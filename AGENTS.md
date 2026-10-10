@@ -1,0 +1,59 @@
+# Agent rules for this workstation (AETHERDESK) — read before running anything
+
+**Why these rules exist.** On 2026-10-09 at 18:48 this machine bug-checked (Windows stop code 0x21
+QUOTA_UNDERFLOW in `nt!PspReturnQuota`, roughly 32 GiB of commit quota returned by one process)
+while agents were working. Windows here is a pre-release Dev-channel build (26300) running WSL2 +
+Docker Desktop, Hyper-V (VM `CoChem-Golden-Baker`, switch `CoChem-Quarantine-Switch`) and an
+8 GiB ImDisk RAM disk on R:. Large memory teardowns and process storms can take the whole host
+down. Earlier BSODs (September 2026) came from agentic swarm spawn storms. Agents therefore keep a
+small footprint and never touch host lifecycle. A PreToolUse hook in `.claude/settings.json`
+(`.claude/hooks/cochem_host_guard.py`) enforces the hard rules for Claude Code; Codex and
+Antigravity agents must follow them by reading this file.
+
+## Never (the hook denies these)
+- Start, stop, restart or reconfigure WSL (shutdown, terminate, unregister), Docker
+  (compose down/up, system prune, restart, stop, Docker Desktop), Hyper-V VMs
+  (`*-VM` cmdlets), ImDisk / volumes, Windows services, scheduled tasks, or the machine itself.
+- Launch the legacy swarm daemons: `start_pipeline.bat`, `cochem_startup.vbs`,
+  `pythonw -m cochem.*`, `watchdog_sre.py`, `worker_daemon`, `cochem_master_loop*`,
+  `task_work_loop.py`, `cochem_ha_daemon_watchdog`.
+- Start the live 4.2.7 controller/warden/supervisor (`cochem_pipeline daemon`,
+  `provision-execution`, `cochem_supervisor daemon/once/recover/resume`). Those run as SYSTEM
+  from scheduled tasks and only the owner starts them, through one reviewed Administrator series.
+- Run more than four heavy processes at once (`pytest -n` > 4, `xargs -P` > 4,
+  `ForEach-Object -Parallel` with throttle > 4, several agents each running a test suite).
+- Kill processes by image name (`taskkill /IM`, `Stop-Process -Name`); kill a PID you own instead.
+- Elevate (`-Verb RunAs`, `sudo`, `runas`), edit HKLM, `bcdedit`, install software,
+  or edit `~/.wslconfig`, Docker settings, the Startup folder, `C:\Program Files\CoChem\*`,
+  `C:\ProgramData\CoChemPipeline427\*`, or the guard hook itself.
+- Spawn additional headless agent CLIs (`claude -p`, `codex exec`, `agy`, `gemini`) from an agent.
+- Run a second Claude / Codex / Antigravity session doing pipeline work on this host at the same
+  time as another one. One live engineering session per host.
+
+The hook scans the whole shell command text, heredoc bodies included. If a harmless command is
+denied only because it *mentions* one of these patterns (for example writing documentation), use
+the Write / Edit / Read tools for that file instead of shell quoting. The owner can switch the
+guard off by creating `%USERPROFILE%\.claude\cochem-host-guard.off`; agents never create it.
+
+## Always
+- Use the pipeline's own interpreter: `C:\Users\ansac\source\repos\Pipeline-Mix-Model-Concurrent\.venv\Scripts\python.exe`
+  (Python 3.12, created with `uv sync --frozen --extra dev --extra mcp`). Never the global
+  `C:\Python314` — its user site has ~17 `.pth` shims that shadow modules such as `scripts`.
+- Wrap long commands in `timeout` and keep test runs single-process (`-p no:cacheprovider`, no `-n`).
+- Before running any test whose name says actual / real / live / physical, read it. It must be
+  in-process only (loopback HTTP, temp SQLite, in-memory MCP). Skip it otherwise.
+- Stop at the UAC boundary: prepare and independently review scripts, then hand the owner one
+  consolidated Administrator PowerShell series. Never ask the owner to repeat approvals already
+  granted (see `docs/WINDOWS_AGENT_HANDOFF_4.2.7_2026-10-09.md` in the pipeline repo).
+- If the machine crashes again, the owner can analyze `C:\WINDOWS\Minidump\*.dmp` with WinDbg
+  (`!analyze -v`); blocked agent attempts are logged in `%USERPROFILE%\.claude\cochem-host-guard.log`.
+
+## Where things are
+| Thing | Path |
+| --- | --- |
+| Pipeline 4.2.7 source (GitHub ProfJJK/Pipeline-Mix-Model-Concurrent) | `C:\Users\ansac\source\repos\Pipeline-Mix-Model-Concurrent` |
+| Installed protected runtime (owner/admin only) | `C:\Program Files\CoChem\Pipeline4.2.7-windows-20261007-r3` |
+| Runtime client config used by every GUI's MCP entry | `C:\Users\ansac\CoChem427\pipeline-client-r3.json` |
+| Legacy agentic swarm trees (do not start) | `D:\__CoChem\__agentic\v4.1.2`, `D:\__CoChem\__agentic\v4.2.0` |
+| Workspace folder (untracked inside the `D:\__CoChem` git repo) | `D:\__CoChem\GitHub-Repo` |
+| Owner's hardening notes from earlier BSODs | `D:\__CoChem\PRIORITY-PIPELINE-*.md` |
