@@ -59,7 +59,17 @@ canonical policy, owner decisions and preservation rules there are unchanged.
    entry currently points at a 4.2.2 token path and must be replaced. See
    `RETURN_SETUP_R4_20261009.txt`.
 
-7. **Controlled switch prepared (10 October, v2.1 after two independent reviews).**
+7. **Controlled switch prepared (10 October, v2.2 after two independent reviews and their
+   re-reviews).** The re-reviews confirmed every earlier finding resolved and added, now in
+   v2.2: a `robocopy /L` backup-rights probe before any attempt namespace is consumed (also
+   run by the elevated read-only plan, which the owner sheet now requires before the
+   switch); two independent backup passes that must agree byte for byte, the witness copy
+   kept raw; `/A-:RSH` on the copies; an elevated worker sweep that takes owners from one
+   `Get-Process -IncludeUserName` call, re-queries any process whose owner cannot be
+   resolved and excludes the ones that exited mid-sweep (four on the live plan); a
+   refused queue-directory probe treated as "exists"; `run_requested` set before `Run`;
+   and the process proof's no-listener branch made reachable. Harness: 107 cases.
+   Earlier text follows.
    `retarget-warden-r4.ps1` in the engineering workspace retargets the existing
    `CoChem-4.2.7-Warden` task's action (r4 interpreter, r4 working directory, same preserved
    configuration, fresh `--queue-launch-output` directory, because the daemon refuses a
