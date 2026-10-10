@@ -1,6 +1,11 @@
 {
   "label": "installed-r3-dynamic-type",
+  "source_path": "C:\\Program Files\\CoChem\\Pipeline4.2.7-windows-20261007-r3\\source\\src\\cochem_pipeline\\resource_telemetry.py",
   "source_sha256": "ad5ada81f1cc3ff683d4e43c706383594a4ab256dd1f3d62675f6a8a2f4d0e8a",
+  "captured_utc": "2026-10-10T03:10:44.155657+00:00",
+  "host": "AetherDesk",
+  "interpreter": "C:\\Users\\ansac\\source\\repos\\Pipeline-Mix-Model-Concurrent\\.venv\\Scripts\\python.exe",
+  "probes_requested": 3000,
   "python_version": "3.12.13 (main, Aug  7 2026, 02:26:41) [MSC v.1944 64 bit (AMD64)]",
   "native_counter_reads": 3000,
   "schema_keys": [
@@ -23,40 +28,40 @@
       "performance_type_entries": 0,
       "python_traced_current_bytes": 1584,
       "python_traced_peak_bytes": 2667,
-      "rss_bytes": 24096768,
-      "private_bytes": 14082048
+      "rss_bytes": 24322048,
+      "private_bytes": 13631488
     },
     {
       "calls": 1000,
       "pointer_cache_entries": 1003,
       "performance_type_entries": 1000,
-      "python_traced_current_bytes": 8171068,
-      "python_traced_peak_bytes": 8241051,
-      "rss_bytes": 38400000,
-      "private_bytes": 28237824
+      "python_traced_current_bytes": 8169244,
+      "python_traced_peak_bytes": 8239275,
+      "rss_bytes": 38719488,
+      "private_bytes": 28643328
     },
     {
       "calls": 2000,
       "pointer_cache_entries": 2003,
       "performance_type_entries": 2000,
-      "python_traced_current_bytes": 16327844,
-      "python_traced_peak_bytes": 16397923,
-      "rss_bytes": 52482048,
-      "private_bytes": 43044864
+      "python_traced_current_bytes": 16323572,
+      "python_traced_peak_bytes": 16393555,
+      "rss_bytes": 52875264,
+      "private_bytes": 43597824
     },
     {
       "calls": 3000,
       "pointer_cache_entries": 3003,
       "performance_type_entries": 3000,
-      "python_traced_current_bytes": 24594004,
-      "python_traced_peak_bytes": 24663987,
-      "rss_bytes": 67534848,
-      "private_bytes": 57749504
+      "python_traced_current_bytes": 24593236,
+      "python_traced_peak_bytes": 24663219,
+      "rss_bytes": 67923968,
+      "private_bytes": 58302464
     }
   ],
   "retained_performance_types_delta": 3000,
-  "private_growth_bytes": 43667456,
-  "rss_growth_bytes": 43438080,
+  "private_growth_bytes": 44670976,
+  "rss_growth_bytes": 43601920,
   "production_runtime_started": false,
   "production_state_opened": false
 }

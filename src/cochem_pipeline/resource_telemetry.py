@@ -200,8 +200,9 @@ class PerformanceInformation(ctypes.Structure):
 
     A structure defined inside ``_commit`` on every call leaked: ctypes keeps every
     structure and ``POINTER`` type it has ever seen in a process-wide cache, so each
-    probe retained one more type (about 8.7 MiB of private commit per 1,000 probes
-    in the Warden). One module-level type keeps that cache at a single entry.
+    probe retained one more type (8.7 MiB of private commit per 1,000 probes in an
+    isolated Python 3.12 experiment; the installed r3 Warden breached its 50 MiB
+    budget within hours). One module-level type keeps that cache at a single entry.
     """
 
     _fields_ = [

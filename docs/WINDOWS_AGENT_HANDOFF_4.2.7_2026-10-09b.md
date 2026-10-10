@@ -37,14 +37,19 @@ canonical policy, owner decisions and preservation rules there are unchanged.
    `Pipeline4.2.7-windows-20261009-r4`, exactly one reviewed changed file, r3 receipts
    pinned, managed daemon tasks may keep running and are only checked for not referencing
    the new root; `-Apply` still requires the owner elevated), `test_stopped_runtime_r4.py`,
-   and `RETURN_SETUP_R4_20261009.txt` with the owner's exact commands. The agent process
-   was not permitted to execute the freeze or the read-only plan; the owner runs steps 0–1
-   first and stops on any unexpected hold.
-4. **Source-of-truth warning.** The GitHub clone (`C:\Users\ansac\source\repos\...`, LF
-   endings, edited README/pyproject) and the Google Drive tree (CRLF, three supervisor
-   files edited after the freeze: `performance_acceptance.py`, `cochem_supervisor/engine.py`,
-   `cochem_supervisor/replay.py`) both differ from the installed r3 frozen source. r4 takes
-   only the telemetry repair. Reconcile the clones before any wider r5.
+   and `RETURN_SETUP_R4_20261009.txt` with the owner's exact commands. The agent ran the
+   freeze (manifest SHA256 `1202b1d780f1b8624523cf2ff3ea5084671f9d6921ae3b4c05f42b2df2652189`,
+   166 files, 165 byte-identical to r3), the installer's read-only plan (mode `READ_ONLY_PLAN`,
+   one expected hold: the SYSTEM task definitions are unreadable without elevation) and the
+   inert harness. Step 2 (`-Apply`, elevated) is the owner's; it downloads the locked wheels
+   from PyPI with `uv --no-cache`, exactly as the r3 build did, so it needs internet access.
+4. **Source-of-truth warning.** Against the 166 installed r3 frozen files, the GitHub clone
+   (`C:\Users\ansac\source\repos\...`) has 59 byte-identical files, 102 that differ only by
+   line endings (LF in the clone, mostly CRLF in r3; `pyproject.toml` is one of these), and 5
+   that differ in content: `README.md`, the repaired `resource_telemetry.py`, and three files
+   edited after the freeze that the Google Drive tree carries too (`performance_acceptance.py`,
+   `cochem_supervisor/engine.py`, `cochem_supervisor/replay.py`). r4 takes only the telemetry
+   repair; those three post-freeze edits need their own review before any r5.
 5. **Agent guard rails.** `.claude/hooks/cochem_host_guard.py` + `.claude/settings.json`
    (Claude Code PreToolUse hook) and `AGENTS.md`/`CLAUDE.md`/`GEMINI.md` in this repository
    and in `D:\__CoChem\GitHub-Repo`. Read `AGENTS.md` before running anything on this host.

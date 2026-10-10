@@ -1,7 +1,8 @@
 # AETHERDESK crash post-mortem — 9 October 2026
 
-Scope: the Windows bugcheck at 18:48:42 CDT on 9 October 2026 while two Claude Code
-sessions were open, what the evidence shows, and the controls installed afterwards.
+Scope: the Windows bugcheck at 18:48:42 CDT on 9 October 2026 while one Claude Code
+session was open (a second one started five minutes after the crash), what the evidence
+shows, and the controls installed afterwards.
 This is an engineering record for the owner; it does not change canonical SRS policy.
 
 ## What happened
@@ -50,16 +51,19 @@ first suspect whenever this machine crashes.
 
 1. **Host guard hook** (`.claude/hooks/cochem_host_guard.py`, wired by `.claude/settings.json`
    in this repository and in `D:\__CoChem\GitHub-Repo`): a Claude Code PreToolUse hook that
-   denies WSL/Docker/Hyper-V/service/scheduled-task lifecycle commands, legacy swarm daemon
-   launches, live controller starts (`cochem_pipeline daemon`, `provision-execution`,
-   `cochem_supervisor daemon/once/recover/resume`), elevation, HKLM edits, image-name kills,
-   more than four-way parallelism, headless agent CLI spawns, and writes to `.wslconfig`,
-   Docker settings, the Startup folder, `C:\Program Files`, `C:\ProgramData\CoChemPipeline427`
-   and the guard itself. 54 self-test cases pass. Blocked attempts are logged to
+   denies WSL/Docker/Hyper-V/service/scheduled-task lifecycle commands (also when wrapped in
+   `Start-Process`, `Invoke-Expression` or `cmd /c`), legacy swarm daemon launches, live
+   controller starts (`cochem_pipeline daemon`, `provision-execution`, `cochem_supervisor
+   daemon/once/recover/resume`, deployment scripts with `-Apply`), elevation, HKLM edits,
+   image-name and tree kills, more than four-way parallelism, headless agent CLI spawns, and
+   writes to `.wslconfig`, Docker settings, the Startup folder, `C:\Program Files`,
+   `C:\ProgramData\CoChemPipeline427`, the guard, its settings and its off-switch. It inspects
+   Claude Code's shell and file tools and the command- and path-like inputs of every MCP tool,
+   and it fails closed on internal errors. Its behavioural suite is committed as
+   `pipeline_tests/test_cochem_host_guard.py`. Blocked attempts are logged to
    `%USERPROFILE%\.claude\cochem-host-guard.log`; the owner-only off switch is
-   `%USERPROFILE%\.claude\cochem-host-guard.off`. It covers Claude Code's shell and file
-   tools only (not MCP file tools), and it scans whole command text, so a heredoc that merely
-   mentions a blocked pattern is refused; use the file tools for such documents.
+   `%USERPROFILE%\.claude\cochem-host-guard.off`. It scans whole command text, so a heredoc
+   that merely mentions a blocked pattern is refused; use the file tools for such documents.
 2. **Written rules** for every agent GUI: `AGENTS.md` (imported by `CLAUDE.md` and
    `GEMINI.md`) in this repository and in `D:\__CoChem\GitHub-Repo`.
 3. **Dedicated interpreter**: `.venv` (Python 3.12.13, `uv sync --frozen --extra dev --extra mcp`)

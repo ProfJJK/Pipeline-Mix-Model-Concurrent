@@ -73,9 +73,16 @@ def main() -> int:
         del result
         samples.append(snapshot((batch + 1) * per_batch))
     first, last = samples[0], samples[-1]
+    import datetime
+    import platform
     print(json.dumps({
         "label": args.label,
+        "source_path": os.path.abspath(args.source),
         "source_sha256": hashlib.sha256(raw).hexdigest(),
+        "captured_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        "host": platform.node(),
+        "interpreter": sys.executable,
+        "probes_requested": args.probes,
         "python_version": sys.version,
         "native_counter_reads": per_batch * batches,
         "schema_keys": schema,

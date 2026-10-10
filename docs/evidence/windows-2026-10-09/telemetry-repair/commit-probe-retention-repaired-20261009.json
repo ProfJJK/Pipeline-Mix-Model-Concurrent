@@ -1,6 +1,11 @@
 {
   "label": "repaired-module-type-cached-binding",
-  "source_sha256": "e140f8048e2d82b2c1accdfbd8c5d67c1e434b5058e2141b5028c31f0a802afc",
+  "source_path": "C:\\Users\\ansac\\source\\repos\\Pipeline-Mix-Model-Concurrent\\src\\cochem_pipeline\\resource_telemetry.py",
+  "source_sha256": "875c231942aac9f727b26fff71bb92e5bf530515737930356aab183edb34a408",
+  "captured_utc": "2026-10-10T03:10:44.565157+00:00",
+  "host": "AetherDesk",
+  "interpreter": "C:\\Users\\ansac\\source\\repos\\Pipeline-Mix-Model-Concurrent\\.venv\\Scripts\\python.exe",
+  "probes_requested": 3000,
   "python_version": "3.12.13 (main, Aug  7 2026, 02:26:41) [MSC v.1944 64 bit (AMD64)]",
   "native_counter_reads": 3000,
   "schema_keys": [
@@ -23,8 +28,8 @@
       "performance_type_entries": 0,
       "python_traced_current_bytes": 1584,
       "python_traced_peak_bytes": 2667,
-      "rss_bytes": 23437312,
-      "private_bytes": 12894208
+      "rss_bytes": 24297472,
+      "private_bytes": 13737984
     },
     {
       "calls": 1000,
@@ -32,8 +37,8 @@
       "performance_type_entries": 1,
       "python_traced_current_bytes": 9459,
       "python_traced_peak_bytes": 21222,
-      "rss_bytes": 23515136,
-      "private_bytes": 12894208
+      "rss_bytes": 24354816,
+      "private_bytes": 13737984
     },
     {
       "calls": 2000,
@@ -41,8 +46,8 @@
       "performance_type_entries": 1,
       "python_traced_current_bytes": 9931,
       "python_traced_peak_bytes": 21694,
-      "rss_bytes": 23515136,
-      "private_bytes": 12894208
+      "rss_bytes": 24354816,
+      "private_bytes": 13737984
     },
     {
       "calls": 3000,
@@ -50,13 +55,13 @@
       "performance_type_entries": 1,
       "python_traced_current_bytes": 10347,
       "python_traced_peak_bytes": 22110,
-      "rss_bytes": 23515136,
-      "private_bytes": 12894208
+      "rss_bytes": 24354816,
+      "private_bytes": 13737984
     }
   ],
   "retained_performance_types_delta": 1,
   "private_growth_bytes": 0,
-  "rss_growth_bytes": 77824,
+  "rss_growth_bytes": 57344,
   "production_runtime_started": false,
   "production_state_opened": false
 }

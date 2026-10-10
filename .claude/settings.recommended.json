@@ -1,0 +1,19 @@
+{
+  "_comment": "Recommended replacement for .claude/settings.json: adds MCP tools to the guard matcher, runs the guard under the py launcher and fails closed if the hook cannot run. The guard protects settings.json itself, so the owner applies this by copying the file over settings.json.",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|PowerShell|Write|Edit|MultiEdit|NotebookEdit|mcp__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "py -3 -I -X utf8 \"$CLAUDE_PROJECT_DIR/.claude/hooks/cochem_host_guard.py\"",
+            "timeout": 20,
+            "onFailure": "block",
+            "statusMessage": "CoChem host guard"
+          }
+        ]
+      }
+    ]
+  }
+}
