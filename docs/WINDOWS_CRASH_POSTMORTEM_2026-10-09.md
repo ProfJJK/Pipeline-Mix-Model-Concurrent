@@ -64,6 +64,9 @@ first suspect whenever this machine crashes.
    `%USERPROFILE%\.claude\cochem-host-guard.log`; the owner-only off switch is
    `%USERPROFILE%\.claude\cochem-host-guard.off`. It scans whole command text, so a heredoc
    that merely mentions a blocked pattern is refused; use the file tools for such documents.
+   The same hook is also wired at user level (`%USERPROFILE%\.claude\settings.json`,
+   script copy in `%USERPROFILE%\.claude\hooks`), so Claude Code sessions opened in any
+   folder on this host are covered.
 2. **Written rules** for every agent GUI: `AGENTS.md` (imported by `CLAUDE.md` and
    `GEMINI.md`) in this repository and in `D:\__CoChem\GitHub-Repo`.
 3. **Dedicated interpreter**: `.venv` (Python 3.12.13, `uv sync --frozen --extra dev --extra mcp`)
