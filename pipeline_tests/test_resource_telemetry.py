@@ -307,3 +307,83 @@ def test_cpu_physical_count_is_actual_and_distinct_from_affinity_logical_count(t
     assert cpu['physical_count_available'] is (type(actual) is int and actual>0)
     assert cpu['physical_count']==actual
     assert cpu['physical_count_source']=='psutil.cpu_count(logical=False)'
+
+
+def test_commit_structure_is_defined_once_with_windows_abi_fields() -> None:
+    import ctypes
+
+    from cochem_pipeline.resource_telemetry import PerformanceInformation
+
+    fields = PerformanceInformation._fields_
+    assert [name for name, _ in fields] == [
+        "cb", "CommitTotal", "CommitLimit", "CommitPeak", "PhysicalTotal", "PhysicalAvailable",
+        "SystemCache", "KernelTotal", "KernelPaged", "KernelNonpaged", "PageSize",
+        "HandleCount", "ProcessCount", "ThreadCount",
+    ]
+    assert fields[0][1] is ctypes.c_uint32
+    assert all(kind is ctypes.c_size_t for _, kind in fields[1:11])
+    assert all(kind is ctypes.c_uint32 for _, kind in fields[11:])
+    # psapi.h PERFORMANCE_INFORMATION is 104 bytes on 64-bit Windows and 56 bytes on 32-bit.
+    assert ctypes.sizeof(PerformanceInformation) == (104 if ctypes.sizeof(ctypes.c_size_t) == 8 else 56)
+
+
+def test_commit_result_schema_is_unchanged() -> None:
+    from cochem_pipeline.resource_telemetry import _commit
+
+    assert sorted(_commit()) == [
+        "available", "error", "free_mb", "limit_mb", "process_memory_available", "process_memory_error",
+        "process_memory_source", "process_private_mb", "process_working_set_mb", "source", "total_mb",
+    ]
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows native commit probe")
+def test_repeated_commit_probes_retain_one_structure_type_and_bounded_memory() -> None:
+    import ctypes
+    import gc
+
+    from cochem_pipeline.resource_telemetry import PerformanceInformation, _commit
+
+    first = _commit()
+    assert first["available"] is True, first["error"]
+    gc.collect()
+    pointer_cache = getattr(ctypes, "_pointer_type_cache", None)
+    cached_types_before = len(pointer_cache) if pointer_cache is not None else None
+    private_before = psutil.Process().memory_info().private
+    for _ in range(1000):
+        result = _commit()
+        assert result["available"] is True and result["error"] is None
+        assert 0 <= result["total_mb"] <= result["limit_mb"]
+    gc.collect()
+    if pointer_cache is not None:
+        assert len(pointer_cache) == cached_types_before, "a native probe must not retain new ctypes types"
+        retained = [key for key in pointer_cache if getattr(key, "__name__", "") == "PerformanceInformation"]
+        assert retained == [PerformanceInformation]
+    growth = psutil.Process().memory_info().private - private_before
+    # The leaking implementation grew private commit by ~8.7 MiB per 1,000 probes.
+    assert growth < 4 * 1024 * 1024, f"private commit grew {growth / 1048576:.2f} MiB over 1,000 probes"
+    assert sorted(result) == sorted(first)
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows native commit probe")
+def test_commit_probe_binding_failure_is_reported_and_not_cached(monkeypatch) -> None:
+    import ctypes
+
+    from cochem_pipeline import resource_telemetry as module
+
+    module._commit_probe.cache_clear()
+
+    def unavailable(*args, **kwargs):
+        raise OSError("psapi unavailable in this test")
+
+    monkeypatch.setattr(ctypes, "WinDLL", unavailable)
+    failed = module._commit()
+    assert failed["available"] is False
+    assert "psapi unavailable" in failed["error"]
+    assert failed["total_mb"] is failed["limit_mb"] is failed["free_mb"] is None
+    assert failed["process_memory_available"] is True, failed["process_memory_error"]
+    assert module._commit_probe.cache_info().currsize == 0, "a failed native bind must not be cached"
+    monkeypatch.undo()
+    recovered = module._commit()
+    assert recovered["available"] is True, recovered["error"]
+    assert module._commit_probe.cache_info().currsize == 1
+    assert module._commit_probe() is module._commit_probe()

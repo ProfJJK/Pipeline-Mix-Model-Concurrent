@@ -1,0 +1,62 @@
+{
+  "label": "repaired-module-type-cached-binding",
+  "source_sha256": "e140f8048e2d82b2c1accdfbd8c5d67c1e434b5058e2141b5028c31f0a802afc",
+  "python_version": "3.12.13 (main, Aug  7 2026, 02:26:41) [MSC v.1944 64 bit (AMD64)]",
+  "native_counter_reads": 3000,
+  "schema_keys": [
+    "available",
+    "error",
+    "free_mb",
+    "limit_mb",
+    "process_memory_available",
+    "process_memory_error",
+    "process_memory_source",
+    "process_private_mb",
+    "process_working_set_mb",
+    "source",
+    "total_mb"
+  ],
+  "samples": [
+    {
+      "calls": 0,
+      "pointer_cache_entries": 3,
+      "performance_type_entries": 0,
+      "python_traced_current_bytes": 1584,
+      "python_traced_peak_bytes": 2667,
+      "rss_bytes": 23437312,
+      "private_bytes": 12894208
+    },
+    {
+      "calls": 1000,
+      "pointer_cache_entries": 4,
+      "performance_type_entries": 1,
+      "python_traced_current_bytes": 9459,
+      "python_traced_peak_bytes": 21222,
+      "rss_bytes": 23515136,
+      "private_bytes": 12894208
+    },
+    {
+      "calls": 2000,
+      "pointer_cache_entries": 4,
+      "performance_type_entries": 1,
+      "python_traced_current_bytes": 9931,
+      "python_traced_peak_bytes": 21694,
+      "rss_bytes": 23515136,
+      "private_bytes": 12894208
+    },
+    {
+      "calls": 3000,
+      "pointer_cache_entries": 4,
+      "performance_type_entries": 1,
+      "python_traced_current_bytes": 10347,
+      "python_traced_peak_bytes": 22110,
+      "rss_bytes": 23515136,
+      "private_bytes": 12894208
+    }
+  ],
+  "retained_performance_types_delta": 1,
+  "private_growth_bytes": 0,
+  "rss_growth_bytes": 77824,
+  "production_runtime_started": false,
+  "production_state_opened": false
+}
