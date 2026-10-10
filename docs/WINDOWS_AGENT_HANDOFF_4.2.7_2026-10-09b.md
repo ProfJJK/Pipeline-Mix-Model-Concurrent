@@ -59,16 +59,31 @@ canonical policy, owner decisions and preservation rules there are unchanged.
    entry currently points at a 4.2.2 token path and must be replaced. See
    `RETURN_SETUP_R4_20261009.txt`.
 
-7. **Controlled switch prepared (10 October).** `retarget-warden-r4.ps1` in the engineering
-   workspace retargets the existing `CoChem-4.2.7-Warden` task's action (r4 interpreter,
-   r4 working directory, same preserved configuration, fresh `--queue-launch-output`
-   directory, because the daemon refuses a pre-existing one) after capturing the task XML
-   and private DACL, writing a durable intent and taking read-only SQLite backups with WAL
-   content. `-Apply -Start` then requests exactly one Run and waits for `/health` to answer
-   as SYSTEM from the r4 root; no retry, stop or delete exists. Inert harness
-   `test_retarget_warden_r4.py` passes; the read-only plan ran as the ordinary user and
-   correctly distinguishes GUI MCP client processes from a controller. The held supervisor
-   observer and resource recorder are deliberately not rebound by this script.
+7. **Controlled switch prepared (10 October, v2 after an independent review).**
+   `retarget-warden-r4.ps1` in the engineering workspace retargets the existing
+   `CoChem-4.2.7-Warden` task's action (r4 interpreter, r4 working directory, same preserved
+   configuration, fresh `--queue-launch-output` directory, because the daemon refuses a
+   pre-existing one) after capturing the task XML and private DACL, writing a durable intent
+   and taking read-only SQLite backups with WAL content. The review found two high-severity
+   defects in v1 (a Python program passed through `-c` is truncated by Windows PowerShell
+   5.1 quoting; native stderr became a terminating error under `Stop`) and v2 fixes them:
+   the backup program is the hash-pinned helper `backup-private-databases-r4.py`, copied
+   into the attempt root and run by path, and every native call is judged by exit code.
+   v2 also stores backups under a SYSTEM/Administrators-only DACL, fails closed when the
+   port query cannot answer, proves `127.0.0.1:47824` can be bound exclusively, requires the
+   other managed daemon tasks to be stopped and disabled and no slot-worker process to be
+   alive, diffs the task XML outside `Actions`/`RegistrationInfo` after the write, and
+   namespaces every attempt (`-Attempt v1`, `v2`, ...; a consumed namespace is never
+   reused). `-Apply -Start` (or `-Apply` then `-Apply -StartOnly`) requests exactly one Run
+   and accepts only two stable `/health` samples (same pid, instance and start time, SYSTEM,
+   r4 root, no active work, no quarantined slots) plus a task readback showing exactly that
+   one running instance and a process proof for the pid; otherwise it writes
+   `start-held.json` and stops. No retry, stop or delete exists. Inert harness
+   `test_retarget_warden_r4.py` (56 cases, fixture-driven register and run paths, temp
+   SQLite backups, real PowerShell 5.1 functions) passes; the read-only plan ran as the
+   ordinary user with only the two expected holds (r4 not yet built, task definition
+   unreadable without elevation). The held supervisor observer and resource recorder are
+   deliberately not rebound by this script.
 
 ## Still open (unchanged unless noted)
 
