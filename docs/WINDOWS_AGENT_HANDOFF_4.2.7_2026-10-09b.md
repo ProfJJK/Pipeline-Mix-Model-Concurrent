@@ -59,9 +59,21 @@ canonical policy, owner decisions and preservation rules there are unchanged.
    entry currently points at a 4.2.2 token path and must be replaced. See
    `RETURN_SETUP_R4_20261009.txt`.
 
+7. **Controlled switch prepared (10 October).** `retarget-warden-r4.ps1` in the engineering
+   workspace retargets the existing `CoChem-4.2.7-Warden` task's action (r4 interpreter,
+   r4 working directory, same preserved configuration, fresh `--queue-launch-output`
+   directory, because the daemon refuses a pre-existing one) after capturing the task XML
+   and private DACL, writing a durable intent and taking read-only SQLite backups with WAL
+   content. `-Apply -Start` then requests exactly one Run and waits for `/health` to answer
+   as SYSTEM from the r4 root; no retry, stop or delete exists. Inert harness
+   `test_retarget_warden_r4.py` passes; the read-only plan ran as the ordinary user and
+   correctly distinguishes GUI MCP client processes from a controller. The held supervisor
+   observer and resource recorder are deliberately not rebound by this script.
+
 ## Still open (unchanged unless noted)
 
-- Controlled r3 → r4 switch script (handoff steps 4–7): not written. Do not improvise.
+- Rebinding of the held supervisor observer and resource recorder to the r4 controller
+  instance (they still bind r3 PID 5788 / instance `c867588c…`): not written.
 - Two approved synthetic workflows: unsubmitted; need a running, repaired Warden with
   fresh admission readiness.
 - 48-hour observation window, desktop-heap evidence, recovery timing, repair-spend
