@@ -6,7 +6,8 @@ ImDisk RAM disk, so VM/daemon/service churn and process storms can take the mach
 This hook denies the commands that start, stop or restart host infrastructure, spawn the
 agentic swarm daemons, elevate, or fan out more than four heavy processes.
 
-It is a guard rail, not a sandbox. To disable it deliberately, the OWNER creates the file
+It is a guard rail, not a sandbox: it covers Claude Code's Bash, PowerShell, Write, Edit,
+MultiEdit and NotebookEdit tools only. To disable it deliberately, the OWNER creates the file
 %USERPROFILE%\\.claude\\cochem-host-guard.off (agents must not create it).
 Blocked attempts are appended to %USERPROFILE%\\.claude\\cochem-host-guard.log.
 """
@@ -24,7 +25,10 @@ LOG = os.path.join(HOME, ".claude", "cochem-host-guard.log")
 
 # A shell "segment" ends at &&, ||, |, ; or a newline; path rules never cross one.
 _SEG = r"[^\n&|;]*"
-_GUARD_FILES = r"(\.wslconfig|settings-store\.json|host_guard\.py|[\\/]\.claude[\\/]settings(\.local)?\.json|Startup[\\/])"
+# ".claude/settings.json" may appear bare, quoted, or under a longer path.
+_SETTINGS = r"(^|[\s\"'=\\/])\.claude[\\/]settings(\.local)?\.json"
+_HOOKS_DIR = r"(^|[\s\"'=\\/])\.claude[\\/]hooks\b"
+_GUARD_FILES = r"(\.wslconfig|settings-store\.json|host_guard\.py|" + _SETTINGS + r"|Startup[\\/])"
 
 # (pattern, reason). Matched case-insensitively against the whole command text.
 COMMAND_RULES: list[tuple[str, str]] = [
@@ -54,11 +58,11 @@ COMMAND_RULES: list[tuple[str, str]] = [
      "System configuration and software installation are owner-only"),
     (r"(^|[\s&|;(])(>|>>|tee)\s*\"?" + r"[^\s\"&|;]*" + _GUARD_FILES
      + r"|\b(Set-Content|Out-File|Add-Content)\b" + _SEG + _GUARD_FILES
-     + r"|\b(cp|mv|copy|move|robocopy|xcopy|rm|del|erase|Copy-Item|Move-Item|Remove-Item|rename|ren|Rename-Item|git\s+checkout|git\s+restore)\b" + _SEG + r"(host_guard\.py|[\\/]\.claude[\\/]settings(\.local)?\.json|[\\/]\.claude[\\/]hooks\b)",
+     + r"|\b(cp|mv|copy|move|robocopy|xcopy|rm|del|erase|Copy-Item|Move-Item|Remove-Item|rename|ren|Rename-Item|git\s+checkout|git\s+restore)\b" + _SEG + r"(host_guard\.py|" + _SETTINGS + r"|" + _HOOKS_DIR + r")",
      "Writing, copying over or removing WSL/Docker/startup/guard configuration from a shell is owner-only"),
     (r"\bpytest\b" + _SEG + r"\s-n\s*(auto|[5-9]\b|\d{2,})|\bxargs\b" + _SEG + r"\s-P\s*([5-9]\b|\d{2,})|-ThrottleLimit\s+([5-9]\b|\d{2,})|\bparallel\s+-j\s*([5-9]\b|\d{2,})",
      "More than four parallel heavy processes is a spawn-storm risk on this host; use at most 4"),
-    (r"\b(claude|codex|agy|gemini)(\.exe)?\s" + _SEG + r"(\s-p\s|--print\b|\sexec\b|--yolo\b|--dangerously-skip-permissions\b)",
+    (r"\b(claude|codex|agy|gemini)(\.exe)?\s+(" + _SEG + r"\s)?(-p|--print|exec|--yolo|--dangerously-skip-permissions)(\s|$)",
      "Spawning additional headless agent CLIs from an agent is a swarm risk; the owner starts agents"),
 ]
 
