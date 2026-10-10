@@ -1,7 +1,7 @@
 {
   "mcpServers": {
     "cochem-pipeline": {
-      "command": "C:\\Program Files\\CoChem\\Pipeline4.2.7-windows-20261007-r3\\.venv\\Scripts\\python.exe",
+      "command": "C:\\Program Files\\CoChem\\Pipeline4.2.7-windows-20261009-r4\\.venv\\Scripts\\python.exe",
       "args": [
         "-I",
         "-B",
