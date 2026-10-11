@@ -13,6 +13,23 @@ import uuid
 from urllib.parse import parse_qs, urlsplit
 
 
+# Heavy read projections are built and encoded one at a time. Concurrent builds
+# multiplied transient allocator high-water in the Warden; /health,
+# /knowledge/* and every POST stay outside this server-wide lock.
+PROJECTION_WAIT_SECONDS = 20.0
+PROJECTION_PREFIXES = ('/operator/workflow/','/operator/job/','/workflow/','/coding/workflow/')
+
+
+def heavy_projection(path: str) -> bool:
+    return path=='/operator' or path.startswith(PROJECTION_PREFIXES)
+
+
+def encode_json(data) -> bytes:
+    # Same JSON value as before, without a 2-byte-per-character intermediate
+    # str for non-ASCII text and without separator whitespace.
+    return json.dumps(data,ensure_ascii=True,separators=(',',':')).encode('ascii')
+
+
 def redact(value):
     if isinstance(value,dict):
         public = {key:(deepcopy(item) if key in ('payload','output','artifacts') else redact(item))
@@ -51,6 +68,8 @@ class ControlServer(ThreadingHTTPServer):
         self.runtime,self.token = runtime,token
         from .operator_views import OperatorViewHistory
         self.operator_history=OperatorViewHistory()
+        self.projection_lock = threading.Lock()
+        self.projection_wait_seconds = PROJECTION_WAIT_SECONDS
         self._requests = threading.BoundedSemaphore(16)
         super().__init__(('127.0.0.1',runtime.config.port),Handler)
 
@@ -85,7 +104,9 @@ class Handler(BaseHTTPRequestHandler):
         return None
 
     def reply(self,code,data):
-        payload=json.dumps(data,ensure_ascii=False).encode('utf-8')
+        self.send_payload(code,encode_json(data))
+
+    def send_payload(self,code,payload):
         self.send_response(code)
         self.send_header('Content-Type','application/json; charset=utf-8')
         self.send_header('Content-Length',str(len(payload)))
@@ -134,6 +155,22 @@ class Handler(BaseHTTPRequestHandler):
         finally:
             self.connection.settimeout(previous_timeout)
 
+    def _projection(self,runtime,path):
+        # Called only while the server-wide projection lock is held.
+        if path.startswith('/coding/workflow/'):
+            return public_workflow(runtime.coding_workflow(path[len('/coding/workflow/'):]))
+        if path.startswith('/workflow/'):
+            return public_workflow(runtime.store.workflow(path[len('/workflow/'):]))
+        from .operator_views import operator_snapshot
+        workflow_id=path[len('/operator/workflow/'):] if path.startswith('/operator/workflow/') else None
+        job_id=path[len('/operator/job/'):] if path.startswith('/operator/job/') else None
+        query=parse_qs(urlsplit(self.path).query,keep_blank_values=True,max_num_fields=1)
+        if set(query)-{'after_event_id'}:
+            raise ValueError('Operator view accepts only the after_event_id cursor')
+        cursor=int(query['after_event_id'][0]) if 'after_event_id' in query else None
+        return redact(operator_snapshot(runtime,workflow_id,job_id=job_id,after_event_id=cursor,
+                                        history=self.server.operator_history))
+
     def dispatch(self):
         started=time.monotonic()
         self._observed_started=None
@@ -159,25 +196,23 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if self.command=='GET' and path=='/health':
                 self.reply(200,redact(runtime.status()))
-            elif self.command=='GET' and (path=='/operator' or path.startswith('/operator/workflow/') or path.startswith('/operator/job/')):
-                from .operator_views import operator_snapshot
-                workflow_id=path[len('/operator/workflow/'):] if path.startswith('/operator/workflow/') else None
-                job_id=path[len('/operator/job/'):] if path.startswith('/operator/job/') else None
-                query=parse_qs(urlsplit(self.path).query,keep_blank_values=True,max_num_fields=1)
-                if set(query)-{'after_event_id'}:
-                    raise ValueError('Operator view accepts only the after_event_id cursor')
-                cursor=int(query['after_event_id'][0]) if 'after_event_id' in query else None
-                self.reply(200,redact(operator_snapshot(runtime,workflow_id,job_id=job_id,after_event_id=cursor,
-                                                        history=self.server.operator_history)))
+            elif self.command=='GET' and heavy_projection(path):
+                # Bounded wait, then build and encode under the lock. The lock is
+                # released before the socket write so a slow reader cannot stall
+                # other callers; only the encoded bytes outlive the projection.
+                if not self.server.projection_lock.acquire(timeout=self.server.projection_wait_seconds):
+                    self.reply(503,{'error':'Operator projection busy; retry'})
+                    return
+                try:
+                    payload=encode_json(self._projection(runtime,path))
+                finally:
+                    self.server.projection_lock.release()
+                self.send_payload(200,payload)
             elif self.command=='GET' and path=='/knowledge/status':
                 self.reply(200,runtime.knowledge_authority.status() if hasattr(runtime,'knowledge_authority')
                            else runtime.knowledge.status())
             elif self.command=='GET' and path=='/coding/projects':
                 self.reply(200,{'projects':sorted(runtime.config.coding_projects)})
-            elif self.command=='GET' and path.startswith('/coding/workflow/'):
-                self.reply(200,public_workflow(runtime.coding_workflow(path[len('/coding/workflow/'):])) )
-            elif self.command=='GET' and path.startswith('/workflow/'):
-                self.reply(200,public_workflow(runtime.store.workflow(path[len('/workflow/'):])) )
             elif self.command=='POST' and path in ('/submit','/preflight','/cancel','/routing/resume',
                                                   '/coding/submit','/coding/cancel','/coding/resume',
                                                   '/knowledge/search','/knowledge/read','/knowledge/refresh'):

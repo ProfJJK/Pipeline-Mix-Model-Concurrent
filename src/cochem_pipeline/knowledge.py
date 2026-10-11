@@ -457,6 +457,13 @@ class KnowledgeService:
                 raise sqlite3.DatabaseError('Knowledge index binary header is corrupt')
         return record,path
 
+    @staticmethod
+    def _connect(path):
+        conn=sqlite3.connect(path.as_uri()+'?mode=ro&immutable=1',uri=True,timeout=.5,check_same_thread=False)
+        conn.row_factory=sqlite3.Row
+        conn.execute('PRAGMA query_only=ON');conn.execute('PRAGMA cache_size=-8192')
+        return conn
+
     @contextmanager
     def _reader(self):
         if self._closed:
@@ -476,9 +483,7 @@ class KnowledgeService:
             # Published generations never mutate. Reuse bounded, independently
             # owned immutable read connections; every request still verifies the
             # protected pointer and executes its real FTS query (no result cache).
-            conn=sqlite3.connect(path.as_uri()+'?mode=ro&immutable=1',uri=True,timeout=.5,check_same_thread=False)
-            conn.row_factory=sqlite3.Row
-            conn.execute('PRAGMA query_only=ON');conn.execute('PRAGMA cache_size=-8192')
+            conn=self._connect(path)
         try:
             yield record,conn
         finally:
@@ -486,9 +491,27 @@ class KnowledgeService:
                 conn.close()
             else:
                 try:
+                    # Keep the connection for reuse (PERF-003) but release its
+                    # page cache first, so an idle pooled reader never holds
+                    # index pages against the Warden memory budget.
+                    conn.execute('PRAGMA shrink_memory')
                     self._readers.put_nowait((record['generation'],conn))
-                except queue.Full:
+                except (queue.Full,sqlite3.Error):
                     conn.close()
+
+    @contextmanager
+    def _verification_reader(self):
+        """Yield a dedicated, non-pooled immutable reader closed on exit.
+
+        PRAGMA quick_check reads every index page. Running it through the pool
+        would leave a pooled reader caching the whole index after each 30 s
+        background refresh, so this connection never enters the pool.
+        """
+        if self._closed:
+            raise KnowledgeError('Knowledge service is closed')
+        record,path=self._current()
+        with closing(self._connect(path)) as conn:
+            yield record,conn
 
     def _close_readers(self):
         while True:
@@ -505,7 +528,7 @@ class KnowledgeService:
             validated=self.validate()
             previous=None;existing={};corruption=False
             try:
-                with self._reader() as (previous,reader):
+                with self._verification_reader() as (previous,reader):
                     if reader.execute('PRAGMA quick_check').fetchone()[0]!='ok':
                         raise sqlite3.DatabaseError('Knowledge index failed its integrity check')
                     existing={row['doc_path']:row['sha256'] for row in reader.execute('SELECT doc_path,sha256 FROM documents')}

@@ -62,6 +62,9 @@ def validate_gemini_contract(gemini):
         raise ValueError('Unsupported or embedded Gemini argument placeholder')
     if gemini.get('protocol') not in ('gemini-json', 'terminal-json', 'agy-stream-json'):
         raise ValueError('Select a supported Gemini native result protocol: gemini-json, terminal-json or agy-stream-json')
+    from .agy_protocol import validate_identity_policy, validate_model_bindings
+    validate_identity_policy(gemini)
+    validate_model_bindings(gemini)
     validate_subscription_probe(gemini.get('subscription_probe'))
     from .inference_policy import gemini_inference_arguments
     inference_args = gemini_inference_arguments(gemini)
@@ -73,6 +76,34 @@ def validate_gemini_contract(gemini):
             re.search(r'\{[A-Za-z_][A-Za-z_0-9]*\}',arg) and arg not in ('{model}','{workspace}')
             for arg in inference_args):
         raise ValueError('Gemini inference-only arguments require exactly one separate {model} entry and supported placeholders')
+
+
+def validate_gemini_route_bindings(gemini: dict[str, Any], routing: RoutingPolicy) -> dict[str, dict[str, str]]:
+    """Tie the reviewed Agy model table (decision 3B) to the routed Gemini targets.
+
+    Without the identity policy nothing is bound and nothing changes. Under it
+    every binding must name a Gemini target in routing.tiers (no orphans), at
+    least one binding must exist, and every effort binding must carry an exact
+    native effort contract. A routed target without a binding stays valid: it
+    fails closed as a compatibility hold at dispatch, before any launch.
+    """
+    from .agy_protocol import validate_identity_policy, validate_model_bindings
+    from .native_effort import effort_contract
+    if validate_identity_policy(gemini) is None:
+        return {}
+    bindings = validate_model_bindings(gemini)
+    if not bindings:
+        raise ValueError('Agy identity policy requires at least one reviewed model binding')
+    targets = {pair['model'] if pair['reasoning_effort'] is None else f"{pair['model']}:{pair['reasoning_effort']}"
+               for pairs in routing.as_dict()['tiers'].values() for pair in pairs if pair['provider'] == 'gemini'}
+    orphans = sorted(set(bindings) - targets)
+    if orphans:
+        raise ValueError('Agy model bindings must name routed Gemini targets; unrouted: ' + ', '.join(orphans))
+    for key in bindings:
+        model, _, effort = key.partition(':')
+        if effort:
+            effort_contract('gemini', model, effort, gemini)
+    return bindings
 
 
 @dataclass(frozen=True)
@@ -184,6 +215,8 @@ def load_config(filename: str) -> PipelineConfig:
         except (TypeError,ValueError) as exc:
             raise ValueError(f'Invalid rule configuration: {exc}') from exc
     routing = load_current_routing_policy(raw.get('routing'))
+    if 'gemini' not in held_providers:
+        validate_gemini_route_bindings(gemini, routing)
     hardware = HardwarePolicy.from_dict(raw.get('hardware'))
     execution_limits = ResourceLimits.from_dict(raw.get('execution_limits'))
     ramdisk = RamdiskConfig.from_dict(raw.get('ramdisk'))

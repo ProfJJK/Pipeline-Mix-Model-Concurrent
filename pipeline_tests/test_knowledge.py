@@ -3,12 +3,16 @@ from __future__ import annotations
 
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import closing
+import ctypes
 from dataclasses import replace
+import gc
 import hashlib
 import http.client
 import json
 import os
 from pathlib import Path
+import random
 import secrets
 import sqlite3
 import subprocess
@@ -20,6 +24,7 @@ from types import SimpleNamespace
 import pytest
 
 from cochem_pipeline.knowledge import KnowledgeConfig,KnowledgeError,KnowledgeService
+from cochem_pipeline.knowledge_authority import KnowledgeAuthority
 
 
 def ratify(root,documents):
@@ -328,3 +333,149 @@ def test_uncatalogued_authority_is_never_inferred_from_filename_or_prose(corpus)
     path.write_text(json.dumps(manifest))
     with pytest.raises(KnowledgeError,match='authority'):corpus.service.refresh()
     assert corpus.service.search('SQLite')[0]['authority']=='unclassified'
+
+
+GENERATED_REVISION='r5-controller-memory-fixture'
+
+
+def sqlite_memory_used():
+    """Return sqlite3_memory_used of the SQLite library behind the sqlite3 module.
+
+    The counter is process-wide, so callers compare deltas. A self-check first
+    grows a private in-memory database and skips when the counter does not see
+    it (a different library copy, or SQLITE_DEFAULT_MEMSTATUS=0).
+    """
+    import _sqlite3
+    library=None
+    if os.name=='nt':
+        kernel32=ctypes.WinDLL('kernel32',use_last_error=True)
+        kernel32.GetModuleHandleW.argtypes=[ctypes.c_wchar_p]
+        kernel32.GetModuleHandleW.restype=ctypes.c_void_p
+        handle=kernel32.GetModuleHandleW('sqlite3.dll')
+        if handle:
+            library=ctypes.CDLL('sqlite3.dll',handle=handle)
+    try:
+        used=(library or ctypes.CDLL(_sqlite3.__file__)).sqlite3_memory_used
+    except (AttributeError,OSError):
+        pytest.skip('The interpreter SQLite does not expose sqlite3_memory_used')
+    used.argtypes=[];used.restype=ctypes.c_int64
+    with closing(sqlite3.connect(':memory:')) as probe:
+        before=used()
+        probe.execute('CREATE TABLE pages(payload BLOB)')
+        probe.executemany('INSERT INTO pages VALUES (?)',((bytes(4000),) for _ in range(256)))
+        grown=used()-before
+    if grown<512*1024:
+        pytest.skip('sqlite3_memory_used does not observe the sqlite3 module heap')
+    return used
+
+
+@pytest.fixture
+def generated(corpus):
+    """Deterministic ~1.5 MB corpus whose FTS index spans well over 1 MiB of pages."""
+    rng=random.Random(4270)
+    syllables=[consonant+vowel for consonant in 'bdfgklmnprstvz' for vowel in 'aeiou']
+    vocabulary=sorted({''.join(rng.choice(syllables) for _ in range(rng.randint(2,4))) for _ in range(6000)})
+    for number in range(128):
+        parts=['# Generated corpus %03d\n'%number]
+        for part in range(8):
+            words=[rng.choice(vocabulary) for _ in range(200)]
+            if part==3 and number%16==0:
+                words[100:100]=['quasiperiodic','lattice']
+            parts.append('## Part %d\n'%part+''.join(' '.join(words[start:start+12])+'\n'
+                                                   for start in range(0,len(words),12)))
+        corpus.docs['.sources/generated/%03d.md'%number]='\n'.join(parts)
+    specification,amendment='.sources/authority/specification.md','.sources/authority/amendment.md'
+    corpus.docs[specification]='# Specification\nThe Warden admits work only within its measured self budget.\n'
+    corpus.docs[amendment]='# Amendment\nThe owner amends the Warden self budget for allocator headroom.\n'
+    ratify(corpus.root,corpus.docs)
+    path=corpus.root/'v4.1.2_manifest.json'
+    manifest=json.loads(path.read_text(encoding='utf-8'))
+    for item in manifest['documents']:
+        if item['path'] in (specification,amendment):
+            item.update(authority='current_normative' if item['path']==specification else 'owner_decision',
+                        authority_revision=GENERATED_REVISION)
+    path.write_text(json.dumps(manifest,ensure_ascii=False),encoding='utf-8')
+    digest=lambda key:hashlib.sha256(corpus.docs[key].encode('utf-8')).hexdigest()
+    corpus.captured={'specification_sha256':digest(specification),'specification_revision':GENERATED_REVISION,
+        'owner_amendments':[{'source':'amendment','sha256':digest(amendment),'revision':GENERATED_REVISION}]}
+    return corpus
+
+
+def test_refresh_quick_check_runs_off_pool_and_pooled_readers_are_shrunk(corpus,monkeypatch):
+    service=corpus.service
+    service.refresh()
+    opened=[];connect=service._connect
+    def traced(path):
+        conn=connect(path);statements=[]
+        conn.set_trace_callback(statements.append)
+        opened.append((conn,statements))
+        return conn
+    monkeypatch.setattr(service,'_connect',traced)
+    rows=service.search('SQLite fencing')
+    ((pooled,pooled_sql),)=opened
+    assert pooled_sql[-1]=='PRAGMA shrink_memory' and service._readers.queue[-1][1] is pooled
+    with service._reader() as (_,held):
+        assert held is pooled and service._readers.empty()
+        assert service.refresh()['changed_documents']==0
+        # The overlapping refresh neither borrowed nor pooled a reader.
+        assert service._readers.empty()
+    assert len(opened)==2
+    verifier,verifier_sql=opened[1]
+    assert 'PRAGMA quick_check' in verifier_sql
+    assert not any('quick_check' in sql for sql in pooled_sql)
+    with pytest.raises(sqlite3.ProgrammingError):
+        verifier.execute('SELECT 1')
+    assert pooled_sql[-1]=='PRAGMA shrink_memory' and service._readers.queue[-1][1] is pooled
+    assert service.search('SQLite fencing')==rows and len(opened)==2
+
+
+def test_pooled_readers_are_reused_without_caching_the_generated_index(generated,monkeypatch):
+    service,used=generated.service,sqlite_memory_used()
+    published=service.refresh()
+    assert published['changed_documents']==len(generated.docs) and published['index_size_sla_met'] is True
+    assert service.status()['ready'] is True and service._readers.empty()
+    opened=[];connect=service._connect
+    def counted(path):
+        opened.append(connect(path))
+        return opened[-1]
+    monkeypatch.setattr(service,'_connect',counted)
+    authority=KnowledgeAuthority(service,generated.captured)
+    def authority_view():
+        status=authority.status(force=True)
+        return {key:status.get(key) for key in ('ready','index_ready','authority_matches_capture','authority_reason',
+            'authority_source','observed_specification_sha256','owner_amendments','generation','manifest_sha256')}
+    queries=('quasiperiodic lattice','measured self budget')
+    gc.collect();baseline=used()
+    first={query:service.search(query) for query in queries}
+    assert len(first['quasiperiodic lattice'])==5
+    assert {row['doc_path'][:19] for row in first['quasiperiodic lattice']}=={'.sources/generated/'}
+    top=first['measured self budget'][0]
+    assert (top['doc_path'],top['authority'],top['authority_label'])==(
+        '.sources/authority/specification.md','current_normative','Current normative')
+    assert {query:service.search(query) for query in queries}==first
+    # Both rounds of searches reused one pooled connection object.
+    assert len(opened)==1 and service._readers.qsize()==1 and service._readers.queue[0][1] is opened[0]
+    authority_before=authority_view()
+    assert authority_before['ready'] is True and authority_before['authority_matches_capture'] is True
+    assert authority_before['authority_source']=='.sources/authority/specification.md'
+    with service._reader() as (_,held):
+        assert held is opened[0] and service._readers.empty()
+        # Hold a reader whose page cache spans the whole index, as the 30 s
+        # background refresh used to leave a pooled reader.
+        assert held.execute('PRAGMA quick_check').fetchone()[0]=='ok'
+        held_cache=used()-baseline
+        overlapping=service.refresh()
+        assert (overlapping['generation'],overlapping['changed_documents'])==(published['generation'],0)
+        during={query:service.search(query) for query in queries}
+    assert held_cache>1048576, 'The generated index must exceed the 1 MiB bound for this test to discriminate'
+    assert len(opened)==3
+    with pytest.raises(sqlite3.ProgrammingError):
+        opened[1].execute('SELECT 1')  # refresh's dedicated quick_check reader is closed
+    pooled=[conn for _,conn in service._readers.queue]
+    assert len(pooled)==2 and pooled[0] is opened[2] and pooled[1] is opened[0]
+    assert during==first and {query:service.search(query) for query in queries}==first
+    assert authority_view()==authority_before
+    assert len(opened)==3 and service._readers.qsize()==2
+    gc.collect()
+    pooled_memory=used()-baseline
+    assert pooled_memory<1048576, 'Two pooled readers still hold %d bytes of SQLite memory'%pooled_memory

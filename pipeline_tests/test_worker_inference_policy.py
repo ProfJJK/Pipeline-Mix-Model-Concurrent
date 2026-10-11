@@ -4,6 +4,7 @@ Static protocol inputs are explicitly fixtures. Real temporary files exercise
 binary identity checks. Installed CLI capability probes live in the separate
 inference_policy tests; these checks do not claim Windows or paid model runs.
 """
+import copy
 import hashlib
 import json
 
@@ -185,6 +186,130 @@ def test_gemini_cannot_guess_flags_model_or_version_probe(tmp_path, mutation):
         del spec['inference_only']['version_arguments']
     with pytest.raises(ValueError):
         provider_command('gemini', [str(binary)], 'gemini-3.1-pro', 'ram-project', spec, inference_only=True)
+
+
+AGY_ARGV = ['--agent', 'cochem-inference-only', '--input-format', 'stream-json',
+            '--output-format', 'stream-json', '--model', '{model}', '--disable-slash-commands']
+
+
+def agy_policy_spec(binary, bindings):
+    """Decision-3B contract shape with fixture provenance, not host evidence."""
+    digest = hashlib.sha256(binary.read_bytes()).hexdigest()
+    return {'executable': str(binary), 'protocol': 'agy-stream-json',
+            'identity_policy': 'reported-model-equality', 'model_bindings': bindings,
+            'arguments': list(AGY_ARGV),
+            'inference_only': {'arguments': list(AGY_ARGV), 'version_arguments': ['--version'],
+                               'executable_sha256': digest, 'version': '1.3.1',
+                               'capability_reference': 'fixture-isolation-receipt.json#' + '0' * 64,
+                               'disables_tools': True, 'disables_mcp': True, 'disables_hooks': True,
+                               'disables_subagents': True, 'disables_model_fallback': True}}
+
+
+def agy_effort_high(spec):
+    contract = spec['inference_only']
+    return {'arguments': ['--effort', 'high'], 'version_arguments': ['--version'],
+            'executable_sha256': contract['executable_sha256'], 'version': contract['version'],
+            'capability_reference': contract['capability_reference'],
+            'native_metadata': None, 'thinking_enabled': None}
+
+
+@pytest.mark.parametrize('binding, effort, slug', [
+    ('gemini-3.8-flash-low', None, 'gemini-3.8-flash-low'),
+    ({'argv': 'gemini-3.8-flash', 'reports': 'gemini-3.8-flash-high'}, None, 'gemini-3.8-flash'),
+    ('gemini-3.8-flash-high', 'extended', 'gemini-3.8-flash-high'),
+    ({'argv': 'gemini-3.8-flash', 'reports': 'gemini-3.8-flash-high'}, 'extended', 'gemini-3.8-flash'),
+])
+def test_agy_dispatch_substitutes_the_bound_argv_slug_exactly_once(tmp_path, binding, effort, slug):
+    binary = tmp_path / 'agy.exe'
+    binary.write_bytes(b'agy binding fixture')
+    key = 'gemini-3.8-flash' if effort is None else 'gemini-3.8-flash:extended'
+    spec = agy_policy_spec(binary, {key: binding})
+    if effort is not None:
+        spec['effort_contracts'] = {key: agy_effort_high(spec)}
+    reviewed = copy.deepcopy(spec)
+    argv = provider_command('gemini', [str(binary)], 'gemini-3.8-flash', 'ram-project', spec, effort,
+                            inference_only=True)
+    assert argv == [str(binary), '--agent', 'cochem-inference-only', '--input-format', 'stream-json',
+                    '--output-format', 'stream-json', '--model', slug, '--disable-slash-commands',
+                    *(['--effort', 'high'] if effort is not None else [])]
+    assert argv.count(slug) == 1
+    assert not any('{model}' in arg for arg in argv)
+    # The reviewed template keeps its literal placeholder for validate_arguments.
+    assert spec == reviewed and spec['inference_only']['arguments'].count('{model}') == 1
+
+
+def test_agy_dispatch_refuses_unbound_routes_and_pre_substituted_templates(tmp_path):
+    binary = tmp_path / 'agy.exe'
+    binary.write_bytes(b'agy binding fixture')
+    spec = agy_policy_spec(binary, {'gemini-3.8-flash': 'gemini-3.8-flash-low'})
+    with pytest.raises(ValueError, match='no reviewed native model binding'):
+        provider_command('gemini', [str(binary)], 'gemini-3.1-pro-preview', 'ram-project', spec, inference_only=True)
+    for model, effort in (('gemini-3.8-flash', 'extended'), ('gemini-3.1-pro-preview', 'high')):
+        with pytest.raises(ValueError):
+            provider_command('gemini', [str(binary)], model, 'ram-project', spec, effort, inference_only=True)
+    literal = copy.deepcopy(spec)
+    literal['inference_only']['arguments'][literal['inference_only']['arguments'].index('{model}')] = 'gemini-3.8-flash-low'
+    with pytest.raises(ValueError):
+        provider_command('gemini', [str(binary)], 'gemini-3.8-flash', 'ram-project', literal, inference_only=True)
+
+
+# r4 argv, spelled out: the r5 Gemini binding must not change Codex or Claude dispatch.
+R4_CODEX_FEATURES = [item for name in (
+    'shell_tool', 'shell_snapshot', 'code_mode_host', 'code_mode', 'code_mode_only',
+    'apps', 'plugins', 'hooks', 'remote_plugin', 'recommended_plugins',
+    'multi_agent', 'multi_agent_v2', 'browser_use', 'browser_use_external',
+    'browser_use_full_cdp_access', 'computer_use', 'in_app_local_automation',
+    'workspace_dependencies', 'skill_search', 'skill_mcp_dependency_install',
+    'tool_suggest', 'request_permissions_tool', 'view_image', 'image_generation',
+) for item in ('-c', f'features.{name}=false')]
+R4_CODEX_HEAD = ['-a', 'never', 'exec', '--json', '--model']
+R4_CLAUDE_SETTINGS = ('{"disableAllHooks":true,"disableSkillShellExecution":true,'
+                      '"fallbackModel":[],"switchModelsOnFlag":false}')
+R4_CLAUDE_POLICY = ['--tools', '', '--strict-mcp-config', '--mcp-config', '{"mcpServers":{}}',
+                    '--setting-sources', '', '--disable-slash-commands', '--settings']
+
+
+def claude_extended_spec():
+    return {'executable': 'C:\\fixture\\claude.exe', 'effort_contracts': {'claude-opus-5-5:extended': {
+        'arguments': ['--effort', 'max'], 'version_arguments': ['--version'], 'executable_sha256': 'a' * 64,
+        'version': 'claude-version-fixture', 'capability_reference': 'Protocol fixture, not vendor evidence',
+        'native_metadata': None, 'thinking_enabled': True}}}
+
+
+@pytest.mark.parametrize('call, expected', [
+    (lambda: provider_command('codex', ['codex.exe'], 'gpt-6.1-sol', 'ram-project', {}, 'high',
+                              inference_only=True, mcp_names=('srv',)),
+     ['codex.exe', *R4_CODEX_HEAD, 'gpt-6.1-sol', '--ignore-user-config', '--sandbox', 'read-only',
+      '--cd', 'ram-project', '-c', 'model_provider="openai"', '-c', 'forced_login_method="chatgpt"',
+      '--skip-git-repo-check', '--ephemeral', *R4_CODEX_FEATURES, '-c', 'web_search="disabled"',
+      '-c', 'agents.enabled=false', '-c', 'mcp_servers={"srv"={enabled=false}}',
+      '-c', 'model_reasoning_effort="high"', '-']),
+    (lambda: provider_command('codex', ['codex.exe'], 'gpt-6-luna', 'ram-project', {}, 'low', inference_only=True),
+     ['codex.exe', *R4_CODEX_HEAD, 'gpt-6-luna', '--ignore-user-config', '--sandbox', 'read-only',
+      '--cd', 'ram-project', '-c', 'model_provider="openai"', '-c', 'forced_login_method="chatgpt"',
+      '--skip-git-repo-check', '--ephemeral', *R4_CODEX_FEATURES, '-c', 'web_search="disabled"',
+      '-c', 'agents.enabled=false', '-c', 'model_reasoning_effort="low"', '-']),
+    (lambda: provider_command('codex', ['codex.exe'], 'gpt-6-sol', 'workspace', {}),
+     ['codex.exe', *R4_CODEX_HEAD, 'gpt-6-sol', '--ignore-user-config', '--sandbox', 'workspace-write',
+      '--cd', 'workspace', '-c', 'model_provider="openai"', '-c', 'forced_login_method="chatgpt"',
+      '--skip-git-repo-check', '--ephemeral', '-']),
+    (lambda: provider_command('claude', ['claude.exe'], 'claude-haiku-4-5', 'ram-project', {}, inference_only=True),
+     ['claude.exe', '--print', '--output-format', 'json', '--model', 'claude-haiku-4-5',
+      '--permission-mode', 'default', '--no-session-persistence', *R4_CLAUDE_POLICY, R4_CLAUDE_SETTINGS]),
+    (lambda: provider_command('claude', ['claude.exe'], 'claude-opus-5-5', 'ram-project', claude_extended_spec(),
+                              'extended', inference_only=True),
+     ['claude.exe', '--print', '--output-format', 'json', '--model', 'claude-opus-5-5',
+      '--permission-mode', 'default', '--no-session-persistence', *R4_CLAUDE_POLICY,
+      R4_CLAUDE_SETTINGS[:-1] + ',"alwaysThinkingEnabled":true}', '--effort', 'max']),
+    (lambda: provider_command('claude', ['claude.exe'], 'claude-sonnet-5-5', 'workspace', {'allowed_tools': ['Read']}),
+     ['claude.exe', '--print', '--output-format', 'json', '--model', 'claude-sonnet-5-5',
+      '--permission-mode', 'acceptEdits', '--setting-sources', '', '--strict-mcp-config',
+      '--mcp-config', '{"mcpServers":{}}', '--no-session-persistence', '--allowedTools', 'Read']),
+])
+def test_codex_and_claude_argv_remain_byte_identical_to_r4(call, expected):
+    argv = call()
+    assert argv == expected
+    assert json.dumps(argv).encode() == json.dumps(expected).encode()
 
 
 @pytest.mark.parametrize('kind', sorted(CODING_NATIVE_KINDS))

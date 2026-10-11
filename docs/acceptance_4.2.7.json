@@ -1,7 +1,7 @@
 {
   "schema": "cochem-acceptance/4.2.7",
   "revision": "model-routing-2026-10-07",
-  "specification_sha256": "724428cabba182bfcc7328200a454c806df45ebe4dcc9289c863b56975db3074",
+  "specification_sha256": "93fc9da6e975bc47a209b95a9d6ac345cba66ae65be7fa3a97b455abaf4ebc90",
   "evidence": [
     {
       "id": "S427-GOV-001",

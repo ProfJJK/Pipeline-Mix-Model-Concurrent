@@ -18,13 +18,14 @@ import xml.etree.ElementTree as ET
 
 import pytest
 
+from cochem_pipeline.agy_protocol import IDENTITY_POLICY, AgyIdentityError
 from cochem_pipeline.windows import WindowsIsolationError
 from cochem_supervisor.runner import (
     RepairOutputLimitError, RepairRunner, repair_command, repair_prompt,
     validate_provider_spec, verified_repair_output, wait_checked,
     NativeRepairError, NativeRepairAuthError, NativeRepairQuotaError, NativeRepairProviderError,
     NativeRepairResourceError, NativeRepairProtocolError, NativeRepairModelError,
-    NativeRepairPermissionError, native_process_error,
+    NativeRepairPermissionError, NativeRepairIdentityError, native_process_error,
 )
 
 
@@ -350,3 +351,285 @@ def test_lease_revocation_interrupts_actual_running_process_before_deadline():
     assert len(heartbeats) == 2
     assert time.monotonic() - started < 5
     assert process.poll() is not None
+
+
+# Decision 3B ('reported-model-equality'): synthetic Agy stream fixtures and fake
+# launches only. Nothing here is live Agy, subscription or Windows evidence.
+FLASH, LOW, HIGH = "gemini-3.8-flash", "gemini-3.8-flash-low", "gemini-3.8-flash-high"
+EXTENDED = FLASH + ":extended"
+AGY_ARGV = ["--agent", "cochem-inference-only", "--input-format", "stream-json", "--output-format",
+            "stream-json", "--model", "{model}", "--disable-slash-commands"]
+AGY_SHA256, AGY_VERSION = "3" * 64, "1.3.1"
+AGY_REFERENCE = "synthetic-agy-fixture.json#" + "0" * 64
+PROPOSAL = json.dumps({"summary": "Changed the candidate scheduler.",
+                       "files": {"src/cochem_pipeline/scheduler.py": "READY = True\n"}})
+
+
+def agy_effort_contract():
+    return {"arguments": ["--effort", "high"], "version_arguments": ["--version"],
+            "executable_sha256": AGY_SHA256, "version": AGY_VERSION, "capability_reference": AGY_REFERENCE,
+            "native_metadata": None, "thinking_enabled": None}
+
+
+def agy_spec(bindings=None, effort=None):
+    """An unheld synthetic 3B repair contract; not native capability evidence."""
+    value = {"provider": "gemini", "model": FLASH, "reasoning_effort": effort,
+             "executable": str(Path(sys.executable).resolve()), "protocol": "agy-stream-json",
+             "identity_policy": IDENTITY_POLICY, "arguments": list(AGY_ARGV),
+             "model_bindings": {FLASH: LOW} if bindings is None else bindings,
+             "subscription_probe": {"arguments": ["--output-format", "json", "models"], "protocol": "json-fields",
+                                    "expected": {"status": "SUCCESS", "command.name": "models"}},
+             "inference_only": {"arguments": list(AGY_ARGV), "version_arguments": ["--version"],
+                                "executable_sha256": AGY_SHA256, "version": AGY_VERSION,
+                                "capability_reference": AGY_REFERENCE, "disables_tools": True,
+                                "disables_mcp": True, "disables_hooks": True, "disables_subagents": True,
+                                "disables_model_fallback": True}}
+    efforts = [key for key in value["model_bindings"] if ":" in key]
+    if efforts:
+        value["effort_contracts"] = {key: agy_effort_contract() for key in efforts}
+    return value
+
+
+def agy_stream(model, change=None, response="Changed the candidate scheduler."):
+    events = [
+        {"event": "init", "conversation_id": "synthetic-protocol-session",
+         "init": {"model": model, "tools": [], "permission_mode": "request-review"}},
+        {"event": "step_update", "step_update": {"conversation_id": "synthetic-protocol-session",
+         "step_index": 0, "state": "DONE", "step_type": "user_input"}},
+        {"event": "step_update", "step_update": {"conversation_id": "synthetic-protocol-session",
+         "step_index": 1, "state": "DONE", "step_type": "agent_response"}},
+        {"event": "result", "result": {"conversation_id": "synthetic-protocol-session", "status": "SUCCESS",
+         "response": response, "num_turns": 1, "usage": {"input_tokens": 17, "output_tokens": 8}}},
+    ]
+    if change is not None:
+        change(events)
+    return "\n".join(json.dumps(event) for event in events) + "\n"
+
+
+AGY_BINDINGS = [
+    pytest.param({FLASH: LOW}, None, LOW, LOW, id="slug"),
+    pytest.param({FLASH: {"argv": FLASH, "reports": HIGH}}, None, FLASH, HIGH, id="argv-reports"),
+    pytest.param({FLASH: LOW, EXTENDED: HIGH}, "extended", HIGH, HIGH, id="effort-slug"),
+    pytest.param({FLASH: LOW, EXTENDED: {"argv": FLASH, "reports": HIGH}}, "extended", FLASH, HIGH,
+                 id="effort-argv-reports"),
+]
+
+
+@pytest.mark.parametrize("bindings,effort,argv,reports", AGY_BINDINGS)
+def test_agy_stream_is_accepted_under_reported_model_equality(bindings, effort, argv, reports):
+    spec = agy_spec(bindings, effort)
+    assert validate_provider_spec(spec) is None
+    # Record-level model metadata is compared with the reviewed reported name.
+    output = agy_stream(reports, lambda events: events[0].update(model=reports))
+    parsed = verified_repair_output(spec, output, "Loaded cached credentials.\n")
+    assert parsed["content"] == "Changed the candidate scheduler."
+    assert parsed["session_id"] == "synthetic-protocol-session"
+    assert parsed["reported_model"] == FLASH  # The routed canonical id, never the CLI slug.
+    assert parsed["native_reported_model"] == reports
+    assert parsed["native_selected_model"] == argv
+    assert parsed["terminal_success"] is True
+    assert not parsed.get("acceptance_verified", False)
+
+
+@pytest.mark.parametrize("output,stderr", [
+    pytest.param(agy_stream(FLASH), "", id="argv-slug-reported"),
+    pytest.param(agy_stream("gemini-2.5-flash"), "", id="other-model"),
+    pytest.param(agy_stream(HIGH, lambda events: events[-1]["result"].update(model=FLASH)), "", id="result-model"),
+    pytest.param(agy_stream(HIGH, lambda events: events[2]["step_update"].update(model=FLASH)), "", id="step-model"),
+    pytest.param(agy_stream(HIGH, lambda events: events[0]["init"].update(is_fallback=True)), "", id="fallback"),
+    pytest.param(agy_stream(HIGH, lambda events: events[0]["init"].update(tools=["read_file"])), "",
+                 id="tool-registry"),
+    pytest.param(agy_stream(HIGH), "warning: gemini-3.8-flash-high is no longer available. Using gemini-2.5-flash\n",
+                 id="stderr-reroute"),
+])
+def test_agy_identity_mismatch_is_a_compatibility_hold_not_a_relabel(output, stderr):
+    spec = agy_spec({FLASH: {"argv": FLASH, "reports": HIGH}})
+    with pytest.raises(NativeRepairIdentityError) as observed:
+        verified_repair_output(spec, output, stderr)
+    assert observed.value.category == "compatibility"
+    assert isinstance(observed.value.__cause__, AgyIdentityError)
+
+
+def test_agy_record_level_model_must_equal_the_binding_report_not_the_routed_id():
+    spec = agy_spec({FLASH: {"argv": FLASH, "reports": HIGH}})
+    with pytest.raises(NativeRepairIdentityError) as observed:
+        verified_repair_output(spec, agy_stream(HIGH, lambda events: events[0].update(model=FLASH)))
+    assert observed.value.category == "compatibility"
+
+
+@pytest.mark.parametrize("output", [
+    "not JSON", agy_stream(HIGH).splitlines()[0],
+    agy_stream(HIGH, lambda events: events[-1]["result"].update(status="FAILED")),
+    agy_stream(HIGH, lambda events: events[-1]["result"].update(response=" ")),
+    agy_stream(HIGH, lambda events: events[1]["step_update"].update(conversation_id="other-session")),
+])
+def test_malformed_agy_stream_stays_a_protocol_failure(output):
+    with pytest.raises(NativeRepairProtocolError) as observed:
+        verified_repair_output(agy_spec({FLASH: HIGH}), output)
+    assert type(observed.value) is NativeRepairProtocolError
+    assert observed.value.category == "compatibility"
+    assert not isinstance(observed.value.__cause__, AgyIdentityError)
+
+
+@pytest.mark.parametrize("mutation,message", [
+    pytest.param(lambda spec: spec.pop("identity_policy"), "has no verified native contract", id="no-policy"),
+    pytest.param(lambda spec: [spec.pop("identity_policy"), spec.pop("model_bindings")],
+                 "has no verified native contract", id="legacy-hold"),
+    pytest.param(lambda spec: spec.update(identity_policy=None), "reported-model-equality", id="null-policy"),
+    pytest.param(lambda spec: spec.update(identity_policy="reported-model"), "reported-model-equality",
+                 id="unknown-policy"),
+    pytest.param(lambda spec: spec.update(protocol="terminal-json"), "reported-model-equality",
+                 id="policy-off-stream"),
+    pytest.param(lambda spec: [spec.pop("identity_policy"), spec.update(protocol="gemini-json")],
+                 "require the reported-model-equality", id="bindings-without-policy"),
+    pytest.param(lambda spec: spec.pop("model_bindings"), "1 to 32", id="no-bindings"),
+    pytest.param(lambda spec: spec.update(model_bindings={}), "1 to 32", id="empty-bindings"),
+    pytest.param(lambda spec: spec.update(model_bindings={"gemini-3.1-pro-preview": "gemini-3.1-pro-preview"}),
+                 "no reviewed native model binding", id="unbound-model"),
+    pytest.param(lambda spec: spec.update(reasoning_effort="extended"), "no reviewed native model binding",
+                 id="unbound-extended"),
+    pytest.param(lambda spec: spec.update(reasoning_effort="high"), "no reviewed native model binding",
+                 id="unbound-high"),
+])
+def test_gemini_spec_without_policy_or_binding_is_rejected_before_launch(monkeypatch, tmp_path, mutation, message):
+    import cochem_pipeline.windows as windows
+    launches, system_checks = [], []
+    monkeypatch.setattr(windows, "require_system", lambda: system_checks.append(True))
+    monkeypatch.setattr(RepairRunner, "run_process", lambda self, *args, **kwargs: launches.append(args))
+    spec = agy_spec()
+    mutation(spec)
+    with pytest.raises(ValueError, match=message):
+        validate_provider_spec(spec)
+    with pytest.raises(ValueError, match=message):
+        repair_command(spec, ["/trusted/agy"], "/candidate")
+    with pytest.raises(ValueError, match=message):
+        verified_repair_output(spec, agy_stream(LOW))
+    runner = RepairRunner({"private_root": str(tmp_path / "private")})
+    route = {"provider": "gemini", "model": spec["model"], "reasoning_effort": spec.get("reasoning_effort")}
+    with pytest.raises(ValueError, match=message):
+        runner.run(spec, IDENTITY, tmp_path, {"allowed_paths": ["src/cochem_pipeline/"], "route_reservation": route},
+                   tmp_path / "inference", 10, lease_held)
+    with pytest.raises(NativeRepairProtocolError) as preflight:
+        runner.preflight_selected_spec(spec, IDENTITY, tmp_path, tmp_path / "preflight", lease_held)
+    assert preflight.value.category == "compatibility"
+    assert type(preflight.value.__cause__) is ValueError and message in str(preflight.value.__cause__)
+    assert launches == [] and system_checks == []
+    assert list(tmp_path.iterdir()) == []
+
+
+def gemini_terminal_spec(**changes):
+    return {"provider": "gemini", "model": FLASH, "executable": str(Path(sys.executable).resolve()),
+            "protocol": "terminal-json", "arguments": ["--output-format", "json", "--model", "{model}"],
+            "subscription_probe": {"arguments": ["auth", "status"], "protocol": "exact-line",
+                                   "success_line": "Signed in"}, **changes}
+
+
+def test_gemini_terminal_json_without_policy_keeps_the_routed_identity():
+    output = json.dumps({"type": "result", "subtype": "success", "is_error": False,
+                         "session_id": "synthetic-protocol-session", "result": "Changed the candidate scheduler.",
+                         "model": FLASH})
+    parsed = verified_repair_output(gemini_terminal_spec(), output)
+    assert parsed["reported_model"] == FLASH and parsed["session_id"] == "synthetic-protocol-session"
+    with pytest.raises(NativeRepairModelError) as observed:
+        verified_repair_output(gemini_terminal_spec(), output.replace(FLASH, HIGH))
+    assert observed.value.category == "configuration"
+    with pytest.raises(ValueError, match="require the reported-model-equality"):
+        validate_provider_spec(gemini_terminal_spec(model_bindings={FLASH: LOW}))
+
+
+@pytest.fixture
+def agy_launches(monkeypatch):
+    """Fake SYSTEM checks, job board, digests and launches around the real runner.
+
+    Validation, argv construction, the stream parser, proposal parsing and the
+    receipt are real code. No process starts; nothing claims Windows isolation.
+    """
+    import cochem_pipeline.native_effort as native_effort
+    import cochem_pipeline.windows as windows
+    import cochem_pipeline.worker as worker
+    import cochem_supervisor.job_board as job_board
+    import cochem_supervisor.releases as releases
+    import cochem_supervisor.repair_artifacts as repair_artifacts
+    state = {"launches": [], "stdout": None, "stderr": "", "route": None}
+    for name in ("require_system", "validate_code_path", "validate_private_directory"):
+        monkeypatch.setattr(windows, name, lambda *args: None)
+    monkeypatch.setattr(worker, "gemini_binary_digest", lambda spec: spec["inference_only"]["executable_sha256"])
+    monkeypatch.setattr(native_effort, "effort_binary_digest", lambda spec, contract: contract["executable_sha256"])
+    monkeypatch.setattr(repair_artifacts, "source_packet",
+                        lambda workspace, allowed, evidence: {"files": {}, "allowed_paths": list(allowed)})
+    monkeypatch.setattr(releases, "tree_manifest", lambda workspace: {"src/cochem_pipeline/scheduler.py": "0" * 64})
+
+    class Board:
+        def __init__(self, path):
+            pass
+
+        def get(self, job_id):
+            return {"status": "IN_PROGRESS", "reservation": state["route"]}
+
+    monkeypatch.setattr(job_board, "RepairJobBoard", Board)
+
+    def run_process(self, identity, argv, cwd, log_dir, stdin_text="", timeout_seconds=1800,
+                    heartbeat=None, env_overrides=None):
+        logs = Path(log_dir)
+        state["launches"].append({"label": logs.name, "argv": list(argv), "stdin": stdin_text})
+        if logs.name == "inference":
+            stdout, stderr = state["stdout"], state["stderr"]
+        elif logs.name == "auth":
+            stdout, stderr = json.dumps({"status": "SUCCESS", "command": {"name": "models"}}), ""
+        else:
+            stdout, stderr = AGY_VERSION + "\n", ""
+        logs.mkdir(parents=True)
+        (logs / "stdout.log").write_bytes(stdout.encode("utf-8"))
+        (logs / "stderr.log").write_bytes(stderr.encode("utf-8"))
+        return {"pid": 4242, "exit_code": 0, "argv": list(argv), "stdout_path": str(logs / "stdout.log"),
+                "stderr_path": str(logs / "stderr.log"), "cleanup_verified": True, "acceptance_verified": False}
+
+    monkeypatch.setattr(RepairRunner, "run_process", run_process)
+    return state
+
+
+def run_agy_repair(state, tmp_path, spec):
+    route = {"provider": "gemini", "model": spec["model"], "reasoning_effort": spec["reasoning_effort"],
+             "job_id": "synthetic-repair-job", "kind": "REPAIR_REQUEST",
+             "reservation_id": "synthetic-reservation", "reservation_sha256": "b" * 64}
+    state["route"] = route
+    workspace = tmp_path / "candidate"
+    workspace.mkdir(exist_ok=True)
+    runner = RepairRunner({"private_root": str(tmp_path / "private")})
+    return runner.run(spec, IDENTITY, workspace, {"allowed_paths": ["src/cochem_pipeline/"], "route_reservation": route},
+                      tmp_path / "attempt", 60, lease_held)
+
+
+@pytest.mark.parametrize("bindings,effort,argv,reports", AGY_BINDINGS)
+def test_agy_repair_receipt_binds_routed_model_to_reviewed_native_identity(
+        agy_launches, tmp_path, bindings, effort, argv, reports):
+    agy_launches["stdout"] = agy_stream(reports, response=PROPOSAL)
+    receipt = run_agy_repair(agy_launches, tmp_path, agy_spec(bindings, effort))
+    assert receipt["requested_model"] == receipt["reported_model"] == FLASH
+    assert receipt["native_selected_model"] == argv
+    assert receipt["model_identity"] == {"policy": IDENTITY_POLICY, "argv": argv, "reports": reports}
+    assert receipt["requested_effort"] == effort and receipt["reported_effort"] is None
+    assert receipt["proposal"]["summary"] == "Changed the candidate scheduler."
+    assert receipt["terminal_success"] is True and receipt["acceptance_verified"] is False
+    assert json.loads((tmp_path / "attempt" / "repair-receipt.json").read_text(encoding="utf-8")) == receipt
+    labels = [launch["label"] for launch in agy_launches["launches"]]
+    assert labels == ([] if effort is None else ["policy-effort-version"]) + ["policy-disabled-tools", "auth", "inference"]
+    inference = agy_launches["launches"][-1]
+    command = inference["argv"]
+    assert command[0] == str(Path(sys.executable).resolve())
+    assert command[command.index("--model") + 1] == argv and "{model}" not in command
+    if effort is None:
+        assert command[-1] == "--disable-slash-commands" and "--effort" not in command
+    else:
+        assert command[-2:] == ["--effort", "high"]
+    assert inference["stdin"].count("\n") == 1 and json.loads(inference["stdin"])["event"] == "user"
+
+
+@pytest.mark.parametrize("reported,stderr", [(FLASH, ""), (HIGH, "AGY_ERROR: requested model unavailable\n")])
+def test_agy_repair_identity_failure_after_launch_holds_route_without_receipt(agy_launches, tmp_path, reported, stderr):
+    agy_launches["stdout"], agy_launches["stderr"] = agy_stream(reported, response=PROPOSAL), stderr
+    with pytest.raises(NativeRepairIdentityError) as observed:
+        run_agy_repair(agy_launches, tmp_path, agy_spec({FLASH: {"argv": FLASH, "reports": HIGH}}))
+    assert observed.value.category == "compatibility"
+    assert agy_launches["launches"][-1]["label"] == "inference"
+    assert not (tmp_path / "attempt" / "repair-receipt.json").exists()

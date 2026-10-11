@@ -124,6 +124,7 @@ def _claude_failed_result(text, **changes):
 @pytest.mark.parametrize(('text','category','scope'), [
     ('Failed to authenticate. API Error: 401 {"type":"error","error":{"type":"authentication_error"}}', 'auth','pool'),
     ('API Error: 401 {"type":"error","error":{"message":"OAuth token has expired."}}', 'auth','pool'),
+    ('Invalid API key', 'auth','pool'),
     ('Invalid API key · Please run /login', 'auth','pool'),
     ('OAuth token has expired. Please obtain a new token or refresh your existing token.', 'auth','pool'),
     ('Failed to authenticate', 'auth','pool'),
@@ -145,7 +146,8 @@ def test_claude_failed_result_text_maps_anchored_api_status_and_diagnostics(text
     assert isinstance(failure,ProviderFailure)
     assert failure.category == category
     assert failure.hold_scope == scope
-    assert text.strip() not in str(failure)
+    assert failure.args == (failure.summary,)
+    assert text.strip() not in str(failure) and text.strip() not in repr(failure)
     assert text.strip()[:12] not in str(failure)
 
 
@@ -163,7 +165,16 @@ def test_claude_error_subtype_result_without_is_error_is_a_failed_envelope():
     'The model wrote: Invalid API key',
     'Invalid API keys are rotated weekly',
     'API Error: 4011 unexpected',
+    'API Error: 4290 rate limited',
+    'API Error: 401x',
+    'API Error: 50',
     'API Error 401',
+    'Error 429: rate limited',
+    'HTTP 401 Unauthorized',
+    'Connection refused on port 5030',
+    'Upstream returned 529 overloaded',
+    'Failed to authenticated proxy',
+    'OAuth token has expiredness',
     'API Error: \u0664\u0660\u0661',
     ' '*4096 + 'API Error: 401',
     'Internal tool diagnostic with private details',
@@ -183,6 +194,10 @@ def test_claude_failed_result_non_text_result_keeps_execution_fallback():
     {'type':'result','subtype':'success','is_error':False,'result':'API Error: 401 {"type":"error"}'},
     {'type':'result','subtype':'success','is_error':False,'result':'Invalid API key · Please run /login'},
     {'type':'result','subtype':'success','is_error':False,'result':'OAuth token has expired.'},
+    {'type':'result','subtype':'success','is_error':False,'result':'API Error: 429 {"type":"error","error":{"type":"rate_limit_error"}}'},
+    {'type':'result','subtype':'success','is_error':False,'result':'API Error: 529 {"type":"error","error":{"type":"overloaded_error"}}'},
+    {'type':'result','subtype':'success','is_error':False,'result':"You've hit your limit · resets later"},
+    {'type':'result','subtype':'success','is_error':False,'result':'Prompt is too long'},
     {'type':'result','subtype':'success','result':'API Error: 429 rate limited'},
     {'type':'assistant','message':{'content':[{'type':'text','text':'API Error: 401 {"type":"error"}'}]}},
     {'type':'assistant','message':{'content':[{'type':'text','text':'Invalid API key · Please run /login'}]}},
@@ -198,6 +213,12 @@ def test_claude_answers_and_tool_content_never_classify_from_text(record):
 def test_claude_result_text_without_literal_is_error_true_stays_data(is_error):
     # The error_* subtype still makes this a failed envelope, but its text is not read.
     record = {'type':'result','subtype':'error_max_turns','is_error':is_error,'result':'API Error: 401 {"type":"error"}'}
+    assert parse_native_failure('claude',json.dumps(record),'',1).category == 'code'
+
+
+def test_claude_result_text_is_read_only_from_a_result_envelope():
+    # A Claude error record is a failure envelope, but only a result record carries answer text.
+    record = {'type':'error','error':{'message':'Opaque native failure'},'result':'API Error: 401'}
     assert parse_native_failure('claude',json.dumps(record),'',1).category == 'code'
 
 

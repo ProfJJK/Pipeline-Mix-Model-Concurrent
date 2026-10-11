@@ -20,7 +20,7 @@ import time
 
 import pytest
 
-from cochem_pipeline.store import JobStore, artifact_digest, canonical_json, output_digest
+from cochem_pipeline.store import JobStore, artifact_digest, canonical_json, output_digest, reconcile_chapter_wbs
 
 
 def receipt(output, provider=None, job=None):
@@ -690,3 +690,215 @@ def test_manual_preflight_is_one_routed_readonly_model_job_with_finite_fallback(
     assert final['status'] == 'COMPLETED'
     assert len(final['jobs']) == 2 and final['artifacts'] == []
     assert store.claim('extra-paid-job') is None
+
+
+# r5 W1: deterministic chapter WBS reconciliation and sibling task-ID ownership.
+# Chapter outputs below are explicit deterministic fixtures, not model executions.
+MISSING = object()
+
+
+def drift_manifest():
+    """Declarations carrying manifest-model extras that a chapter model should not have to echo."""
+    return {'chapters': [
+        {'chapter_id': 'ch-a', 'title': 'Chapter A', 'requirements': ['REQ-1', 'REQ-2'], 'wbs_tasks_defined': [
+            {'id': 'T-A1', 'description': 'Define schema – units', 'requirements': ['REQ-1', 'REQ-2'],
+             'deliverable': 'schema.json', 'critical': True},
+            {'id': 'T-A2', 'description': 'Validate units', 'requirements': ['REQ-2'], 'dependencies': ['T-A1']}]},
+        {'chapter_id': 'ch-b', 'title': 'Chapter B', 'requirements': ['REQ-3'], 'wbs_tasks_defined': [
+            {'id': 'T-B1', 'description': 'Report results', 'requirements': ['REQ-3']}]}]}
+
+
+def drift_seeded(tmp_path, manifest_output=None, requirements=('REQ-1', 'REQ-2', 'REQ-3')):
+    manifest_output = manifest_output or drift_manifest()
+    count = len(manifest_output['chapters'])
+    store = JobStore(tmp_path / 'drift.db')
+    workflow_id = store.submit('Plan with declared WBS', list(requirements), count)['workflow_id']
+    finish(store, store.claim('manifest'), manifest_output)
+    claimed = [store.claim(f'chapter-worker-{index}') for index in range(count)]
+    return store, workflow_id, {job['chapter_id']: job for job in claimed}
+
+
+def drafted(job, tasks=MISSING):
+    output = {'chapter_id': job['chapter_id'], 'requirements_traced': job['payload']['requirements'],
+              'artifact_uri': f"db://{job['workflow_id']}/{job['chapter_id']}",
+              'artifact_text': f"# {job['payload']['title']}\nModel-written chapter prose."}
+    if tasks is not MISSING:
+        output['wbs_tasks_defined'] = tasks
+    return output
+
+
+def drifted_wbs(declared, mutation):
+    t1, t2 = json.loads(canonical_json(declared))
+    extra = {'id': 'ch-a-extra', 'description': 'Model-added review step', 'requirements': ['REQ-1']}
+    if mutation == 'reword':
+        t1['description'] = 'Specify the unit schema'
+    elif mutation == 'trailing-space':
+        t1['description'] += ' '
+    elif mutation == 'en-dash':
+        t1['description'] = t1['description'].replace('–', '-')
+    elif mutation == 'requirements-order':
+        t1['requirements'].reverse()
+    elif mutation == 'extra-field':
+        t2['status'] = 'planned'
+    elif mutation == 'dropped-manifest-field':
+        del t1['deliverable']
+    elif mutation == 'dropped-dependencies':
+        del t2['dependencies']
+    elif mutation == 'renumbered-ids':
+        t1['id'], t2['id'], t2['dependencies'] = 'ch-a-1', 'ch-a-2', ['ch-a-1']
+    elif mutation == 'true-vs-1':
+        t1['critical'] = 1
+    elif mutation == 'omitted':
+        return [t1, extra]
+    elif mutation == 'duplicated':
+        return [t1, t2, dict(t1), extra]
+    elif mutation == 'reordered':
+        return [extra, t2, t1]
+    elif mutation == 'empty-list':
+        return []
+    elif mutation == 'missing-key':
+        return MISSING
+    elif mutation == 'non-list':
+        return {'T-A1': t1, 'T-A2': t2}
+    return [t1, t2, extra]
+
+
+# mutation -> (restored_omitted_ids, restored_rewritten_ids, additional_task_ids)
+WBS_DRIFT = {
+    'reword': ([], ['T-A1'], ['ch-a-extra']),
+    'trailing-space': ([], ['T-A1'], ['ch-a-extra']),
+    'en-dash': ([], ['T-A1'], ['ch-a-extra']),
+    'requirements-order': ([], ['T-A1'], ['ch-a-extra']),
+    'extra-field': ([], ['T-A2'], ['ch-a-extra']),
+    'dropped-manifest-field': ([], ['T-A1'], ['ch-a-extra']),
+    'dropped-dependencies': ([], ['T-A2'], ['ch-a-extra']),
+    'renumbered-ids': (['T-A1', 'T-A2'], [], ['ch-a-1', 'ch-a-2', 'ch-a-extra']),
+    'omitted': (['T-A2'], [], ['ch-a-extra']),
+    'duplicated': ([], [], ['ch-a-extra']),
+    'reordered': ([], [], ['ch-a-extra']),
+    'empty-list': (['T-A1', 'T-A2'], [], []),
+    'missing-key': (['T-A1', 'T-A2'], [], []),
+    'non-list': (['T-A1', 'T-A2'], [], []),
+    'true-vs-1': ([], ['T-A1'], ['ch-a-extra']),
+}
+
+
+@pytest.mark.parametrize('mutation', list(WBS_DRIFT))
+def test_reconcile_restores_declared_wbs_from_model_drift_and_completion_succeeds(tmp_path, mutation):
+    store, _, claimed = drift_seeded(tmp_path)
+    job = claimed['ch-a']
+    declared = job['payload']['wbs_tasks_defined']
+    tasks = drifted_wbs(declared, mutation)
+    raw = drafted(job, tasks)
+    raw_bytes, payload_bytes = canonical_json(raw), canonical_json(job['payload'])
+    reconciled, evidence = reconcile_chapter_wbs(job['payload'], raw)
+    assert canonical_json(raw) == raw_bytes and canonical_json(job['payload']) == payload_bytes
+    omitted, rewritten, additional = WBS_DRIFT[mutation]
+    assert evidence == {'schema': 'cochem-chapter-wbs-reconciliation/1', 'model_output_sha256': output_digest(raw),
+                        'declared_task_ids': ['T-A1', 'T-A2'], 'restored_omitted_ids': omitted,
+                        'restored_rewritten_ids': rewritten, 'additional_task_ids': additional}
+    wbs = reconciled['wbs_tasks_defined']
+    # Declarations come first and byte-identical; Python == alone would conflate True and 1.
+    assert canonical_json(wbs[:2]) == canonical_json(declared)
+    kept = [task for task in (tasks if isinstance(tasks, list) else []) if task['id'] not in ('T-A1', 'T-A2')]
+    assert canonical_json(wbs[2:]) == canonical_json(kept)
+    assert ({key: value for key, value in reconciled.items() if key != 'wbs_tasks_defined'}
+            == {key: value for key, value in raw.items() if key != 'wbs_tasks_defined'})
+    accepted = finish(store, job, reconciled)
+    assert accepted['status'] == 'COMPLETED'
+    assert accepted['output_sha256'] == output_digest(reconciled)
+    assert canonical_json(accepted['output']['wbs_tasks_defined'][:2]) == canonical_json(declared)
+
+
+@pytest.mark.parametrize('entry, message', [
+    ('a bare string task', 'bounded structured object'),
+    ({'id': '../bad id', 'description': 'Unsafe identifier', 'requirements': ['REQ-1']}, 'alphanumeric identifier'),
+    ({'id': 'ch-a-unowned', 'description': 'Traces a sibling requirement', 'requirements': ['REQ-3']},
+     'only their owning chapter'),
+], ids=['non-dict', 'bad-id', 'unowned-requirement'])
+def test_reconcile_keeps_invalid_additional_tasks_so_completion_still_rejects_them(tmp_path, entry, message):
+    store, _, claimed = drift_seeded(tmp_path)
+    job = claimed['ch-a']
+    reconciled, evidence = reconcile_chapter_wbs(job['payload'], drafted(job, [entry]))
+    assert reconciled['wbs_tasks_defined'][2:] == [entry]
+    assert evidence['restored_omitted_ids'] == ['T-A1', 'T-A2']
+    assert evidence['additional_task_ids'] == [entry['id'] if isinstance(entry, dict) else None]
+    with pytest.raises(ValueError, match=message):
+        finish(store, job, reconciled)
+    assert store.get(job['job_id'])['output'] is None
+
+
+def test_reconcile_passes_output_through_when_nothing_is_declared():
+    output = {'chapter_id': 'ch-a', 'wbs_tasks_defined': [{'id': 'X-1'}]}
+    for payload in (None, {}, {'wbs_tasks_defined': []}, {'wbs_tasks_defined': 'T-A1'}):
+        result, evidence = reconcile_chapter_wbs(payload, output)
+        assert result is output and evidence is None
+    not_an_object = ['not', 'an', 'object']
+    assert reconcile_chapter_wbs({'wbs_tasks_defined': [{'id': 'T-A1'}]}, not_an_object) == (not_an_object, None)
+
+
+def test_sibling_declared_task_id_is_rejected_at_the_offending_chapter_not_at_gather(tmp_path):
+    store, workflow_id, claimed = drift_seeded(tmp_path)
+    a, b = claimed['ch-a'], claimed['ch-b']
+    stolen = {'id': 'T-B1', 'description': 'Reuses the sibling declaration ID', 'requirements': ['REQ-1']}
+    output, _ = reconcile_chapter_wbs(a['payload'], drafted(a, [stolen]))
+    with pytest.raises(ValueError, match='must not reuse a sibling chapter task ID'):
+        finish(store, a, output)
+    assert store.get(a['job_id'])['output'] is None
+    assert store.fail(a['job_id'], a['attempt_id'], a['fencing_token'], 'sibling task ID collision', retry=True)
+    retry = store.claim('chapter-worker-retry')
+    assert retry['job_id'] == a['job_id'] and retry['fencing_token'] > a['fencing_token']
+    output, _ = reconcile_chapter_wbs(retry['payload'], drafted(retry, [{**stolen, 'id': 'ch-a-fresh'}]))
+    finish(store, retry, output)
+    # The innocent last chapter is accepted and gather releases synthesis.
+    exact, evidence = reconcile_chapter_wbs(
+        b['payload'], drafted(b, json.loads(canonical_json(b['payload']['wbs_tasks_defined']))))
+    assert evidence['restored_omitted_ids'] == evidence['restored_rewritten_ids'] == evidence['additional_task_ids'] == []
+    finish(store, b, exact)
+    assert [event['event'] for event in store.events(workflow_id)].count('SYNTHESIS_RELEASED') == 1
+    synthesis = store.claim('synthesis')
+    assert synthesis['kind'] == 'SYNTHESIS'
+    assert [task['id'] for task in synthesis['payload']['wbs_tasks_by_chapter']['ch-a']] == ['T-A1', 'T-A2', 'ch-a-fresh']
+    finish(store, synthesis, synthesis_output(synthesis))
+    assert store.workflow(workflow_id)['status'] == 'COMPLETED'
+
+
+def test_additional_task_id_cannot_reuse_an_accepted_sibling_additional_id(tmp_path):
+    store, workflow_id, claimed = drift_seeded(tmp_path)
+    a, b = claimed['ch-a'], claimed['ch-b']
+    shared = {'id': 'EXTRA-1', 'description': 'Model-added step', 'requirements': ['REQ-1']}
+    finish(store, a, reconcile_chapter_wbs(a['payload'], drafted(a, [shared]))[0])
+    clash = reconcile_chapter_wbs(b['payload'], drafted(b, [{**shared, 'requirements': ['REQ-3']}]))[0]
+    with pytest.raises(ValueError, match='must not reuse a sibling chapter task ID'):
+        finish(store, b, clash)
+    assert store.get(b['job_id'])['output'] is None
+    assert 'SYNTHESIS_RELEASED' not in [event['event'] for event in store.events(workflow_id)]
+    assert store.fail(b['job_id'], b['attempt_id'], b['fencing_token'], 'sibling task ID collision', retry=True)
+    retry = store.claim('chapter-worker-retry')
+    assert retry['job_id'] == b['job_id']
+    fresh = {**shared, 'id': 'EXTRA-2', 'requirements': ['REQ-3']}
+    finish(store, retry, reconcile_chapter_wbs(retry['payload'], drafted(retry, [fresh]))[0])
+    assert store.claim('synthesis')['kind'] == 'SYNTHESIS'
+
+
+def test_sibling_wbs_check_reads_legacy_sibling_rows_defensively(tmp_path):
+    chapters = [{'chapter_id': f'ch-{key}', 'title': f'Chapter {key}', 'requirements': ['REQ-1'],
+                 'wbs_tasks_defined': [{'id': f'T-{key.upper()}1', 'description': 'Declared task',
+                                        'requirements': ['REQ-1']}]} for key in 'abcd']
+    store, _, claimed = drift_seeded(tmp_path, {'chapters': chapters}, ('REQ-1',))
+    # Physical legacy rows written as if accepted before r5 validation; not model executions.
+    legacy = {'ch-b': ['legacy prose task', {'id': 7}, {'id': 'LEGACY-1'}], 'ch-c': 'legacy free-text WBS'}
+    with sqlite3.connect(store.path) as conn:
+        for chapter_id, tasks in legacy.items():
+            job = claimed[chapter_id]
+            odd = {'chapter_id': chapter_id, 'wbs_tasks_defined': tasks}
+            conn.execute('INSERT INTO pipeline_outputs VALUES(?,?,?,?,?,?,?,?)',
+                         (job['job_id'], job['attempt_id'], job['fencing_token'], chapter_id, canonical_json(odd),
+                          canonical_json(receipt(odd, job=job)), output_digest(odd), time.time()))
+            conn.execute("UPDATE pipeline_jobs SET status='COMPLETED' WHERE job_id=?", (job['job_id'],))
+    a = claimed['ch-a']
+    reused = {'id': 'LEGACY-1', 'description': 'Reuses a legacy accepted ID', 'requirements': ['REQ-1']}
+    with pytest.raises(ValueError, match='must not reuse a sibling chapter task ID'):
+        finish(store, a, reconcile_chapter_wbs(a['payload'], drafted(a, [reused]))[0])
+    fresh = {**reused, 'id': 'ch-a-1'}
+    assert finish(store, a, reconcile_chapter_wbs(a['payload'], drafted(a, [fresh]))[0])['status'] == 'COMPLETED'

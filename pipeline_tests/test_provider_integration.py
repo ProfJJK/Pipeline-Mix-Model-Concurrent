@@ -10,7 +10,8 @@ import pytest
 from cochem_pipeline.config import load_config
 from cochem_pipeline.failures import ProviderFailure
 from cochem_pipeline.provider_integration import integration_hold, IntegrationVerificationHold
-from cochem_pipeline.worker import NativeRunner, check_native_integration, provider_command
+from cochem_pipeline.worker import (NativeRunner, check_native_integration, gemini_binary_digest,
+    provider_command, subscription_probe_status)
 from cochem_supervisor.runner import RepairRunner, NativeRepairProtocolError, validate_provider_spec
 
 
@@ -242,3 +243,101 @@ def test_pending_integration_cannot_be_certified_from_a_native_receipt_fixture(t
     with pytest.raises(ValueError, match='integration verification remains pending'):
         verify_effort_profile({}, {'provider': 'gemini', 'model': spec['model'], 'reasoning_effort': None},
                               {'gemini': spec})
+
+
+# Decision 3B at the integration surface: the unheld r5 contract as the r5 load_config
+# accepts it. Fixture bytes only; no CLI process is launched and nothing claims Agy works.
+AGY_BINARY = b'non-executable test bytes'  # the bytes held_spec binds, so a hold can be layered on
+AGY_HIGH = 'gemini-3.8-flash-high'
+AGY_AUTH_OK = json.dumps({'status': 'SUCCESS', 'command': {'name': 'models'}})
+
+
+def unheld_policy_contract(tmp_path):
+    from pipeline_tests.test_config import agy_policy_document, write_config
+    binary = tmp_path / 'native' / 'agy.exe'
+    binary.parent.mkdir()
+    binary.write_bytes(AGY_BINARY)
+    raw = agy_policy_document(tmp_path, {'gemini-3.8-flash': AGY_HIGH})
+    spec = raw['providers']['gemini']
+    spec['executable'] = str(binary)
+    spec['inference_only'].update(executable_sha256=hashlib.sha256(AGY_BINARY).hexdigest(), version='fixture-1')
+    spec['subscription_probe'] = {'arguments': ['--output-format', 'json', 'models'], 'protocol': 'json-fields',
+                                  'expected': {'status': 'SUCCESS', 'command.name': 'models'}}
+    return raw, load_config(write_config(tmp_path, raw)).providers['gemini']
+
+
+def gemini_preflight(spec, version='fixture-1'):
+    """The real Gemini inference preflight; its version probe is answered in-process, never launched."""
+    runner, probes, launches = NativeRunner(None), [], []
+    runner._launch_worker = lambda *args, **kwargs: launches.append(args)
+    def answer(node, identity, argv, *args, probe_kind, **kwargs):
+        probes.append((list(argv), probe_kind))
+        return version + '\n', {'probe': probe_kind}
+    runner._policy_probe = answer
+    def run(effort=None):
+        return runner._inference_preflight({'route': {'model': 'gemini-3.8-flash'}}, 'gemini',
+            [spec['executable']], spec, None, None, lambda: True, None, {}, effort)
+    return run, probes, launches
+
+
+def test_unheld_identity_policy_contract_passes_every_prelaunch_gate_without_a_launch(tmp_path):
+    _, spec = unheld_policy_contract(tmp_path)
+    exe, digest = spec['executable'], hashlib.sha256(AGY_BINARY).hexdigest()
+    version_probe = ([exe, '--version'], 'verify_reviewed_native_version')
+    assert integration_hold('gemini', spec) is None
+    check_native_integration('gemini', spec)
+    run, probes, launches = gemini_preflight(spec)
+    names, evidence = run()
+    assert names == ()
+    assert evidence['identity_policy'] == 'reported-model-equality'
+    assert evidence['native_model'] == {'argv': AGY_HIGH, 'reports': AGY_HIGH}
+    assert (evidence['executable_sha256'], evidence['version']) == (digest, 'fixture-1')
+    assert evidence['model_fallback_disabled'] is True and evidence['tools_disabled'] is True
+    assert probes == [version_probe]
+    assert subscription_probe_status(AGY_AUTH_OK, '', 0, spec['subscription_probe']) is True
+    argv = provider_command('gemini', [exe], 'gemini-3.8-flash', 'ram-workspace', spec, inference_only=True)
+    assert argv == [exe, *(AGY_HIGH if arg == '{model}' else arg for arg in spec['inference_only']['arguments'])]
+    assert gemini_binary_digest(spec) == digest
+    # A target the r5 load_config left unbound fails closed here, before any probe.
+    with pytest.raises(ProviderFailure) as caught:
+        run('extended')
+    assert caught.value.category == 'compatibility'
+    assert str(caught.value.__cause__) == 'Gemini route has no reviewed native model binding'
+    assert probes == [version_probe]
+    assert launches == []
+
+
+@pytest.mark.parametrize('gate', ['digest', 'version', 'probe', 'hold'])
+def test_identity_policy_does_not_bypass_digest_version_probe_or_hold_gates(tmp_path, gate):
+    from pipeline_tests.test_config import write_config
+    raw, spec = unheld_policy_contract(tmp_path)
+    exe = spec['executable']
+    version_probe = ([exe, '--version'], 'verify_reviewed_native_version')
+    if gate == 'digest':
+        Path(exe).write_bytes(AGY_BINARY + b' replaced')
+    elif gate == 'hold':
+        spec = {**spec, 'integration_hold': held_spec(tmp_path)['integration_hold']}
+    run, probes, launches = gemini_preflight(spec, 'fixture-2' if gate == 'version' else 'fixture-1')
+    if gate == 'probe':
+        assert run()[1]['identity_policy'] == 'reported-model-equality'
+        failed = json.dumps({'status': 'FAILED', 'command': {'name': 'models'}})
+        for stdout, code in ((failed, 0), (AGY_AUTH_OK, 1), ('{}', 0), ('', 0)):
+            assert subscription_probe_status(stdout, '', code, spec['subscription_probe']) is False
+        assert probes == [version_probe]
+    else:
+        with pytest.raises(ProviderFailure) as caught:
+            run()
+        assert caught.value.category == 'compatibility'
+        assert probes == ([version_probe] if gate == 'version' else [])
+        if gate == 'hold':
+            assert caught.value.integration_evidence['state'] == 'verification_pending'
+    assert launches == []
+    # Nor can a policy candidate drop or malform these contracts at load (builder gate G6).
+    drop = {'digest': (lambda s: s['inference_only'].update(executable_sha256='not-a-digest'), 'binary digest'),
+            'version': (lambda s: s['inference_only'].update(version=''), 'version and native capability'),
+            'probe': (lambda s: s.update(subscription_probe=None), 'subscription_probe')}
+    if gate in drop:
+        mutate, message = drop[gate]
+        mutate(raw['providers']['gemini'])
+        with pytest.raises(ValueError, match=message):
+            load_config(write_config(tmp_path, raw))

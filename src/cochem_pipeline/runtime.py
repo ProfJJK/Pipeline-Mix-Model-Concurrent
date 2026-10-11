@@ -91,7 +91,8 @@ class Runtime:
         from .resource_limits import controller_limits
         from .controller_guard import ControllerMonitor
         self.controller_scheduling = controller_limits(config.execution_limits,apply=True)
-        self.controller_monitor = ControllerMonitor()
+        # The controller pause recovers with the configured host-governor hysteresis.
+        self.controller_monitor = ControllerMonitor.from_policy(getattr(config,'hardware',None))
         identities = {slot:WorkerIdentity(**value) for slot,value in config.workers.items()}
         validate_layout(config.private_root,config.slot_roots,identities,require_defender=True)
         self.config = config
@@ -453,14 +454,17 @@ class Runtime:
                     'reasons':[*decision.get('reasons',[]),knowledge.get('authority_reason') or 'Registered knowledge corpus/index is not ready']}
         if hasattr(self,'controller_monitor'):
             controller = self.controller_monitor.sample()
+            # A violation closes admission at once; reopening waits for the
+            # monitor's recovery hysteresis, so admission follows admission_ready.
+            admission_ready = controller.get('admission_ready') is True
             self.components['warden_controller'] = {'required':True,
-                'state':'healthy' if controller['ready'] else 'resource_pressure',
+                'state':'healthy' if admission_ready else 'recovering' if controller['ready'] else 'resource_pressure',
                 **controller,'scheduling':self.controller_scheduling}
-            if not controller['ready']:
+            if not admission_ready:
                 decision = {**decision,'capacity':0,
                     'state':decision.get('state') if decision.get('action')=='terminate_active' else 'paused',
                     'action':decision.get('action') if decision.get('action')=='terminate_active' else 'pause_admission',
-                    'reasons':[*decision.get('reasons',[]),*controller['reasons']],
+                    'reasons':[*decision.get('reasons',[]),*controller.get('admission_reasons',controller['reasons'])],
                     'controller':controller}
         ceiling = decision['capacity']
         self.store.set_transition_telemetry(decision)

@@ -77,6 +77,28 @@ def test_loaded_default_policy_collections_are_independent(tmp_path):
     assert second["test_targets"] == expected_targets
 
 
+def test_held_repair_gemini_entry_coexists_with_an_unheld_pipeline_identity_contract(tmp_path):
+    from cochem_pipeline.config import validate_gemini_contract
+    from pipeline_tests.test_config import agy_policy_document
+    from pipeline_tests.test_provider_integration import held_spec
+    raw = document(tmp_path)
+    pipeline_path = Path(raw['pipeline_config'])
+    pipeline = json.loads(pipeline_path.read_text(encoding='utf-8'))
+    unheld = agy_policy_document(tmp_path, {'gemini-3.8-flash': 'gemini-3.8-flash-low'})['providers']['gemini']
+    validate_gemini_contract(unheld)
+    pipeline['providers']['gemini'] = unheld
+    pipeline_path.write_text(json.dumps(pipeline), encoding='utf-8')
+    held = held_spec(tmp_path)
+    raw['providers'].append(json.loads(json.dumps(held)))
+    result = load_config(write_config(tmp_path, raw))
+    assert [item['provider'] for item in result['providers']] == ['codex', 'claude', 'gemini']
+    assert result['providers'][-1]['integration_hold'] == held['integration_hold']
+    assert result['provider_integration_holds']['gemini']['state'] == 'verification_pending'
+    assert 'gemini' not in result.get('provider_contract_errors', {})
+    assert result['pipeline_providers']['gemini'] == unheld
+    assert 'integration_hold' not in result['pipeline_providers']['gemini']
+
+
 def test_incomplete_agy_contract_does_not_disable_other_repair_providers(tmp_path):
     raw=document(tmp_path)
     raw['providers'].append({'provider':'gemini','model':'gemini-3.8-flash',

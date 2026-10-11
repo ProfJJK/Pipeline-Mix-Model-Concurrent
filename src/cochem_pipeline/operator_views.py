@@ -21,13 +21,36 @@ from .planning_governance import SPECIFICATION_ID, execution_contract, digest
 _MAX_FILE = 8 * 1024 * 1024
 _ID = re.compile(r'\bS427-[A-Z]+-\d{3}\b')
 _SHA = re.compile(r'[0-9a-f]{64}')
+# Files whose (size, mtime_ns) key the cached acceptance projection, including
+# the packaged-catalog fallbacks acceptance_dashboard reads.
+_ACCEPTANCE_SOURCES = ('docs/requirements_4.2.7.json', 'requirements_4.2.7.json',
+                       'docs/acceptance_4.2.7.json', 'acceptance_4.2.7.json', '4.2.7_SRS.md')
+_ACCEPTANCE_TTL_SECONDS = 60
+_ACCEPTANCE_MAX_ROOTS = 4
+# Host-sample scalars the timeline and resource plot read from each event.
+_HOST_SAMPLE_FIELDS = ('measured_at', 'capacity', 'state', 'reasons', 'cpu_percent', 'memory_available_mb')
+
+
+def _acceptance_fingerprint(root):
+    fingerprint = []
+    for relative in _ACCEPTANCE_SOURCES:
+        try:
+            observed = (root / relative).stat()
+        except OSError:
+            fingerprint.append((relative, None, None))
+        else:
+            fingerprint.append((relative, observed.st_size, observed.st_mtime_ns))
+    return tuple(fingerprint)
 
 
 class OperatorViewHistory:
     """Read-only observations cached in memory, separate from execution state."""
-    def __init__(self):
+    def __init__(self, clock=time.monotonic):
         self._lock = threading.Lock()
         self._retention = None
+        self._acceptance_lock = threading.Lock()
+        self._acceptance = {}
+        self._clock = clock
 
     def retention_snapshot(self, private_root):
         from .operations_policy import storage_forecast
@@ -38,6 +61,60 @@ class OperatorViewHistory:
             observed = storage_forecast(private_root, previous=previous, max_files=256)
             self._retention = observed
             return {**observed, 'cached': False}
+
+    def acceptance_snapshot(self, source_root):
+        """Reuse one acceptance projection per source root for at most 60 seconds.
+
+        Any change in size or mtime_ns of the requirements ledger, the
+        acceptance ledger or the SRS rebuilds it at once. Evidence artifacts and
+        tested source bytes are re-verified at the latest when the TTL expires;
+        installed specification files are protected and immutable per revision.
+        The cache keeps compact encoded JSON and every caller gets its own copy.
+        """
+        root = Path(source_root)
+        key = str(root.resolve())
+        with self._acceptance_lock:
+            fingerprint = _acceptance_fingerprint(root)
+            now = self._clock()
+            cached = self._acceptance.get(key)
+            if (cached is not None and cached[0] == fingerprint
+                    and 0 <= now - cached[1] < _ACCEPTANCE_TTL_SECONDS):
+                return json.loads(cached[2])
+            dashboard = acceptance_dashboard(root)
+            encoded = json.dumps(dashboard, ensure_ascii=True, separators=(',', ':')).encode('ascii')
+            self._acceptance.pop(key, None)
+            while len(self._acceptance) >= _ACCEPTANCE_MAX_ROOTS:
+                self._acceptance.pop(next(iter(self._acceptance)))
+            self._acceptance[key] = (fingerprint, now, encoded)
+            return dashboard
+
+
+def _slim_event(event):
+    """Keep only what the timeline and resource plot read from a decoded event.
+
+    A full host sample is about 7 KB per event; the operator view needs the
+    plotted scalars, not the retained policy, disk and workspace blocks.
+    """
+    details = event.get('details')
+    details = details if isinstance(details, dict) else {}
+    slim = {key: details[key] for key in ('reason', 'error') if key in details}
+    telemetry = details.get('telemetry')
+    sample = telemetry.get('host_sample') if isinstance(telemetry, dict) else None
+    if isinstance(sample, dict):
+        kept = {key: sample[key] for key in _HOST_SAMPLE_FIELDS if key in sample}
+        measurements = sample.get('measurements')
+        if isinstance(measurements, dict):
+            kept['measurements'] = {}
+            for block, field in (('cpu', 'percent'), ('memory', 'available_mb')):
+                values = measurements.get(block)
+                if isinstance(values, dict) and field in values:
+                    kept['measurements'][block] = {field: values[field]}
+        sample = kept
+    else:
+        sample = None
+    slim['telemetry'] = {'host_sample': sample}
+    return {'id': event.get('id'), 'timestamp': event.get('timestamp'), 'job_id': event.get('job_id'),
+            'event': event.get('event'), 'details': slim}
 
 
 def _document(root, relative):
@@ -268,10 +345,14 @@ def resource_plot(samples):
     """Render separately labelled capacity and measured pressure; never mix units."""
     points = []
     seen = set()
+    raw = {}
     for sample in samples:
         if not isinstance(sample, dict) or sample.get('measured_at') is None:
             continue
         stamp = sample['measured_at']
+        # The last copy of a measurement wins the raw block: the live admission
+        # snapshot follows the slimmed event copies of the same sample.
+        raw[stamp] = sample.get('measurements', {})
         if stamp in seen:
             continue
         seen.add(stamp)
@@ -280,9 +361,11 @@ def resource_plot(samples):
         points.append({'at': stamp, 'capacity': sample.get('capacity'), 'state': sample.get('state'),
             'cpu_percent': cpu.get('percent', sample.get('cpu_percent')),
             'available_memory_mb': memory.get('available_mb', sample.get('memory_available_mb')),
-            'limiting_reasons': sample.get('reasons', []),
-            'measurements': sample.get('measurements', {})})
+            'limiting_reasons': sample.get('reasons', [])})
     points = sorted(points, key=lambda row: row['at'])[-200:]
+    if points:
+        # Raw sensor blocks are kilobytes each; only the latest point carries one.
+        points[-1]['measurements'] = raw[points[-1]['at']]
     panels = [('capacity', 'Admitted capacity (agents)', '#2563eb'),
               ('cpu_percent', 'Measured CPU (%)', '#b45309'),
               ('available_memory_mb', 'Available RAM (MB)', '#15803d')]
@@ -305,6 +388,7 @@ def resource_plot(samples):
             svg.append(f'<text x="100" y="{top + 60}" fill="#6b7280" font-size="12">No physical samples available</text>')
     svg.append('</svg>')
     return {'samples': points, 'sample_scope': 'retained transition telemetry plus latest completed host sample',
+            'measurements_scope': 'latest_point_only',
             'continuous_monitoring_claimed': False, 'svg': ''.join(svg)}
 
 
@@ -536,7 +620,7 @@ def operator_snapshot(runtime, workflow_id=None, *, job_id=None, after_event_id=
         event_params = (*params, after_event_id) if after_event_id is not None else params
         event_count = conn.execute(f'SELECT count(*) FROM pipeline_events {event_where}', event_params).fetchone()[0]
         event_order = 'ASC' if after_event_id is not None else 'DESC'
-        events = [runtime.store._decode_event(row) for row in conn.execute(
+        events = [_slim_event(runtime.store._decode_event(row)) for row in conn.execute(
             f'SELECT * FROM pipeline_events {event_where} ORDER BY id {event_order} LIMIT 200', event_params)]
         events.sort(key=lambda event: event['id'])
         state_rows = conn.execute('SELECT workflow_id,state_json FROM coding_workflows' +
@@ -578,7 +662,8 @@ def operator_snapshot(runtime, workflow_id=None, *, job_id=None, after_event_id=
         source_root = Path(__file__).resolve().parents[2]
         if not (source_root / '4.2.7_SRS.md').is_file():
             source_root = Path(__file__).resolve().parent / 'specification'
-    dashboard = acceptance_dashboard(source_root)
+    dashboard = (history.acceptance_snapshot(source_root) if history is not None
+                 else acceptance_dashboard(source_root))
     current_contract = digest(execution_contract())
     from .document_governance import execution_contract as document_contract
     current_contracts = {'coding': current_contract,

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
 import asyncio
+import hashlib
 import http.client
 import json
 from pathlib import Path
@@ -92,6 +93,7 @@ def endpoint(tmp_path):
     try:
         yield SimpleNamespace(
             controller=controller,
+            server=server,
             port=server.server_address[1],
             token=token,
             client=ControlClient(server.server_address[1], token_file),
@@ -115,6 +117,19 @@ def request(endpoint, method, path, data=None, authorization=None, raw=None, con
         connection.request(method, path, body, headers)
         response = connection.getresponse()
         return response.status, json.loads(response.read())
+    finally:
+        connection.close()
+
+
+def raw_get(endpoint, path, timeout=30):
+    """Authenticated GET returning the status and the exact response bytes."""
+    connection = http.client.HTTPConnection("127.0.0.1", endpoint.port, timeout=timeout)
+    try:
+        connection.request("GET", path, headers={"Authorization": "Bearer " + endpoint.token})
+        response = connection.getresponse()
+        body = response.read()
+        assert response.getheader("Content-Length") == str(len(body))
+        return response.status, body
     finally:
         connection.close()
 
@@ -326,6 +341,171 @@ def test_client_surfaces_authentication_error_without_token_disclosure(endpoint,
     with pytest.raises(RuntimeError, match="Unauthorized") as error:
         ControlClient(endpoint.port, token_file).call("/health")
     assert endpoint.token not in str(error.value)
+
+
+def test_replies_are_compact_ascii_json_with_unchanged_unicode_values(endpoint):
+    workflow = submitted(endpoint)
+    astral = endpoint.client.call("/submit", {"objective": "Chapter \U0001d6fd and Chapter β",
+                                              "chapter_count": 2, "workflow_id": "astral-workflow"})
+    for workflow_id, expected, objective in (
+            ("service-workflow", workflow, "Document thermal transport — Chapter β"),
+            ("astral-workflow", astral, "Chapter \U0001d6fd and Chapter β")):
+        status, body = raw_get(endpoint, "/workflow/" + workflow_id)
+        assert status == 200
+        assert body.isascii()
+        value = json.loads(body)
+        assert value == expected == endpoint.client.call("/workflow/" + workflow_id)
+        assert value["root"]["payload"]["objective"] == objective
+        # Same JSON value, encoded with ASCII escapes and no separator whitespace.
+        assert body == json.dumps(value, ensure_ascii=True, separators=(",", ":")).encode("ascii")
+    assert b"\\u03b2" in raw_get(endpoint, "/workflow/service-workflow")[1]
+    assert b"\\ud835\\udefd" in raw_get(endpoint, "/workflow/astral-workflow")[1]
+    status, body = raw_get(endpoint, "/health")
+    assert status == 200 and body.isascii() and json.loads(body)["test_kind"] == "http-and-sqlite"
+
+
+def test_redacted_receipt_commitment_is_unchanged_by_ascii_wire_encoding(endpoint, monkeypatch):
+    from cochem_pipeline import operator_views
+    receipt = {"attempt_id": "private-attempt", "model": "Chapter β", "output_sha256": "a" * 64}
+    # The commitment is still over the UTF-8 canonical receipt, not the ASCII wire form.
+    expected = hashlib.sha256(json.dumps(receipt, sort_keys=True, separators=(",", ":"), ensure_ascii=False,
+                                         allow_nan=False).encode("utf-8")).hexdigest()
+    assert expected != hashlib.sha256(json.dumps(receipt, sort_keys=True, separators=(",", ":"),
+                                                 ensure_ascii=True).encode("ascii")).hexdigest()
+    assert public_workflow({"receipt": receipt})["receipt_sha256"] == expected
+    monkeypatch.setattr(operator_views, "operator_snapshot",
+                        lambda *args, **kwargs: {"jobs": [{"job_id": "receipt-job", "attempt_id": "private-attempt",
+                                                           "receipt": dict(receipt)}]})
+    status, body = raw_get(endpoint, "/operator")
+    assert status == 200 and body.isascii()
+    job = json.loads(body)["jobs"][0]
+    assert job["receipt_sha256"] == expected
+    assert job["receipt"] == {"model": "Chapter β", "output_sha256": "a" * 64}
+    assert b"private-attempt" not in body
+
+
+def test_concurrent_operator_calls_build_one_projection_at_a_time(endpoint, monkeypatch):
+    from cochem_pipeline import operator_views
+    submitted(endpoint)
+    real = operator_views.operator_snapshot
+    guard = threading.Lock()
+    state = {"active": 0, "peak": 0, "entries": 0}
+
+    def counted(*args, **kwargs):
+        with guard:
+            state["active"] += 1
+            state["entries"] += 1
+            state["peak"] = max(state["peak"], state["active"])
+        try:
+            time.sleep(.05)  # Unserialized builds started together would overlap here.
+            return real(*args, **kwargs)
+        finally:
+            with guard:
+                state["active"] -= 1
+
+    monkeypatch.setattr(operator_views, "operator_snapshot", counted)
+    start = threading.Barrier(8)
+
+    def poll(_):
+        start.wait(timeout=10)
+        return raw_get(endpoint, "/operator")
+
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        results = list(executor.map(poll, range(8)))
+    assert state == {"active": 0, "peak": 1, "entries": 8}
+    assert [status for status, _ in results] == [200] * 8
+    assert all(json.loads(body)["read_only"] is True for _, body in results)
+    assert not endpoint.server.projection_lock.locked()
+
+
+def test_health_reads_and_posts_answer_while_an_operator_build_is_held(endpoint, monkeypatch):
+    from cochem_pipeline import operator_views
+    real = operator_views.operator_snapshot
+    entered, release = threading.Event(), threading.Event()
+
+    def held(*args, **kwargs):
+        entered.set()
+        if not release.wait(timeout=20):
+            raise RuntimeError("test did not release the held build")
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(operator_views, "operator_snapshot", held)
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        pending = executor.submit(raw_get, endpoint, "/operator")
+        try:
+            assert entered.wait(timeout=10)
+            assert endpoint.server.projection_lock.locked()
+            assert endpoint.client.call("/health")["test_kind"] == "http-and-sqlite"
+            assert endpoint.client.call("/coding/projects") == {"projects": []}
+            assert submitted(endpoint)["workflow_id"] == "service-workflow"
+            assert not pending.done()
+        finally:
+            release.set()
+        status, body = pending.result(timeout=30)
+    assert status == 200
+    assert json.loads(body)["read_only"] is True
+    assert not endpoint.server.projection_lock.locked()
+
+
+def test_projection_wait_defaults_to_twenty_seconds(endpoint):
+    from cochem_pipeline.service import PROJECTION_WAIT_SECONDS
+    assert PROJECTION_WAIT_SECONDS == 20
+    assert endpoint.server.projection_wait_seconds == PROJECTION_WAIT_SECONDS
+
+
+@pytest.mark.parametrize("path", ["/operator", "/operator?after_event_id=1", "/operator/workflow/service-workflow",
+                                  "/operator/job/unknown-job", "/workflow/service-workflow",
+                                  "/coding/workflow/unknown"])
+def test_busy_heavy_projection_waits_boundedly_then_returns_documented_503(endpoint, path):
+    submitted(endpoint)
+    endpoint.server.projection_wait_seconds = .2
+    assert endpoint.server.projection_lock.acquire(timeout=5)
+    try:
+        started = time.monotonic()
+        status, body = raw_get(endpoint, path)
+        assert time.monotonic() - started >= .15
+        assert status == 503
+        assert json.loads(body) == {"error": "Operator projection busy; retry"}
+        with pytest.raises(RuntimeError, match=r"^Operator projection busy; retry$"):
+            endpoint.client.call(path)
+        # Health, light reads and writes never take the projection lock.
+        assert endpoint.client.call("/health")["test_kind"] == "http-and-sqlite"
+        assert endpoint.client.call("/coding/projects") == {"projects": []}
+        assert endpoint.client.call("/cancel", {"workflow_id": "service-workflow"})["status"] == "FAILED"
+    finally:
+        endpoint.server.projection_lock.release()
+    if not path.startswith("/coding/"):
+        assert raw_get(endpoint, path)[0] in (200, 400)
+
+
+def test_heavy_projections_are_encoded_under_the_lock_and_light_replies_are_not(endpoint, monkeypatch):
+    from cochem_pipeline import service
+    submitted(endpoint)
+    real = service.encode_json
+    held = []
+
+    def observed(data):
+        held.append(endpoint.server.projection_lock.locked())
+        return real(data)
+
+    monkeypatch.setattr(service, "encode_json", observed)
+    for path in ("/workflow/service-workflow", "/operator/workflow/service-workflow", "/operator"):
+        assert endpoint.client.call(path)
+    assert held == [True, True, True]
+    endpoint.client.call("/health")
+    endpoint.client.call("/coding/projects")
+    assert held == [True, True, True, False, False]
+    assert not endpoint.server.projection_lock.locked()
+
+
+@pytest.mark.parametrize("path", ["/operator?unexpected=1", "/operator?after_event_id=x",
+                                  "/operator?after_event_id=1&after_event_id=2", "/workflow/missing-workflow"])
+def test_rejected_heavy_projection_releases_the_lock(endpoint, path):
+    status, body = raw_get(endpoint, path)
+    assert status == 400
+    assert "error" in json.loads(body)
+    assert not endpoint.server.projection_lock.locked()
+    assert raw_get(endpoint, "/operator")[0] == 200
 
 
 @pytest.mark.parametrize('operation', ['/coding/projects','/coding/workflow/unknown'])

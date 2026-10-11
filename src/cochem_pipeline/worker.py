@@ -6,6 +6,7 @@ from contextlib import contextmanager
 import json
 import os
 from pathlib import Path
+import re
 import stat
 import tempfile
 import threading
@@ -13,14 +14,21 @@ import time
 from typing import Any
 
 from cochem_mcp.providers import build_command, executable_prefix, parse_result
+from .agy_protocol import AgyIdentityError
 from .failures import ProviderFailure, parse_native_failure
-from .store import output_digest
+from .store import output_digest, reconcile_chapter_wbs
 
 
 CODING_NATIVE_KINDS = frozenset({'CODE_PLAN', 'CODE_PLAN_REVIEW', 'CODE_TEST_AUTHOR',
                                'CODE_EDIT', 'CODE_REVIEW', 'CODE_RESEARCH'})
 NATIVE_OUTPUT_LIMIT_BYTES = 8 * 1024 * 1024
 NATIVE_STATUS_LIMIT_BYTES = 1024 * 1024
+NATIVE_FAILURE_SCHEMA = 'cochem-native-failure-metadata/1'
+NATIVE_FAILURE_KEYS = frozenset({'schema', 'category', 'exit_code', 'stdout_bytes', 'stdout_sha256',
+                                 'stderr_bytes', 'stderr_sha256', 'envelope_kind', 'claude_result_subtype',
+                                 'api_status', 'started_at', 'finished_at'})
+_CLAUDE_RESULT_SUBTYPE = re.compile(r'success|error_[a-z0-9_]{1,64}')
+_CLAUDE_RESULT_API_STATUS = re.compile(r'(?:failed to authenticate\.\s*)?api error:\s*([0-9]{3})\b')
 
 
 class NativeOutputLimitError(ProviderFailure):
@@ -178,8 +186,11 @@ def node_prompt(node: dict, context_xml: str = '') -> str:
         }
         instruction = ('Write only your assigned chapter. You have no access to siblings or the job database. '
                        'The Warden stores the artifact in SQLite; do not create a URI file or write a database. '
-                       'Trace every assigned requirement to the chapter and WBS. Preserve all supplied WBS declarations '
-                       'exactly in wbs_tasks_defined; you may append bounded additional tasks owned by this chapter.')
+                       'Trace every assigned requirement to the chapter and WBS. '
+                       'The controller copies every supplied WBS declaration verbatim into the accepted wbs_tasks_defined; '
+                       'repeat them unchanged or omit them, and never reuse a declared ID for a different task. '
+                       'You may append bounded additional tasks owned by this chapter; give each a new ID starting with '
+                       '<chapter_id>- so it cannot collide with sibling chapters.')
     elif kind == 'SYNTHESIS':
         if any(key not in payload for key in ('chapter_output_hashes', 'coverage_report_sha256', 'wbs_tasks_by_chapter')):
             from .document_governance import DocumentCommitmentHold
@@ -297,11 +308,41 @@ def parse_payload(content: str) -> dict:
     return result
 
 
-def parse_gemini(raw: str, protocol: str, requested_model: str) -> dict:
+def parse_gemini(raw: str, protocol: str, requested_model: str, *, native: dict | None = None,
+                 identity_policy: str | None = None, stderr: str | None = None) -> dict:
+    """Parse one Gemini result; reported_model is always the routed canonical id.
+
+    Under the reviewed agy identity policy ``native`` is the binding
+    {'argv', 'reports'} for the routed model/effort: the stream must report
+    exactly ``native['reports']``. Identity, reroute and tool-registry
+    contradictions raise AgyIdentityError (a compatibility failure); any other
+    malformed output raises ValueError. Without the policy an agy stream stays
+    unverified, and the other protocols are parsed unchanged.
+    """
     if protocol == 'agy-stream-json':
-        from .agy_protocol import parse_stream
-        parse_stream(raw, requested_model)
-        raise ValueError('Agy actual-model identity is unverified; native init selection is insufficient')
+        from .agy_protocol import IDENTITY_POLICY, parse_stream
+        if identity_policy is None:
+            parse_stream(raw, requested_model)
+            raise ValueError('Agy actual-model identity is unverified; native init selection is insufficient')
+        if identity_policy != IDENTITY_POLICY:
+            raise ValueError('Unsupported Agy identity policy')
+        if (not isinstance(native, dict) or set(native) != {'argv', 'reports'}
+                or any(not isinstance(native[key], str) or not native[key] for key in ('argv', 'reports'))
+                or not isinstance(requested_model, str) or not requested_model):
+            raise ValueError('Agy identity policy requires the routed model and its reviewed native binding')
+        parsed = parse_stream(raw, native['reports'], identity_policy=identity_policy, stderr=stderr)
+        if parsed['reported_model'] != native['reports']:
+            raise AgyIdentityError('Agy reported model differs from the reviewed native binding')
+        return {'content': parsed['content'], 'session_id': parsed['session_id'],
+                'reported_model': requested_model,
+                'native_reported_model': parsed['reported_model'],
+                'native_selected_model': native['argv'],
+                'identity_policy': identity_policy,
+                'usage': parsed['usage'], 'terminal_success': True}
+    if identity_policy is not None:
+        raise ValueError('Gemini identity policy requires the agy-stream-json protocol')
+    if native is not None and native != {'argv': requested_model, 'reports': requested_model}:
+        raise ValueError('Gemini native model bindings require the reviewed identity policy')
     data = strict_json(raw)
     if not isinstance(data,dict) or data.get('error') or data.get('is_error'):
         raise ValueError('Gemini returned an error or unsupported result')
@@ -421,8 +462,11 @@ def provider_command(provider: str, prefix: list[str], model: str, workspace: st
         return argv
     if provider != 'gemini':
         raise ValueError('Unsupported native provider')
-    from .agy_protocol import require_serving_model_contract
+    from .agy_protocol import native_model_binding, require_serving_model_contract
     require_serving_model_contract(spec)
+    # The reviewed binding maps the routed id to the CLI's argv slug; without
+    # the identity policy it is the routed id itself.
+    binding = native_model_binding(spec, model, reasoning_effort)
     arguments = gemini_inference_arguments(spec) if inference_only else spec['arguments']
     if spec.get('protocol') == 'agy-stream-json':
         from .agy_protocol import validate_arguments
@@ -433,7 +477,7 @@ def provider_command(provider: str, prefix: list[str], model: str, workspace: st
         if not inference_only:
             raise ValueError('Reviewed Agy reasoning effort requires inference-only execution')
         arguments = [*arguments, *effort_binding['arguments']]
-    return [*prefix,*(model if arg=='{model}' else workspace if arg=='{workspace}' else arg
+    return [*prefix,*(binding['argv'] if arg=='{model}' else workspace if arg=='{workspace}' else arg
                       for arg in arguments)]
 
 
@@ -535,6 +579,94 @@ def native_reported_effort(provider: str, raw: str) -> str | None:
     if len(values)>1:
         raise ValueError('Native CLI reported conflicting reasoning effort metadata')
     return next(iter(values)) if values else None
+
+
+def _failure_records(text):
+    """Complete JSON or JSONL objects only; JSON is never extracted from prose."""
+    if not isinstance(text, str) or not text.strip():
+        return []
+    try:
+        value = strict_json(text)
+    except (ValueError, RecursionError):
+        records = []
+        for line in text.splitlines():
+            try:
+                value = strict_json(line)
+            except (ValueError, RecursionError):
+                continue
+            if isinstance(value, dict):
+                records.append(value)
+        return records
+    return [value] if isinstance(value, dict) else []
+
+
+def _failure_envelope(provider, stdout, stderr):
+    """Classify the native failure envelope by type; return no free text."""
+    envelope, subtype, api_status = 'none', None, None
+    for record in [*_failure_records(stdout), *_failure_records(stderr)]:
+        kind, error = record.get('type'), record.get('error')
+        if provider == 'claude' and kind == 'result':
+            value = record.get('subtype')
+            allowed = isinstance(value, str) and _CLAUDE_RESULT_SUBTYPE.fullmatch(value) is not None
+            if subtype is None and allowed:
+                subtype = value
+            if record.get('is_error') is True or (isinstance(value, str) and value.startswith('error_')):
+                envelope = 'claude_result_is_error' if envelope == 'none' else envelope
+                text = record.get('result')
+                status = (_CLAUDE_RESULT_API_STATUS.match(text[:4096].strip().casefold())
+                          if isinstance(text, str) else None)
+                if api_status is None and status is not None:
+                    api_status = int(status.group(1))
+        elif provider == 'claude' and kind == 'error' and isinstance(error, dict):
+            envelope = 'claude_error_record' if envelope == 'none' else envelope
+        elif provider == 'codex' and kind in ('error', 'turn.failed'):
+            envelope = 'codex_turn_failed' if envelope == 'none' else envelope
+        elif provider == 'gemini':
+            failed_result = kind == 'result' and (record.get('is_error') is True or (
+                isinstance(record.get('subtype'), str) and record['subtype'].startswith('error_')))
+            terminal = record.get('result') if record.get('event') == 'result' else None
+            if ((isinstance(error, dict) and (kind in (None, 'error') or failed_result))
+                    or (isinstance(terminal, dict) and (terminal.get('error') or (
+                        isinstance(terminal.get('status'), str) and terminal['status'] != 'SUCCESS')))):
+                envelope = 'gemini_error' if envelope == 'none' else envelope
+    return envelope, subtype, api_status
+
+
+def native_failure_metadata(provider, category, exit_code, stdout, stderr, *, started_at, finished_at,
+                            agy_identity=False, stream_sizes=(None, None)):
+    """Bounded facts about one failed native inference; never raw native text.
+
+    ``stdout``/``stderr`` are the bytes read from the attempt, or None when the
+    output budget stopped the read; their sizes then come from ``stream_sizes``.
+    """
+    streams = []
+    for data, size in zip((stdout, stderr), stream_sizes):
+        if isinstance(data, bytes):
+            streams.append((len(data), hashlib.sha256(data).hexdigest()))
+        else:
+            streams.append((size if type(size) is int and size >= 0 else None, None))
+    envelope, subtype, api_status = 'none', None, None
+    if isinstance(stdout, bytes) and isinstance(stderr, bytes):
+        envelope, subtype, api_status = _failure_envelope(
+            provider, stdout.decode('utf-8', 'replace'), stderr.decode('utf-8', 'replace'))
+    if agy_identity:
+        envelope = 'agy_identity'
+    return {'schema': NATIVE_FAILURE_SCHEMA, 'category': category,
+            'exit_code': exit_code if type(exit_code) is int else None,
+            'stdout_bytes': streams[0][0], 'stdout_sha256': streams[0][1],
+            'stderr_bytes': streams[1][0], 'stderr_sha256': streams[1][1],
+            'envelope_kind': envelope, 'claude_result_subtype': subtype, 'api_status': api_status,
+            'started_at': started_at, 'finished_at': finished_at}
+
+
+def write_native_failure_metadata(log_dir, metadata):
+    """Exclusively create the protected failure.json; never replace an entry."""
+    if not isinstance(metadata, dict) or set(metadata) != NATIVE_FAILURE_KEYS or (
+            metadata['schema'] != NATIVE_FAILURE_SCHEMA):
+        raise ValueError('Native failure metadata must contain exactly its allowlisted fields')
+    data = json.dumps(metadata, indent=2, sort_keys=True, allow_nan=False).encode('utf-8')
+    with (Path(log_dir) / 'failure.json').open('xb') as stream:
+        stream.write(data)
 
 
 class NativeRunner:
@@ -698,10 +830,15 @@ class NativeRunner:
 
         try:
             from .native_effort import effort_contract, effort_binary_digest, effort_version_evidence
-            if provider == 'gemini':
-                from .agy_protocol import require_serving_model_contract
-                require_serving_model_contract(spec)
             model = node['route']['model']
+            if provider == 'gemini':
+                from .agy_protocol import (native_model_binding, require_serving_model_contract,
+                                           validate_identity_policy)
+                require_serving_model_contract(spec)
+                # An unbound routed model/effort fails closed here, before any
+                # native process (including the version probe) is launched.
+                evidence.update(identity_policy=validate_identity_policy(spec),
+                                native_model=native_model_binding(spec, model, reasoning_effort))
             binding = effort_contract(provider, model, reasoning_effort, spec)
             if binding is not None:
                 digest = effort_binary_digest(spec, binding)
@@ -829,6 +966,7 @@ class NativeRunner:
                                       output_limit_bytes=NATIVE_STATUS_LIMIT_BYTES)
                 if code != 0:
                     raise ProviderFailure('compatibility')
+        native_binding = identity_policy = None
         try:
             argv = provider_command(provider,prefix,model,str(workspace),spec,reasoning_effort,
                                     inference_only=inference_only,mcp_names=mcp_names)
@@ -836,6 +974,10 @@ class NativeRunner:
             binding = effort_contract(provider, model, reasoning_effort, spec)
             if binding is not None:
                 effort_binary_digest(spec, binding)
+            if provider == 'gemini':
+                from .agy_protocol import native_model_binding, validate_identity_policy
+                identity_policy = validate_identity_policy(spec)
+                native_binding = native_model_binding(spec, model, reasoning_effort)
             if inference_only and provider == 'gemini':
                 # The protected binary must still be the one whose version and
                 # capability contract were verified before authentication.
@@ -848,42 +990,68 @@ class NativeRunner:
             if not heartbeat():
                 raise ExecutionRevokedError('Execution lease was revoked before launch')
             process = self._launch_worker(identity,argv,workspace,input_pipe.reader,out,err,**launch_options)
-            with self._managed(node['job_id'],process):
-                input_pipe.start()
-                timeout = min(self.config.timeout_seconds, 60) if node['kind'] == 'PREFLIGHT_REQUEST' else self.config.timeout_seconds
-                code = self._wait(process,heartbeat,timeout,on_launch,
-                                  output_streams=(out,err))
-                native_stdout, native_stderr = _read_native_output(out,err)
-                raw = native_stdout.decode('utf-8','replace')
-                stderr = native_stderr.decode('utf-8','replace')
-                failure = parse_native_failure(provider,raw,stderr,code)
-                if failure is not None:
-                    raise failure
-                if code != 0:
-                    raise ProviderFailure('code')
+            code = native_stdout = native_stderr = None
+            agy_identity = False
+            try:
+                with self._managed(node['job_id'],process):
+                    input_pipe.start()
+                    timeout = min(self.config.timeout_seconds, 60) if node['kind'] == 'PREFLIGHT_REQUEST' else self.config.timeout_seconds
+                    code = self._wait(process,heartbeat,timeout,on_launch,
+                                      output_streams=(out,err))
+                    native_stdout, native_stderr = _read_native_output(out,err)
+                    raw = native_stdout.decode('utf-8','replace')
+                    stderr = native_stderr.decode('utf-8','replace')
+                    failure = parse_native_failure(provider,raw,stderr,code)
+                    if failure is not None:
+                        raise failure
+                    if code != 0:
+                        raise ProviderFailure('code')
+                    try:
+                        input_pipe.verify_delivered()
+                    except BrokenPipeError as exc:
+                        raise ProviderFailure('protocol') from exc
+                    try:
+                        parsed = (parse_result(provider,raw) if provider!='gemini' else
+                                  parse_gemini(raw,spec['protocol'],model,native=native_binding,
+                                               identity_policy=identity_policy,stderr=stderr))
+                        reported_effort = native_reported_effort(provider,raw)
+                        if provider != 'codex' and reasoning_effort is not None:
+                            from .native_effort import reported_profile
+                            observation = reported_profile(provider, raw, model=model,
+                                effort=reasoning_effort, spec=spec)
+                            inference_evidence['reasoning_effort'].update(observation)
+                            reported_effort = observation['reported_effort']
+                    except AgyIdentityError as exc:
+                        # A misconfigured or rerouting Agy slot is a model hold
+                        # and reroute, never a failure counted against the job.
+                        agy_identity = True
+                        raise ProviderFailure('compatibility') from exc
+                    except (ValueError,TypeError) as exc:
+                        raise ProviderFailure('protocol') from exc
+                    if parsed.get('reported_model') is not None and parsed['reported_model']!=model:
+                        raise ProviderFailure('protocol')
+                    if reasoning_effort is not None and reported_effort is not None and reported_effort != reasoning_effort:
+                        raise ProviderFailure('protocol')
+                    try:
+                        output = parse_payload(parsed['content'])
+                    except (ValueError,TypeError) as exc:
+                        raise ProviderFailure('protocol') from exc
+            except ProviderFailure as failure:
+                # receipt.json exists only on success; keep the failed attempt's
+                # bounded facts (no raw text) beside its protected logs.
                 try:
-                    input_pipe.verify_delivered()
-                except BrokenPipeError as exc:
-                    raise ProviderFailure('protocol') from exc
-                try:
-                    parsed = parse_result(provider,raw) if provider!='gemini' else parse_gemini(raw,spec['protocol'],model)
-                    reported_effort = native_reported_effort(provider,raw)
-                    if provider != 'codex' and reasoning_effort is not None:
-                        from .native_effort import reported_profile
-                        observation = reported_profile(provider, raw, model=model,
-                            effort=reasoning_effort, spec=spec)
-                        inference_evidence['reasoning_effort'].update(observation)
-                        reported_effort = observation['reported_effort']
-                except (ValueError,TypeError) as exc:
-                    raise ProviderFailure('protocol') from exc
-                if parsed.get('reported_model') is not None and parsed['reported_model']!=model:
-                    raise ProviderFailure('protocol')
-                if reasoning_effort is not None and reported_effort is not None and reported_effort != reasoning_effort:
-                    raise ProviderFailure('protocol')
-                try:
-                    output = parse_payload(parsed['content'])
-                except (ValueError,TypeError) as exc:
-                    raise ProviderFailure('protocol') from exc
+                    write_native_failure_metadata(log_dir, native_failure_metadata(
+                        provider, failure.category, code, native_stdout, native_stderr,
+                        started_at=started, finished_at=time.time(), agy_identity=agy_identity,
+                        stream_sizes=tuple(os.fstat(stream.fileno()).st_size for stream in (out, err))))
+                except (OSError, ValueError, TypeError):
+                    pass  # Diagnostics never replace the typed failure that routing acts on.
+                raise
+            wbs_reconciliation = None
+            if node['kind'] == 'CHAPTER_DRAFT':
+                # The controller owns the manifest WBS declarations: restore them
+                # before the receipt so output_sha256 binds the accepted output.
+                output, wbs_reconciliation = reconcile_chapter_wbs(node['payload'], output)
             receipt = {'provider':provider,'pid':process.pid,'exit_code':code,'session_id':parsed['session_id'],
                        'execution_kind':'native_cli',
                        'process_creation_time':process.creation_time,
@@ -905,6 +1073,13 @@ class NativeRunner:
                        'subscription_verified':True}
             from .native_evidence import native_usage
             receipt['usage'] = native_usage(provider, parsed.get('usage'))
+            if wbs_reconciliation is not None:
+                receipt['wbs_reconciliation'] = wbs_reconciliation
+            if provider == 'gemini':
+                receipt['native_selected_model'] = parsed.get('native_selected_model')
+                receipt['native_reported_model'] = parsed.get('native_reported_model')
+                receipt['model_identity'] = {'policy': identity_policy, 'argv': native_binding['argv'],
+                                             'reports': native_binding['reports']}
             receipt['docker_denial'] = process.docker_denial_evidence
             if inference_evidence is not None:
                 inference_evidence['source_context_sha256'] = source_context_sha256

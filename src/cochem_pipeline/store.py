@@ -198,6 +198,53 @@ def _identifier(value: Any, label: str) -> str:
     return value
 
 
+def reconcile_chapter_wbs(payload: Any, output: Any) -> tuple[Any, dict | None]:
+    """Restore a chapter's controller-owned manifest WBS declarations (pure).
+
+    The scatter payload owns the declarations, and a model is not a byte-exact
+    copier. The returned output's wbs_tasks_defined holds the declared tasks
+    first, deep-copied (canonical_json identical), in manifest order, then every
+    model task whose id is not declared, in model order. A model task reusing a
+    declared id is discarded: the declaration wins. A missing or non-list model
+    list counts as empty. Invalid additional entries are kept, so JobStore._wbs
+    still rejects them. Neither argument is mutated.
+
+    Returns (output, None) unchanged when there is nothing to reconcile (no
+    nonempty declared list, or a non-object output); otherwise the reconciled
+    output and its evidence. Propagates output_digest's error when output is
+    not canonical JSON (for example ValueError for NaN).
+    """
+    declared = payload.get('wbs_tasks_defined') if isinstance(payload, dict) else None
+    if not isinstance(declared, list) or not declared or not isinstance(output, dict):
+        return output, None
+    model_output_sha256 = output_digest(output)
+    canonical: dict[str, str] = {}
+    for task in declared:
+        if isinstance(task, dict) and isinstance(task.get('id'), str):
+            canonical.setdefault(task['id'], canonical_json(task))
+    proposed = output.get('wbs_tasks_defined')
+    seen: set[str] = set()
+    rewritten: set[str] = set()
+    additional: list[Any] = []
+    for task in proposed if isinstance(proposed, list) else ():
+        task_id = task.get('id') if isinstance(task, dict) else None
+        if isinstance(task_id, str) and task_id in canonical:
+            seen.add(task_id)
+            if canonical_json(task) != canonical[task_id]:
+                rewritten.add(task_id)
+            continue
+        additional.append(task)
+    reconciled = {**output, 'wbs_tasks_defined': json.loads(canonical_json(declared + additional))}
+    evidence = {'schema': 'cochem-chapter-wbs-reconciliation/1',
+                'model_output_sha256': model_output_sha256,
+                'declared_task_ids': list(canonical),
+                'restored_omitted_ids': [task_id for task_id in canonical if task_id not in seen],
+                'restored_rewritten_ids': [task_id for task_id in canonical if task_id in rewritten],
+                'additional_task_ids': [task['id'] if isinstance(task, dict) and isinstance(task.get('id'), str)
+                                        else None for task in additional]}
+    return reconciled, evidence
+
+
 class JobStore(CodingStoreMixin):
     def __init__(self, path: str | Path, max_attempts: int = 3, *, routing_policy=None,
                  cleanup_boot_id: int | None = None, governing_requirements: dict | None = None):
@@ -746,6 +793,39 @@ class JobStore(CodingStoreMixin):
             raise ValueError(f"Chapter artifact_uri must be {expected}")
 
     @staticmethod
+    def _sibling_wbs(conn: sqlite3.Connection, job: dict, output: dict) -> None:
+        """Reject chapter WBS task IDs that a sibling chapter of the workflow owns.
+
+        Reserved IDs are every other chapter's manifest-declared task IDs plus the
+        accepted wbs_tasks_defined IDs of COMPLETED sibling CHAPTER_DRAFT jobs,
+        read defensively. complete() runs this in its write transaction right
+        after _chapter, so the offending chapter retries instead of the innocent
+        last chapter failing at gather (_synthesis_payload keeps that check as
+        defence in depth).
+        """
+        def task_ids(tasks: Any) -> set[str]:
+            if not isinstance(tasks, list):
+                return set()
+            return {task['id'] for task in tasks if isinstance(task, dict) and isinstance(task.get('id'), str)}
+
+        reserved: set[str] = set()
+        row = conn.execute("""SELECT o.output_json FROM pipeline_jobs j JOIN pipeline_outputs o USING(job_id)
+            WHERE j.workflow_id=? AND j.kind='MANIFEST_GENERATOR'""", (job['workflow_id'],)).fetchone()
+        manifest = json.loads(row[0]) if row is not None else None
+        chapters = manifest.get('chapters') if isinstance(manifest, dict) else None
+        for chapter in chapters if isinstance(chapters, list) else ():
+            if isinstance(chapter, dict) and chapter.get('chapter_id') != job['chapter_id']:
+                reserved |= task_ids(chapter.get('wbs_tasks_defined'))
+        for row in conn.execute("""SELECT json_extract(o.output_json,'$.wbs_tasks_defined')
+                FROM pipeline_jobs j JOIN pipeline_outputs o USING(job_id)
+                WHERE j.workflow_id=? AND j.kind='CHAPTER_DRAFT' AND j.status='COMPLETED' AND j.job_id<>?
+                AND json_type(o.output_json,'$.wbs_tasks_defined')='array'""",
+                                (job['workflow_id'], job['job_id'])).fetchall():
+            reserved |= task_ids(json.loads(row[0]))
+        if reserved & task_ids(output.get('wbs_tasks_defined')):
+            raise ValueError('Chapter WBS task IDs must not reuse a sibling chapter task ID')
+
+    @staticmethod
     def _hashes(output: dict) -> dict:
         hashes = output.get("chapter_hashes")
         if isinstance(hashes, list):
@@ -796,6 +876,7 @@ class JobStore(CodingStoreMixin):
                     raise ValueError('Preflight must return the exact bounded ready:true response')
             elif job["kind"] == "CHAPTER_DRAFT":
                 self._chapter(job, output)
+                self._sibling_wbs(conn, job, output)
             elif job["kind"] == "SYNTHESIS":
                 if any(key not in job['payload'] for key in ('chapter_output_hashes', 'coverage_report_sha256', 'wbs_tasks_by_chapter')):
                     from .document_governance import DocumentCommitmentHold

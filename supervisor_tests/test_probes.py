@@ -420,6 +420,72 @@ def test_agy_profile_requires_each_observed_inference_guard(field):
         verify_smoke_workflow(workflow, MODELS, provider_config=providers)
 
 
+AGY_STREAM_ARGV = ["--agent", "cochem-inference-only", "--input-format", "stream-json", "--output-format",
+                   "stream-json", "--model", "{model}", "--disable-slash-commands"]
+
+
+def agy_stream_profile(providers, contract, proof, route):
+    """Turn the Gemini fixture into an unheld decision-3B agy stream contract.
+
+    The reviewed CLI selects effort with --effort but never reports it, so the
+    profile stays honestly unverified. Synthetic config, not native evidence.
+    """
+    from cochem_pipeline.agy_protocol import IDENTITY_POLICY
+    model, effort = route["model"], route["reasoning_effort"]
+    gemini = providers["gemini"]
+    contract.update(arguments=["--effort", "high"], native_metadata=None)
+    gemini.update(protocol="agy-stream-json", identity_policy=IDENTITY_POLICY, arguments=list(AGY_STREAM_ARGV),
+                  model_bindings={model + ":" + effort: {"argv": model, "reports": model + "-high"}})
+    gemini["inference_only"]["arguments"] = list(AGY_STREAM_ARGV)
+    proof.update(contract_sha256=digest(contract), native_metadata=None, verified_profile=None,
+                 native_metadata_path=None, observed_native_value=None,
+                 observation_status="not_reported_by_reviewed_cli")
+    return gemini
+
+
+@pytest.mark.parametrize("verifier", ["smoke", "preflight"])
+def test_agy_stream_profile_verifies_under_unheld_identity_policy_with_unreported_effort(verifier):
+    from cochem_pipeline.agy_protocol import IDENTITY_POLICY, native_model_binding, require_serving_model_contract
+    from cochem_pipeline.native_effort import effort_contract
+    from cochem_supervisor.probes import verify_acceptance_preflight
+    if verifier == "smoke":
+        workflow, providers, contract, proof = reviewed_profile_fixture("gemini", "4-6")
+        def verify():
+            return verify_smoke_workflow(workflow, MODELS, provider_config=providers)
+    else:
+        workflow, providers, contract, proof = profiled_preflight_contract_fixture("agy-stream-preflight", "gemini")
+        def verify():
+            return verify_acceptance_preflight(workflow, provider_config=providers)
+    job = workflow["jobs"][1]
+    route = job["route"]
+    gemini = agy_stream_profile(providers, contract, proof, route)
+    assert "integration_hold" not in gemini
+    # The pipeline's own validators accept the same protected contract.
+    assert require_serving_model_contract(gemini) is None
+    assert effort_contract("gemini", route["model"], route["reasoning_effort"], gemini) == contract
+    binding = native_model_binding(gemini, route["model"], route["reasoning_effort"])
+    job["receipt"].update(native_selected_model=binding["argv"], native_reported_model=binding["reports"],
+                          model_identity={"policy": IDENTITY_POLICY, **binding})
+    result = verify()
+    assert result["passed"] is True
+    assert result["effort_identity_verified"] is False
+    assert result["unverified_effort_providers"] == ["gemini"]
+    receipt = result["process_receipts"][0] if verifier == "smoke" else result["receipt"]
+    assert receipt["provider"] == "gemini" and receipt["reported_model"] == route["model"]
+    assert receipt["effort_profile_verified"] is False and receipt["reported_effort"] is None
+    # An agy stream cannot claim a native effort observation, and a hold stays a hold.
+    contract["native_metadata"] = {"path": ["metadata", "thinking_level"], "value": "high"}
+    proof.update(contract_sha256=digest(contract), native_metadata=contract["native_metadata"])
+    with pytest.raises(ValueError, match="no verified native effort observation"):
+        verify()
+    contract["native_metadata"] = None
+    proof.update(contract_sha256=digest(contract), native_metadata=None)
+    assert verify()["passed"] is True
+    gemini["integration_hold"] = {"state": "verification_pending"}
+    with pytest.raises(ValueError, match="integration verification remains pending"):
+        verify()
+
+
 def test_dynamic_assignment_accepts_gemini_chapter_instead_of_fixed_codex_parity():
     workflow = workflow_fixture()
     chapter = workflow["jobs"][2]

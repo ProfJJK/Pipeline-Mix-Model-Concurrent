@@ -1,6 +1,7 @@
 """Pure worker-contract checks; no provider, auth, or operating-system emulation."""
 from __future__ import annotations
 
+import inspect
 import json
 from copy import deepcopy
 from types import SimpleNamespace
@@ -10,6 +11,8 @@ import pytest
 from cochem_pipeline.worker import NativeRunner, node_prompt, parse_gemini, parse_payload, subscription_status, subscription_probe_status, provider_command, native_reported_effort
 from cochem_pipeline.routing import load_routing_policy, tier_for_score
 from cochem_pipeline.failures import ProviderFailure
+from cochem_pipeline.agy_protocol import IDENTITY_POLICY, AgyIdentityError, native_model_binding
+from cochem_pipeline.store import output_digest
 
 
 def test_manifest_prompt_contains_full_assignment_without_controller_secrets():
@@ -43,6 +46,60 @@ def test_chapter_prompt_binds_owned_requirements_and_database_uri():
     assert shape["artifact_uri"] == "db://workflow-1/database"
     assert "no access to siblings or the job database" in prompt
     assert "do not create a URI file or write a database" in prompt
+
+
+def chapter_node():
+    return {"kind": "CHAPTER_DRAFT", "workflow_id": "workflow-1", "payload": {
+        "chapter_id": "database", "chapter_index": 1, "title": "Storage", "requirements": ["REQ-2"],
+        'wbs_tasks_defined': [{'id': 'database-task', 'description': 'Store evidence', 'requirements': ['REQ-2']}],
+        "objective": "Write the storage chapter"}}
+
+
+def test_chapter_prompt_states_controller_restoration_and_chapter_prefixed_new_ids():
+    node = chapter_node()
+    prompt = node_prompt(node)
+    instruction = prompt.split("\n\nTrusted baseline directives:", 1)[0]
+    assert ('The controller copies every supplied WBS declaration verbatim into the accepted wbs_tasks_defined; '
+            'repeat them unchanged or omit them, and never reuse a declared ID for a different task. '
+            'You may append bounded additional tasks owned by this chapter; give each a new ID starting with '
+            '<chapter_id>- so it cannot collide with sibling chapters.') in instruction
+    assert '<chapter_id>-' in instruction
+    assert 'Preserve all supplied WBS declarations exactly' not in prompt
+    # The required output shape (contract) is unchanged.
+    shape = json.loads(prompt.split("Required output shape:\n", 1)[1].split("\n\nTask payload", 1)[0])
+    assert shape == {'chapter_id': 'database', 'requirements_traced': ['REQ-2'],
+                     'wbs_tasks_defined': node['payload']['wbs_tasks_defined'],
+                     'artifact_uri': 'db://workflow-1/database',
+                     'artifact_text': 'Full chapter Markdown, including its SRS and WBS'}
+
+
+def test_runner_reconciles_chapter_wbs_before_binding_the_receipt_digest():
+    source = inspect.getsource(NativeRunner.run)
+    assert source.count('reconcile_chapter_wbs(') == 1
+    assert source.index('reconcile_chapter_wbs') < source.index("'output_sha256':output_digest(output)")
+    assert source.index("if node['kind'] == 'CHAPTER_DRAFT'") < source.index('reconcile_chapter_wbs')
+
+
+def test_drifted_chapter_output_is_restored_by_the_function_the_runner_calls():
+    from cochem_pipeline import store, worker
+    assert worker.reconcile_chapter_wbs is store.reconcile_chapter_wbs
+    node = chapter_node()
+    payload = deepcopy(node['payload'])
+    declared = payload['wbs_tasks_defined'][0]
+    drifted = {'chapter_id': 'database', 'requirements_traced': ['REQ-2'], 'artifact_uri': 'db://workflow-1/database',
+               'artifact_text': 'Chapter', 'wbs_tasks_defined': [
+                   {**declared, 'description': 'Store evidence – reworded '},
+                   {'id': 'database-index', 'description': 'Index evidence', 'requirements': ['REQ-2']}]}
+    original = deepcopy(drifted)
+    restored, evidence = worker.reconcile_chapter_wbs(node['payload'], drifted)
+    assert restored['wbs_tasks_defined'] == [declared, original['wbs_tasks_defined'][1]]
+    assert {key: value for key, value in restored.items() if key != 'wbs_tasks_defined'} == {
+        key: value for key, value in original.items() if key != 'wbs_tasks_defined'}
+    assert evidence['model_output_sha256'] == output_digest(original) != output_digest(restored)
+    assert evidence['restored_rewritten_ids'] == ['database-task']
+    assert evidence['restored_omitted_ids'] == []
+    assert evidence['additional_task_ids'] == ['database-index']
+    assert drifted == original and node['payload'] == payload
 
 
 def test_synthesis_preserves_supplied_hash_map_and_chapter_content():
@@ -223,6 +280,106 @@ def test_gemini_standard_protocol_requires_exactly_one_matching_native_model():
             parse_gemini(json.dumps(data), "gemini-json", "gemini-3.1-pro")
     with pytest.raises(ValueError):
         parse_gemini(json.dumps(gemini_response()), "guess-output", "gemini-3.1-pro")
+
+
+# Decision 3B: the routed canonical id stays the job identity; the reviewed
+# binding names the agy argv slug and the model name the CLI must report.
+ROUTED = 'gemini-3.8-flash'
+LOW, HIGH = 'gemini-3.8-flash-low', 'gemini-3.8-flash-high'
+EFFORT_HIGH = {'arguments': ['--effort', 'high'], 'version_arguments': ['--version'],
+               'executable_sha256': '0' * 64, 'version': '1.3.1',
+               'capability_reference': 'fixture-receipt.json#' + '0' * 64,
+               'native_metadata': None, 'thinking_enabled': None}
+
+
+def agy_stream(reported, response='{"ready":true}'):
+    """Documented agy NDJSON shape as a protocol fixture, not host evidence."""
+    events = [{'event': 'init', 'conversation_id': 'native-agy-session', 'init': {'model': reported, 'tools': []}},
+              {'event': 'step_update', 'step_update': {'conversation_id': 'native-agy-session', 'step_index': 0,
+                                                       'state': 'DONE', 'step_type': 'user_input'}},
+              {'event': 'result', 'result': {'conversation_id': 'native-agy-session', 'status': 'SUCCESS',
+                                             'response': response, 'num_turns': 1,
+                                             'usage': {'input_tokens': 5, 'output_tokens': 3}}}]
+    return '\n'.join(json.dumps(event) for event in events) + '\n'
+
+
+def agy_policy_spec(bindings, contracts=None):
+    spec = {'provider': 'gemini', 'protocol': 'agy-stream-json', 'identity_policy': IDENTITY_POLICY,
+            'model_bindings': bindings}
+    if contracts is not None:
+        spec['effort_contracts'] = contracts
+    return spec
+
+
+def test_parse_gemini_signature_is_the_shared_runner_contract():
+    parameters = inspect.signature(parse_gemini).parameters
+    assert list(parameters) == ['raw', 'protocol', 'requested_model', 'native', 'identity_policy', 'stderr']
+    for name in ('native', 'identity_policy', 'stderr'):
+        assert parameters[name].kind is inspect.Parameter.KEYWORD_ONLY
+        assert parameters[name].default is None
+
+
+@pytest.mark.parametrize('bindings, effort, argv, reports', [
+    ({ROUTED: LOW}, None, LOW, LOW),
+    ({ROUTED: {'argv': ROUTED, 'reports': HIGH}}, None, ROUTED, HIGH),
+    ({ROUTED + ':extended': HIGH}, 'extended', HIGH, HIGH),
+    ({ROUTED + ':extended': {'argv': ROUTED, 'reports': HIGH}}, 'extended', ROUTED, HIGH),
+])
+def test_agy_policy_reports_the_routed_canonical_id_for_both_binding_forms(bindings, effort, argv, reports):
+    contracts = {ROUTED + ':extended': EFFORT_HIGH} if effort else None
+    native = native_model_binding(agy_policy_spec(bindings, contracts), ROUTED, effort)
+    parsed = parse_gemini(agy_stream(reports), 'agy-stream-json', ROUTED, native=native,
+                          identity_policy=IDENTITY_POLICY, stderr='Loaded cached credentials.\n')
+    assert parsed == {'content': '{"ready":true}', 'session_id': 'native-agy-session',
+                      'reported_model': ROUTED, 'native_reported_model': reports,
+                      'native_selected_model': argv, 'identity_policy': IDENTITY_POLICY,
+                      'usage': {'input_tokens': 5, 'output_tokens': 3}, 'terminal_success': True}
+    assert parse_payload(parsed['content']) == {'ready': True}
+
+
+@pytest.mark.parametrize('stream_model, stderr', [
+    (ROUTED, ''),  # The argv slug is not the reviewed reported name.
+    ('gemini-2.5-flash', ''),
+    (HIGH, 'warning: Model resolved via alias\n'),
+    (HIGH, f'{HIGH} is no longer available. Using gemini-2.5-flash\n'),
+])
+def test_agy_policy_identity_mismatch_raises_identity_error(stream_model, stderr):
+    with pytest.raises(AgyIdentityError):
+        parse_gemini(agy_stream(stream_model), 'agy-stream-json', ROUTED, native={'argv': ROUTED, 'reports': HIGH},
+                     identity_policy=IDENTITY_POLICY, stderr=stderr)
+
+
+def test_agy_policy_malformed_stream_or_binding_is_not_an_identity_error():
+    native = {'argv': ROUTED, 'reports': ROUTED}
+    for raw in ('not a native stream', '{}\n{}\n', agy_stream(ROUTED).replace('"SUCCESS"', '"FAILED"')):
+        with pytest.raises(ValueError) as caught:
+            parse_gemini(raw, 'agy-stream-json', ROUTED, native=native, identity_policy=IDENTITY_POLICY)
+        assert not isinstance(caught.value, AgyIdentityError)
+    for invalid in (None, {}, {'argv': ROUTED}, {'argv': ROUTED, 'reports': ''},
+                    {'argv': ROUTED, 'reports': ROUTED, 'extra': ROUTED}, [ROUTED, ROUTED]):
+        with pytest.raises(ValueError) as caught:
+            parse_gemini(agy_stream(ROUTED), 'agy-stream-json', ROUTED, native=invalid,
+                         identity_policy=IDENTITY_POLICY)
+        assert not isinstance(caught.value, AgyIdentityError)
+    for policy in ('reported-model', 'REPORTED-MODEL-EQUALITY'):
+        with pytest.raises(ValueError, match='Unsupported Agy identity policy'):
+            parse_gemini(agy_stream(ROUTED), 'agy-stream-json', ROUTED, native=native, identity_policy=policy)
+
+
+def test_unpoliced_agy_stays_unverified_and_other_protocols_are_unchanged():
+    for native in (None, {'argv': ROUTED, 'reports': ROUTED}):
+        with pytest.raises(ValueError, match='actual-model identity is unverified'):
+            parse_gemini(agy_stream(ROUTED), 'agy-stream-json', ROUTED, native=native, stderr='')
+    for protocol in ('gemini-json', 'terminal-json'):
+        raw = json.dumps(gemini_response(protocol))
+        expected = parse_gemini(raw, protocol, 'gemini-3.1-pro')
+        assert 'native_reported_model' not in expected
+        assert parse_gemini(raw, protocol, 'gemini-3.1-pro', native={'argv': 'gemini-3.1-pro', 'reports': 'gemini-3.1-pro'},
+                            stderr='diagnostic') == expected
+        with pytest.raises(ValueError, match='identity policy'):
+            parse_gemini(raw, protocol, 'gemini-3.1-pro', identity_policy=IDENTITY_POLICY)
+        with pytest.raises(ValueError, match='identity policy'):
+            parse_gemini(raw, protocol, 'gemini-3.1-pro', native={'argv': 'gemini-3.1-pro-low', 'reports': 'gemini-3.1-pro'})
 
 
 def test_codex_subscription_status_requires_native_chatgpt_success():

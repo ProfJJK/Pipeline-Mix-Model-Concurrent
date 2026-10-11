@@ -1,21 +1,115 @@
-"""Agy's documented NDJSON transport, not a deployable isolation contract.
+"""Agy's documented NDJSON transport and its reviewed model identity policy.
 
-The init event reports the selected model, not a server attestation of which
-model served the request. Authentication, inference isolation and model identity
-remain separate required deployment evidence; this module cannot supply them.
+Without a policy the init event reports the selected model, not a server
+attestation of which model served the request, so every agy-stream-json spec
+stays held. The reviewed 'reported-model-equality' policy (decision 3B) treats
+the model name the CLI echoes in its init event, and in any step or result
+field spelling a model, as the identity: any mismatch, absence, fallback or
+reroute field, or rerouting diagnostic is a hard AgyIdentityError. A reviewed
+model_bindings table maps each routed (model, effort) to the CLI argv slug and
+the name the CLI reports. Authentication and inference isolation remain
+separate required deployment evidence; this module cannot supply them.
 """
 from __future__ import annotations
 
 import json
+import re
 
 
 PROTOCOL = 'agy-stream-json'
+IDENTITY_POLICY = 'reported-model-equality'
+
+_SLUG = re.compile(r'^[a-z0-9][a-z0-9.-]{0,127}$')
+_BINDING_KEY = re.compile(r'^[A-Za-z0-9][A-Za-z0-9._/-]{0,199}(:(extended|high))?$')
+_MAX_BINDINGS = 32
+_SLUG_EFFORT = re.compile(r'-(low|medium|high)$')
+_MODEL_KEYS = ('model', 'selected_model', 'model_id')
+_REROUTE_KEY_PARTS = ('fallback', 'rerout', 'deprecated_model', 'deprecatedmodel')
+_STDERR_MARKERS = ('AGY_ERROR:', 'is no longer available. Using', 'Model resolved via',
+                   'Restored session model', 'resolves to a different model')
+_STDERR_LIMIT = 8 * 1024 * 1024
+
+
+class AgyIdentityError(ValueError):
+    """Native output contradicts the reviewed identity, reroute or tool registry.
+
+    Callers classify this as a compatibility failure (model hold and reroute),
+    never as a protocol failure that counts against the job.
+    """
+
+
+def validate_identity_policy(spec):
+    """Return IDENTITY_POLICY when declared, None when absent; reject anything else."""
+    if 'identity_policy' not in spec:
+        return None
+    if spec['identity_policy'] != IDENTITY_POLICY or spec.get('protocol') != PROTOCOL:
+        raise ValueError('Agy identity policy must be reported-model-equality '
+                         'on the agy-stream-json protocol')
+    return IDENTITY_POLICY
 
 
 def require_serving_model_contract(spec):
     """Keep unsupported identity semantics held before any native dispatch."""
-    if spec.get('protocol') == PROTOCOL:
+    if validate_identity_policy(spec) is None and spec.get('protocol') == PROTOCOL:
         raise ValueError('Agy stream actual-model identity has no verified native contract')
+    validate_model_bindings(spec)
+
+
+def validate_model_bindings(spec):
+    """Return {routed key: {'argv': slug, 'reports': slug}} from the reviewed table.
+
+    A value is either one slug (argv and reports are the same) or a mapping with
+    exactly 'argv' and 'reports'. Bindings are required under the identity
+    policy and rejected without it, where the result is always empty.
+    """
+    if validate_identity_policy(spec) is None:
+        if 'model_bindings' in spec:
+            raise ValueError('Agy model bindings require the reported-model-equality identity policy')
+        return {}
+    table = spec.get('model_bindings')
+    if not isinstance(table, dict) or not 1 <= len(table) <= _MAX_BINDINGS:
+        raise ValueError('Agy identity policy requires 1 to 32 reviewed model bindings')
+    contracts = spec.get('effort_contracts', {})
+    if not isinstance(contracts, dict):
+        raise ValueError('Agy effort contracts must be a reviewed mapping')
+    bindings = {}
+    for key, value in table.items():
+        if not isinstance(key, str) or not _BINDING_KEY.fullmatch(key):
+            raise ValueError('Agy model binding key must be a routed model '
+                             'with an optional :extended or :high profile')
+        if isinstance(value, str):
+            argv = reports = value
+        elif isinstance(value, dict) and set(value) == {'argv', 'reports'}:
+            argv, reports = value['argv'], value['reports']
+        else:
+            raise ValueError('Agy model binding must be a slug or exactly {argv, reports}')
+        if any(not isinstance(slug, str) or not _SLUG.fullmatch(slug) for slug in (argv, reports)):
+            raise ValueError('Agy model binding slugs must be reviewed lowercase CLI model names')
+        if ':' in key:
+            contract = contracts.get(key)
+            if not isinstance(contract, dict):
+                raise ValueError('Agy effort model binding requires a reviewed effort contract')
+            arguments = contract.get('arguments')
+            if isinstance(arguments, list) and len(arguments) == 2 and arguments[0] == '--effort':
+                for slug in (argv, reports):
+                    suffix = _SLUG_EFFORT.search(slug)
+                    if suffix and suffix.group(1) != arguments[1]:
+                        raise ValueError('Agy model binding slug contradicts its reviewed --effort level')
+        bindings[key] = {'argv': argv, 'reports': reports}
+    if any(key not in bindings for key in contracts):
+        raise ValueError('Every Agy effort contract requires a reviewed model binding')
+    return bindings
+
+
+def native_model_binding(spec, model, effort):
+    """Map a routed model/effort to its reviewed CLI argv slug and reported name."""
+    bindings = validate_model_bindings(spec)
+    if validate_identity_policy(spec) is None:
+        return {'argv': model, 'reports': model}
+    binding = bindings.get(model if effort is None else f'{model}:{effort}')
+    if binding is None:
+        raise ValueError('Gemini route has no reviewed native model binding')
+    return dict(binding)
 
 
 def validate_arguments(arguments):
@@ -71,51 +165,87 @@ def _json(raw):
         raise ValueError('Agy native JSON exceeds the supported nesting depth') from exc
 
 
-def parse_stream(raw, requested_model):
+def _reject_reroute(value):
+    # Always on: a truthy fallback/reroute/deprecated-model member anywhere in
+    # the native records means the CLI did not serve the selected model as-is.
+    if isinstance(value, dict):
+        for key, child in value.items():
+            if child and any(part in key.casefold() for part in _REROUTE_KEY_PARTS):
+                raise AgyIdentityError('Agy stream reports a model fallback or reroute')
+            _reject_reroute(child)
+    elif isinstance(value, list):
+        for child in value:
+            _reject_reroute(child)
+
+
+def _require_model_identity(event, expected_model):
+    for record in (event, event.get('init'), event.get('step_update'), event.get('result')):
+        if isinstance(record, dict) and any(
+                key in record and record[key] != expected_model for key in _MODEL_KEYS):
+            raise AgyIdentityError('Agy stream reports a model other than the reviewed binding')
+
+
+def parse_stream(raw, expected_model, *, identity_policy=None, stderr=None):
     """Validate one native conversation; never infer identity from answer prose."""
     if not isinstance(raw, str) or len(raw.encode('utf-8')) > 8 * 1024 * 1024:
         raise ValueError('Agy native output exceeds its bounded stream contract')
-    if not isinstance(requested_model, str) or not requested_model.strip():
+    if not isinstance(expected_model, str) or not expected_model.strip():
         raise ValueError('Agy requires an exact selected model')
+    if identity_policy is not None and identity_policy != IDENTITY_POLICY:
+        raise ValueError('Unsupported Agy identity policy')
+    if stderr is not None:
+        if not isinstance(stderr, str) or len(stderr) > _STDERR_LIMIT:
+            raise ValueError('Agy native diagnostics exceed their bounded contract')
+        if any(marker in stderr for marker in _STDERR_MARKERS):
+            raise AgyIdentityError('Agy diagnostics report a model error, fallback or reroute')
     # NDJSON delimiters are LF; Unicode paragraph separators inside JSON text
     # are content and must not split an otherwise valid native record.
     lines = [line for line in raw.split('\n') if line.strip()]
     if not 2 <= len(lines) <= 32768:
         raise ValueError('Agy must report one bounded native conversation')
     events = [_json(line) for line in lines]
+    _reject_reroute(events)
     if (any(not isinstance(event, dict) for event in events)
             or events[0].get('event') != 'init' or events[-1].get('event') != 'result'):
         raise ValueError('Agy stream requires initial and terminal native events')
+    for event in events:
+        _require_model_identity(event, expected_model)
     first, terminal = events[0], events[-1].get('result')
     init = first.get('init')
     session = first.get('conversation_id')
     if (not isinstance(session, str) or not 0 < len(session.strip()) <= 512
-            or any(ord(char) < 32 for char in session) or not isinstance(init, dict)
-            or init.get('model') != requested_model):
+            or any(ord(char) < 32 for char in session) or not isinstance(init, dict)):
         raise ValueError('Agy native selected model and session must match the controller request')
+    if init.get('model') != expected_model:
+        raise AgyIdentityError('Agy native selected model and session must match the controller request')
     if init.get('tools') != []:
-        raise ValueError('Agy stream did not attest an empty native tool registry')
+        raise AgyIdentityError('Agy stream did not attest an empty native tool registry')
     for event in events[1:-1]:
         step = event.get('step_update')
-        if (event.get('event') != 'step_update' or not isinstance(step, dict)
-                or step.get('conversation_id') != session
+        if event.get('event') != 'step_update' or not isinstance(step, dict):
+            raise ValueError('Agy stream contains unverified steps, tools, agents or model identity')
+        if (any(key in step for key in ('tool_name', 'tool_info', 'subagent_info'))
+                or ('model' in step and step['model'] != expected_model)):
+            raise AgyIdentityError('Agy stream contains unverified steps, tools, agents or model identity')
+        if (step.get('conversation_id') != session
                 or step.get('step_type') not in ('user_input', 'agent_response', 'checkpoint')
                 or step.get('state') not in ('ACTIVE', 'DONE')
-                or type(step.get('step_index')) is not int or step['step_index'] < 0
-                or any(key in step for key in ('tool_name', 'tool_info', 'subagent_info'))
-                or ('model' in step and step['model'] != requested_model)):
+                or type(step.get('step_index')) is not int or step['step_index'] < 0):
             raise ValueError('Agy stream contains unverified steps, tools, agents or model identity')
     if (not isinstance(terminal, dict) or terminal.get('conversation_id') != session
             or terminal.get('status') != 'SUCCESS'
             or type(terminal.get('num_turns')) is not int or terminal['num_turns'] != 1
             or terminal.get('error') or terminal.get('permission_denials')
-            or not isinstance(terminal.get('response'), str) or not terminal['response'].strip()
-            or ('model' in terminal and terminal['model'] != requested_model)):
+            or not isinstance(terminal.get('response'), str) or not terminal['response'].strip()):
         raise ValueError('Agy must report one successful result for the same native conversation')
-    # init.model is configuration metadata. No terminal model field has a
-    # verified public contract, so even a field with that spelling cannot
-    # manufacture a serving-model receipt. The caller must retain its hold.
+    if 'model' in terminal and terminal['model'] != expected_model:
+        raise AgyIdentityError('Agy must report one successful result for the same native conversation')
+    # Without the reviewed policy init.model is configuration metadata only and
+    # the caller must retain its hold. Under the policy init.model, checked
+    # above to equal the binding's reported name, is the identity receipt; a
+    # result without a model member is the documented CLI shape, not a failure.
     return {'content': terminal['response'], 'session_id': session,
-            'native_selected_model': init['model'], 'reported_model': None,
+            'native_selected_model': init['model'],
+            'reported_model': init['model'] if identity_policy == IDENTITY_POLICY else None,
             'terminal_success': True,
             'usage': terminal.get('usage') if isinstance(terminal.get('usage'), dict) else {}}

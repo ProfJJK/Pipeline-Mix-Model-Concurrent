@@ -5,6 +5,8 @@ import json
 import pytest
 
 from cochem_pipeline.agy_protocol import encode_prompt, parse_stream, validate_arguments
+from cochem_pipeline.agy_protocol import (IDENTITY_POLICY, AgyIdentityError, native_model_binding,
+    require_serving_model_contract, validate_identity_policy, validate_model_bindings)
 from cochem_pipeline.failures import ProviderFailure
 from cochem_pipeline.native_evidence import native_usage
 from cochem_pipeline.worker import NativeRunner, native_prompt_text, parse_gemini, provider_command
@@ -125,3 +127,289 @@ def test_stream_identity_hold_precedes_native_probe_authentication_and_inference
         provider_command('gemini', ['must-not-launch'], MODEL, 'workspace', spec)
     with pytest.raises(ValueError, match='actual-model identity'):
         validate_provider_spec(spec)
+
+
+# Decision 3B: the reviewed 'reported-model-equality' identity policy.
+LOW, HIGH, FAMILY = 'gemini-3.8-flash-low', 'gemini-3.8-flash-high', 'gemini-3.8-flash'
+EXTENDED = MODEL + ':extended'
+LEGACY_HOLD = 'Agy stream actual-model identity has no verified native contract'
+
+
+def effort_contract(level='high'):
+    return {'arguments': ['--effort', level], 'version_arguments': ['--version'],
+            'executable_sha256': '0' * 64, 'version': '1.3.1',
+            'capability_reference': 'fixture-receipt.json#' + '0' * 64,
+            'native_metadata': None, 'thinking_enabled': None}
+
+
+def policy_spec(bindings=None, contracts=None):
+    spec = {'provider': 'gemini', 'model': 'gemini-3.1-pro-preview', 'protocol': 'agy-stream-json',
+            'identity_policy': IDENTITY_POLICY,
+            'model_bindings': {MODEL: LOW} if bindings is None else bindings}
+    if contracts is not None:
+        spec['effort_contracts'] = contracts
+    return spec
+
+
+def stream(model, change=None):
+    data = records()
+    data[0]['init']['model'] = model
+    if change is not None:
+        change(data)
+    return raw(data)
+
+
+def test_identity_policy_constant_and_error_type_are_stable():
+    assert IDENTITY_POLICY == 'reported-model-equality'
+    assert issubclass(AgyIdentityError, ValueError)
+    assert validate_identity_policy({'protocol': 'agy-stream-json'}) is None
+    assert validate_identity_policy({'protocol': 'gemini-json'}) is None
+    assert validate_identity_policy(policy_spec()) == IDENTITY_POLICY
+
+
+def test_both_model_binding_forms_are_accepted():
+    spec = policy_spec({MODEL: LOW, EXTENDED: {'argv': FAMILY, 'reports': HIGH}},
+                       {EXTENDED: effort_contract('high')})
+    assert validate_model_bindings(spec) == {
+        MODEL: {'argv': LOW, 'reports': LOW}, EXTENDED: {'argv': FAMILY, 'reports': HIGH}}
+    assert require_serving_model_contract(spec) is None
+    assert native_model_binding(spec, MODEL, None) == {'argv': LOW, 'reports': LOW}
+    assert native_model_binding(spec, MODEL, 'extended') == {'argv': FAMILY, 'reports': HIGH}
+    # A plain slug may bind an effort route, and a dict may bind a plain route.
+    spec = policy_spec({MODEL: {'argv': FAMILY, 'reports': HIGH}, EXTENDED: HIGH},
+                       {EXTENDED: effort_contract('high')})
+    assert native_model_binding(spec, MODEL, None) == {'argv': FAMILY, 'reports': HIGH}
+    assert native_model_binding(spec, MODEL, 'extended') == {'argv': HIGH, 'reports': HIGH}
+    # Exactly 32 bindings are the upper bound.
+    assert len(validate_model_bindings(policy_spec({f'm{i}': LOW for i in range(32)}))) == 32
+
+
+@pytest.mark.parametrize('bindings, contracts', [
+    ({MODEL: {'argv': LOW, 'reports': LOW, 'extra': LOW}}, None),
+    ({MODEL: {'argv': LOW}}, None),
+    ({MODEL: {'reports': LOW}}, None),
+    ({MODEL: {}}, None),
+    ({MODEL: 'Gemini-3.8-flash'}, None),
+    ({MODEL: '{model}'}, None),
+    ({MODEL: 'REPLACE_WITH_REVIEWED_SLUG'}, None),
+    ({MODEL: ''}, None),
+    ({MODEL: '-gemini'}, None),
+    ({MODEL: 'gemini 3.8'}, None),
+    ({MODEL: 'gemini/flash'}, None),
+    ({MODEL: 'gemini-3.8-flash\n'}, None),
+    ({MODEL: 'a' * 129}, None),
+    ({MODEL: {'argv': LOW, 'reports': 'Gemini'}}, None),
+    ({MODEL: {'argv': None, 'reports': LOW}}, None),
+    ({MODEL: 7}, None),
+    ({MODEL: None}, None),
+    ({MODEL: [LOW]}, None),
+    ({'': LOW}, None),
+    ({':high': LOW}, None),
+    ({MODEL + ':low': LOW}, None),
+    ({MODEL + ':extended:high': LOW}, None),
+    ({'-gemini': LOW}, None),
+    ({'gemini 3.8': LOW}, None),
+    ({'a' * 201: LOW}, None),
+    ({EXTENDED: HIGH}, None),
+    ({EXTENDED: HIGH}, {}),
+    ({EXTENDED: HIGH}, {MODEL + ':high': effort_contract('high')}),
+    ({EXTENDED: LOW}, {EXTENDED: effort_contract('high')}),
+    ({EXTENDED: {'argv': LOW, 'reports': HIGH}}, {EXTENDED: effort_contract('high')}),
+    ({EXTENDED: {'argv': FAMILY, 'reports': 'gemini-3.8-flash-medium'}}, {EXTENDED: effort_contract('high')}),
+    ({MODEL: LOW}, {EXTENDED: effort_contract('high')}),
+    ({MODEL: LOW}, []),
+    ({}, None),
+    ([MODEL, LOW], None),
+    ({f'm{i}': LOW for i in range(33)}, None),
+])
+def test_invalid_model_bindings_are_rejected(bindings, contracts):
+    spec = policy_spec(bindings, contracts)
+    with pytest.raises(ValueError):
+        validate_model_bindings(spec)
+    with pytest.raises(ValueError):
+        require_serving_model_contract(spec)
+
+
+def test_policy_requires_bindings_and_bindings_require_policy():
+    spec = policy_spec()
+    del spec['model_bindings']
+    with pytest.raises(ValueError, match='1 to 32'):
+        validate_model_bindings(spec)
+    with pytest.raises(ValueError):
+        require_serving_model_contract(spec)
+    for protocol in ('agy-stream-json', 'gemini-json', 'terminal-json'):
+        unpoliced = {'provider': 'gemini', 'protocol': protocol, 'model_bindings': {MODEL: LOW}}
+        with pytest.raises(ValueError, match='identity policy'):
+            validate_model_bindings(unpoliced)
+        with pytest.raises(ValueError):
+            native_model_binding(unpoliced, MODEL, None)
+        with pytest.raises(ValueError):
+            require_serving_model_contract(unpoliced)
+    for policy, protocol in (('reported-model', 'agy-stream-json'), (None, 'agy-stream-json'),
+                             (IDENTITY_POLICY, 'gemini-json'), (IDENTITY_POLICY, 'terminal-json')):
+        spec = policy_spec()
+        spec.update(identity_policy=policy, protocol=protocol)
+        for check in (validate_identity_policy, validate_model_bindings, require_serving_model_contract):
+            with pytest.raises(ValueError, match='reported-model-equality'):
+                check(spec)
+
+
+def test_native_model_binding_without_reviewed_key_raises():
+    spec = policy_spec({MODEL: LOW})
+    for model, effort in ((MODEL, 'extended'), (MODEL, 'high'), ('gemini-3.1-pro-preview', 'high'),
+                          ('gemini-3.1-pro-preview', None)):
+        with pytest.raises(ValueError) as caught:
+            native_model_binding(spec, model, effort)
+        assert str(caught.value) == 'Gemini route has no reviewed native model binding'
+    # Without the policy the routed id is passed through unchanged.
+    for protocol in ('gemini-json', 'terminal-json', 'agy-stream-json'):
+        assert native_model_binding({'protocol': protocol}, MODEL, 'extended') == {
+            'argv': MODEL, 'reports': MODEL}
+    assert validate_model_bindings({'protocol': 'gemini-json'}) == {}
+
+
+def test_legacy_hold_message_is_byte_identical_without_policy():
+    for spec in ({'protocol': 'agy-stream-json'},
+                 {'provider': 'gemini', 'model': MODEL, 'protocol': 'agy-stream-json'}):
+        with pytest.raises(ValueError) as caught:
+            require_serving_model_contract(spec)
+        assert type(caught.value) is ValueError
+        assert str(caught.value) == LEGACY_HOLD
+        assert caught.value.args == (LEGACY_HOLD,)
+    for protocol in ('gemini-json', 'terminal-json', None):
+        assert require_serving_model_contract({'protocol': protocol}) is None
+
+
+def test_reported_name_not_argv_slug_is_the_identity_under_policy():
+    binding = native_model_binding(policy_spec({MODEL: {'argv': FAMILY, 'reports': HIGH}}), MODEL, None)
+    assert binding == {'argv': FAMILY, 'reports': HIGH}
+    result = parse_stream(stream(binding['reports']), binding['reports'],
+                          identity_policy=IDENTITY_POLICY, stderr='')
+    assert result['reported_model'] == result['native_selected_model'] == HIGH
+    assert result['content'] == '{}' and result['terminal_success'] is True
+    assert result['usage']['total_tokens'] == 18
+    with pytest.raises(AgyIdentityError):
+        parse_stream(stream(binding['argv']), binding['reports'], identity_policy=IDENTITY_POLICY)
+    # Without the policy the same stream is still not an identity receipt.
+    assert parse_stream(stream(HIGH), HIGH)['reported_model'] is None
+
+
+def test_missing_result_model_passes_and_matching_model_fields_pass():
+    assert 'model' not in records()[-1]['result']
+    assert parse_stream(stream(HIGH), HIGH, identity_policy=IDENTITY_POLICY)['reported_model'] == HIGH
+
+    def agreeing(data):
+        data[0]['init'].update(selected_model=HIGH, model_id=HIGH)
+        data[0]['model'] = HIGH
+        data[1]['step_update'].update(model=HIGH, selected_model=HIGH)
+        data[-1]['result'].update(model=HIGH, model_id=HIGH, selected_model=HIGH)
+    assert parse_stream(stream(HIGH, agreeing), HIGH,
+                        identity_policy=IDENTITY_POLICY)['reported_model'] == HIGH
+
+
+@pytest.mark.parametrize('change', [
+    lambda x: x[0]['init'].update(model_id=FAMILY),
+    lambda x: x[0]['init'].update(selected_model=FAMILY),
+    lambda x: x[0].update(model=FAMILY),
+    lambda x: x[0].update(model_id=FAMILY),
+    lambda x: x[1].update(selected_model=FAMILY),
+    lambda x: x[1]['step_update'].update(model_id=FAMILY),
+    lambda x: x[2]['step_update'].update(selected_model=FAMILY),
+    lambda x: x[2]['step_update'].update(model=FAMILY),
+    lambda x: x[-1].update(model=FAMILY),
+    lambda x: x[-1]['result'].update(model=FAMILY),
+    lambda x: x[-1]['result'].update(model_id=FAMILY),
+    lambda x: x[-1]['result'].update(selected_model=FAMILY),
+    lambda x: x[-1]['result'].update(model_id=None),
+    lambda x: x[0]['init'].pop('model'),
+    lambda x: x[0]['init'].update(model=None),
+])
+def test_model_identity_disagreement_fails(change):
+    with pytest.raises(AgyIdentityError):
+        parse_stream(stream(HIGH, change), HIGH, identity_policy=IDENTITY_POLICY)
+    with pytest.raises(AgyIdentityError):
+        parse_stream(stream(HIGH, change), HIGH)
+
+
+@pytest.mark.parametrize('change', [
+    lambda x: x[0]['init'].update(deprecated_model_rerouting_info={'from': HIGH, 'to': 'gemini-2.5-flash'}),
+    lambda x: x[-1]['result'].update(metadata={'routing': {'deprecated_model_rerouting_info': {'to': 'x'}}}),
+    lambda x: x[0]['init'].update(is_fallback=True),
+    lambda x: x[1]['step_update'].update(details=[{'serving': {'is_fallback': True}}]),
+    lambda x: x[-1]['result']['usage'].update(is_fallback=True),
+    lambda x: x[0].update(isFallback=True),
+    lambda x: x[0]['init'].update(fallback_model='gemini-2.5-flash'),
+    lambda x: x[-1]['result'].update(model_rerouted=True),
+    lambda x: x[2]['step_update'].update(rerouting={'reason': 'capacity'}),
+    lambda x: x[0]['init'].update(deprecatedModel='gemini-2.0'),
+])
+def test_fallback_and_reroute_members_fail_with_and_without_policy(change):
+    with pytest.raises(AgyIdentityError, match='fallback or reroute'):
+        parse_stream(stream(HIGH, change), HIGH, identity_policy=IDENTITY_POLICY)
+    with pytest.raises(AgyIdentityError, match='fallback or reroute'):
+        parse_stream(stream(HIGH, change), HIGH)
+
+
+def test_falsy_fallback_members_pass():
+    def benign(data):
+        data[0]['init'].update(is_fallback=False, deprecated_model_rerouting_info={})
+        data[1]['step_update'].update(details=[{'serving': {'is_fallback': False}}])
+        data[-1]['result'].update(rerouted=None, fallback_reason='')
+        data[-1]['result']['usage'].update(fallback_tokens=0)
+    result = parse_stream(stream(HIGH, benign), HIGH, identity_policy=IDENTITY_POLICY)
+    assert result['reported_model'] == HIGH
+    assert parse_stream(stream(MODEL, benign), MODEL)['reported_model'] is None
+
+
+@pytest.mark.parametrize('marker', [
+    'AGY_ERROR:', 'is no longer available. Using', 'Model resolved via',
+    'Restored session model', 'resolves to a different model',
+])
+def test_each_rerouting_stderr_marker_fails(marker):
+    stderr = f'info: starting\nwarning: {marker} something else\n'
+    with pytest.raises(AgyIdentityError, match='diagnostics'):
+        parse_stream(stream(HIGH), HIGH, identity_policy=IDENTITY_POLICY, stderr=stderr)
+    with pytest.raises(AgyIdentityError, match='diagnostics'):
+        parse_stream(stream(MODEL), MODEL, stderr=stderr)
+    # Without stderr the stream itself remains acceptable.
+    assert parse_stream(stream(HIGH), HIGH, identity_policy=IDENTITY_POLICY)['reported_model'] == HIGH
+
+
+def test_benign_or_absent_stderr_passes_and_bad_stderr_is_protocol():
+    for stderr in (None, '', 'Loaded cached credentials.\n', 'agy_error: lowercase is not the marker'):
+        assert parse_stream(stream(HIGH), HIGH, identity_policy=IDENTITY_POLICY,
+                            stderr=stderr)['reported_model'] == HIGH
+    for stderr in (b'AGY_ERROR: bytes', 7, 'x' * (8 * 1024 * 1024 + 1)):
+        with pytest.raises(ValueError) as caught:
+            parse_stream(stream(HIGH), HIGH, identity_policy=IDENTITY_POLICY, stderr=stderr)
+        assert not isinstance(caught.value, AgyIdentityError)
+
+
+def test_tool_registry_violations_are_identity_but_malformed_streams_are_protocol():
+    for change in (lambda x: x[0]['init'].update(tools=['read_file']),
+                   lambda x: x[0]['init'].pop('tools'),
+                   lambda x: x[1]['step_update'].update(tool_name='run_shell'),
+                   lambda x: x[1]['step_update'].update(tool_info={}),
+                   lambda x: x[1]['step_update'].update(subagent_info={})):
+        with pytest.raises(AgyIdentityError):
+            parse_stream(stream(HIGH, change), HIGH, identity_policy=IDENTITY_POLICY)
+    for change in (lambda x: x[1]['step_update'].update(conversation_id='other-session'),
+                   lambda x: x[1]['step_update'].update(step_type='tool'),
+                   lambda x: x[-1]['result'].update(status='FAILED'),
+                   lambda x: x[-1]['result'].update(response=''),
+                   lambda x: x[0].update(conversation_id=''),
+                   lambda x: x.insert(1, copy.deepcopy(x[0]))):
+        with pytest.raises(ValueError) as caught:
+            parse_stream(stream(HIGH, change), HIGH, identity_policy=IDENTITY_POLICY)
+        assert not isinstance(caught.value, AgyIdentityError)
+    for text in ('{}', 'not JSON', '{}\nNaN'):
+        with pytest.raises(ValueError) as caught:
+            parse_stream(text, HIGH, identity_policy=IDENTITY_POLICY)
+        assert not isinstance(caught.value, AgyIdentityError)
+
+
+def test_unknown_identity_policy_is_rejected_by_the_parser():
+    for policy in ('reported-model', 'REPORTED-MODEL-EQUALITY', ''):
+        with pytest.raises(ValueError, match='identity policy') as caught:
+            parse_stream(stream(HIGH), HIGH, identity_policy=policy)
+        assert not isinstance(caught.value, AgyIdentityError)

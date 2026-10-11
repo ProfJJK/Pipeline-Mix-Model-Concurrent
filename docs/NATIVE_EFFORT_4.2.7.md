@@ -252,10 +252,23 @@ tool registry, which has **not** been observed on this installation.
 
 The documented init model describes selected configuration; the terminal
 result does not establish the actual serving model. No effort observation
-binding is established either. An explicit compatibility hold therefore rejects
-this protocol **before any native launch** in pipeline and repair runners.
-Parsing fixtures is not permission to enable it. Even an undocumented terminal
-field named `model` is not promoted to actual-model evidence.
+binding is established either. Without an identity policy, an explicit
+compatibility hold therefore rejects this protocol **before any native launch**
+in pipeline and repair runners. Parsing fixtures is not permission to enable it.
+Even an undocumented terminal field named `model` is not promoted to
+actual-model evidence.
+
+r5 (owner decision 3B, 2026-10-10) adds the `identity_policy`
+`reported-model-equality`. A Gemini spec that declares it must also declare
+reviewed `model_bindings` (canonical route id to the CLI slug passed as
+`--model` and the slug the stream must report). Under that policy the worker
+and the repair runner accept a stream only when every reported model equals the
+binding's `reports` slug, the tool registry is empty, and no fallback, reroute
+or stderr marker appears; any violation is a `compatibility` failure that holds
+the model and reroutes. An unbound Gemini route fails closed before launch. The
+policy is enabled only by the gated r5 config builder after the sign-in,
+isolation and replay evidence passes; otherwise the commissioned held contract
+stays in force.
 
 The [Agy reference](https://www.antigravity.google/docs/cli/reference/) permits
 read tools even under strict permission settings. No verified all-tools/MCP/

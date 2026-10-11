@@ -99,6 +99,17 @@ class NativeRepairPermissionError(NativeRepairProtocolError):
     category = "configuration"
 
 
+class NativeRepairIdentityError(NativeRepairProtocolError):
+    """Agy output contradicts its reviewed model identity, reroute or tool registry.
+
+    Under decision 3B ('reported-model-equality') this holds the route and
+    reroutes to the next candidate, like the pipeline worker; it is never
+    charged to repaired code and never relabels the configured model.
+    """
+
+    category = "compatibility"
+
+
 def _positive_number(value: Any, label: str, maximum: float) -> float:
     if type(value) not in (int, float) or not math.isfinite(value) or not 0 < value <= maximum:
         raise ValueError(f"{label} must be finite, positive, and at most {maximum}")
@@ -129,8 +140,13 @@ def validate_provider_spec(spec: Mapping[str, Any]) -> None:
         from cochem_pipeline.provider_integration import require_integration_ready
         require_integration_ready(provider, spec)
     if provider == "gemini":
-        from cochem_pipeline.agy_protocol import require_serving_model_contract
+        from cochem_pipeline.agy_protocol import (native_model_binding, require_serving_model_contract,
+            validate_model_bindings)
         require_serving_model_contract(spec)
+        # Decision 3B: the routed model/effort needs its reviewed CLI binding
+        # before any capability probe, authentication or inference launch.
+        validate_model_bindings(spec)
+        native_model_binding(spec, spec["model"], effort)
         from cochem_pipeline.config import validate_subscription_probe
         validate_subscription_probe(spec.get("subscription_probe"))
         if spec.get("protocol") not in ("gemini-json", "terminal-json", "agy-stream-json"):
@@ -148,6 +164,19 @@ def validate_provider_spec(spec: Mapping[str, Any]) -> None:
         raise ValueError("allowed_tools must be a list of explicit nonempty tool names")
     if tools:
         raise ValueError("Repair inference cannot enable native tools or nested model jobs")
+
+
+def _model_identity(spec: Mapping[str, Any]) -> dict | None:
+    """Return a Gemini route's reviewed identity {policy, argv, reports}; None otherwise.
+
+    Without the identity policy the routed model passes through unchanged and
+    policy is None. An unbound route under the policy raises ValueError.
+    """
+    if spec["provider"] != "gemini":
+        return None
+    from cochem_pipeline.agy_protocol import native_model_binding, validate_identity_policy
+    binding = native_model_binding(spec, spec["model"], spec.get("reasoning_effort"))
+    return {"policy": validate_identity_policy(spec), "argv": binding["argv"], "reports": binding["reports"]}
 
 
 def repair_command(spec: Mapping[str, Any], prefix: list[str], workspace: str, *, mcp_names=()) -> list[str]:
@@ -287,8 +316,18 @@ def native_process_error(provider: str, stdout: str, stderr: str, exit_code: int
 
 
 def verified_repair_output(spec: Mapping[str, Any], stdout: str, stderr: str = "") -> dict:
-    """Validate native terminal evidence, without trusting generated identity text."""
+    """Validate native terminal evidence, without trusting generated identity text.
+
+    Gemini record-level model metadata must equal the reviewed binding's
+    reported name. Under 'reported-model-equality' the parser must attest that
+    name; identity, reroute and tool-registry violations raise
+    NativeRepairIdentityError (compatibility), while malformed output stays a
+    plain NativeRepairProtocolError.
+    """
     validate_provider_spec(spec)
+    identity = _model_identity(spec)
+    policy = identity["policy"] if identity is not None else None
+    expected = {identity["reports"]} if identity is not None else {spec["model"]}
     try:
         if spec["provider"] in ("claude", "gemini") and spec.get("protocol") != "agy-stream-json":
             records = [strict_json(stdout)]
@@ -312,18 +351,27 @@ def verified_repair_output(spec: Mapping[str, Any], stdout: str, stderr: str = "
             reported.add(record["model"])
         if spec["provider"] == "claude" and isinstance(record.get("modelUsage"), dict):
             reported.update(record["modelUsage"])
-    if reported and reported != {spec["model"]}:
-        raise NativeRepairModelError("Native repair model metadata disagrees with the exact configured model")
+    if reported and reported != expected:
+        raise (NativeRepairIdentityError if policy is not None else NativeRepairModelError)(
+            "Native repair model metadata disagrees with the exact configured model")
+    from cochem_pipeline.agy_protocol import AgyIdentityError
     try:
         from cochem_pipeline.worker import parse_gemini
-        parsed = (parse_gemini(stdout, spec["protocol"], spec["model"]) if spec["provider"] == "gemini"
-                  else parse_result(spec["provider"], stdout))
+        parsed = (parse_gemini(stdout, spec["protocol"], spec["model"],
+                               native={"argv": identity["argv"], "reports": identity["reports"]},
+                               identity_policy=policy, stderr=stderr)
+                  if identity is not None else parse_result(spec["provider"], stdout))
+    except AgyIdentityError as exc:  # A ValueError subclass: classify it first.
+        raise NativeRepairIdentityError(str(exc)) from exc
     except ValueError as exc:
         raise NativeRepairProtocolError(str(exc)) from exc
     if not isinstance(parsed.get("content"), str) or not parsed["content"].strip():
         raise NativeRepairProtocolError("Native repair returned an empty summary")
     if parsed.get("reported_model") is not None and parsed["reported_model"] != spec["model"]:
         raise NativeRepairModelError("Native repair reported a different model")
+    if policy is not None and (parsed.get("reported_model") != spec["model"]
+                               or parsed.get("native_reported_model") != identity["reports"]):
+        raise NativeRepairModelError("Native Agy repair output did not attest its reviewed model identity")
     return parsed
 
 
@@ -734,6 +782,8 @@ class RepairRunner:
             raise NativeRepairModelError("Native repair reasoning effort contradicts its reservation")
         receipt = {**process, "provider": provider, "requested_model": provider_spec["model"],
                    "reported_model": parsed.get("reported_model"), "session_id": parsed["session_id"],
+                   "native_selected_model": parsed.get("native_selected_model"),
+                   "model_identity": _model_identity(provider_spec),
                    "summary": proposal["summary"] if proposal else "Asymmetric SRS/WBS reconciliation response", "proposal":proposal, "source_packet":packet,
                    "review_output":review_output,
                    "review_output_sha256":hashlib.sha256(json.dumps(review_output,sort_keys=True,separators=(",",":"),ensure_ascii=False,allow_nan=False).encode()).hexdigest() if review_output is not None else None,

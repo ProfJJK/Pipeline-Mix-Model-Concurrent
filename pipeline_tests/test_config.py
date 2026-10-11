@@ -1,6 +1,7 @@
 """Deployment configuration contracts using real JSON files and pure validation."""
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 
@@ -329,3 +330,156 @@ def test_configured_sixty_four_execution_slots_require_sixty_four_isolated_ident
 def test_execution_capacity_default_remains_four_without_raising_small_deployments(tmp_path):
     assert load_config(write_config(tmp_path,config_document(tmp_path,64))).max_execution_slots == 4
     assert load_config(write_config(tmp_path,config_document(tmp_path,1))).max_execution_slots == 1
+
+
+# Decision 3B (reported-model-equality). Fixture digests/versions only; these are
+# not A5 receipts and do not claim any Agy capability.
+AGY_ARGUMENTS = ['--agent', 'cochem-inference-only', '--input-format', 'stream-json',
+                 '--output-format', 'stream-json', '--model', '{model}', '--disable-slash-commands']
+COMMISSIONED_CONFIG = Path(r'C:\Program Files\CoChem\Pipeline4.2.7-windows-20261009-r4\pipeline.json')
+COMMISSIONED_SHA256 = '135cd9eccf9efcdbc910679bde83b571913e731a4041ece62f60e42442f1709c'
+
+
+def agy_policy_document(tmp_path, bindings, slots=1):
+    """The r5 enabled Gemini shape; every ':effort' key gets a reviewed --effort high contract."""
+    raw = config_document(tmp_path, slots)
+    spec = raw['providers']['gemini']
+    spec['inference_only'].update(arguments=list(AGY_ARGUMENTS), version_arguments=['--version'])
+    inference = spec['inference_only']
+    spec.update(model='gemini-3.1-pro-preview', protocol='agy-stream-json', arguments=list(AGY_ARGUMENTS),
+                identity_policy='reported-model-equality', model_bindings=bindings,
+                effort_contracts={key: {'arguments': ['--effort', 'high'], 'version_arguments': ['--version'],
+                                        'executable_sha256': inference['executable_sha256'],
+                                        'version': inference['version'],
+                                        'capability_reference': 'configuration parser fixture; not A5 evidence',
+                                        'native_metadata': None, 'thinking_enabled': None}
+                                  for key in bindings if ':' in key})
+    return raw
+
+
+def gemini_targets(config):
+    return [(target.model, target.reasoning_effort) for score in (1, 4, 7, 10)
+            for target in config.routing.candidates(score) if target.provider == 'gemini']
+
+
+def test_commissioned_held_gemini_shape_loads_on_the_unchanged_path(tmp_path, monkeypatch):
+    from pipeline_tests.test_provider_integration import held_spec
+    import cochem_pipeline.config as config_module
+    raw = config_document(tmp_path, slots=6)
+    raw['max_execution_slots'] = 4
+    hold = held_spec(tmp_path)['integration_hold']
+    spec = {'executable': str(tmp_path / 'staged' / 'agy.exe'), 'model': 'gemini-3.1-pro-preview',
+            'arguments': None, 'protocol': 'gemini-json', 'subscription_probe': None,
+            'inference_only': None, 'effort_contracts': {}, 'integration_hold': hold}
+    raw['providers']['gemini'] = json.loads(json.dumps(spec))
+    filename = write_config(tmp_path, raw)
+    config = load_config(filename)
+    assert config.providers['gemini'] == spec
+    assert (len(config.workers), config.max_execution_slots) == (6, 4)
+    def unchanged_path_only(*args, **kwargs):
+        raise AssertionError('A held Gemini spec must never enter contract or binding validation')
+    monkeypatch.setattr(config_module, 'validate_gemini_contract', unchanged_path_only)
+    monkeypatch.setattr(config_module, 'validate_gemini_route_bindings', unchanged_path_only)
+    assert load_config(filename).providers == config.providers
+
+
+@pytest.mark.parametrize('bindings', [
+    {'gemini-3.8-flash': 'gemini-3.8-flash-high', 'gemini-3.8-flash:extended': 'gemini-3.8-flash-high'},
+    {'gemini-3.8-flash': 'gemini-3.8-flash-low',
+     'gemini-3.8-flash:extended': {'argv': 'gemini-3.8-flash', 'reports': 'gemini-3.8-flash-high'}},
+    {'gemini-3.8-flash': 'gemini-3.8-flash-low'},
+    {'gemini-3.8-flash:extended': 'gemini-3.8-flash-high'},
+    {'gemini-3.8-flash': 'gemini-3.8-flash-low', 'gemini-3.8-flash:extended': 'gemini-3.8-flash-high',
+     'gemini-3.1-pro-preview:high': 'gemini-3.1-pro-preview'},
+], ids=['string-only', 'argv-reports-with-effort-contract', 'effort-null-only', 'effort-only', 'every-target'])
+def test_identity_policy_candidates_load_and_unbound_targets_stay_routed(tmp_path, bindings):
+    raw = agy_policy_document(tmp_path, bindings)
+    config = load_config(write_config(tmp_path, raw))
+    gemini = config.providers['gemini']
+    assert gemini['identity_policy'] == 'reported-model-equality'
+    assert gemini['model_bindings'] == bindings
+    assert set(gemini['effort_contracts']) == {key for key in bindings if ':' in key}
+    # Unbound targets are not rejected here; dispatch fails them closed as
+    # 'compatibility' before any launch, so the canonical tiers are unchanged.
+    assert gemini_targets(config) == [('gemini-3.8-flash', None), ('gemini-3.8-flash', 'extended'),
+                                      ('gemini-3.1-pro-preview', 'high')]
+
+
+def _contract(raw, key):
+    return raw['providers']['gemini']['effort_contracts'][key]
+
+
+@pytest.mark.parametrize(('mutate', 'message'), [
+    (lambda raw: raw['providers']['gemini']['model_bindings'].update(
+        {'gemini-3.1-pro-preview': 'gemini-3.1-pro-preview'}), 'routed Gemini targets; unrouted: gemini-3.1-pro-preview$'),
+    (lambda raw: raw['providers']['gemini']['model_bindings'].update(
+        {'claude-opus-5-5': 'gemini-3.8-flash-high'}), 'routed Gemini targets; unrouted: claude-opus-5-5$'),
+    (lambda raw: (raw['providers']['gemini']['model_bindings'].update({'gemini-3.8-flash:high': 'gemini-3.8-flash-high'}),
+                  raw['providers']['gemini']['effort_contracts'].update(
+                      {'gemini-3.8-flash:high': dict(_contract(raw, 'gemini-3.8-flash:extended'))})),
+     'routed Gemini targets; unrouted: gemini-3.8-flash:high$'),
+    (lambda raw: raw['providers']['gemini'].update(identity_policy='reported-model'),
+     'reported-model-equality on the agy-stream-json protocol'),
+    (lambda raw: raw['providers']['gemini'].update(identity_policy=None),
+     'reported-model-equality on the agy-stream-json protocol'),
+    (lambda raw: raw['providers']['gemini'].update(protocol='gemini-json'),
+     'reported-model-equality on the agy-stream-json protocol'),
+    (lambda raw: raw['providers']['gemini']['effort_contracts'].clear(), 'requires a reviewed effort contract'),
+    (lambda raw: raw['providers']['gemini'].update(model_bindings={}, effort_contracts={}), '1 to 32'),
+    (lambda raw: (raw['providers']['gemini'].pop('model_bindings'),
+                  raw['providers']['gemini'].update(effort_contracts={})), '1 to 32'),
+    (lambda raw: raw['providers']['gemini'].pop('identity_policy'), 'require the reported-model-equality identity policy'),
+    (lambda raw: _contract(raw, 'gemini-3.8-flash:extended').update(version='other-native-version'),
+     'same native binary/version'),
+    (lambda raw: _contract(raw, 'gemini-3.8-flash:extended').update(executable_sha256='b' * 64),
+     'same native binary/version'),
+    (lambda raw: _contract(raw, 'gemini-3.8-flash:extended').update(thinking_enabled=True),
+     'same native binary/version'),
+    (lambda raw: _contract(raw, 'gemini-3.8-flash:extended').update(
+        native_metadata={'path': ['reasoning_effort'], 'value': 'high'}), 'no verified native effort observation'),
+    (lambda raw: _contract(raw, 'gemini-3.8-flash:extended').update(version_arguments=['version']), 'offline --version'),
+    (lambda raw: _contract(raw, 'gemini-3.8-flash:extended').pop('native_metadata'), 'exact reviewed model/profile'),
+    (lambda raw: _contract(raw, 'gemini-3.1-pro-preview:high').update(arguments=['--effort', 'medium']),
+     'Agy High must select native high'),
+], ids=['orphan-unrouted-effort-null', 'orphan-other-provider', 'orphan-unrouted-effort', 'wrong-policy',
+        'null-policy', 'policy-on-gemini-json', 'effort-key-without-contract', 'zero-bindings',
+        'missing-bindings', 'bindings-without-policy', 'effort-version-drift', 'effort-digest-drift',
+        'effort-thinking-flag', 'effort-stream-metadata', 'effort-online-version-probe',
+        'effort-contract-fields', 'high-lowered'])
+def test_identity_policy_candidates_with_invalid_bindings_are_rejected(tmp_path, mutate, message):
+    raw = agy_policy_document(tmp_path, {'gemini-3.8-flash': 'gemini-3.8-flash-low',
+                                         'gemini-3.8-flash:extended': 'gemini-3.8-flash-high',
+                                         'gemini-3.1-pro-preview:high': 'gemini-3.1-pro-preview'})
+    assert load_config(write_config(tmp_path, raw)).providers['gemini']['model_bindings']
+    mutate(raw)
+    filename = write_config(tmp_path, raw)
+    before = Path(filename).read_bytes()
+    with pytest.raises(ValueError, match=message):
+        load_config(filename)
+    assert Path(filename).read_bytes() == before
+    assert not Path(raw['private_root']).exists()
+
+
+def test_real_commissioned_configuration_bytes_load_unchanged(tmp_path, monkeypatch):
+    """Copies the protected r4 commissioning bytes (read-only); nothing is written under Program Files."""
+    try:
+        data = COMMISSIONED_CONFIG.read_bytes()
+    except OSError as exc:
+        pytest.skip(f'Commissioned r4 configuration is not readable on this host ({type(exc).__name__})')
+    assert hashlib.sha256(data).hexdigest() == COMMISSIONED_SHA256
+    copy = tmp_path / 'pipeline.json'
+    copy.write_bytes(data)
+    import cochem_pipeline.config as config_module
+    def unchanged_path_only(*args, **kwargs):
+        raise AssertionError('The held commissioned Gemini spec must never enter contract or binding validation')
+    monkeypatch.setattr(config_module, 'validate_gemini_contract', unchanged_path_only)
+    monkeypatch.setattr(config_module, 'validate_gemini_route_bindings', unchanged_path_only)
+    config = load_config(str(copy))
+    raw = json.loads(data.decode('utf-8-sig'))
+    assert (len(config.workers), len(config.slot_roots), config.max_execution_slots) == (6, 6, 4)
+    assert config.providers == raw['providers']
+    assert config.providers['gemini']['integration_hold']['state'] == 'verification_pending'
+    assert config.routing.as_dict()['tiers'] == raw['routing']['tiers']
+    assert gemini_targets(config) == [('gemini-3.8-flash', None), ('gemini-3.8-flash', 'extended'),
+                                      ('gemini-3.1-pro-preview', 'high')]
+    assert copy.read_bytes() == data

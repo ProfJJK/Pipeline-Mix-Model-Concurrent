@@ -11,7 +11,7 @@ import os
 
 import pytest
 
-from cochem_pipeline.operator_views import acceptance_dashboard, operator_snapshot, resource_plot
+from cochem_pipeline.operator_views import OperatorViewHistory, acceptance_dashboard, operator_snapshot, resource_plot
 from pipeline_tests.test_service import endpoint, request, submitted
 
 
@@ -286,3 +286,197 @@ def test_queue_preview_skips_observed_hold_matches_atomic_claim_and_does_not_mut
     assert endpoint.controller.store.workflow('service-workflow') == before
     claimed = endpoint.controller.store.claim('actual-comparison-claim')
     assert claimed['route']['key'] == preview['eligible_candidate']['key']
+
+
+def _host_sample(index):
+    """A host sample shaped like the live Warden transition telemetry (over 7 KB compact JSON)."""
+    disks = {f'disk-{number:02d}': {'mount': f'V{number:02d}:\\', 'read_iops': 1.5 + index, 'write_iops': 2.5,
+             'busy_percent': 12.5, 'free_mb': 100000 + index, 'total_mb': 500000, 'queue_depth': 0.25,
+             'filesystem': 'NTFS', 'serial': f'serial-{number:04d}', 'available': True} for number in range(32)}
+    return {'measured_at': 1000.0 + index, 'capacity': index % 4, 'state': ('steady', 'throttled')[index % 2],
+            'reasons': [f'Measured pressure {index}'] if index % 2 else [], 'action': 'admit',
+            'policy': {f'limit_{number:02d}': {'pause': 85 + number, 'resume': 70 + number} for number in range(24)},
+            'measurements': {'cpu': {'percent': float(index % 100), 'count': 16,
+                                     'per_core_percent': [float((index + core) % 100) for core in range(16)]},
+                             'memory': {'available_mb': 30000 - index, 'total_mb': 65536, 'commit_free_mb': 20000},
+                             'disks': disks, 'gpus': {'available': False, 'devices': []}},
+            'workspaces': {f'slot-{number}': {'path': f'R:\\slot-{number}\\workspace', 'free_mb': 4096}
+                           for number in range(6)}}
+
+
+def _observed_events(endpoint, count):
+    """Append real store events; each transition embeds the then-current full host sample."""
+    store = endpoint.controller.store
+    workflow = submitted(endpoint)
+    job_id = next(job['job_id'] for job in workflow['jobs'] if job['kind'] == 'MANIFEST_GENERATOR')
+    with store._write() as conn:
+        job = store._get(conn, job_id)
+        for index in range(count):
+            store.set_transition_telemetry(None if index % 50 == 7 else _host_sample(index))
+            details = ({'reason': f'observation {index}'} if index % 3 == 0 else
+                       {'error': f'failure {index}'} if index % 3 == 1 else {})
+            store._event(conn, job, 'HOST_OBSERVATION', **details)
+    return job_id
+
+
+def _expected_timeline(events):
+    return [{'id': event['id'], 'at': event['timestamp'], 'job_id': event['job_id'], 'event': event['event'],
+             'reason': event['details'].get('reason', event['details'].get('error'))} for event in events]
+
+
+def _deployment(tmp_path, name='deployment'):
+    root = tmp_path / name
+    root.mkdir()
+    _catalog(root, platforms=('POSIX',))
+    return root
+
+
+def test_slim_event_keeps_timeline_reason_semantics_and_plotted_scalars_only():
+    from cochem_pipeline.operator_views import _slim_event
+    sample = {**_host_sample(3), 'cpu_percent': 1.0}
+    event = {'id': 9, 'workflow_id': 'w', 'job_id': 'j', 'timestamp': 5.0, 'event': 'CLAIMED',
+             'details': {'reason': None, 'error': 'kept', 'attempt_id': 'private',
+                         'telemetry': {'host_sample': sample, 'pid': 4}}}
+    assert _slim_event(event) == {'id': 9, 'timestamp': 5.0, 'job_id': 'j', 'event': 'CLAIMED', 'details': {
+        'reason': None, 'error': 'kept', 'telemetry': {'host_sample': {
+            'measured_at': sample['measured_at'], 'capacity': sample['capacity'], 'state': sample['state'],
+            'reasons': sample['reasons'], 'cpu_percent': 1.0,
+            'measurements': {'cpu': {'percent': sample['measurements']['cpu']['percent']},
+                             'memory': {'available_mb': sample['measurements']['memory']['available_mb']}}}}}}
+    assert _slim_event({'id': 1, 'details': {}})['details'] == {'telemetry': {'host_sample': None}}
+    assert _slim_event({'id': 2, 'details': {'telemetry': {'host_sample': {'measured_at': 3}}}})['details'] == {
+        'telemetry': {'host_sample': {'measured_at': 3}}}
+
+
+def test_resource_plot_keeps_raw_measurements_only_on_the_latest_point():
+    older = {'measured_at': 100., 'capacity': 2, 'state': 'steady', 'reasons': [],
+             'measurements': {'cpu': {'percent': 10.}, 'memory': {'available_mb': 4096}, 'disks': {'C:': 'older'}}}
+    newer = {'measured_at': 200., 'capacity': 1, 'state': 'throttled', 'reasons': ['CPU'],
+             'measurements': {'cpu': {'percent': 20.}, 'memory': {'available_mb': 2048}, 'disks': {'C:': 'newer'}}}
+    result = resource_plot([newer, older])
+    assert [point['at'] for point in result['samples']] == [100., 200.]
+    assert 'measurements' not in result['samples'][0]
+    assert result['samples'][0]['cpu_percent'] == 10. and result['samples'][0]['available_memory_mb'] == 4096
+    assert result['samples'][1]['measurements'] == newer['measurements']
+    assert result['measurements_scope'] == 'latest_point_only'
+    # A slimmed event copy of the newest measurement is followed by the live snapshot's full block.
+    slim = {**newer, 'measurements': {'cpu': {'percent': 20.}, 'memory': {'available_mb': 2048}}}
+    combined = resource_plot([older, slim, newer])
+    assert combined['samples'][-1]['measurements'] == newer['measurements']
+    assert combined['svg'] == result['svg']
+
+
+def test_two_hundred_full_host_samples_give_a_small_body_with_unchanged_timeline_and_plot(endpoint, tmp_path, monkeypatch):
+    from cochem_pipeline.service import redact
+    store = endpoint.controller.store
+    _observed_events(endpoint, 200)
+    status = endpoint.controller.status
+    monkeypatch.setattr(endpoint.controller, 'status', lambda: {**status(), 'admission': store.transition_telemetry})
+    with store._connection() as conn:
+        full = sorted((store._decode_event(row) for row in conn.execute(
+            'SELECT * FROM pipeline_events ORDER BY id DESC LIMIT 200')), key=lambda event: event['id'])
+    samples = [event['details']['telemetry']['host_sample'] for event in full]
+    measured = [sample for sample in samples if sample is not None]
+    assert len(full) == 200 and len(measured) == 196
+    assert all(len(json.dumps(sample, separators=(',', ':'))) > 7000 for sample in measured)
+    # Copying every raw block into the plot, as r4 did, would exceed the bound on its own.
+    assert sum(len(json.dumps(sample['measurements'], separators=(',', ':'))) for sample in measured) > 300_000
+    result = operator_snapshot(endpoint.controller, source_root=_deployment(tmp_path), history=OperatorViewHistory())
+    assert result['timeline'] == _expected_timeline(full)
+    assert result['window']['events_truncated'] is True
+    plotted = result['resources']['samples']
+    expected = resource_plot(samples + [store.transition_telemetry])
+    assert plotted == expected['samples']
+    assert result['resources']['svg'] == expected['svg']
+    assert [point['at'] for point in plotted] == [sample['measured_at'] for sample in measured]
+    assert [point['capacity'] for point in plotted] == [sample['capacity'] for sample in measured]
+    assert [point['state'] for point in plotted] == [sample['state'] for sample in measured]
+    assert [point['cpu_percent'] for point in plotted] == [sample['measurements']['cpu']['percent'] for sample in measured]
+    assert [point['available_memory_mb'] for point in plotted] == [
+        sample['measurements']['memory']['available_mb'] for sample in measured]
+    assert [point['limiting_reasons'] for point in plotted] == [sample['reasons'] for sample in measured]
+    assert all('measurements' not in point for point in plotted[:-1])
+    assert plotted[-1]['measurements'] == store.transition_telemetry['measurements']
+    body = json.dumps(redact(result), ensure_ascii=False).encode('utf-8')
+    assert len(body) < 300_000
+
+
+def test_event_cursor_pages_slimmed_events_in_order_without_gaps(endpoint, tmp_path):
+    store = endpoint.controller.store
+    job_id = _observed_events(endpoint, 230)
+    with store._connection() as conn:
+        full = [store._decode_event(row) for row in conn.execute('SELECT * FROM pipeline_events ORDER BY id')]
+    root, history = _deployment(tmp_path), OperatorViewHistory()
+    cursor, timeline, truncated = 0, [], []
+    for _ in range(4):
+        page = operator_snapshot(endpoint.controller, after_event_id=cursor, source_root=root, history=history)
+        assert page['window']['after_event_id'] == cursor
+        if not page['timeline']:
+            assert page['window']['next_event_cursor'] == cursor
+            break
+        assert len(page['timeline']) <= 200
+        timeline.extend(page['timeline'])
+        truncated.append(page['window']['events_truncated'])
+        cursor = page['window']['next_event_cursor']
+        assert cursor == page['timeline'][-1]['id']
+    else:
+        pytest.fail('Event cursor did not reach the end of the retained events')
+    assert truncated == [True, False]
+    assert timeline == _expected_timeline(full)
+    scoped = operator_snapshot(endpoint.controller, job_id=job_id, after_event_id=full[-31]['id'],
+                               source_root=root, history=history)
+    assert scoped['timeline'] == _expected_timeline(full[-30:])
+
+
+def test_acceptance_cache_returns_identical_copies_and_rebuilds_on_ledger_bytes_or_mtime(tmp_path, monkeypatch):
+    from cochem_pipeline import operator_views
+    _, evidence = _catalog(tmp_path, platforms=('POSIX',))
+    builds = []
+    build = operator_views.acceptance_dashboard
+    monkeypatch.setattr(operator_views, 'acceptance_dashboard', lambda root: builds.append(root) or build(root))
+    clock = [1000.0]
+    history = OperatorViewHistory(clock=lambda: clock[0])
+    first = history.acceptance_snapshot(tmp_path)
+    assert first == build(tmp_path) and first['all_verified']
+    copy = history.acceptance_snapshot(tmp_path)
+    assert copy == first and len(builds) == 1
+    copy['requirements'].clear()  # Callers get their own copy; the cache is not shared mutable state.
+    assert history.acceptance_snapshot(tmp_path) == first and len(builds) == 1
+    evidence['evidence'].append({**evidence['evidence'][0], 'status': 'failed'})
+    (tmp_path / 'docs/acceptance_4.2.7.json').write_text(json.dumps(evidence))
+    changed = history.acceptance_snapshot(tmp_path)
+    assert len(builds) == 2 and changed == build(tmp_path)
+    assert not changed['all_verified'] and changed['counts']['verified'] == 1
+    specification = tmp_path / '4.2.7_SRS.md'
+    observed = specification.stat()
+    os.utime(specification, ns=(observed.st_atime_ns, observed.st_mtime_ns + 2_000_000_000))
+    assert history.acceptance_snapshot(tmp_path) == changed and len(builds) == 3
+    # Evidence artifacts are outside the key; they are re-verified once the 60 s TTL expires.
+    (tmp_path / 'docs/physical-result.txt').write_text('Changed artifact bytes')
+    clock[0] += 59
+    assert history.acceptance_snapshot(tmp_path) == changed and len(builds) == 3
+    clock[0] += 2
+    expired = history.acceptance_snapshot(tmp_path)
+    assert len(builds) == 4 and expired == build(tmp_path) and expired['counts']['verified'] == 0
+
+
+def test_operator_snapshot_reuses_cached_acceptance_per_history_and_source_root(endpoint, tmp_path, monkeypatch):
+    from cochem_pipeline import operator_views
+    submitted(endpoint)
+    first_root, second_root = _deployment(tmp_path, 'first'), _deployment(tmp_path, 'second')
+    (second_root / 'docs/physical-result.txt').write_text('Different bytes in another deployment')
+    builds = []
+    build = operator_views.acceptance_dashboard
+    monkeypatch.setattr(operator_views, 'acceptance_dashboard', lambda root: builds.append(root) or build(root))
+    history = OperatorViewHistory()
+    first = operator_snapshot(endpoint.controller, source_root=first_root, history=history)
+    again = operator_snapshot(endpoint.controller, source_root=first_root, history=history)
+    assert first['acceptance'] == again['acceptance'] == build(first_root)
+    assert first['acceptance']['all_verified'] and len(builds) == 1
+    assert first['current_specification']['sha256'] == first['acceptance']['specification_sha256']
+    other = operator_snapshot(endpoint.controller, source_root=second_root, history=history)
+    assert not other['acceptance']['all_verified'] and len(builds) == 2
+    assert operator_snapshot(endpoint.controller, source_root=first_root, history=history)['acceptance'] == first['acceptance']
+    assert len(builds) == 2
+    operator_snapshot(endpoint.controller, source_root=first_root)  # Without a history every call rebuilds, as before.
+    assert len(builds) == 3
