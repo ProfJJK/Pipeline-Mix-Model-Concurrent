@@ -112,6 +112,25 @@ canonical policy, owner decisions and preservation rules there are unchanged.
    `TASK_UPDATE`. The held supervisor observer and resource recorder are deliberately not
    rebound by this script.
 
+8. **Launched (10 October, 19:57 to 20:01 CDT).** The owner ran the one-sitting series
+   `RUN_427_LAUNCH_SERIES.ps1` (revision 3) once: zero holds, r4 built
+   (`FRESH_STOPPED_RUNTIME_READY`), `CoChem-4.2.7-Warden` retargeted and started once,
+   controller pid 20664 (launcher 5320) as SYSTEM from
+   `Pipeline4.2.7-windows-20261009-r4\.venv\Lib`, instance `61497bdab0514590b88fd0cab689a404`,
+   receipts under `WardenRetarget4.2.7-windows-20261010-r4-v1`. The held supervisor observer
+   reported the new controller healthy within the run. Admission ramped from the recovery
+   window to capacity 4. First real job: provider preflight workflow
+   `3bc91a4f6d9640e39167ebafce69fde3` at 20:13, routed to gemini-3.8-flash first (refused by
+   the integration hold as a `compatibility` failure, as designed), then completed on slot 1
+   with claude-haiku-4-5, output `{"ready": true}` with a native receipt. Legacy pipelines:
+   tasks `CoChemHostWarden_V412`, `CoChem V4.1.2 Swarm` and two disabled fixtures
+   unregistered, the Startup launcher removed, `D:\__CoChem\__agentic\v4.2.0` and the contents
+   of `v4.1.2` deleted; what remains is `v4.1.2\vm\`, the virtual disks of the Hyper-V
+   quarantine VM, which Hyper-V keeps open and which only the owner may stop or remove. Task
+   XML exports and the launcher are kept in the workspace folder
+   `legacy-removal-evidence-20261010\`. All GUI MCP entries point at r4 and were verified
+   (15 tools, health through the MCP). The fix branch is pushed.
+
 ## Still open (unchanged unless noted)
 
 - Rebinding of the held supervisor observer and resource recorder to the r4 controller
