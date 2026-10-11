@@ -150,6 +150,45 @@ def _records(raw: str) -> list[dict[str, Any]]:
     return [value] if isinstance(value, dict) else []
 
 
+AGY_ERROR_PREFIX = 'AGY_ERROR:'
+_AGY_ERROR_LINES = 16
+_AGY_ERROR_PAYLOAD_LIMIT = 16384
+_ANSI = re.compile(r'\x1b\[[0-?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b[@-_]')
+
+
+def _reject_constant(value: str) -> Any:
+    raise ValueError('Invalid native JSON constant')
+
+
+def agy_error_records(stderr: str) -> list[dict[str, Any] | None]:
+    """Agy's own failure lines, 'AGY_ERROR: {...}' on stderr, one entry per line.
+
+    Only a line that starts with the prefix (after terminal styling is removed)
+    qualifies, and at most 16 such lines are read. Each entry is the line's
+    strict JSON object, or None when the payload is oversized, malformed,
+    duplicate-keyed or not an object: still an Agy error line, never classified.
+    The payload text itself is never returned in any other form.
+    """
+    found: list[dict[str, Any] | None] = []
+    if not isinstance(stderr, str) or not stderr:
+        return found
+    for line in stderr.splitlines():
+        text = (_ANSI.sub('', line) if '\x1b' in line else line).strip()
+        if not text.startswith(AGY_ERROR_PREFIX):
+            continue
+        payload = text[len(AGY_ERROR_PREFIX):].strip()
+        value: Any = None
+        if len(payload) <= _AGY_ERROR_PAYLOAD_LIMIT:
+            try:
+                value = json.loads(payload, object_pairs_hook=_strict_object, parse_constant=_reject_constant)
+            except (ValueError, RecursionError):
+                value = None
+        found.append(value if isinstance(value, dict) else None)
+        if len(found) >= _AGY_ERROR_LINES:
+            break
+    return found
+
+
 def _error_fields(provider: str, record: dict[str, Any]) -> tuple[list[dict[str, Any]], str] | None:
     """Select native error containers, excluding model/tool/result content."""
     kind = record.get('type')
@@ -261,6 +300,13 @@ def _retry_after(fields: list[dict[str, Any]]) -> float | None:
     return max(hints, default=None)
 
 
+def _typed_category(fields: list[dict[str, Any]]) -> str | None:
+    categories = [_category(field.get(key)) for field in fields for key in _CODE_FIELDS]
+    # Prefer a specific typed cause to a generic API/server classification.
+    return next((candidate for candidate in ('auth', 'quota', 'context', 'busy', 'timeout', 'provider', 'compatibility', 'protocol')
+                 if candidate in categories), None)
+
+
 def parse_native_failure(provider: str, stdout: str, stderr: str,
                          exit_code: int) -> ProviderFailure | None:
     """Read recognized native failure envelopes from either CLI output stream.
@@ -270,6 +316,10 @@ def parse_native_failure(provider: str, stdout: str, stderr: str,
     Retry hints are finite seconds, bounded to one day. Known anchored native
     error diagnostics are accepted only inside failure envelopes; generated
     answers, nested tool results and arbitrary textual stderr are excluded.
+    For Gemini, Agy's 'AGY_ERROR: {...}' stderr lines are failure envelopes
+    too, but only a typed cause classifies one. An untyped line, or an argument
+    error (the reviewed argv varies only in its model selection), is left to
+    the caller's identity policy rather than counting against the job.
     """
     if provider not in ('codex', 'claude', 'gemini'):
         raise ValueError('Unsupported native provider')
@@ -279,14 +329,18 @@ def parse_native_failure(provider: str, stdout: str, stderr: str,
         if selected is None:
             continue
         fields, fallback = selected
-        categories = [_category(field.get(key)) for field in fields for key in _CODE_FIELDS]
-        # Prefer a specific typed cause to a generic API/server classification.
-        category = next((candidate for candidate in ('auth', 'quota', 'context', 'busy', 'timeout', 'provider', 'compatibility', 'protocol')
-                         if candidate in categories), None)
-        if category is None:
-            category = _native_diagnostic_category(provider,record,fields) or fallback
+        category = _typed_category(fields) or _native_diagnostic_category(provider,record,fields) or fallback
         retry_after = _retry_after(fields) if category in _DEFAULT_SCOPE else None
         failures.append(ProviderFailure(category, retry_after))
+    if provider == 'gemini':
+        for record in agy_error_records(stderr):
+            if record is None:
+                continue
+            fields = [record['error'], record] if isinstance(record.get('error'), dict) else [record]
+            category = _typed_category(fields) or _native_diagnostic_category(provider,record,fields)
+            if category not in (None, 'protocol'):
+                retry_after = _retry_after(fields) if category in _DEFAULT_SCOPE else None
+                failures.append(ProviderFailure(category, retry_after))
     if not failures:
         return None
     priority = {'auth': 0, 'quota': 1, 'context': 2, 'busy': 3, 'timeout': 4, 'provider': 5, 'compatibility': 6, 'protocol': 7, 'code': 8}

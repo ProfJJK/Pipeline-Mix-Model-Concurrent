@@ -13,15 +13,24 @@ import uuid
 from urllib.parse import parse_qs, urlsplit
 
 
-# Heavy read projections are built and encoded one at a time. Concurrent builds
-# multiplied transient allocator high-water in the Warden; /health,
-# /knowledge/* and every POST stay outside this server-wide lock.
+# Heavy read projections are built and encoded one at a time per lock.
+# Concurrent builds multiplied transient allocator high-water in the Warden.
+# Operator views (/operator, /operator/workflow/*, /operator/job/*) share one
+# lock; workflow status reads (/workflow/*, /coding/workflow/*) have their own
+# lock with the same bounded wait, so a status poll never queues behind an
+# operator build. /health, /knowledge/* and every POST stay outside both locks.
 PROJECTION_WAIT_SECONDS = 20.0
-PROJECTION_PREFIXES = ('/operator/workflow/','/operator/job/','/workflow/','/coding/workflow/')
+OPERATOR_PROJECTION_PREFIXES = ('/operator/workflow/','/operator/job/')
+WORKFLOW_PROJECTION_PREFIXES = ('/workflow/','/coding/workflow/')
+PROJECTION_PREFIXES = OPERATOR_PROJECTION_PREFIXES+WORKFLOW_PROJECTION_PREFIXES
 
 
 def heavy_projection(path: str) -> bool:
     return path=='/operator' or path.startswith(PROJECTION_PREFIXES)
+
+
+def operator_projection(path: str) -> bool:
+    return path=='/operator' or path.startswith(OPERATOR_PROJECTION_PREFIXES)
 
 
 def encode_json(data) -> bytes:
@@ -68,7 +77,8 @@ class ControlServer(ThreadingHTTPServer):
         self.runtime,self.token = runtime,token
         from .operator_views import OperatorViewHistory
         self.operator_history=OperatorViewHistory()
-        self.projection_lock = threading.Lock()
+        self.projection_lock = threading.Lock()  # operator views
+        self.workflow_projection_lock = threading.Lock()  # workflow status reads
         self.projection_wait_seconds = PROJECTION_WAIT_SECONDS
         self._requests = threading.BoundedSemaphore(16)
         super().__init__(('127.0.0.1',runtime.config.port),Handler)
@@ -156,7 +166,7 @@ class Handler(BaseHTTPRequestHandler):
             self.connection.settimeout(previous_timeout)
 
     def _projection(self,runtime,path):
-        # Called only while the server-wide projection lock is held.
+        # Called only while the path's projection lock is held.
         if path.startswith('/coding/workflow/'):
             return public_workflow(runtime.coding_workflow(path[len('/coding/workflow/'):]))
         if path.startswith('/workflow/'):
@@ -197,16 +207,18 @@ class Handler(BaseHTTPRequestHandler):
             if self.command=='GET' and path=='/health':
                 self.reply(200,redact(runtime.status()))
             elif self.command=='GET' and heavy_projection(path):
-                # Bounded wait, then build and encode under the lock. The lock is
-                # released before the socket write so a slow reader cannot stall
+                # Bounded wait, then build and encode under the path's lock. The lock
+                # is released before the socket write so a slow reader cannot stall
                 # other callers; only the encoded bytes outlive the projection.
-                if not self.server.projection_lock.acquire(timeout=self.server.projection_wait_seconds):
+                lock=(self.server.projection_lock if operator_projection(path)
+                      else self.server.workflow_projection_lock)
+                if not lock.acquire(timeout=self.server.projection_wait_seconds):
                     self.reply(503,{'error':'Operator projection busy; retry'})
                     return
                 try:
                     payload=encode_json(self._projection(runtime,path))
                 finally:
-                    self.server.projection_lock.release()
+                    lock.release()
                 self.send_payload(200,payload)
             elif self.command=='GET' and path=='/knowledge/status':
                 self.reply(200,runtime.knowledge_authority.status() if hasattr(runtime,'knowledge_authority')

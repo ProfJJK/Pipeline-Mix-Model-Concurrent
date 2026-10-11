@@ -4,6 +4,7 @@ import json
 
 import pytest
 
+from cochem_pipeline import agy_protocol
 from cochem_pipeline.agy_protocol import encode_prompt, parse_stream, validate_arguments
 from cochem_pipeline.agy_protocol import (IDENTITY_POLICY, AgyIdentityError, native_model_binding,
     require_serving_model_contract, validate_identity_policy, validate_model_bindings)
@@ -413,3 +414,108 @@ def test_unknown_identity_policy_is_rejected_by_the_parser():
         with pytest.raises(ValueError, match='identity policy') as caught:
             parse_stream(stream(HIGH), HIGH, identity_policy=policy)
         assert not isinstance(caught.value, AgyIdentityError)
+
+
+# AG-2: the identity and reroute scan covers every event and nested record,
+# every model spelling, and the A5 evidence tool's reroute fragments and
+# stderr markers (agy_isolation_evidence_r4_v1.py). records()[0] is init,
+# [1] a step and [-1] the result.
+OTHER = 'gemini-2.5-flash'
+REVIEWER_REJECTS = [
+    pytest.param(lambda x: x[-1]['result'].update(model=OTHER), '', id='result.model'),
+    pytest.param(lambda x: x[1]['step_update'].update(metadata={'model': OTHER}), '', id='step.metadata.model'),
+    pytest.param(lambda x: x[-1]['result']['usage'].update(model=OTHER), '', id='result.usage.model'),
+    pytest.param(lambda x: x[-1]['result']['usage'].update(models={OTHER: {'input': 5}}), '',
+                 id='result.usage.models-keyed-by-other'),
+    pytest.param(lambda x: x[-1]['result'].update(modelVersion=OTHER), '', id='result.modelVersion'),
+    pytest.param(lambda x: x[-1]['result'].update(model_name=OTHER), '', id='result.model_name'),
+    pytest.param(lambda x: x[0]['init'].update(model_version=OTHER), '', id='init.model_version'),
+    pytest.param(lambda x: x[-1]['result'].update(used_non_gemini_model=True), '', id='used_non_gemini_model'),
+    pytest.param(lambda x: x[-1]['result'].update(model_substituted=True), '', id='model_substituted'),
+    pytest.param(lambda x: x[-1]['result'].update(downgraded_from=HIGH), '', id='downgraded_from'),
+    pytest.param(lambda x: x[0]['init'].update(resolved_model=OTHER), '', id='init.resolved_model'),
+    pytest.param(lambda x: x[-1]['result'].update(retry_model_capacity_exhausted=True), '',
+                 id='retry_model_capacity_exhausted'),
+    pytest.param(lambda x: x[-1]['result'].update(is_fallback=True), '', id='is_fallback'),
+    pytest.param(None, f'Model ID {HIGH} not in local config, defaulting to CCPA\n', id='stderr-defaulting-to'),
+    pytest.param(None, f'Restoring model "{OTHER}" after a one-shot /model turn\n', id='stderr-restoring-model'),
+    pytest.param(None, 'AGY_ERROR: {"code":"x"}\n', id='stderr-agy-error'),
+]
+NESTED_REJECTS = [
+    pytest.param(lambda x: x[0]['init'].update(ModelId=OTHER), '', id='ModelId'),
+    pytest.param(lambda x: x[0]['init'].update(**{'model-name': OTHER}), '', id='model-name'),
+    pytest.param(lambda x: x[0]['init'].update(selectedModel=OTHER), '', id='selectedModel'),
+    pytest.param(lambda x: x[2]['step_update'].update(modelVersion=None), '', id='step.modelVersion-null'),
+    pytest.param(lambda x: x[-1]['result'].update(meta={'serving': [{'model_id': OTHER}]}), '', id='deep-list'),
+    pytest.param(lambda x: x[-1]['result'].update(resolvedModel=OTHER), '', id='resolvedModel'),
+    # A5 lists every key containing 'resolved' as a reroute signal, so even an
+    # agreeing resolved_model is rejected; resolved_model=None fails equality.
+    pytest.param(lambda x: x[0]['init'].update(resolved_model=HIGH), '', id='resolved_model-agreeing'),
+    pytest.param(lambda x: x[0]['init'].update(resolved_model=None), '', id='resolved_model-null'),
+    pytest.param(lambda x: x[0]['init'].update(models={HIGH: {}, OTHER: {}}), '', id='models-extra-key'),
+    pytest.param(lambda x: x[0]['init'].update(models=[OTHER]), '', id='models-list'),
+    pytest.param(lambda x: x[0]['init'].update(models=OTHER), '', id='models-string'),
+    pytest.param(lambda x: x[0]['init'].update(models=7), '', id='models-number'),
+    pytest.param(lambda x: x[-1]['result'].update(usedNonGeminiModel=1), '', id='usedNonGeminiModel'),
+    pytest.param(lambda x: x[-1]['result'].update(capacityExhausted=True), '', id='capacityExhausted'),
+    pytest.param(lambda x: x[-1]['result'].update(deprecation_notice='retired soon'), '', id='deprecat'),
+    pytest.param(lambda x: x[-1]['result'].update(substitution={'to': OTHER}), '', id='substitut'),
+    pytest.param(lambda x: x[0]['init'].update(rerouted_to=OTHER), '', id='rerouted'),
+    pytest.param(None, f'\x1b[1m{HIGH} is no longer\x1b[0m available. Using {OTHER}\n', id='stderr-ansi-split'),
+]
+
+
+@pytest.mark.parametrize('change, stderr', REVIEWER_REJECTS + NESTED_REJECTS)
+def test_every_nested_identity_or_reroute_signal_is_an_identity_error(change, stderr):
+    data = stream(HIGH, change)
+    with pytest.raises(AgyIdentityError):
+        parse_stream(data, HIGH, identity_policy=IDENTITY_POLICY, stderr=stderr)
+    with pytest.raises(AgyIdentityError):  # the shared runner path, as the reviewer drove it
+        parse_gemini(data, 'agy-stream-json', MODEL, native={'argv': HIGH, 'reports': HIGH},
+                     identity_policy=IDENTITY_POLICY, stderr=stderr)
+    # The scan is always on: without the policy the stream is still not accepted.
+    with pytest.raises(AgyIdentityError):
+        parse_stream(data, HIGH, stderr=stderr)
+
+
+def test_reviewer_baseline_and_agreeing_or_falsy_nested_fields_pass():
+    parsed = parse_gemini(stream(HIGH), 'agy-stream-json', MODEL, native={'argv': HIGH, 'reports': HIGH},
+                          identity_policy=IDENTITY_POLICY, stderr='Loaded cached credentials.\n')
+    assert (parsed['reported_model'], parsed['native_reported_model']) == (MODEL, HIGH)
+
+    def agreeing(data):
+        data[0]['init'].update(modelVersion=HIGH, model_name=HIGH, ModelId=HIGH, models={HIGH: {'tokens': 1}})
+        data[1]['step_update'].update(metadata={'model': HIGH, 'model_id': HIGH})
+        data[-1]['result']['usage'].update(model=HIGH, models={HIGH: {'input': 5}}, model_version=HIGH)
+        data[-1]['result'].update(models={}, selected_model=HIGH)
+
+    def falsy(data):
+        data[0]['init'].update(models=None, resolved=False, unresolved_tools=[])
+        data[-1]['result'].update(used_non_gemini_model=False, retry_model_capacity_exhausted=False,
+                                  model_substituted=False, downgraded_from=None, deprecation_notice='')
+        data[-1]['result']['usage'].update(capacity_exhausted=0, substitutions=[])
+    for change in (agreeing, falsy):
+        result = parse_stream(stream(HIGH, change), HIGH, identity_policy=IDENTITY_POLICY, stderr='')
+        assert result['reported_model'] == HIGH and result['content'] == '{}'
+        assert parse_stream(stream(HIGH, change), HIGH)['reported_model'] is None
+
+
+# AG-3: tool-registry and subagent violations are their own identity subclass.
+def test_tool_registry_violations_raise_their_own_identity_subclass():
+    assert issubclass(agy_protocol.AgyToolRegistryError, AgyIdentityError)
+    for change in (lambda x: x[0]['init'].update(tools=['read_file']),
+                   lambda x: x[0]['init'].pop('tools'),
+                   lambda x: x[0]['init'].update(tools=None),
+                   lambda x: x[1]['step_update'].update(tool_name='run_shell'),
+                   lambda x: x[1]['step_update'].update(tool_info={}),
+                   lambda x: x[2]['step_update'].update(subagent_info={'name': 'helper'})):
+        for policy in (IDENTITY_POLICY, None):
+            with pytest.raises(agy_protocol.AgyToolRegistryError):
+                parse_stream(stream(HIGH, change), HIGH, identity_policy=policy)
+    for change, stderr in ((lambda x: x[0]['init'].update(model=FAMILY), ''),
+                           (lambda x: x[-1]['result'].update(model_id=FAMILY), ''),
+                           (lambda x: x[0]['init'].update(is_fallback=True), ''),
+                           (None, 'Model resolved via alias table\n')):
+        with pytest.raises(AgyIdentityError) as caught:
+            parse_stream(stream(HIGH, change), HIGH, identity_policy=IDENTITY_POLICY, stderr=stderr)
+        assert not isinstance(caught.value, agy_protocol.AgyToolRegistryError)

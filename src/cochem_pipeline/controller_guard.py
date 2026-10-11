@@ -8,9 +8,13 @@ high-water paused admission. The CPU budget is unchanged.
 These are readiness/admission limits, not a promise that a Python allocation
 cannot cross the boundary. Crossing it holds new work without killing the
 controller and losing the diagnostic or entering an automatic restart loop.
-A violation pauses admission on the same sample. Reopening uses the host
-governor's recovery hysteresis (HardwarePolicy recovery_seconds and
-recovery_samples), so admission cannot flap around the budget.
+A violation pauses admission on the same sample. After a resident-memory
+violation or unavailable telemetry, reopening uses the host governor's
+recovery hysteresis (HardwarePolicy recovery_seconds and recovery_samples),
+so admission cannot flap around the memory budget. A CPU-only violation
+(memory measured within budget) starts no hold: as in r4, the next fresh
+ready sample reopens admission, so a short polling burst does not hold new
+work for the whole recovery window.
 """
 from __future__ import annotations
 
@@ -44,14 +48,27 @@ def assess_controller(measurements):
             'measurements':measurements}
 
 
+def _cpu_only_violation(measurements):
+    """True only when resident memory is measured within WARDEN_MEMORY_LIMIT_MB and
+    CPU utilization is measured above WARDEN_CPU_LIMIT_PERCENT; unavailable
+    telemetry is never a CPU-only violation."""
+    rss = measurements.get('rss_mb')
+    cpu = measurements.get('cpu_percent')
+    measured = all(type(value) in (int,float) and math.isfinite(value) and value >= 0 for value in (rss,cpu))
+    return measured and rss <= WARDEN_MEMORY_LIMIT_MB and cpu > WARDEN_CPU_LIMIT_PERCENT
+
+
 class ControllerMonitor:
     """Sample the Warden at most once per second and hold admission after a violation.
 
-    ``ready`` is the literal budget verdict of the latest sample. Any not-ready
-    sample sets ``recovery_hold``. The hold is released only once at least
-    ``recovery_seconds`` have passed since the first healthy sample and at
-    least ``recovery_samples`` consecutive fresh healthy samples were taken,
-    as GovernorState does for host capacity. Admission uses
+    ``ready`` is the literal budget verdict of the latest sample. A not-ready
+    sample caused by resident memory or unavailable telemetry sets
+    ``recovery_hold``, and any violation while held restarts it. The hold is
+    released only once at least ``recovery_seconds`` have passed since the
+    first healthy sample and at least ``recovery_samples`` consecutive fresh
+    healthy samples were taken, as GovernorState does for host capacity. A
+    CPU-only violation outside a hold pauses admission for that sample alone,
+    as in r4; the next fresh ready sample reopens it. Admission uses
     ``admission_ready`` (ready and not held).
     """
     def __init__(self, recovery_seconds=HardwarePolicy.recovery_seconds,
@@ -108,8 +125,11 @@ class ControllerMonitor:
             assessed = assess_controller(self._measure())
             now = self._clock()
             if not assessed['ready']:
-                # The pause is immediate and any violation restarts recovery.
-                self.recovery_hold, self.healthy_since, self.healthy_samples = True, None, 0
+                # The pause is immediate. Memory or unavailable telemetry starts the
+                # recovery hold and any violation while held restarts it; a CPU-only
+                # violation outside a hold holds nothing beyond this sample.
+                if self.recovery_hold or not _cpu_only_violation(assessed['measurements']):
+                    self.recovery_hold, self.healthy_since, self.healthy_samples = True, None, 0
             elif self.recovery_hold:
                 if self.healthy_since is None:
                     self.healthy_since = now

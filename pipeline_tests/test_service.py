@@ -451,15 +451,28 @@ def test_projection_wait_defaults_to_twenty_seconds(endpoint):
     from cochem_pipeline.service import PROJECTION_WAIT_SECONDS
     assert PROJECTION_WAIT_SECONDS == 20
     assert endpoint.server.projection_wait_seconds == PROJECTION_WAIT_SECONDS
+    # Operator views and workflow status reads have separate locks with the same bounded wait.
+    assert endpoint.server.workflow_projection_lock is not endpoint.server.projection_lock
 
 
-@pytest.mark.parametrize("path", ["/operator", "/operator?after_event_id=1", "/operator/workflow/service-workflow",
-                                  "/operator/job/unknown-job", "/workflow/service-workflow",
-                                  "/coding/workflow/unknown"])
-def test_busy_heavy_projection_waits_boundedly_then_returns_documented_503(endpoint, path):
+def fixture_coding_workflow(endpoint):
+    # Explicit read stub: the database fixture has no coding coordinator.
+    endpoint.controller.coding_workflow = lambda identifier: {"workflow_id": identifier, "status": "fixture"}
+
+
+@pytest.mark.parametrize("path,lock,other", [
+    ("/operator", "projection_lock", "/workflow/service-workflow"),
+    ("/operator?after_event_id=1", "projection_lock", "/coding/workflow/coding-fixture"),
+    ("/operator/workflow/service-workflow", "projection_lock", "/workflow/service-workflow"),
+    ("/operator/job/unknown-job", "projection_lock", "/workflow/service-workflow"),
+    ("/workflow/service-workflow", "workflow_projection_lock", "/operator"),
+    ("/coding/workflow/unknown", "workflow_projection_lock", "/operator/workflow/service-workflow")])
+def test_busy_heavy_projection_waits_boundedly_then_returns_documented_503(endpoint, path, lock, other):
     submitted(endpoint)
+    fixture_coding_workflow(endpoint)
     endpoint.server.projection_wait_seconds = .2
-    assert endpoint.server.projection_lock.acquire(timeout=5)
+    held = getattr(endpoint.server, lock)
+    assert held.acquire(timeout=5)
     try:
         started = time.monotonic()
         status, body = raw_get(endpoint, path)
@@ -468,34 +481,115 @@ def test_busy_heavy_projection_waits_boundedly_then_returns_documented_503(endpo
         assert json.loads(body) == {"error": "Operator projection busy; retry"}
         with pytest.raises(RuntimeError, match=r"^Operator projection busy; retry$"):
             endpoint.client.call(path)
-        # Health, light reads and writes never take the projection lock.
+        # Health, light reads and writes never take a projection lock, and the
+        # other projection domain builds on its own lock.
         assert endpoint.client.call("/health")["test_kind"] == "http-and-sqlite"
         assert endpoint.client.call("/coding/projects") == {"projects": []}
+        assert raw_get(endpoint, other)[0] == 200
         assert endpoint.client.call("/cancel", {"workflow_id": "service-workflow"})["status"] == "FAILED"
     finally:
-        endpoint.server.projection_lock.release()
-    if not path.startswith("/coding/"):
-        assert raw_get(endpoint, path)[0] in (200, 400)
+        held.release()
+    assert raw_get(endpoint, path)[0] in (200, 400)
+
+
+def test_a_held_operator_build_does_not_block_workflow_status_reads(endpoint, monkeypatch):
+    from cochem_pipeline import operator_views
+    submitted(endpoint)
+    fixture_coding_workflow(endpoint)
+    real = operator_views.operator_snapshot
+    entered, release = threading.Event(), threading.Event()
+
+    def held(*args, **kwargs):
+        entered.set()
+        if not release.wait(timeout=20):
+            raise RuntimeError("test did not release the held build")
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(operator_views, "operator_snapshot", held)
+    # A status read blocked behind the operator lock would end in a 503 after this wait.
+    endpoint.server.projection_wait_seconds = .5
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        pending = executor.submit(raw_get, endpoint, "/operator")
+        try:
+            assert entered.wait(timeout=10)
+            status, body = raw_get(endpoint, "/workflow/service-workflow", timeout=10)
+            assert status == 200 and json.loads(body)["workflow_id"] == "service-workflow"
+            status, body = raw_get(endpoint, "/coding/workflow/coding-fixture", timeout=10)
+            assert status == 200 and json.loads(body) == {"workflow_id": "coding-fixture", "status": "fixture"}
+            # Other operator views still wait on the held operator build.
+            assert raw_get(endpoint, "/operator/job/unknown-job", timeout=10)[0] == 503
+            assert endpoint.server.projection_lock.locked()
+            assert not endpoint.server.workflow_projection_lock.locked()
+            assert not pending.done()
+        finally:
+            release.set()
+        status, body = pending.result(timeout=30)
+    assert status == 200
+    assert json.loads(body)["read_only"] is True
+    assert not endpoint.server.projection_lock.locked()
+
+
+def test_workflow_status_builds_serialise_on_their_own_lock_without_blocking_operator(endpoint, monkeypatch):
+    submitted(endpoint)
+    fixture_coding_workflow(endpoint)
+    real = endpoint.controller.store.workflow
+    entered, release = threading.Event(), threading.Event()
+    calls = []
+
+    def held(workflow_id):
+        calls.append(workflow_id)
+        if len(calls) == 1:
+            entered.set()
+            if not release.wait(timeout=20):
+                raise RuntimeError("test did not release the held build")
+        return real(workflow_id)
+
+    monkeypatch.setattr(endpoint.controller.store, "workflow", held)
+    endpoint.server.projection_wait_seconds = .3
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        pending = executor.submit(raw_get, endpoint, "/workflow/service-workflow")
+        try:
+            assert entered.wait(timeout=10)
+            # The operator view is not queued behind a held status build.
+            status, body = raw_get(endpoint, "/operator", timeout=10)
+            assert status == 200 and json.loads(body)["read_only"] is True
+            # A second status build, of either kind, waits on the shared status lock.
+            for path in ("/workflow/service-workflow", "/coding/workflow/coding-fixture"):
+                status, body = raw_get(endpoint, path, timeout=10)
+                assert status == 503 and json.loads(body) == {"error": "Operator projection busy; retry"}
+            assert calls == ["service-workflow"]
+            assert endpoint.server.workflow_projection_lock.locked()
+            assert not endpoint.server.projection_lock.locked()
+            assert not pending.done()
+        finally:
+            release.set()
+        status, body = pending.result(timeout=30)
+    assert status == 200 and json.loads(body)["workflow_id"] == "service-workflow"
+    assert not endpoint.server.workflow_projection_lock.locked()
+    assert raw_get(endpoint, "/coding/workflow/coding-fixture")[0] == 200
 
 
 def test_heavy_projections_are_encoded_under_the_lock_and_light_replies_are_not(endpoint, monkeypatch):
     from cochem_pipeline import service
     submitted(endpoint)
+    fixture_coding_workflow(endpoint)
     real = service.encode_json
     held = []
 
     def observed(data):
-        held.append(endpoint.server.projection_lock.locked())
+        held.append((endpoint.server.projection_lock.locked(), endpoint.server.workflow_projection_lock.locked()))
         return real(data)
 
     monkeypatch.setattr(service, "encode_json", observed)
-    for path in ("/workflow/service-workflow", "/operator/workflow/service-workflow", "/operator"):
+    for path in ("/workflow/service-workflow", "/coding/workflow/coding-fixture",
+                 "/operator/workflow/service-workflow", "/operator"):
         assert endpoint.client.call(path)
-    assert held == [True, True, True]
+    assert held == [(False, True), (False, True), (True, False), (True, False)]
     endpoint.client.call("/health")
     endpoint.client.call("/coding/projects")
-    assert held == [True, True, True, False, False]
+    assert held[4:] == [(False, False), (False, False)]
     assert not endpoint.server.projection_lock.locked()
+    assert not endpoint.server.workflow_projection_lock.locked()
 
 
 @pytest.mark.parametrize("path", ["/operator?unexpected=1", "/operator?after_event_id=x",
@@ -505,7 +599,9 @@ def test_rejected_heavy_projection_releases_the_lock(endpoint, path):
     assert status == 400
     assert "error" in json.loads(body)
     assert not endpoint.server.projection_lock.locked()
+    assert not endpoint.server.workflow_projection_lock.locked()
     assert raw_get(endpoint, "/operator")[0] == 200
+    assert raw_get(endpoint, "/workflow/missing-workflow")[0] == 400
 
 
 @pytest.mark.parametrize('operation', ['/coding/projects','/coding/workflow/unknown'])

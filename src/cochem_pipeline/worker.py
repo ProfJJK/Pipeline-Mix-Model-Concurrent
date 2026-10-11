@@ -14,8 +14,8 @@ import time
 from typing import Any
 
 from cochem_mcp.providers import build_command, executable_prefix, parse_result
-from .agy_protocol import AgyIdentityError
-from .failures import ProviderFailure, parse_native_failure
+from .agy_protocol import AgyIdentityError, AgyToolRegistryError, require_clean_diagnostics
+from .failures import ProviderFailure, agy_error_records, parse_native_failure
 from .store import output_digest, reconcile_chapter_wbs
 
 
@@ -629,6 +629,8 @@ def _failure_envelope(provider, stdout, stderr):
                     or (isinstance(terminal, dict) and (terminal.get('error') or (
                         isinstance(terminal.get('status'), str) and terminal['status'] != 'SUCCESS')))):
                 envelope = 'gemini_error' if envelope == 'none' else envelope
+    if provider == 'gemini' and envelope == 'none' and agy_error_records(stderr):
+        envelope = 'agy_error'
     return envelope, subtype, api_status
 
 
@@ -638,6 +640,9 @@ def native_failure_metadata(provider, category, exit_code, stdout, stderr, *, st
 
     ``stdout``/``stderr`` are the bytes read from the attempt, or None when the
     output budget stopped the read; their sizes then come from ``stream_sizes``.
+    ``agy_identity`` is True or 'agy_identity' for an Agy identity/reroute
+    violation and 'agy_tool_registry' for a tool-registry/subagent one; any
+    other truthy value records 'agy_identity', never the value itself.
     """
     streams = []
     for data, size in zip((stdout, stderr), stream_sizes):
@@ -650,7 +655,7 @@ def native_failure_metadata(provider, category, exit_code, stdout, stderr, *, st
         envelope, subtype, api_status = _failure_envelope(
             provider, stdout.decode('utf-8', 'replace'), stderr.decode('utf-8', 'replace'))
     if agy_identity:
-        envelope = 'agy_identity'
+        envelope = 'agy_tool_registry' if agy_identity == 'agy_tool_registry' else 'agy_identity'
     return {'schema': NATIVE_FAILURE_SCHEMA, 'category': category,
             'exit_code': exit_code if type(exit_code) is int else None,
             'stdout_bytes': streams[0][0], 'stdout_sha256': streams[0][1],
@@ -1004,6 +1009,17 @@ class NativeRunner:
                     failure = parse_native_failure(provider,raw,stderr,code)
                     if failure is not None:
                         raise failure
+                    if code != 0 and provider == 'gemini' and identity_policy is not None:
+                        # Agy exits nonzero with an untyped AGY_ERROR line or a
+                        # reroute diagnostic for an unresolvable or rerouted
+                        # model: a model hold and reroute, never a job failure.
+                        try:
+                            require_clean_diagnostics(stderr)
+                        except AgyIdentityError as exc:
+                            agy_identity = True
+                            raise ProviderFailure('compatibility') from exc
+                        except ValueError:
+                            pass  # Unbounded diagnostics stay an execution failure.
                     if code != 0:
                         raise ProviderFailure('code')
                     try:
@@ -1024,7 +1040,8 @@ class NativeRunner:
                     except AgyIdentityError as exc:
                         # A misconfigured or rerouting Agy slot is a model hold
                         # and reroute, never a failure counted against the job.
-                        agy_identity = True
+                        agy_identity = ('agy_tool_registry' if isinstance(exc, AgyToolRegistryError)
+                                        else True)
                         raise ProviderFailure('compatibility') from exc
                     except (ValueError,TypeError) as exc:
                         raise ProviderFailure('protocol') from exc

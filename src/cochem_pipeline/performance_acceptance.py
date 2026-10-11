@@ -21,6 +21,8 @@ import time
 
 import psutil
 
+from .controller_guard import WARDEN_CPU_LIMIT_PERCENT, WARDEN_MEMORY_LIMIT_MB
+
 
 def _read_object(path, maximum=1048576):
     with Path(path).open('rb') as stream:
@@ -286,7 +288,8 @@ def observe_native(heartbeat_path, output, *, duration_seconds=172800, interval_
                        'passed':complete and final_handles<=initial_handles,
                        'scope':'physical handle-count growth; individual handle lifetime attribution is not available'},
             'controller':{'maximum_rss_mb':max_rss,'maximum_cpu_percent':max_cpu,
-                          'passed':observations>0 and max_rss<=50 and max_cpu<=5},
+                          'passed':observations>0 and max_rss<=WARDEN_MEMORY_LIMIT_MB
+                                   and max_cpu<=WARDEN_CPU_LIMIT_PERCENT},
             'desktop_heap':{'available':observations>0 and heap_available,'passed':observations>0 and heap_passed},
             'supervisor_timing':timing}
     result['passed']=all((complete,result['handles']['passed'],result['controller']['passed'],

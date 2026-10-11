@@ -242,3 +242,70 @@ def test_claude_result_status_honours_retry_hint_from_failed_envelope():
 ])
 def test_result_text_reclassification_is_claude_only(provider,record):
     assert parse_native_failure(provider,json.dumps(record),'',1).category == 'code'
+
+
+# AG-1: agy reports its own failures as one 'AGY_ERROR: {...}' stderr line and
+# exits nonzero (3 per its changelog). Protocol fixtures, not host evidence.
+AGY_QUOTA = '{"error":{"code":429,"status":"RESOURCE_EXHAUSTED","message":"MODEL_CAPACITY_EXHAUSTED"}}'
+AGY_SECRET = 'SECRET-AGY-zq9'
+
+
+@pytest.mark.parametrize(('stderr','category','scope'), [
+    ('AGY_ERROR: ' + AGY_QUOTA + '\n', 'quota', 'pool'),
+    ('AGY_ERROR: {"code":"MODEL_NOT_FOUND","message":"model gemini-3.8-flash-high not found"}\n', 'compatibility', 'model'),
+    ('AGY_ERROR: {"code":"RESOURCE_EXHAUSTED","message":"' + AGY_SECRET + '"}\n', 'quota', 'pool'),
+    ('AGY_ERROR: {"error":{"code":401,"status":"UNAUTHENTICATED"}}\n', 'auth', 'pool'),
+    ('AGY_ERROR: {"error":{"code":503}}\n', 'busy', 'model'),
+    ('AGY_ERROR: {"status":"DEADLINE_EXCEEDED"}\n', 'timeout', None),
+    ('AGY_ERROR: {"message":"Rate limit exceeded for ' + AGY_SECRET + '"}\n', 'quota', 'pool'),
+    ('Loaded cached credentials.\r\n  AGY_ERROR:{"code":"unknown_model"}\r\n', 'compatibility', 'model'),
+    ('\x1b[31mAGY_ERROR: ' + AGY_QUOTA + '\x1b[0m\n', 'quota', 'pool'),
+])
+def test_agy_error_line_maps_to_the_typed_category_on_any_exit(stderr,category,scope):
+    for exit_code in (3, 1, 0):
+        failure = parse_native_failure('gemini','',stderr,exit_code)
+        assert isinstance(failure,ProviderFailure)
+        assert (failure.category,failure.hold_scope) == (category,scope)
+        assert failure.args == (failure.summary,)
+        for raw in (AGY_SECRET, 'not found', 'CAPACITY', 'AGY_ERROR'):
+            assert raw not in str(failure) and raw not in repr(failure)
+
+
+def test_agy_error_line_honours_bounded_retry_hints_and_typed_priority():
+    detail = {'@type':'type.googleapis.com/google.rpc.RetryInfo','retryDelay':'42s'}
+    line = 'AGY_ERROR: ' + json.dumps({'error':{'code':429,'details':[detail]}}) + '\n'
+    failure = parse_native_failure('gemini','',line,3)
+    assert (failure.category,failure.retry_after_seconds) == ('quota',42.0)
+    unknown = 'AGY_ERROR: {"code":"MODEL_NOT_FOUND"}\n'
+    assert parse_native_failure('gemini','',unknown + 'AGY_ERROR: ' + AGY_QUOTA + '\n',3).category == 'quota'
+    untyped = 'AGY_ERROR: {"code":"x"}\n'
+    assert parse_native_failure('gemini','',untyped + 'AGY_ERROR: ' + AGY_QUOTA + '\n',3).category == 'quota'
+    # The scan reads a bounded number of AGY_ERROR lines; later lines are never parsed.
+    assert parse_native_failure('gemini','',untyped * 16 + 'AGY_ERROR: ' + AGY_QUOTA + '\n',3) is None
+
+
+@pytest.mark.parametrize('stderr', [
+    'AGY_ERROR: {"code":"x","message":"' + AGY_SECRET + '"}\n',  # no typed cause: the caller's policy decides
+    'AGY_ERROR: {"code":"INVALID_ARGUMENT","message":"invalid model selection"}\n',  # never a job protocol failure
+    'AGY_ERROR: {"error":{"status":"INVALID_ARGUMENT"}}\n',
+    'AGY_ERROR: requested model unavailable ' + AGY_SECRET + '\n',  # prose is never parsed
+    'AGY_ERROR: [429]\n', 'AGY_ERROR: "RESOURCE_EXHAUSTED"\n', 'AGY_ERROR: 429\n', 'AGY_ERROR:\n',
+    'AGY_ERROR: {"code":429,"code":429}\n',
+    'AGY_ERROR: {"code":NaN}\n',
+    'AGY_ERROR: {"code":429} trailing prose\n',
+    pytest.param('AGY_ERROR: {"error":{"code":429},"pad":"' + 'x' * 70000 + '"}\n', id='oversized'),
+    pytest.param('AGY_ERROR: ' + '[' * 5000 + ']' * 5000 + '\n', id='deep-list'),
+    pytest.param('AGY_ERROR: ' + '{"a":' * 40 + '{"code":429}' + '}' * 40 + '\n', id='nested-code'),
+    'warning: AGY_ERROR: ' + AGY_QUOTA + '\n',  # the prefix must start the line
+    'AGY_ERROR ' + AGY_QUOTA + '\n', 'agy_error: ' + AGY_QUOTA + '\n',
+])
+def test_untyped_malformed_or_unbounded_agy_error_lines_are_not_classified(stderr):
+    assert parse_native_failure('gemini','',stderr,3) is None
+    assert parse_native_failure('gemini','',stderr,0) is None
+
+
+def test_agy_error_lines_are_read_only_from_gemini_stderr():
+    line = 'AGY_ERROR: ' + AGY_QUOTA + '\n'
+    assert parse_native_failure('gemini',line,'',3) is None
+    for provider in ('codex','claude'):
+        assert parse_native_failure(provider,'',line,1) is None

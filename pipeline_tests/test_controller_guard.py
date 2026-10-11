@@ -18,6 +18,7 @@ from cochem_pipeline.resource_limits import ResourceLimits, ResourcePolicyError,
 # Explicit sample fixtures for the fake sampler; they are not live measurements.
 OVER = {'rss_mb':WARDEN_MEMORY_LIMIT_MB+1,'cpu_percent':1}
 HEALTHY = {'rss_mb':40,'cpu_percent':1}
+CPU_SPIKE = {'rss_mb':40,'cpu_percent':WARDEN_CPU_LIMIT_PERCENT+1}
 
 
 @pytest.mark.parametrize('rss,cpu,ready',[(WARDEN_MEMORY_LIMIT_MB,WARDEN_CPU_LIMIT_PERCENT,True),
@@ -128,6 +129,61 @@ def test_any_violation_during_recovery_restarts_the_window(violation):
     for second in range(11,21):
         assert at(second,HEALTHY)['admission_ready'] is False
     assert at(21,HEALTHY)['admission_ready'] is True
+
+
+def test_cpu_only_spike_pauses_on_the_same_sample_and_reopens_on_the_next_ready_sample():
+    # r4 parity: an over-budget CPU sample with resident memory measured within
+    # budget closes admission at once but starts no recovery hold.
+    monitor,at=fake_monitor()
+    assert at(0,HEALTHY)['admission_ready'] is True
+    paused=at(1,CPU_SPIKE)
+    assert (paused['ready'],paused['admission_ready'],paused['recovery_hold'])==(False,False,False)
+    assert paused['action']=='pause_admission'
+    assert paused['admission_reasons']==paused['reasons']==['Warden CPU utilization exceeds its strict 5% budget']
+    # A cached read inside the one-second window is the same paused sample.
+    assert at(1.5,HEALTHY) is paused
+    reopened=at(2,HEALTHY)
+    assert (reopened['ready'],reopened['admission_ready'],reopened['recovery_hold'],reopened['action'])==(
+        True,True,False,'none')
+    assert reopened['admission_reasons']==[]
+    assert (reopened['recovery']['healthy_samples'],reopened['recovery']['healthy_seconds'])==(0,None)
+
+
+def test_consecutive_cpu_only_spikes_stay_paused_and_reopen_on_the_first_ready_sample():
+    monitor,at=fake_monitor()
+    for second in range(5):
+        spiked=at(second,CPU_SPIKE)
+        assert (spiked['admission_ready'],spiked['recovery_hold'])==(False,False)
+    assert at(5,HEALTHY)['admission_ready'] is True
+
+
+@pytest.mark.parametrize('violation',[{'rss_mb':WARDEN_MEMORY_LIMIT_MB+1,'cpu_percent':WARDEN_CPU_LIMIT_PERCENT+1},
+                                      {'rss_mb':None,'cpu_percent':WARDEN_CPU_LIMIT_PERCENT+1},
+                                      {'rss_mb':40,'cpu_percent':None},{'rss_mb':40,'cpu_percent':float('nan')}])
+def test_cpu_violation_with_memory_violation_or_unavailable_telemetry_starts_the_full_hold(violation):
+    monitor,at=fake_monitor()
+    assert at(0,violation)['recovery_hold'] is True
+    for second in range(1,11):
+        assert at(second,HEALTHY)['admission_ready'] is False
+    assert at(11,HEALTHY)['admission_ready'] is True
+
+
+@pytest.mark.parametrize('violation',[OVER,{'rss_mb':None,'cpu_percent':1},{'rss_mb':40,'cpu_percent':None},
+                                      {'rss_mb':WARDEN_MEMORY_LIMIT_MB+1,'cpu_percent':WARDEN_CPU_LIMIT_PERCENT+1}])
+def test_memory_violation_during_a_cpu_pause_starts_the_full_hold_from_that_violation(violation):
+    monitor,at=fake_monitor()
+    at(0,HEALTHY)
+    assert at(1,CPU_SPIKE)['admission_ready'] is False
+    held=at(2,violation)
+    assert (held['admission_ready'],held['recovery_hold'])==(False,True)
+    # Ten healthy seconds from the first healthy sample (t=3) and three samples.
+    for second in range(3,13):
+        assert at(second,HEALTHY)['admission_ready'] is False
+    released=at(13,HEALTHY)
+    assert (released['admission_ready'],released['recovery_hold'])==(True,False)
+    # After the full hold releases, a later CPU-only spike is again a one-sample pause.
+    assert at(14,CPU_SPIKE)['recovery_hold'] is False
+    assert at(15,HEALTHY)['admission_ready'] is True
 
 
 def test_cached_reads_within_one_second_are_not_counted_as_fresh_samples():
@@ -242,6 +298,30 @@ def test_runtime_tick_never_admits_while_the_controller_flaps_and_reopens_only_a
     capacity,component=tick(420)
     assert capacity==0 and component['state']=='resource_pressure'
     assert telemetry[-1]['reasons']==['Warden resident memory exceeds its strict 200 MiB budget']
+
+
+def test_runtime_tick_closes_on_a_cpu_only_spike_and_reopens_on_the_next_fresh_sample():
+    clock=SimpleNamespace(now=1000.)
+    readings=itertools.chain([HEALTHY,CPU_SPIKE],itertools.repeat(HEALTHY))
+    monitor=ControllerMonitor(clock=lambda: clock.now,measure=lambda: dict(next(readings)))
+    runtime,telemetry=tick_runtime(monitor)
+
+    def tick(step):
+        # The runtime ticks every 0.1 s; the monitor takes one fresh sample per second.
+        clock.now=1000+step/10
+        runtime.tick()
+        return runtime.last_capacity,runtime.components['warden_controller']
+
+    for step in range(10):
+        assert tick(step)[0]==4
+    # The spike closes admission on its own tick and for the cached rest of that second.
+    for step in range(10,20):
+        capacity,component=tick(step)
+        assert capacity==0 and component['state']=='resource_pressure'
+        assert telemetry[-1]['reasons']==['Warden CPU utilization exceeds its strict 5% budget']
+    capacity,component=tick(20)
+    assert capacity==4 and component['state']=='healthy' and component['recovery_hold'] is False
+    assert 'controller' not in telemetry[-1]
 
 
 def test_native_controller_policy_cannot_be_claimed_on_linux():

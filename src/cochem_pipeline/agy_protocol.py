@@ -3,12 +3,12 @@
 Without a policy the init event reports the selected model, not a server
 attestation of which model served the request, so every agy-stream-json spec
 stays held. The reviewed 'reported-model-equality' policy (decision 3B) treats
-the model name the CLI echoes in its init event, and in any step or result
-field spelling a model, as the identity: any mismatch, absence, fallback or
-reroute field, or rerouting diagnostic is a hard AgyIdentityError. A reviewed
-model_bindings table maps each routed (model, effort) to the CLI argv slug and
-the name the CLI reports. Authentication and inference isolation remain
-separate required deployment evidence; this module cannot supply them.
+the model name the CLI echoes in its init event, and every member anywhere in
+any event that spells a model, as the identity: any mismatch, absence,
+fallback or reroute field, or rerouting diagnostic is a hard AgyIdentityError.
+A reviewed model_bindings table maps each routed (model, effort) to the CLI
+argv slug and the name the CLI reports. Authentication and inference isolation
+remain separate required deployment evidence; this module cannot supply them.
 """
 from __future__ import annotations
 
@@ -23,11 +23,23 @@ _SLUG = re.compile(r'^[a-z0-9][a-z0-9.-]{0,127}$')
 _BINDING_KEY = re.compile(r'^[A-Za-z0-9][A-Za-z0-9._/-]{0,199}(:(extended|high))?$')
 _MAX_BINDINGS = 32
 _SLUG_EFFORT = re.compile(r'-(low|medium|high)$')
-_MODEL_KEYS = ('model', 'selected_model', 'model_id')
-_REROUTE_KEY_PARTS = ('fallback', 'rerout', 'deprecated_model', 'deprecatedmodel')
+# Member names are compared casefolded with separators removed, so that
+# model_id, modelId and model-id are one spelling. Every model member must equal
+# the reviewed reported name, and a 'models' collection may name only it.
+_MODEL_KEYS = frozenset(('model', 'selectedmodel', 'modelid', 'modelname', 'modelversion', 'resolvedmodel'))
+_MODELS_KEY = 'models'
+# The A5 evidence tool's reroute fragments (agy_isolation_evidence_r4_v1.py
+# REROUTE_KEY_FRAGMENTS) plus two reroute members named in the agy binary. A
+# truthy member is a reroute; A5 lists any key containing 'resolved', so even
+# an agreeing resolved_model is rejected.
+_REROUTE_KEY_PARTS = ('rerout', 'fallback', 'deprecat', 'resolved', 'substitut', 'downgrad',
+                      'usednongeminimodel', 'capacityexhausted')
+# The A5 tool's STDERR_MARKERS plus the agy one-shot model restore notice.
 _STDERR_MARKERS = ('AGY_ERROR:', 'is no longer available. Using', 'Model resolved via',
-                   'Restored session model', 'resolves to a different model')
+                   'Restored session model', 'resolves to a different model', 'defaulting to',
+                   'Restoring model')
 _STDERR_LIMIT = 8 * 1024 * 1024
+_ANSI = re.compile(r'\x1b\[[0-?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b[@-_]')
 
 
 class AgyIdentityError(ValueError):
@@ -35,6 +47,14 @@ class AgyIdentityError(ValueError):
 
     Callers classify this as a compatibility failure (model hold and reroute),
     never as a protocol failure that counts against the job.
+    """
+
+
+class AgyToolRegistryError(AgyIdentityError):
+    """Native output reports a tool registry, tool step or subagent.
+
+    Still a compatibility failure; the subclass only lets callers record the
+    distinct 'agy_tool_registry' failure envelope.
     """
 
 
@@ -165,12 +185,17 @@ def _json(raw):
         raise ValueError('Agy native JSON exceeds the supported nesting depth') from exc
 
 
+def _member(key):
+    # One spelling per member name: casefolded, separators removed.
+    return ''.join(char for char in key.casefold() if char.isalnum()) if isinstance(key, str) else ''
+
+
 def _reject_reroute(value):
-    # Always on: a truthy fallback/reroute/deprecated-model member anywhere in
-    # the native records means the CLI did not serve the selected model as-is.
+    # Always on: a truthy fallback/reroute/substitution member anywhere in the
+    # native records means the CLI did not serve the selected model as-is.
     if isinstance(value, dict):
         for key, child in value.items():
-            if child and any(part in key.casefold() for part in _REROUTE_KEY_PARTS):
+            if child and any(part in _member(key) for part in _REROUTE_KEY_PARTS):
                 raise AgyIdentityError('Agy stream reports a model fallback or reroute')
             _reject_reroute(child)
     elif isinstance(value, list):
@@ -178,11 +203,48 @@ def _reject_reroute(value):
             _reject_reroute(child)
 
 
-def _require_model_identity(event, expected_model):
-    for record in (event, event.get('init'), event.get('step_update'), event.get('result')):
-        if isinstance(record, dict) and any(
-                key in record and record[key] != expected_model for key in _MODEL_KEYS):
-            raise AgyIdentityError('Agy stream reports a model other than the reviewed binding')
+def _names_only(value, expected_model):
+    # A 'models' mapping is keyed only by the reviewed name; a list or a single
+    # name must be that name; an empty or null member names no model.
+    if isinstance(value, dict):
+        names = list(value)
+    elif isinstance(value, list):
+        names = value
+    elif isinstance(value, str):
+        names = [value]
+    else:
+        return not value
+    return all(name == expected_model for name in names)
+
+
+def _require_model_identity(value, expected_model):
+    # Always on and recursive: every member spelling a model, in any event or
+    # nested record, must equal the reviewed reported name.
+    if isinstance(value, dict):
+        for key, child in value.items():
+            member = _member(key)
+            if ((member in _MODEL_KEYS and child != expected_model)
+                    or (member == _MODELS_KEY and not _names_only(child, expected_model))):
+                raise AgyIdentityError('Agy stream reports a model other than the reviewed binding')
+            _require_model_identity(child, expected_model)
+    elif isinstance(value, list):
+        for child in value:
+            _require_model_identity(child, expected_model)
+
+
+def require_clean_diagnostics(stderr):
+    """Reject Agy diagnostics that report a model error, fallback or reroute.
+
+    ``stderr`` is the decoded native error stream. Terminal styling is removed
+    before the marker scan, as the A5 evidence tool does. Raises ValueError for
+    an unbounded or non-text stream and AgyIdentityError for any marker; no
+    diagnostic text is copied into either exception.
+    """
+    if not isinstance(stderr, str) or len(stderr) > _STDERR_LIMIT:
+        raise ValueError('Agy native diagnostics exceed their bounded contract')
+    text = _ANSI.sub('', stderr) if '\x1b' in stderr else stderr
+    if any(marker in text for marker in _STDERR_MARKERS):
+        raise AgyIdentityError('Agy diagnostics report a model error, fallback or reroute')
 
 
 def parse_stream(raw, expected_model, *, identity_policy=None, stderr=None):
@@ -194,10 +256,7 @@ def parse_stream(raw, expected_model, *, identity_policy=None, stderr=None):
     if identity_policy is not None and identity_policy != IDENTITY_POLICY:
         raise ValueError('Unsupported Agy identity policy')
     if stderr is not None:
-        if not isinstance(stderr, str) or len(stderr) > _STDERR_LIMIT:
-            raise ValueError('Agy native diagnostics exceed their bounded contract')
-        if any(marker in stderr for marker in _STDERR_MARKERS):
-            raise AgyIdentityError('Agy diagnostics report a model error, fallback or reroute')
+        require_clean_diagnostics(stderr)
     # NDJSON delimiters are LF; Unicode paragraph separators inside JSON text
     # are content and must not split an otherwise valid native record.
     lines = [line for line in raw.split('\n') if line.strip()]
@@ -208,8 +267,7 @@ def parse_stream(raw, expected_model, *, identity_policy=None, stderr=None):
     if (any(not isinstance(event, dict) for event in events)
             or events[0].get('event') != 'init' or events[-1].get('event') != 'result'):
         raise ValueError('Agy stream requires initial and terminal native events')
-    for event in events:
-        _require_model_identity(event, expected_model)
+    _require_model_identity(events, expected_model)
     first, terminal = events[0], events[-1].get('result')
     init = first.get('init')
     session = first.get('conversation_id')
@@ -219,13 +277,14 @@ def parse_stream(raw, expected_model, *, identity_policy=None, stderr=None):
     if init.get('model') != expected_model:
         raise AgyIdentityError('Agy native selected model and session must match the controller request')
     if init.get('tools') != []:
-        raise AgyIdentityError('Agy stream did not attest an empty native tool registry')
+        raise AgyToolRegistryError('Agy stream did not attest an empty native tool registry')
     for event in events[1:-1]:
         step = event.get('step_update')
         if event.get('event') != 'step_update' or not isinstance(step, dict):
             raise ValueError('Agy stream contains unverified steps, tools, agents or model identity')
-        if (any(key in step for key in ('tool_name', 'tool_info', 'subagent_info'))
-                or ('model' in step and step['model'] != expected_model)):
+        if any(key in step for key in ('tool_name', 'tool_info', 'subagent_info')):
+            raise AgyToolRegistryError('Agy stream contains unverified steps, tools, agents or model identity')
+        if 'model' in step and step['model'] != expected_model:
             raise AgyIdentityError('Agy stream contains unverified steps, tools, agents or model identity')
         if (step.get('conversation_id') != session
                 or step.get('step_type') not in ('user_input', 'agent_response', 'checkpoint')

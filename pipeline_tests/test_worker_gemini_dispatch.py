@@ -13,7 +13,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from cochem_pipeline import worker
+from cochem_pipeline import agy_protocol, worker
 from cochem_pipeline.agy_protocol import IDENTITY_POLICY, AgyIdentityError, require_serving_model_contract
 from cochem_pipeline.failures import ProviderFailure
 from cochem_pipeline.routing import load_routing_policy, tier_for_score
@@ -412,6 +412,150 @@ def test_failure_envelope_is_classified_without_raw_text(provider, stdout, expec
     identity = native_failure_metadata(provider, 'compatibility', 0, raw, b'', started_at=1.0, finished_at=2.0,
                                        agy_identity=True)
     assert identity['envelope_kind'] == 'agy_identity'
+
+
+def changed_stream(change):
+    events = [json.loads(line) for line in agy_stream(HIGH).decode().splitlines()]
+    change(events)
+    return ('\n'.join(json.dumps(event) for event in events) + '\n').encode()
+
+
+# --- AG-1: agy's 'AGY_ERROR: {...}' stderr line with a nonzero exit (3 per the agy changelog) ---
+
+AGY_SECRET = 'SECRET-AGY-zq9'
+AGY_UNKNOWN = ('AGY_ERROR: {"code":"MODEL_NOT_FOUND","message":"model %s not found %s"}\n'
+               % (HIGH, AGY_SECRET)).encode()
+AGY_QUOTA = ('AGY_ERROR: {"error":{"code":429,"status":"RESOURCE_EXHAUSTED",'
+             '"message":"MODEL_CAPACITY_EXHAUSTED %s"}}\n' % AGY_SECRET).encode()
+ERROR_RESULT = changed_stream(lambda events: (events.pop(1), events[-1]['result'].update(
+    status='ERROR', error={'message': 'unknown model ' + AGY_SECRET}, num_turns=0)))
+
+
+def assert_no_agy_text(text):
+    for raw in (AGY_SECRET, 'not found', 'CAPACITY', 'MODEL_', 'AGY_ERROR', 'unknown model', 'defaulting'):
+        assert raw not in text
+
+
+@pytest.mark.parametrize('stdout, stderr, code, category, scope, envelope', [
+    pytest.param(b'', AGY_UNKNOWN, 3, 'compatibility', 'model', 'agy_error', id='unknown-model-exit3'),
+    pytest.param(ERROR_RESULT, AGY_UNKNOWN, 3, 'compatibility', 'model', 'gemini_error', id='error-result-exit3'),
+    pytest.param(b'', AGY_UNKNOWN, 1, 'compatibility', 'model', 'agy_error', id='unknown-model-exit1'),
+    pytest.param(b'', AGY_QUOTA, 3, 'quota', 'pool', 'agy_error', id='quota-exit3'),
+    pytest.param(b'', b'\x1b[31m' + AGY_QUOTA.rstrip(b'\n') + b'\x1b[0m\r\n', 3, 'quota', 'pool', 'agy_error',
+                 id='ansi-quota-exit3'),
+    pytest.param(b'', b'AGY_ERROR: {"error":{"code":503,"status":"UNAVAILABLE"}}\n', 3, 'busy', 'model',
+                 'agy_error', id='busy-exit3'),
+])
+def test_typed_agy_error_line_classifies_the_nonzero_exit(tmp_path, monkeypatch, stdout, stderr, code,
+                                                          category, scope, envelope):
+    h = harness(tmp_path, monkeypatch, inference=(stdout, stderr, code))
+    with pytest.raises(ProviderFailure) as caught:
+        h.run()
+    assert (caught.value.category, caught.value.hold_scope) == (category, scope)
+    assert caught.value.args == (caught.value.summary,)
+    assert len(h.fake.launches) == 3
+    text, metadata = failure_metadata(h.log_dir)
+    assert set(metadata) == NATIVE_FAILURE_KEYS
+    assert (metadata['category'], metadata['exit_code'], metadata['envelope_kind']) == (category, code, envelope)
+    assert metadata['stderr_sha256'] == hashlib.sha256(stderr).hexdigest()
+    assert_no_agy_text(text)
+    assert_no_agy_text(str(caught.value))
+    assert not (h.log_dir / 'receipt.json').exists()
+
+
+@pytest.mark.parametrize('stdout, stderr, code', [
+    pytest.param(b'', b'AGY_ERROR: {"code":"x","message":"' + AGY_SECRET.encode() + b'"}\n', 3, id='untyped'),
+    pytest.param(b'', b'AGY_ERROR: requested model unavailable ' + AGY_SECRET.encode() + b'\n', 3, id='prose'),
+    pytest.param(b'', b'AGY_ERROR: {"code":"INVALID_ARGUMENT","message":"invalid model selection"}\n', 3,
+                 id='argument-error'),
+    pytest.param(b'', b'AGY_ERROR: {"error":{"code":429},"pad":"' + b'x' * 70000 + b'"}\n', 3, id='oversized'),
+    pytest.param(b'', b'warning: ' + AGY_QUOTA, 3, id='prefix-not-at-line-start'),
+    pytest.param(ERROR_RESULT, b'AGY_ERROR: {"code":"x"}\n', 3, id='error-result-untyped'),
+    pytest.param(agy_stream(HIGH), f'{HIGH} is no longer available. Using gemini-2.5-flash\n'.encode(), 2,
+                 id='reroute-marker-exit2'),
+    pytest.param(b'', f'Model ID {HIGH} not in local config, defaulting to CCPA\n'.encode(), 3,
+                 id='defaulting-to-exit3'),
+])
+def test_untyped_agy_error_or_reroute_diagnostic_on_nonzero_exit_is_compatibility(tmp_path, monkeypatch,
+                                                                                   stdout, stderr, code):
+    h = harness(tmp_path, monkeypatch, inference=(stdout, stderr, code))
+    with pytest.raises(ProviderFailure) as caught:
+        h.run()
+    assert (caught.value.category, caught.value.hold_scope) == ('compatibility', 'model')
+    assert isinstance(caught.value.__cause__, AgyIdentityError)
+    text, metadata = failure_metadata(h.log_dir)
+    assert (metadata['category'], metadata['exit_code'], metadata['envelope_kind']) == (
+        'compatibility', code, 'agy_identity')
+    assert_no_agy_text(text)
+    assert_no_agy_text(str(caught.value))
+    assert not (h.log_dir / 'receipt.json').exists()
+
+
+def test_nonzero_exit_without_agy_diagnostics_stays_code(tmp_path, monkeypatch):
+    for index, stderr in enumerate((STDERR, b'Loaded cached credentials.\nagy_error: lowercase is not agy\n')):
+        root = tmp_path / str(index)
+        root.mkdir()
+        h = harness(root, monkeypatch, inference=(agy_stream(HIGH), stderr, 3))
+        with pytest.raises(ProviderFailure) as caught:
+            h.run()
+        assert caught.value.category == 'code' and caught.value.hold_scope is None
+        _, metadata = failure_metadata(h.log_dir)
+        assert (metadata['category'], metadata['envelope_kind']) == ('code', 'none')
+
+
+# --- AG-2 end to end: nested identity and reroute fields are model holds, not receipts ---
+
+@pytest.mark.parametrize('change', [
+    lambda events: events[-1]['result']['usage'].update(model='gemini-2.5-flash'),
+    lambda events: events[-1]['result'].update(used_non_gemini_model=True),
+    lambda events: events[1]['step_update'].update(metadata={'model': 'gemini-2.5-flash'}),
+    lambda events: events[0]['init'].update(resolved_model='gemini-2.5-flash'),
+])
+def test_nested_identity_contradiction_after_launch_is_compatibility(tmp_path, monkeypatch, change):
+    h = harness(tmp_path, monkeypatch, inference=(changed_stream(change), b'', 0))
+    with pytest.raises(ProviderFailure) as caught:
+        h.run()
+    assert (caught.value.category, caught.value.hold_scope) == ('compatibility', 'model')
+    assert isinstance(caught.value.__cause__, AgyIdentityError)
+    assert not isinstance(caught.value.__cause__, agy_protocol.AgyToolRegistryError)
+    _, metadata = failure_metadata(h.log_dir)
+    assert metadata['envelope_kind'] == 'agy_identity'
+    assert not (h.log_dir / 'receipt.json').exists()
+
+
+# --- AG-3: tool-registry and subagent violations have their own envelope kind ---
+
+@pytest.mark.parametrize('change', [
+    lambda events: events[0]['init'].update(tools=['read_file']),
+    lambda events: events[0]['init'].pop('tools'),
+    lambda events: events[1]['step_update'].update(tool_name='run_shell'),
+    lambda events: events[1]['step_update'].update(subagent_info={'name': 'helper'}),
+])
+def test_tool_registry_violation_after_launch_has_its_own_envelope(tmp_path, monkeypatch, change):
+    h = harness(tmp_path, monkeypatch, inference=(changed_stream(change), b'', 0))
+    with pytest.raises(ProviderFailure) as caught:
+        h.run()
+    assert (caught.value.category, caught.value.hold_scope) == ('compatibility', 'model')
+    assert isinstance(caught.value.__cause__, agy_protocol.AgyToolRegistryError)
+    text, metadata = failure_metadata(h.log_dir)
+    assert (metadata['category'], metadata['envelope_kind']) == ('compatibility', 'agy_tool_registry')
+    assert 'read_file' not in text and 'run_shell' not in text and 'helper' not in text
+    assert not (h.log_dir / 'receipt.json').exists()
+
+
+def test_agy_envelope_kinds_are_allowlisted():
+    for value, expected in ((True, 'agy_identity'), ('agy_identity', 'agy_identity'),
+                            ('agy_tool_registry', 'agy_tool_registry'), (SECRET, 'agy_identity'),
+                            (False, 'none'), (None, 'none')):
+        metadata = native_failure_metadata('gemini', 'compatibility', 0, b'', b'', started_at=1.0,
+                                           finished_at=2.0, agy_identity=value)
+        assert metadata['envelope_kind'] == expected
+    line = b'AGY_ERROR: {"code":"x"}\n'
+    assert native_failure_metadata('gemini', 'code', 3, b'', line, started_at=1.0,
+                                   finished_at=2.0)['envelope_kind'] == 'agy_error'
+    for provider in ('codex', 'claude'):
+        assert native_failure_metadata(provider, 'code', 3, b'', line, started_at=1.0,
+                                       finished_at=2.0)['envelope_kind'] == 'none'
 
 
 def test_unread_streams_record_sizes_only():
