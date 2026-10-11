@@ -207,9 +207,16 @@ def read_workspace(root: Path, *, max_files=10000, max_bytes=67108864) -> dict[s
                 if entries>max_files*4:
                     raise ValueError('Worker directory inventory exceeds its bounded size')
                 path=Path(item.path)
-                metadata=item.stat(follow_symlinks=False)
+                listed=item.stat(follow_symlinks=False)
+                if stat.S_ISLNK(listed.st_mode) or getattr(listed,'st_file_attributes',0)&0x400:
+                    raise ValueError('Worker created a symbolic link or reparse point')
+                # os.DirEntry.stat() reports st_nlink/st_ino/st_dev as 0 on Windows; os.lstat
+                # opens the entry without following links and returns the real NTFS link count.
+                metadata=os.lstat(item.path)
                 if stat.S_ISLNK(metadata.st_mode) or getattr(metadata,'st_file_attributes',0)&0x400:
                     raise ValueError('Worker created a symbolic link or reparse point')
+                if stat.S_IFMT(metadata.st_mode)!=stat.S_IFMT(listed.st_mode):
+                    raise ValueError('Worker workspace entry changed while being inventoried')
                 name=validate_source_path(path.relative_to(root).as_posix())
                 if stat.S_ISDIR(metadata.st_mode):
                     stack.append(path)

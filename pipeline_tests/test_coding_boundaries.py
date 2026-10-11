@@ -131,8 +131,10 @@ def test_workspace_capture_rejects_a_real_hardlink_to_external_material(tmp_path
     source.write_bytes(b"Not a real secret; physical external inode fixture")
     workspace = tmp_path / "worker"
     workspace.mkdir()
+    (workspace / "plain.py").write_bytes(b"ordinary = True\n")
+    assert read_workspace(workspace) == {"plain.py": b"ordinary = True\n"}
     (workspace / "source.py").hardlink_to(source)
-    with pytest.raises(ValueError, match="[Hh]ardlink|[Hh]ard link|link"):
+    with pytest.raises(ValueError, match="non-regular or hard-linked file"):
         read_workspace(workspace)
     assert source.read_bytes() == b"Not a real secret; physical external inode fixture"
 

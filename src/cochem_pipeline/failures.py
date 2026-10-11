@@ -191,11 +191,34 @@ _NATIVE_DIAGNOSTICS = (
     ('context', r'^(?:your input exceeds the context window\b|the input exceeds the context window\b|prompt is too long\b|input is too long\b|context (?:window|length|limit) exceeded\b)'),
     ('busy', r'^(?:the model is currently overloaded\b|the server is overloaded\b|model is temporarily unavailable\b|this model is currently at capacity\b|server is busy\b)'),
 )
+# Claude CLI can report an API failure only as text in its failed result record.
+# A leading API status decides alone; an unmapped status keeps the 'code' fallback.
+_CLAUDE_RESULT_API_STATUS = r'^(?:failed to authenticate\.\s*)?api error:\s*([0-9]{3})\b'
+_CLAUDE_RESULT_AUTH = r'^(?:invalid api key|oauth token has expired|failed to authenticate|please run /login)\b'
+
+
+def _claude_result_category(record: dict) -> str | None:
+    # Only a failed result envelope (is_error true, or an error_* subtype without
+    # is_error) qualifies. A result that says is_error false is an answer: data.
+    subtype = record.get('subtype')
+    failed = record.get('is_error') is True or ('is_error' not in record and
+                                                isinstance(subtype, str) and subtype.startswith('error_'))
+    if record.get('type') != 'result' or not failed or not isinstance(record.get('result'), str):
+        return None
+    text = record['result'][:4096].strip().casefold()
+    status = re.match(_CLAUDE_RESULT_API_STATUS, text)
+    if status:
+        return _HTTP_CODES.get(int(status.group(1)))
+    for category, pattern in (*_NATIVE_DIAGNOSTICS, ('auth', _CLAUDE_RESULT_AUTH)):
+        if re.match(pattern, text):
+            return category
+    return None
 
 
 def _native_diagnostic_category(provider: str, record: dict, fields: list[dict]) -> str | None:
     # These fields are selected only after establishing a native failure event.
-    # In particular, Claude result text and Codex agent_message.text stay data.
+    # Codex agent_message.text stays data; Claude result text is read only from
+    # a failed result envelope, after its typed codes and error messages.
     messages = [field.get('message') for field in fields]
     if provider == 'claude' and record.get('type') == 'result' and isinstance(record.get('errors'),list):
         messages.extend(record['errors'])
@@ -206,6 +229,8 @@ def _native_diagnostic_category(provider: str, record: dict, fields: list[dict])
         for category, pattern in _NATIVE_DIAGNOSTICS:
             if re.match(pattern,message):
                 return category
+    if provider == 'claude':
+        return _claude_result_category(record)
     return None
 
 
