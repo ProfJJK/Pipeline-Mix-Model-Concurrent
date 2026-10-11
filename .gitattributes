@@ -19,3 +19,5 @@ config/windows/** -text
 pipeline_tests/** -text
 mcp_tests/** -text
 supervisor_tests/** -text
+# Published deployment workspace mirror: the sitting runner pins these files by sha256.
+docs/deployment/** -text -whitespace

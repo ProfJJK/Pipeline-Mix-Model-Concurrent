@@ -1,0 +1,273 @@
+WINDOWS PIPELINE: r4 STOPPED RUNTIME (TELEMETRY LEAK REPAIR) - OWNER STEPS
+9 October 2026 - AETHERDESK (step 3 revised 10 October for retarget script v2.2)
+
+=====================================================================================
+DONE 10 October 20:01: THE ONE STEP below was run once with zero holds; the 4.2.7 pipeline
+is live on r4 (controller pid 20664) and completed its first provider preflight at 20:14.
+
+NEXT SITTING (about 3 minutes, Administrator Windows PowerShell 5.1): retire the legacy
+Hyper-V quarantine VM whose disks sit in D:\__CoChem\__agentic\v4.1.2\vm (the only piece
+of the legacy pipelines left). Read-only plan first (optional), then -Apply:
+
+  C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\Users\ansac\Documents\Codex\2026-10-06\the-github-repository-is-located-at\windows-deployment-next\retire-legacy-hyperv.ps1"
+  C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\Users\ansac\Documents\Codex\2026-10-06\the-github-repository-is-located-at\windows-deployment-next\retire-legacy-hyperv.ps1" -Apply
+
+Expected: status LEGACY_VM_RETIRED, the VM(s) named CoChem* gone, the vm folder and the
+empty v4.1.2 tree removed, the CoChem-Quarantine-Switch removed if nothing else used it,
+receipts in legacy-removal-evidence-20261010\. A VM whose disks live elsewhere is removed
+but those disks are listed, not deleted.
+=====================================================================================
+THE ONE STEP (10 October 2026). Everything below this box is reference material: the
+single script RUN_427_LAUNCH_SERIES.ps1 in this folder runs steps 2, 3a-elevated, 3b,
+the health read and the observer rebinding in sequence, after removing the legacy
+4.1.2/4.2.0 pipelines, and stops at the first hold with a STOP line and a log file.
+It never asks a question. Expected wall time 8-12 minutes, mostly waiting.
+
+  1. Make sure Docker Desktop is running (whale icon, "Engine running") and stay logged in.
+  2. Start menu > type "Windows PowerShell" > Run as administrator > accept UAC.
+  3. Paste this one line and press Enter:
+
+  C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\Users\ansac\Documents\Codex\2026-10-06\the-github-repository-is-located-at\windows-deployment-next\RUN_427_LAUNCH_SERIES.ps1"
+
+  4. When it prints DONE in green: quit and reopen Claude Desktop and Antigravity, and start
+     a fresh Codex or Claude Code session. Finished.
+     If it prints STOP in red: do nothing else; send the agent the log file it names.
+     A rerun after a STOP is safe (finished stages are skipped); the agent tells you when.
+=====================================================================================
+
+STATE WHEN THIS WAS WRITTEN
+- The machine bug-checked at 18:48 (0x21 QUOTA_UNDERFLOW, kernel quota accounting).
+  The Claude session was idle at that moment; see
+  C:\Users\ansac\source\repos\Pipeline-Mix-Model-Concurrent\docs\WINDOWS_CRASH_POSTMORTEM_2026-10-09.md
+- After the reboots nothing listens on 127.0.0.1:47824: the r3 Warden is NOT running.
+  The SYSTEM task CoChem-4.2.7-Warden is not readable from an ordinary process, so
+  its trigger state is unknown to the agent. Every GUI's pipeline MCP server starts
+  (15 tools) but pipeline_health reports "connection refused" until the Warden runs.
+- The reviewed telemetry repair is committed on branch fix/telemetry-commit-probe-retention
+  in C:\Users\ansac\source\repos\Pipeline-Mix-Model-Concurrent (commit 5d592f9 + follow-ups).
+  Full suite there: 2756 passed, 387 skipped. Isolated Windows measurement: r3 source
+  retained 3,000 ctypes types and grew 41.6 MiB over 3,000 probes; repaired source
+  retained 1 type and grew 0.0 MiB.
+- The r4 source freeze = the installed r3 frozen tree (165 files byte-identical) plus
+  src/cochem_pipeline/resource_telemetry.py from that commit (SHA256
+  e140f8048e2d82b2c1accdfbd8c5d67c1e434b5058e2141b5028c31f0a802afc).
+  The GitHub clone and the Google Drive tree are NOT the same bytes as the frozen r3
+  source (line endings and README/pyproject edits; three supervisor files changed on
+  the Drive tree after the freeze), so r4 deliberately does not take them wholesale.
+
+STEP 0 - STAGE THE r4 SOURCE (DONE by the agent on 9 Oct 2026, ordinary ansac process)
+C:\Users\ansac\CoChem427\stopped-runtime-r4-source holds the 166 files; the manifest
+stopped-runtime-r4-source-manifest.json has SHA256
+1202b1d780f1b8624523cf2ff3ea5084671f9d6921ae3b4c05f42b2df2652189
+(receipt: stopped-runtime-r4-freeze-receipt.json). If you ever need to redo it, delete
+nothing: the script refuses to overwrite; rename the old staging tree and manifest first,
+then run (the script is standard-library only; the repository venv interpreter is used so
+the global Python's user-site shims never load)
+  cd "C:\Users\ansac\Documents\Codex\2026-10-06\the-github-repository-is-located-at\windows-deployment-next"
+  C:\Users\ansac\source\repos\Pipeline-Mix-Model-Concurrent\.venv\Scripts\python.exe -I -X utf8 .\freeze-stopped-runtime-r4-source.py
+Both the installer and the freeze depend on the GitHub clone staying at commit 1279136 or
+later with scripts\stage_aetherdesk_427_payloads.ps1 unchanged (SHA256 0300b827...); the
+installer refuses to run if that reviewed helper's bytes change.
+
+STEP 1 - READ-ONLY PLAN (ordinary ansac Windows PowerShell 5.1, no elevation)
+
+  $m = "C:\Users\ansac\Documents\Codex\2026-10-06\the-github-repository-is-located-at\windows-deployment-next\stopped-runtime-r4-source-manifest.json"
+  $h = (Get-FileHash $m -Algorithm SHA256).Hash.ToLowerInvariant()
+  C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -File "C:\Users\ansac\Documents\Codex\2026-10-06\the-github-repository-is-located-at\windows-deployment-next\install-stopped-runtime-r4.ps1" -Manifest $m -ManifestSha256 $h
+
+Expect mode READ_ONLY_PLAN, source_files 166, reviewed_repair resource_telemetry.py,
+and one hold saying the managed daemon task definitions are unreadable without
+elevation (that hold clears itself in step 2). Any other hold or error: stop, keep
+the output, do not continue.
+
+Optional harness (same shell; already run by the agent, all cases passed). It is inert with
+respect to production but NOT read-only on the machine: it starts ~50 short-lived
+powershell.exe processes one at a time, runs the r3 and staged-r4 validation bodies in
+ordinary processes against temp copies, and writes under %TEMP% only:
+  C:\Users\ansac\source\repos\Pipeline-Mix-Model-Concurrent\.venv\Scripts\python.exe -m pytest .\test_stopped_runtime_r4.py -q -p no:cacheprovider
+
+STEP 2 - BUILD THE STOPPED r4 RUNTIME (Administrator Windows PowerShell 5.1)
+Open Start, type Windows PowerShell, Run as administrator, accept UAC as ansac, then:
+
+  $m = "C:\Users\ansac\Documents\Codex\2026-10-06\the-github-repository-is-located-at\windows-deployment-next\stopped-runtime-r4-source-manifest.json"
+  $h = (Get-FileHash $m -Algorithm SHA256).Hash.ToLowerInvariant()
+  C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -File "C:\Users\ansac\Documents\Codex\2026-10-06\the-github-repository-is-located-at\windows-deployment-next\install-stopped-runtime-r4.ps1" -Manifest $m -ManifestSha256 $h -Apply
+
+What it does: creates C:\Program Files\CoChem\Pipeline4.2.7-windows-20261009-r4 beside r3,
+copies the 166 verified files plus r3's pipeline.json and windows-layout.json byte-for-byte,
+builds the frozen venv with the protected uv and Python 3.12.13 (uv --no-cache downloads the
+~107 locked wheels from PyPI, exactly as the r3 build did; internet access is required and
+nothing is reused from caches), applies the standard code ACLs, validates the config and the
+installed revision, and proves the repaired telemetry module is the one installed. It
+registers no task, starts no process, and modifies no credential, database, RAM disk or
+budget. It never writes to r3, but like the r3 installer it reads every file under the r3
+root with deny-write handles while verifying custody; run it while the r3 Warden is stopped
+(it currently is) so no sharing violation aborts the walk. Expect mode
+FRESH_STOPPED_RUNTIME_READY. Return the final JSON (or the failure).
+
+STEP 3 - CONTROLLED SWITCH r3 -> r4 (retarget-warden-r4.ps1 v2.2; reviewed twice and re-reviewed, inert-tested)
+Do NOT simply run the existing CoChem-4.2.7-Warden task: its action still names a
+--queue-launch-output directory that already exists, and the daemon refuses to start
+when that directory exists (queue_launch.py uses mkdir(exist_ok=False)). The switch
+retargets that same task's ACTION to the r4 interpreter, the r4 working directory,
+the same preserved configuration file and a fresh queue directory; principal,
+settings (no triggers, no restarts) and the private DACL are preserved and proved by
+an XML comparison after the write. Before changing anything the script proves that
+nothing listens on 127.0.0.1:47824 and that the port can be bound exclusively (probe
+run by the hash-pinned base interpreter), that no controller-like, slot-worker or
+unclassified runtime process is alive, that the other managed daemon tasks are stopped
+and disabled, that r4 is the reviewed build, and that the task is byte-for-byte the
+pinned r3 commissioning action. It then captures the task XML and security
+descriptor, writes a durable intent and backs up the private SQLite stores.
+
+Backups, what to expect: the private root C:\ProgramData\CoChemPipeline427\private
+carries a SYSTEM-only DACL, so even your elevated shell cannot list it. The script
+copies *.db, *.db-wal and *.db-journal with robocopy in backup mode (/B needs both the
+"Back up files and directories" and "Restore files and directories" rights, which an
+elevated Administrators token holds by default; sources are opened read-only and
+never by SQLite) twice: into WardenRetarget...\state-backup and into
+state-backup-witness, both under a SYSTEM/Administrators-only DACL. The two copies
+must agree byte for byte (a torn copy or an active writer is a hold). The pinned
+helper backup-private-databases-r4.py then verifies only the first copy (recovers the
+copied WAL frames, integrity_check, table list, SHA256); the witness copy stays raw.
+The sources' content is never modified and no -wal/-shm file is created beside them.
+state-backup.json records both robocopy exit codes (only 0 or 1 is accepted), the raw
+copies' SHA256 and the verification report. Before any attempt namespace is consumed
+the script lists the stores with robocopy /L in backup mode: a missing right or an
+unreadable root holds there, with nothing created.
+
+The two observer recorders (tasks CoChem-4.2.7-HeldSupervisorObservation-20261007-r3-v1
+and CoChem-4.2.7-ResourceObservation-20261008-r3-v4, SYSTEM tasks that only record)
+are recognised by their pinned script paths, listed in the receipts and left running;
+the held observer rebinds itself to the new controller (see NOT COVERED below). In the
+unelevated plan the SYSTEM python processes appear only as "3 python processes could
+not be inspected without elevation" (the held-supervisor observer, its launcher, and
+one more SYSTEM python started through cmd.exe that the agent could not identify
+unelevated): the elevated plan in 3a-elevated classifies them. Anything it lists as
+unclassified_runtime_processes is a hold to investigate before 3b, not to kill.
+
+Every attempt uses its own namespace (-Attempt v1, v2, ...):
+WardenRetarget4.2.7-windows-20261010-r4-<attempt> under C:\Program Files\CoChem and
+queue-retarget-20261010-r4-<attempt> under the private root. A consumed namespace is
+never reused.
+
+PRE-STEP (found by the 10 October audit; the one-step series checks all of it for you).
+The daemon's Docker preflight uses the Docker Desktop engine of YOUR interactive logon
+session (com.docker.service is Manual/Stopped by design), so stay logged in with
+Docker Desktop running through the series and afterwards; a start-held.json after
+the switch is first of all a Docker Desktop question. The series reads `docker info`
+as JSON exactly as the daemon does (OSType linux; MemoryLimit, SwapLimit, CpuCfsQuota,
+PidsLimit true) and confirms the allowlisted execution image; use the plain 64-bit
+"Windows PowerShell" Start entry, not "(x86)" and not PowerShell 7.
+Legacy 4.1.2/4.2.0 pipelines: by the owner's decision of 10 October the series removes
+them (tasks CoChemHostWarden_V412 and "CoChem V4.1.2 Swarm", two disabled test
+fixtures, the Startup launcher, and the two trees moved into an archive folder).
+
+3a. Read-only plan (ordinary PowerShell; already run by the agent). Expected holds
+    today: r4 not yet built, Warden task definition unreadable without elevation, and
+    the 3 uninspectable python processes. Any other hold: stop and return the output.
+  C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -File "C:\Users\ansac\Documents\Codex\2026-10-06\the-github-repository-is-located-at\windows-deployment-next\retarget-warden-r4.ps1" -Attempt v1
+
+3a-elevated. Read-only plan from the Administrator shell (after step 2, before 3b).
+    Without -Apply nothing is changed, but with the elevated token the plan reads the
+    task, classifies every process, runs the worker sweep authoritatively, probes the
+    backup rights with robocopy /L and must report ZERO holds. Also confirm the two
+    rights are present (Disabled is fine; they are enabled by robocopy itself):
+  whoami /priv | findstr /i "SeBackupPrivilege SeRestorePrivilege"
+  C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -File "C:\Users\ansac\Documents\Codex\2026-10-06\the-github-repository-is-located-at\windows-deployment-next\retarget-warden-r4.ps1" -Attempt v1
+    Expect backup_copy_rights_verified true, controller_presence.uninspectable_python_processes
+    0, unclassified_runtime_processes empty, worker_processes.uninspectable_with_image
+    empty, holds empty. Any hold: stop and return the output; nothing was consumed.
+    Two daemon-start preconditions that no script can read from any token were last
+    proven before the crash; re-read them in the same elevated shell (read-only),
+    because the first r4 start must not fail:
+  (Get-MpPreference).ExclusionPath | Select-String 'CoChemPipeline427\\workers\\slot'
+    expect six lines, slot1..slot6 (the layout validation refuses a slot root without
+    its Defender exclusion and the daemon exits before /health exists)
+  Get-Item C:\ProgramData\CoChemPipeline427\workers\slot1,C:\ProgramData\CoChemPipeline427\workers\slot2,C:\ProgramData\CoChemPipeline427\workers\slot3,C:\ProgramData\CoChemPipeline427\workers\slot4,C:\ProgramData\CoChemPipeline427\workers\slot5,C:\ProgramData\CoChemPipeline427\workers\slot6 | Format-Table FullName,Attributes
+    expect all six present. If either check differs, stop and return the output.
+
+3b. ONE of the two forms below (Administrator Windows PowerShell 5.1, after 3a-elevated):
+
+    Retarget and start in one go (recommended):
+  C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -File "C:\Users\ansac\Documents\Codex\2026-10-06\the-github-repository-is-located-at\windows-deployment-next\retarget-warden-r4.ps1" -Apply -Start -Attempt v1
+
+    Or retarget only, then start later with -StartOnly against the same attempt
+    (-StartOnly without -Apply prints the read-only start plan first):
+  C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -File "C:\Users\ansac\Documents\Codex\2026-10-06\the-github-repository-is-located-at\windows-deployment-next\retarget-warden-r4.ps1" -Apply -Attempt v1
+  C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -File "C:\Users\ansac\Documents\Codex\2026-10-06\the-github-repository-is-located-at\windows-deployment-next\retarget-warden-r4.ps1" -Apply -StartOnly -Attempt v1
+
+  What the console JSON shows on success: with -Apply alone, status
+  WARDEN_RETARGETED_TO_R4_NOT_STARTED. With -Apply -Start, the top-level status is
+  WARDEN_R4_RUNNING_HEALTH_VERIFIED, retarget_status is
+  WARDEN_RETARGETED_TO_R4_NOT_STARTED and started is true. With -Apply -StartOnly the
+  top-level status is WARDEN_R4_RUNNING_HEALTH_VERIFIED under mode START_ONLY. The
+  start is accepted only when /health answered twice with the same pid, instance and
+  start time as SYSTEM from the r4 root with no active work and no quarantined slots,
+  the task shows exactly that one running instance, and the pid runs the expected r4
+  daemon command and owns the listening socket. The start enables the task if it was
+  disabled (recorded in start-intent.json as enable_before_run) and requests exactly
+  one Run; it waits up to 240 s. Return the console JSON and the attempt root.
+
+  HOLDS AND WHAT THEY MEAN (leave every file in place in every case):
+  - A hold BEFORE the task was changed (the message says nothing was changed; the
+    attempt root either does not exist, or holds at most warden-task-before.xml,
+    warden-task-before.sddl, retarget-intent.json, backup-private-databases-r4.py,
+    state-backup, state-backup-witness and state-backup.json): read the reason; if it is
+    transient (for example a controller-like or unclassified process was alive and has
+    since exited, or the loopback port was briefly bound; GUI MCP clients are never a
+    hold), retry with the NEXT -Attempt value (v2). Never reuse v1 once its root exists.
+  - retarget-held.json in the attempt root: the task action was updated but the
+    readback did not verify, so the task may now point at r4. Do NOT retry with another
+    -Attempt (the script refuses it because the source is no longer the pinned r3
+    action) and do NOT start the task by hand. Return retarget-held.json,
+    warden-task-before.xml and warden-task-after.xml for a reviewed recovery.
+  - start-held.json in the attempt root: the single start was requested but not
+    accepted within 240 s (daemon exited, health never stable, instance or socket-owner
+    mismatch). The script retries nothing and stops nothing, so a controller may still
+    be running. Do NOT run -StartOnly again (refused), do NOT start v2 (refused), do NOT
+    start the task from Task Scheduler. Return start-held.json and report the path of
+    the new queue directory (it sits under the SYSTEM-only root, so even the elevated
+    shell cannot open it; a reviewed recovery extracts it with robocopy /B).
+
+NOT COVERED BY STEP 3 (corrected 10 October after reading both observers' sources): the
+held supervisor observer needs nothing: every 10 s it reads /health and accepts any SYSTEM
+controller whose pid and instance match the heartbeat, so it reports the r4 controller
+healthy on its own (the series waits for that and prints it); only its old receipts
+still name the r3 instance. The resource recorder (the 48-hour acceptance instrument)
+cannot bind an r4 controller at all: its source and task action are hash-pinned to the
+r3 commissioning receipt and it refuses a reused state root. It stays untouched; an r4
+recorder is a separate reviewed build (new source revision, installer and controller
+attestation) that costs you no time until it exists and is only needed for the 48-hour
+acceptance evidence, not for the pipeline to run. The two approved synthetic workflows
+can be submitted through any GUI once /health reports admission capacity.
+
+AFTER THE SWITCH - GUI MCP ENTRIES
+Each GUI launches the pipeline MCP as a stdio child. Today every entry points at the r3
+interpreter. Once start-receipt.json shows WARDEN_R4_RUNNING_HEALTH_VERIFIED, change the
+interpreter path in every entry from Pipeline4.2.7-windows-20261007-r3 to
+Pipeline4.2.7-windows-20261009-r4 (the client config path stays the same):
+- Codex:       C:\Users\ansac\.codex\config.toml            [mcp_servers."cochem-pipeline"]
+- Claude Code: .mcp.json in both repositories
+- Claude Desktop and Antigravity: the agent was not permitted to edit these; paste the
+  entry below yourself. Claude Desktop: %APPDATA%\Claude\claude_desktop_config.json has no
+  "mcpServers" key yet, so add a top-level  "mcpServers": { <entry> }  object next to
+  "preferences". Antigravity: C:\Users\ansac\.gemini\config\mcp_config.json, replacing the
+  existing "cochem-pipeline" entry, which still points at a 4.2.2 token path and the old
+  Google Drive clone.
+
+  Entry for the r4 runtime (until r4 is live, use the r3 root
+  Pipeline4.2.7-windows-20261007-r3 in the "command" path instead):
+
+  "cochem-pipeline": {
+    "command": "C:\\Program Files\\CoChem\\Pipeline4.2.7-windows-20261009-r4\\.venv\\Scripts\\python.exe",
+    "args": ["-I", "-B", "-m", "cochem_pipeline", "mcp", "--client-config", "C:\\Users\\ansac\\CoChem427\\pipeline-client-r3.json"]
+  }
+
+AGENT GUARD RAILS NOW IN PLACE
+- .claude/hooks/cochem_host_guard.py + .claude/settings.json in both repositories deny
+  host-lifecycle, swarm, elevation and >4-way parallel commands from Claude Code agents.
+  Off switch (owner only): create %USERPROFILE%\.claude\cochem-host-guard.off.
+  Log: %USERPROFILE%\.claude\cochem-host-guard.log
+- AGENTS.md (+ CLAUDE.md / GEMINI.md imports) in both repositories carries the rules for
+  Codex and Antigravity agents, which the hook cannot reach.

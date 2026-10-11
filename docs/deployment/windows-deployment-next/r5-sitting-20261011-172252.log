@@ -1,0 +1,324 @@
+﻿**********************
+Windows PowerShell transcript start
+Start time: 20261011172252
+Username: AETHERDESK\ansac
+RunAs User: AETHERDESK\ansac
+Configuration Name: 
+Machine: AETHERDESK (Microsoft Windows NT 10.0.26300.0)
+Host Application: C:\WINDOWS\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\RUN_427_R5_SITTING.ps1 -Apply
+Process ID: 4584
+PSVersion: 5.1.26100.9444
+PSEdition: Desktop
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1.26100.9444
+BuildVersion: 10.0.26100.9444
+CLRVersion: 4.0.30319.42000
+WSManStackVersion: 3.0
+PSRemotingProtocolVersion: 2.3
+SerializationVersion: 1.1.0.1
+**********************
+[17:22:52] S0: preconditions (nothing is changed by this stage)
+[17:22:52] pins: 33 reviewed files verified
+[17:22:53] Docker engine and execution image: ok
+PS>TerminatingError(Get-NetTCPConnection): "The running command stopped because the preference variable "ErrorActionPreference" or common parameter is set to Stop: No matching MSFT_NetTCPConnection objects found by CIM query for instances of the ROOT/StandardCimv2/MSFT_NetTCPConnection class on the  CIM server: SELECT * FROM MSFT_NetTCPConnection  WHERE ((LocalPort = 47824)) AND ((State = 2)). Verify query parameters and retry."
+[17:22:54] Warden task: source r4-v1, enabled True, instances 0, port 47824 listeners 0
+[17:22:54] PyPI reachable
+[17:22:54] Gemini: attempt; effort-null slug gemini-3.8-flash-low
+[17:22:54] S1: install the r5 runtime beside r4 (stopped; about 4 minutes, downloads the locked wheels; the Warden is not touched)
+[17:22:55] --- install-stopped-runtime-r5.ps1 read-only plan
+{
+    "schema":  "cochem-stopped-runtime-update/1",
+    "mode":  "READ_ONLY_PLAN",
+    "target_root":  "C:\\Program Files\\CoChem\\Pipeline4.2.7-windows-20261011-r5",
+    "previous_runtime_root":  "C:\\Program Files\\CoChem\\Pipeline4.2.7-windows-20261009-r4",
+    "previous_install_receipt_sha256":  "629c87ecb3fb44e6c93ca01cc1e6164cfd3fe34af58b590f9bd3b99c01ce8502",
+    "previous_source_manifest_sha256":  "1202b1d780f1b8624523cf2ff3ea5084671f9d6921ae3b4c05f42b2df2652189",
+    "source_manifest_sha256":  "5d8d337baebbc1e4ac29439d418333ab41c0999eb8c0ef8b02acee66850a3045",
+    "source_files":  166,
+    "reviewed_repair":  "src/cochem_pipeline/resource_telemetry.py",
+    "reviewed_repair_sha256":  "e140f8048e2d82b2c1accdfbd8c5d67c1e434b5058e2141b5028c31f0a802afc",
+    "configuration_sha256":  "135cd9eccf9efcdbc910679bde83b571913e731a4041ece62f60e42442f1709c",
+    "configuration_unchanged":  true,
+    "only_config_change":  null,
+    "preserved_denial_receipt_sha256":  "691c70560436f948464c529b9d2d6a3e33ce240749642af86ca79c748791461d",
+    "preserved_denial_task_terminal_check_deferred":  false,
+    "managed_daemon_tasks":  [
+                                 {
+                                     "name":  "CoChem-4.2.7-Warden",
+                                     "state":  "ENABLED=True;STATE=3;INSTANCES=0",
+                                     "references_new_root":  false
+                                 },
+                                 {
+                                     "name":  "CoChem-4.2.7-Supervisor",
+                                     "state":  "ABSENT",
+                                     "references_new_root":  false
+                                 },
+                                 {
+                                     "name":  "CoChem-4.2.2-Warden",
+                                     "state":  "ABSENT",
+                                     "references_new_root":  false
+                                 },
+                                 {
+                                     "name":  "CoChem-4.2.3-Supervisor",
+                                     "state":  "ABSENT",
+                                     "references_new_root":  false
+                                 }
+                             ],
+    "preserved_worker_cleanup_verified":  false,
+    "accounts_provisioned":  0,
+    "tasks_changed":  0,
+    "credentials_modified":  false,
+    "databases_modified":  false,
+    "ram_modified":  false,
+    "pipeline_started":  false,
+    "activation_ready":  false,
+    "holds":  [
+
+              ],
+    "revision_label":  "r5",
+    "runtime_python":  "C:\\Program Files\\CoChem\\Pipeline4.2.7-windows-20261011-r5\\.venv\\Scripts\\python.exe",
+    "source_stage_root":  "C:\\Users\\ansac\\CoChem427\\stopped-runtime-r5-source",
+    "source_commit":  "8554c7645801a7bc9c4abad4861bfcbe4ed014b0",
+    "previous_revision_sha256":  "38a99c3fc160558c9f170b5da0b28d815f2172e7338b6849f993fdc57e9abb5e",
+    "reviewed_repairs":  [
+                             "src/cochem_pipeline/__main__.py",
+                             "src/cochem_pipeline/agy_protocol.py",
+                             "src/cochem_pipeline/coding.py",
+                             "src/cochem_pipeline/config.py",
+                             "src/cochem_pipeline/controller_guard.py",
+                             "src/cochem_pipeline/failures.py",
+                             "src/cochem_pipeline/knowledge.py",
+                             "src/cochem_pipeline/operator_views.py",
+                             "src/cochem_pipeline/runtime.py",
+                             "src/cochem_pipeline/service.py",
+                             "src/cochem_pipeline/store.py",
+                             "src/cochem_pipeline/worker.py",
+                             "src/cochem_supervisor/runner.py"
+                         ],
+    "reviewed_repairs_sha256":  {
+                                    "src/cochem_pipeline/__main__.py":  "19f24fc7bcd4d6d0133386aff916efc3ceb6fb359d8604041ef17bdab931b1b3",
+                                    "src/cochem_pipeline/agy_protocol.py":  "eaf8d1f407c8792be1343c657afabcf370992df3f82cd9dfb7fe13cf9d41545e",
+                                    "src/cochem_pipeline/coding.py":  "0b97d7bdec4e5c4a1b8f3d1ca8a974f3205d838c6e275e3cc66c5c9826998174",
+                                    "src/cochem_pipeline/config.py":  "908e61267a6133379fad7b26b7452e03f1deb97f44f53eb9e26c07de8212bbd4",
+                                    "src/cochem_pipeline/controller_guard.py":  "e18304719af11e0dd5280d777c6157cc9bc873dd29b7dc15527d6b3667656eba",
+                                    "src/cochem_pipeline/failures.py":  "625f9c6e045f6a108be04a6a13767593db08ac960bb3839fade0a37e36c6edf5",
+                                    "src/cochem_pipeline/knowledge.py":  "1bf720ed5df342704552b3e0996ee1cdaebd8f9d7f26fc345b4e5a848e2d2f0f",
+                                    "src/cochem_pipeline/operator_views.py":  "8b6b51e9ef3879ad13f714ee44390fc4bb7e41cc9bf5c7cbdc589413f1efaf42",
+                                    "src/cochem_pipeline/runtime.py":  "946adaf95b1755138f0e7bf79576c8290569d7fb98851e8962e00ca73b40a208",
+                                    "src/cochem_pipeline/service.py":  "38ab9dc1853dc38b0ee824a1f80f5e4bea503ec2e821c7803b065baa501c5128",
+                                    "src/cochem_pipeline/store.py":  "b3604d227b23d2f3a68e0106b852ad672127089df68b0d512131455fa552d0a0",
+                                    "src/cochem_pipeline/worker.py":  "20a084071bfa172aa787d1a96168b8c541089823559e8f00518b164c16ae0f41",
+                                    "src/cochem_supervisor/runner.py":  "adc8ccf33841438f3104e64325ff84b7826c49db297c8bc3f02ebb55ad96cf31"
+                                },
+    "repair_line_endings":  {
+                                "src/cochem_pipeline/__main__.py":  "CRLF",
+                                "src/cochem_pipeline/agy_protocol.py":  "LF",
+                                "src/cochem_pipeline/coding.py":  "CRLF",
+                                "src/cochem_pipeline/config.py":  "CRLF",
+                                "src/cochem_pipeline/controller_guard.py":  "CRLF",
+                                "src/cochem_pipeline/failures.py":  "CRLF",
+                                "src/cochem_pipeline/knowledge.py":  "CRLF",
+                                "src/cochem_pipeline/operator_views.py":  "CRLF",
+                                "src/cochem_pipeline/runtime.py":  "CRLF",
+                                "src/cochem_pipeline/service.py":  "CRLF",
+                                "src/cochem_pipeline/store.py":  "CRLF",
+                                "src/cochem_pipeline/worker.py":  "CRLF",
+                                "src/cochem_supervisor/runner.py":  "CRLF"
+                            },
+    "verified_unchanged":  153,
+    "installed_repairs_verified":  false
+}
+[17:22:56] --- install-stopped-runtime-r5.ps1 -Apply (a few minutes)
+{
+    "schema":  "cochem-stopped-runtime-update/1",
+    "mode":  "FRESH_STOPPED_RUNTIME_READY",
+    "target_root":  "C:\\Program Files\\CoChem\\Pipeline4.2.7-windows-20261011-r5",
+    "previous_runtime_root":  "C:\\Program Files\\CoChem\\Pipeline4.2.7-windows-20261009-r4",
+    "previous_install_receipt_sha256":  "629c87ecb3fb44e6c93ca01cc1e6164cfd3fe34af58b590f9bd3b99c01ce8502",
+    "previous_source_manifest_sha256":  "1202b1d780f1b8624523cf2ff3ea5084671f9d6921ae3b4c05f42b2df2652189",
+    "source_manifest_sha256":  "5d8d337baebbc1e4ac29439d418333ab41c0999eb8c0ef8b02acee66850a3045",
+    "source_files":  166,
+    "reviewed_repair":  "src/cochem_pipeline/resource_telemetry.py",
+    "reviewed_repair_sha256":  "e140f8048e2d82b2c1accdfbd8c5d67c1e434b5058e2141b5028c31f0a802afc",
+    "configuration_sha256":  "135cd9eccf9efcdbc910679bde83b571913e731a4041ece62f60e42442f1709c",
+    "configuration_unchanged":  true,
+    "only_config_change":  null,
+    "preserved_denial_receipt_sha256":  "691c70560436f948464c529b9d2d6a3e33ce240749642af86ca79c748791461d",
+    "preserved_denial_task_terminal_check_deferred":  false,
+    "managed_daemon_tasks":  [
+                                 {
+                                     "name":  "CoChem-4.2.7-Warden",
+                                     "state":  "ENABLED=True;STATE=3;INSTANCES=0",
+                                     "references_new_root":  false
+                                 },
+                                 {
+                                     "name":  "CoChem-4.2.7-Supervisor",
+                                     "state":  "ABSENT",
+                                     "references_new_root":  false
+                                 },
+                                 {
+                                     "name":  "CoChem-4.2.2-Warden",
+                                     "state":  "ABSENT",
+                                     "references_new_root":  false
+                                 },
+                                 {
+                                     "name":  "CoChem-4.2.3-Supervisor",
+                                     "state":  "ABSENT",
+                                     "references_new_root":  false
+                                 }
+                             ],
+    "preserved_worker_cleanup_verified":  false,
+    "accounts_provisioned":  0,
+    "tasks_changed":  0,
+    "credentials_modified":  false,
+    "databases_modified":  false,
+    "ram_modified":  false,
+    "pipeline_started":  false,
+    "activation_ready":  false,
+    "holds":  [
+
+              ],
+    "revision_label":  "r5",
+    "runtime_python":  "C:\\Program Files\\CoChem\\Pipeline4.2.7-windows-20261011-r5\\.venv\\Scripts\\python.exe",
+    "source_stage_root":  "C:\\Users\\ansac\\CoChem427\\stopped-runtime-r5-source",
+    "source_commit":  "8554c7645801a7bc9c4abad4861bfcbe4ed014b0",
+    "previous_revision_sha256":  "38a99c3fc160558c9f170b5da0b28d815f2172e7338b6849f993fdc57e9abb5e",
+    "reviewed_repairs":  [
+                             "src/cochem_pipeline/__main__.py",
+                             "src/cochem_pipeline/agy_protocol.py",
+                             "src/cochem_pipeline/coding.py",
+                             "src/cochem_pipeline/config.py",
+                             "src/cochem_pipeline/controller_guard.py",
+                             "src/cochem_pipeline/failures.py",
+                             "src/cochem_pipeline/knowledge.py",
+                             "src/cochem_pipeline/operator_views.py",
+                             "src/cochem_pipeline/runtime.py",
+                             "src/cochem_pipeline/service.py",
+                             "src/cochem_pipeline/store.py",
+                             "src/cochem_pipeline/worker.py",
+                             "src/cochem_supervisor/runner.py"
+                         ],
+    "reviewed_repairs_sha256":  {
+                                    "src/cochem_pipeline/__main__.py":  "19f24fc7bcd4d6d0133386aff916efc3ceb6fb359d8604041ef17bdab931b1b3",
+                                    "src/cochem_pipeline/agy_protocol.py":  "eaf8d1f407c8792be1343c657afabcf370992df3f82cd9dfb7fe13cf9d41545e",
+                                    "src/cochem_pipeline/coding.py":  "0b97d7bdec4e5c4a1b8f3d1ca8a974f3205d838c6e275e3cc66c5c9826998174",
+                                    "src/cochem_pipeline/config.py":  "908e61267a6133379fad7b26b7452e03f1deb97f44f53eb9e26c07de8212bbd4",
+                                    "src/cochem_pipeline/controller_guard.py":  "e18304719af11e0dd5280d777c6157cc9bc873dd29b7dc15527d6b3667656eba",
+                                    "src/cochem_pipeline/failures.py":  "625f9c6e045f6a108be04a6a13767593db08ac960bb3839fade0a37e36c6edf5",
+                                    "src/cochem_pipeline/knowledge.py":  "1bf720ed5df342704552b3e0996ee1cdaebd8f9d7f26fc345b4e5a848e2d2f0f",
+                                    "src/cochem_pipeline/operator_views.py":  "8b6b51e9ef3879ad13f714ee44390fc4bb7e41cc9bf5c7cbdc589413f1efaf42",
+                                    "src/cochem_pipeline/runtime.py":  "946adaf95b1755138f0e7bf79576c8290569d7fb98851e8962e00ca73b40a208",
+                                    "src/cochem_pipeline/service.py":  "38ab9dc1853dc38b0ee824a1f80f5e4bea503ec2e821c7803b065baa501c5128",
+                                    "src/cochem_pipeline/store.py":  "b3604d227b23d2f3a68e0106b852ad672127089df68b0d512131455fa552d0a0",
+                                    "src/cochem_pipeline/worker.py":  "20a084071bfa172aa787d1a96168b8c541089823559e8f00518b164c16ae0f41",
+                                    "src/cochem_supervisor/runner.py":  "adc8ccf33841438f3104e64325ff84b7826c49db297c8bc3f02ebb55ad96cf31"
+                                },
+    "repair_line_endings":  {
+                                "src/cochem_pipeline/__main__.py":  "CRLF",
+                                "src/cochem_pipeline/agy_protocol.py":  "LF",
+                                "src/cochem_pipeline/coding.py":  "CRLF",
+                                "src/cochem_pipeline/config.py":  "CRLF",
+                                "src/cochem_pipeline/controller_guard.py":  "CRLF",
+                                "src/cochem_pipeline/failures.py":  "CRLF",
+                                "src/cochem_pipeline/knowledge.py":  "CRLF",
+                                "src/cochem_pipeline/operator_views.py":  "CRLF",
+                                "src/cochem_pipeline/runtime.py":  "CRLF",
+                                "src/cochem_pipeline/service.py":  "CRLF",
+                                "src/cochem_pipeline/store.py":  "CRLF",
+                                "src/cochem_pipeline/worker.py":  "CRLF",
+                                "src/cochem_supervisor/runner.py":  "CRLF"
+                            },
+    "verified_unchanged":  153,
+    "installed_repairs_verified":  true,
+    "verified_entries":  15013,
+    "verification":  {
+                         "revision":  {
+                                          "schema":  "cochem-installed-revision/1",
+                                          "verified":  true,
+                                          "read_only":  true,
+                                          "files":  109,
+                                          "source_sha256":  "a085dd816a54f79cc81026c325ae789854336d7c4370c8d7e1c5ebe2c706e14e",
+                                          "acceptance_files":  0,
+                                          "acceptance_sha256":  null
+                                      },
+                         "configuration_parsed":  true,
+                         "ram_workspace_root":  "R:\\CoChem427-windows-20261007",
+                         "telemetry_repair_installed":  true,
+                         "no_system_or_model_execution":  true,
+                         "r5_repairs_installed":  true,
+                         "r5":  {
+                                    "max_execution_slots":  4,
+                                    "workers":  6,
+                                    "identity_policy":  "reported-model-equality",
+                                    "agy_parse_fixture":  {
+                                                              "reported_model":  "gemini-3.8-flash-high",
+                                                              "identity_mismatch_refused":  true
+                                                          },
+                                    "wbs_reconciliation":  {
+                                                               "drift_refused_before":  true,
+                                                               "accepted_after":  true,
+                                                               "restored_omitted_ids":  [
+                                                                                            "T2"
+                                                                                        ],
+                                                               "restored_rewritten_ids":  [
+                                                                                              "T1"
+                                                                                          ],
+                                                               "additional_task_ids":  [
+                                                                                           "T3"
+                                                                                       ]
+                                                           },
+                                    "read_workspace_plain_file":  true,
+                                    "daemon_options":  {
+                                                           "queue_launch_output_root":  true,
+                                                           "docker_wait_seconds":  900,
+                                                           "mutually_exclusive":  true,
+                                                           "negative_wait_refused":  true
+                                                       }
+                                }
+                     },
+    "runtime_bindings":  {
+                             "pyvenv_sha256":  "0c2b1a15dcdfe67436882fcf0f8d567d79442bcac41f3b744153c17c21df727d",
+                             "venv_python_sha256":  "560b9ef7d856608ab8da02ded2dc8a1951ad1f424c382c0ec6a698874165a18e",
+                             "base_python_sha256":  "d8e3f0adf246db00358c0c4ed349cf714898178f9558fb0e944f79f5c07f8eaa",
+                             "base_root":  "C:\\Program Files\\CoChem\\Toolchain4.2.7-windows-20261006\\Python312"
+                         }
+}
+[17:26:52] r5 built and verified
+[17:26:52] S2: stop-warden-r4 (the task is idle but enabled: disable only, no End)
+[17:26:52] --- stop-warden-r4.ps1 -Apply -Attempt v1
+The Warden stop is held. Nothing was changed: The task is stopped but a controller process, an unclassified runtime 
+process or the loopback port is alive; investigate.
+At C:\Users\ansac\Documents\Codex\2026-10-06\the-github-repository-is-located-at\windows-deployment-next\stop-warden-r4
+.ps1:755 char:26
++ ... olds.Count){throw ('The Warden stop is held. Nothing was changed: '+( ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : OperationStopped: (The Warden stop...e; investigate.:String) [], RuntimeException
+    + FullyQualifiedErrorId : The Warden stop is held. Nothing was changed: The task is stopped but a controller proce 
+   ss, an unclassified runtime process or the loopback port is alive; investigate.
+PS>TerminatingError(): "SERIES-STOP: S2: the Warden stop did not complete (exit 1, status ): ss, an unclassified runtime process or the loopback port is alive; investigate."
+>> TerminatingError(): "SERIES-STOP: S2: the Warden stop did not complete (exit 1, status ): ss, an unclassified runtime process or the loopback port is alive; investigate."
+>> TerminatingError(): "SERIES-STOP: S2: the Warden stop did not complete (exit 1, status ): ss, an unclassified runtime process or the loopback port is alive; investigate."
+[17:26:59] R4-RESTORE: state base (Warden task on its r4-v1 action)
+[17:26:59] --- retarget-warden-r5.ps1 -Target r4 -Attempt v1 -Apply -Start (waits up to 240 s for health)
+C:\Users\ansac\Documents\Codex\2026-10-06\the-github-repository-is-located-at\windows-deployment-next\retarget-warden-r
+5.ps1 : The variable cannot be validated because the value  is not a valid value for the SourceAttempt variable.
+    + CategoryInfo          : MetadataError: (:) [retarget-warden-r5.ps1], ValidationMetadataException
+    + FullyQualifiedErrorId : ValidateSetFailure,retarget-warden-r5.ps1
+
+STOP at S02: S2: the Warden stop did not complete (exit 1, status ): ss, an unclassified runtime process or the loopback port is alive; investigate.
+R4-RESTORE NOT DONE: the r4 restore did not verify (exit 1, status : + FullyQualifiedErrorId : ValidateSetFailure,retarget-warden-r5.ps1)
+PS>TerminatingError(Get-NetTCPConnection): "The running command stopped because the preference variable "ErrorActionPreference" or common parameter is set to Stop: No matching MSFT_NetTCPConnection objects found by CIM query for instances of the ROOT/StandardCimv2/MSFT_NetTCPConnection class on the  CIM server: SELECT * FROM MSFT_NetTCPConnection  WHERE ((LocalPort = 47824)) AND ((State = 2)). Verify query parameters and retry."
+
+OUTCOME (stopped)
+  Claude  : sessions not checked in this sitting
+  Codex   : sessions not checked in this sitting
+  Gemini  : NOT DEPLOYED - the sitting ended before r5 ran the Gemini configuration
+  Warden  : DOWN - the agent reviews the log
+  Reboot  : NOT reboot-safe (r4 has no logon trigger)
+  Log     : C:\Users\ansac\Documents\Codex\2026-10-06\the-github-repository-is-located-at\windows-deployment-next\r5-sitting-20261011-172252.log
+  Sitting root: C:\Program Files\CoChem\R5Sitting4.2.7-windows-20261011-v1
+Log: C:\Users\ansac\Documents\Codex\2026-10-06\the-github-repository-is-located-at\windows-deployment-next\r5-sitting-20261011-172252.log
+Send the log to the agent; do not start, stop or retarget anything by hand.
+**********************
+Windows PowerShell transcript end
+End time: 20261011172700
+**********************

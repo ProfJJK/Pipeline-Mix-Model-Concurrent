@@ -1,0 +1,263 @@
+{
+  "schema": "cochem-stopped-runtime-freeze-receipt/2",
+  "manifest_path": "C:\\Users\\ansac\\Documents\\Codex\\2026-10-06\\the-github-repository-is-located-at\\windows-deployment-next\\stopped-runtime-r5-source-manifest.json",
+  "manifest_sha256": "5d8d337baebbc1e4ac29439d418333ab41c0999eb8c0ef8b02acee66850a3045",
+  "stage_root": "C:\\Users\\ansac\\CoChem427\\stopped-runtime-r5-source",
+  "base_source": "C:\\Program Files\\CoChem\\Pipeline4.2.7-windows-20261009-r4\\source",
+  "files": 166,
+  "unchanged_from_r4": 153,
+  "changed": [
+    "src/cochem_pipeline/__main__.py",
+    "src/cochem_pipeline/agy_protocol.py",
+    "src/cochem_pipeline/coding.py",
+    "src/cochem_pipeline/config.py",
+    "src/cochem_pipeline/controller_guard.py",
+    "src/cochem_pipeline/failures.py",
+    "src/cochem_pipeline/knowledge.py",
+    "src/cochem_pipeline/operator_views.py",
+    "src/cochem_pipeline/runtime.py",
+    "src/cochem_pipeline/service.py",
+    "src/cochem_pipeline/store.py",
+    "src/cochem_pipeline/worker.py",
+    "src/cochem_supervisor/runner.py"
+  ],
+  "source_commit": "8554c7645801a7bc9c4abad4861bfcbe4ed014b0",
+  "repairs": [
+    {
+      "relative": "src/cochem_pipeline/__main__.py",
+      "repository_commit": "8554c7645801a7bc9c4abad4861bfcbe4ed014b0",
+      "repository_sha256": "19f24fc7bcd4d6d0133386aff916efc3ceb6fb359d8604041ef17bdab931b1b3",
+      "staged_sha256": "19f24fc7bcd4d6d0133386aff916efc3ceb6fb359d8604041ef17bdab931b1b3",
+      "staged_length": 16254,
+      "line_endings": "CRLF",
+      "line_ending_counts": {
+        "crlf_lines": 342,
+        "lf_lines": 342
+      },
+      "frozen_tree_line_endings": "CRLF",
+      "frozen_tree_line_ending_counts": {
+        "crlf_lines": 188,
+        "lf_lines": 188
+      },
+      "r4_sha256": "6d9886bfa131aa4bcf72c7debbfaae5e36117d41f5c85b17b29572a0554c8705"
+    },
+    {
+      "relative": "src/cochem_pipeline/agy_protocol.py",
+      "repository_commit": "8554c7645801a7bc9c4abad4861bfcbe4ed014b0",
+      "repository_sha256": "eaf8d1f407c8792be1343c657afabcf370992df3f82cd9dfb7fe13cf9d41545e",
+      "staged_sha256": "eaf8d1f407c8792be1343c657afabcf370992df3f82cd9dfb7fe13cf9d41545e",
+      "staged_length": 16375,
+      "line_endings": "LF",
+      "line_ending_counts": {
+        "crlf_lines": 0,
+        "lf_lines": 310
+      },
+      "frozen_tree_line_endings": "LF",
+      "frozen_tree_line_ending_counts": {
+        "crlf_lines": 0,
+        "lf_lines": 121
+      },
+      "r4_sha256": "78d7bd0ee5cc73c9fc29bc983ef91a8e356cb59303a537948491d5f82efa9dda"
+    },
+    {
+      "relative": "src/cochem_pipeline/coding.py",
+      "repository_commit": "8554c7645801a7bc9c4abad4861bfcbe4ed014b0",
+      "repository_sha256": "0b97d7bdec4e5c4a1b8f3d1ca8a974f3205d838c6e275e3cc66c5c9826998174",
+      "staged_sha256": "0b97d7bdec4e5c4a1b8f3d1ca8a974f3205d838c6e275e3cc66c5c9826998174",
+      "staged_length": 33283,
+      "line_endings": "CRLF",
+      "line_ending_counts": {
+        "crlf_lines": 519,
+        "lf_lines": 519
+      },
+      "frozen_tree_line_endings": "CRLF",
+      "frozen_tree_line_ending_counts": {
+        "crlf_lines": 512,
+        "lf_lines": 512
+      },
+      "r4_sha256": "5ac2454b6c41e862d59bad71c927723048a07f7a78b5b3b2ee1de4765e2cf6d5"
+    },
+    {
+      "relative": "src/cochem_pipeline/config.py",
+      "repository_commit": "8554c7645801a7bc9c4abad4861bfcbe4ed014b0",
+      "repository_sha256": "908e61267a6133379fad7b26b7452e03f1deb97f44f53eb9e26c07de8212bbd4",
+      "staged_sha256": "908e61267a6133379fad7b26b7452e03f1deb97f44f53eb9e26c07de8212bbd4",
+      "staged_length": 15315,
+      "line_endings": "CRLF",
+      "line_ending_counts": {
+        "crlf_lines": 258,
+        "lf_lines": 258
+      },
+      "frozen_tree_line_endings": "CRLF",
+      "frozen_tree_line_ending_counts": {
+        "crlf_lines": 225,
+        "lf_lines": 225
+      },
+      "r4_sha256": "fba7e9e5a8336e489587bd7fa7901fa3004e3a2fe965dbe618083a0ec43b440a"
+    },
+    {
+      "relative": "src/cochem_pipeline/controller_guard.py",
+      "repository_commit": "8554c7645801a7bc9c4abad4861bfcbe4ed014b0",
+      "repository_sha256": "e18304719af11e0dd5280d777c6157cc9bc873dd29b7dc15527d6b3667656eba",
+      "staged_sha256": "e18304719af11e0dd5280d777c6157cc9bc873dd29b7dc15527d6b3667656eba",
+      "staged_length": 8760,
+      "line_endings": "CRLF",
+      "line_ending_counts": {
+        "crlf_lines": 157,
+        "lf_lines": 157
+      },
+      "frozen_tree_line_endings": "CRLF",
+      "frozen_tree_line_ending_counts": {
+        "crlf_lines": 59,
+        "lf_lines": 59
+      },
+      "r4_sha256": "6daedd23b9c685e79b639b520041a84a74494c8a331606a3c6f0641e29562ade"
+    },
+    {
+      "relative": "src/cochem_pipeline/failures.py",
+      "repository_commit": "8554c7645801a7bc9c4abad4861bfcbe4ed014b0",
+      "repository_sha256": "625f9c6e045f6a108be04a6a13767593db08ac960bb3839fade0a37e36c6edf5",
+      "staged_sha256": "625f9c6e045f6a108be04a6a13767593db08ac960bb3839fade0a37e36c6edf5",
+      "staged_length": 18331,
+      "line_endings": "CRLF",
+      "line_ending_counts": {
+        "crlf_lines": 367,
+        "lf_lines": 367
+      },
+      "frozen_tree_line_endings": "CRLF",
+      "frozen_tree_line_ending_counts": {
+        "crlf_lines": 288,
+        "lf_lines": 288
+      },
+      "r4_sha256": "9cde65b860b606b5b74a95690ba75ca4c74d714361203f5bf8b7407a406c9b6e"
+    },
+    {
+      "relative": "src/cochem_pipeline/knowledge.py",
+      "repository_commit": "8554c7645801a7bc9c4abad4861bfcbe4ed014b0",
+      "repository_sha256": "1bf720ed5df342704552b3e0996ee1cdaebd8f9d7f26fc345b4e5a848e2d2f0f",
+      "staged_sha256": "1bf720ed5df342704552b3e0996ee1cdaebd8f9d7f26fc345b4e5a848e2d2f0f",
+      "staged_length": 42496,
+      "line_endings": "CRLF",
+      "line_ending_counts": {
+        "crlf_lines": 788,
+        "lf_lines": 788
+      },
+      "frozen_tree_line_endings": "CRLF (mixed)",
+      "frozen_tree_line_ending_counts": {
+        "crlf_lines": 690,
+        "lf_lines": 765
+      },
+      "r4_sha256": "65e1dc17a5bee38f19e47abb24dd97864fcdcd4bc08fd28ab9199d311869d7b2"
+    },
+    {
+      "relative": "src/cochem_pipeline/operator_views.py",
+      "repository_commit": "8554c7645801a7bc9c4abad4861bfcbe4ed014b0",
+      "repository_sha256": "8b6b51e9ef3879ad13f714ee44390fc4bb7e41cc9bf5c7cbdc589413f1efaf42",
+      "staged_sha256": "8b6b51e9ef3879ad13f714ee44390fc4bb7e41cc9bf5c7cbdc589413f1efaf42",
+      "staged_length": 48509,
+      "line_endings": "CRLF",
+      "line_ending_counts": {
+        "crlf_lines": 738,
+        "lf_lines": 738
+      },
+      "frozen_tree_line_endings": "CRLF (mixed)",
+      "frozen_tree_line_ending_counts": {
+        "crlf_lines": 416,
+        "lf_lines": 653
+      },
+      "r4_sha256": "7ecdc6313598bb831daf1eefecc9745a0e350473b6349da3aad062d126345660"
+    },
+    {
+      "relative": "src/cochem_pipeline/runtime.py",
+      "repository_commit": "8554c7645801a7bc9c4abad4861bfcbe4ed014b0",
+      "repository_sha256": "946adaf95b1755138f0e7bf79576c8290569d7fb98851e8962e00ca73b40a208",
+      "staged_sha256": "946adaf95b1755138f0e7bf79576c8290569d7fb98851e8962e00ca73b40a208",
+      "staged_length": 39641,
+      "line_endings": "CRLF",
+      "line_ending_counts": {
+        "crlf_lines": 643,
+        "lf_lines": 643
+      },
+      "frozen_tree_line_endings": "CRLF (mixed)",
+      "frozen_tree_line_ending_counts": {
+        "crlf_lines": 634,
+        "lf_lines": 639
+      },
+      "r4_sha256": "4fa4c09ceb749ffa5e220c5e59dd5f04a441672e049062902595a19dd14e5db0"
+    },
+    {
+      "relative": "src/cochem_pipeline/service.py",
+      "repository_commit": "8554c7645801a7bc9c4abad4861bfcbe4ed014b0",
+      "repository_sha256": "38ab9dc1853dc38b0ee824a1f80f5e4bea503ec2e821c7803b065baa501c5128",
+      "staged_sha256": "38ab9dc1853dc38b0ee824a1f80f5e4bea503ec2e821c7803b065baa501c5128",
+      "staged_length": 17278,
+      "line_endings": "CRLF",
+      "line_ending_counts": {
+        "crlf_lines": 326,
+        "lf_lines": 326
+      },
+      "frozen_tree_line_endings": "CRLF (mixed)",
+      "frozen_tree_line_ending_counts": {
+        "crlf_lines": 236,
+        "lf_lines": 279
+      },
+      "r4_sha256": "646244f2f89cb7af43991ad0143c716005de44cdad340e3984552371f8f88de2"
+    },
+    {
+      "relative": "src/cochem_pipeline/store.py",
+      "repository_commit": "8554c7645801a7bc9c4abad4861bfcbe4ed014b0",
+      "repository_sha256": "b3604d227b23d2f3a68e0106b852ad672127089df68b0d512131455fa552d0a0",
+      "staged_sha256": "b3604d227b23d2f3a68e0106b852ad672127089df68b0d512131455fa552d0a0",
+      "staged_length": 87300,
+      "line_endings": "CRLF",
+      "line_ending_counts": {
+        "crlf_lines": 1302,
+        "lf_lines": 1302
+      },
+      "frozen_tree_line_endings": "CRLF (mixed)",
+      "frozen_tree_line_ending_counts": {
+        "crlf_lines": 1113,
+        "lf_lines": 1221
+      },
+      "r4_sha256": "ba55f367a5c625ee1bfda0015c0dd69123b8cc4a52019b8d1cb76ac5c8d7d287"
+    },
+    {
+      "relative": "src/cochem_pipeline/worker.py",
+      "repository_commit": "8554c7645801a7bc9c4abad4861bfcbe4ed014b0",
+      "repository_sha256": "20a084071bfa172aa787d1a96168b8c541089823559e8f00518b164c16ae0f41",
+      "staged_sha256": "20a084071bfa172aa787d1a96168b8c541089823559e8f00518b164c16ae0f41",
+      "staged_length": 72122,
+      "line_endings": "CRLF",
+      "line_ending_counts": {
+        "crlf_lines": 1109,
+        "lf_lines": 1109
+      },
+      "frozen_tree_line_endings": "CRLF (mixed)",
+      "frozen_tree_line_ending_counts": {
+        "crlf_lines": 835,
+        "lf_lines": 917
+      },
+      "r4_sha256": "476f83a3f4e19b826d62bd02c0bacce19530de442d047ed9f66a25d0ace0284c"
+    },
+    {
+      "relative": "src/cochem_supervisor/runner.py",
+      "repository_commit": "8554c7645801a7bc9c4abad4861bfcbe4ed014b0",
+      "repository_sha256": "adc8ccf33841438f3104e64325ff84b7826c49db297c8bc3f02ebb55ad96cf31",
+      "staged_sha256": "adc8ccf33841438f3104e64325ff84b7826c49db297c8bc3f02ebb55ad96cf31",
+      "staged_length": 49006,
+      "line_endings": "CRLF",
+      "line_ending_counts": {
+        "crlf_lines": 797,
+        "lf_lines": 797
+      },
+      "frozen_tree_line_endings": "CRLF (mixed)",
+      "frozen_tree_line_ending_counts": {
+        "crlf_lines": 722,
+        "lf_lines": 747
+      },
+      "r4_sha256": "8fbd62ec0b8bdb7859c2d3a649868330790148b7e9108345e801aeabb5555b9f"
+    }
+  ],
+  "production_runtime_started": false,
+  "production_state_opened": false
+}

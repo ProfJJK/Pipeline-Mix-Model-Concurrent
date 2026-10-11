@@ -1,0 +1,8 @@
+Reviewed four-slot/six-identity binding differs.
+At C:\Users\ansac\Documents\Codex\2026-10-06\the-github-repository-is-located-at\windows-deployment-next\continue-stopp
+ed-setup.ps1:108 char:164
++ ... ount -ne 6){throw 'Reviewed four-slot/six-identity binding differs.'} ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : OperationStopped: (Reviewed four-s...inding differs.:String) [], RuntimeException
+    + FullyQualifiedErrorId : Reviewed four-slot/six-identity binding differs.
+ 

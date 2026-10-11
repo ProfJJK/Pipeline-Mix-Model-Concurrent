@@ -1,0 +1,185 @@
+[
+ {
+  "component": "stop-warden-r4 (build-manifest step 1): C:\\Users\\ansac\\Documents\\Codex\\2026-10-06\\the-github-repository-is-located-at\\windows-deployment-next\\stop-warden-r4.ps1 (sha256 bd54cb81..., re-hashed) + test_stop_warden_r4.py (sha256 99bff13f..., re-hashed)",
+  "verdict": "stop-warden-r4.ps1 is sound for S1-A1 and conforms to the manifest. Every embedded pin recomputes from disk and the 16 reused v2.2 functions are byte-identical. The only mutations are New-ProtectedDirectory, CreateNew writes, one Stop(0) and one Enabled=$false, all inside Invoke-StopWarden, which plan mode never reaches. Every probe failure, unreadable value, survivor or busy port I tried, through the test suite, inert dot-sourced probes and extra fixture scenarios, fails closed: refused before the root, or stop-held.json with no disable. I found no fail-open path in the End/exit/disable sequence. I found no Windows PowerShell 5.1 trap: StrictMode, array unrolling, $Matches, $null comparisons, native stderr and Join-Path are all handled. The suite reproduces at 97 passed. The one medium finding is a plan-level conflict, not a code defect: because the action pin is r4-v1 only, the same script cannot serve S2-C3 after the S1-A6 restart, so a reviewed re-pin or a v2 is needed before sitting 2. The low findings are hardening and clarity: the worker check runs before the idle wait, the DISABLE-gate message is misleading, the 200-job operator window is unchecked, the client-config port is unpinned, one root-creation path has no held record, and one test touches the live controller without a 'live' name. None blocks S1-A1. Two of the implementer's open risks are now answered by inert evidence: TIME_WAIT does not block the exclusive bind, and the venv launcher's kill-on-close job ties the controller to the launcher. The PENDING_RETRY blocker has also cleared on the live queue (idle=true as of my plan run). The script can go to the owner for S1-A1 after the low items are optionally fixed, provided the orchestrator records the S2-C3 re-pin as required work.",
+  "findings": [
+   {
+    "severity": "medium",
+    "file": "C:\\Users\\ansac\\Documents\\Codex\\2026-10-06\\the-github-repository-is-located-at\\windows-deployment-next\\stop-warden-r4.ps1",
+    "line": 330,
+    "summary": "The sitting outline's step S2-C3 (`stop-warden-r4.ps1 -Apply -Attempt vN+1`, gate 'As S1-A1') cannot succeed. Assert-StopDefinition accepts only the r4-v1 action, whose queue argument is $script:queueR4v1 = queue-retarget-20261010-r4-v1 (line 285). By S2-C3, step S1-A6 (retarget-warden-r5 -Target r4) will have restarted the Warden with a fresh queue-restart namespace.",
+    "failure_scenario": "In sitting 2, after S1-A6 restarted the Warden with `--queue-launch-output ...\\queue-restart-<date>-r4-vN`, the owner runs S2-C3. Assert-StopSource throws 'The Warden task action differs from the pinned r4-v1 action; preserve it for review.' before the stop root exists. Nothing is changed, but the series stops at S2-C3. The implementer's own test case 'restart_queue' asserts exactly this refusal. The manifest pins r4-v1, so the conflict sits between the manifest and the sitting outline; the implementer flagged it but nothing resolves it.",
+    "fix": "Before sitting 2, choose one. (a) Add a reviewed parameter `-SourceRestartReceipt <path> -SourceRestartReceiptSha256 <pin>`, read with Read-R3Control, that supplies the expected queue path. Accept only r4-v1 or that receipt's queue_launch_output, and add a test for it. (b) Ship a stop-warden-r4 v2 with the restart action pinned once S1-A6's receipt exists. Record the choice in the manifest.",
+    "verified": "CONFIRMED"
+   },
+   {
+    "severity": "low",
+    "file": "C:\\Users\\ansac\\Documents\\Codex\\2026-10-06\\the-github-repository-is-located-at\\windows-deployment-next\\stop-warden-r4.ps1",
+    "line": 591,
+    "summary": "The slot-worker check runs before the idle wait. It runs in the main -Apply holds (line 727, then the throw at 755) and again in Invoke-StopWarden (line 591, before Wait-WardenIdle at 592). A controller that is busy with a live worker is therefore refused at once and never polled. This contradicts the implementer's deviation note that '-Apply ... polls instead of refusing a briefly busy controller'.",
+    "failure_scenario": "Inert probe: Invoke-StopWarden with fixtures where worker pid 4444 is alive and Wait-WardenIdle would return idle. Result: 'Slot worker processes are alive while the controller should be idle; nothing was changed.', with 0 idle waits and no root. -IdleWaitSeconds therefore only helps when PENDING/PENDING_RETRY rows have no worker. An IN_PROGRESS job that finishes within the window still forces the owner to re-run. This fails closed and is safe.",
+    "fix": "In RUNNING mode, call Assert-NoWorkers (Get-WorkerProcesses) after Wait-WardenIdle returns idle, still before Get-StopProcessProof and before End. In main, raise the worker hold only for the plan and for ALREADY_STOPPED, not for -Apply in RUNNING mode. Alternatively, correct the deviation note.",
+    "verified": "CONFIRMED"
+   },
+   {
+    "severity": "low",
+    "file": "C:\\Users\\ansac\\Documents\\Codex\\2026-10-06\\the-github-repository-is-located-at\\windows-deployment-next\\stop-warden-r4.ps1",
+    "line": 688,
+    "summary": "A failure at the DISABLE gate (before $task.Enabled is written) falls into the default message: 'The controller has exited and the task may already be disabled'. Here disable_requested is false, so the task is still enabled, and the gate usually fails because a controller or listener is present again.",
+    "failure_scenario": "Inert probe: after a complete exit observation, a listener reappears (for example, the task was run again) before the disable gate. stop-held.json correctly records phase DISABLE and disable_requested=false, enabled=true. The message the owner reads, however, says the controller has exited and the task may already be disabled, which is the opposite of the actual state, during a recovery decision.",
+    "fix": "Add a 'DISABLE' case to the switch, or key the default message on $disableRequested. When it is false: 'The Warden stop is held at the disable gate: <reason>. The task was NOT disabled and nothing was killed; review stop-held.json.'",
+    "verified": "CONFIRMED"
+   },
+   {
+    "severity": "low",
+    "file": "C:\\Users\\ansac\\Documents\\Codex\\2026-10-06\\the-github-repository-is-located-at\\windows-deployment-next\\stop-warden-r4.ps1",
+    "line": 308,
+    "summary": "The /operator snippet keeps only queue[] and discards window.jobs_total and window.jobs_truncated. operator_snapshot caps the view at 200 jobs (operator_views.py:525-530, 595). If more than 200 IN_PROGRESS/PENDING/PENDING_RETRY/BLOCKED rows exist, newer PENDING or PENDING_RETRY rows fall outside the window and the predicate reports idle.",
+    "failure_scenario": "More than 200 waiting rows, most of them older BLOCKED rows. These sort oldest-first at the same priority as PENDING, so a recent PENDING_RETRY row is truncated. Test-IdlePredicate sees only BLOCKED/COMPLETED and returns idle, and End terminates a controller about to claim work. The live host has 21 rows, so the risk is latent.",
+    "fix": "Project the window, e.g. `print(json.dumps({...,'queue':rows,'jobs_truncated':(value.get('window') or {}).get('jobs_truncated')}))`. In Test-IdlePredicate, hold unless jobs_truncated is exactly $false. Add one idle-table case for it.",
+    "verified": "PLAUSIBLE"
+   },
+   {
+    "severity": "low",
+    "file": "C:\\Users\\ansac\\Documents\\Codex\\2026-10-06\\the-github-repository-is-located-at\\windows-deployment-next\\stop-warden-r4.ps1",
+    "line": 306,
+    "summary": "The elevated idle proof trusts the owner-writable client config C:\\Users\\ansac\\CoChem427\\pipeline-client-r3.json (ACL: ansac F) for the port, and the operator snippet takes `config.get('port',47824)` without pinning it. The process proof binds pid ownership of 47824, but the /health and /operator payloads are not bound to 47824.",
+    "failure_scenario": "An owner-context process edits the config to port 47825 and serves a forged /health (copying the real pid, instance and process_started_at) and a forged empty /operator. Get-ProcessProof still passes against the real pid on 47824, and the elevated run Ends a busy controller (unclean stop with in-flight work). This requires a hostile owner-context process.",
+    "fix": "In the snippet, refuse unless `int(config['port'])==47824` (exit non-zero). In Invoke-StopWardenMain, parse the client config once and add a hold unless port==47824 and token_file is the expected path. Get-HealthSample stays unchanged.",
+    "verified": "PLAUSIBLE"
+   },
+   {
+    "severity": "low",
+    "file": "C:\\Users\\ansac\\Documents\\Codex\\2026-10-06\\the-github-repository-is-located-at\\windows-deployment-next\\stop-warden-r4.ps1",
+    "line": 609,
+    "summary": "New-ProtectedDirectory runs outside both try blocks. If the reviewed helper creates the root and then fails its post-create Assert-ProtectedPath, the attempt namespace is consumed with no stop-held.json and only the helper's raw message.",
+    "failure_scenario": "Inert probe with New-ProtectedDirectory stubbed to create the root and then throw: the result is message 'Untrusted protected owner: simulated', root exists, held=false, no End. The owner gets no durable record and no instruction to choose another -Attempt. This breaks 'every failure after the root exists leaves stop-held.json' in a rare path.",
+    "fix": "Wrap line 609 in try/catch. On failure, if Test-Path $script:targetRoot, try to write stop-held.json (phase ROOT_CREATE) and throw a plain message: 'The stop root could not be secured; nothing was ended or disabled; preserve it and choose another -Attempt.'",
+    "verified": "CONFIRMED"
+   },
+   {
+    "severity": "low",
+    "file": "C:\\Users\\ansac\\Documents\\Codex\\2026-10-06\\the-github-repository-is-located-at\\windows-deployment-next\\test_stop_warden_r4.py",
+    "line": 627,
+    "summary": "test_read_only_plan_reports_the_predicate_and_creates_nothing runs the whole script against the live host, including GET /health and /operator on the running SYSTEM controller and a CIM sweep of every process. It is not in-process only, yet its name avoids the live/real words that AGENTS.md requires to be reviewed before running.",
+    "failure_scenario": "An agent running the default suite contacts the production controller without the AGENTS.md live-test review. The outcome also depends on host state (skips when v1 exists; the idle content varies) and it adds about 110 s per run.",
+    "fix": "Rename the test with a 'live' marker (for example test_live_read_only_plan_...) and gate it behind an explicit opt-in such as an environment variable or `-m live`. Keep the default suite in-process only.",
+    "verified": "CONFIRMED"
+   }
+  ],
+  "tests_rerun_line": "timeout 900 C:\\Users\\ansac\\source\\repos\\Pipeline-Mix-Model-Concurrent\\.venv\\Scripts\\python.exe -I -m pytest -p no:cacheprovider -q test_stop_warden_r4.py -> 97 passed in 156.53s (0:02:36)"
+ },
+ {
+  "component": "build-manifest step 2: agy-status-capture-r4-v1.ps1 + agy_status_capture_r4_v1.py + test_agy_status_capture_r4_v1.py (adversarial verification)",
+  "verdict": "The component conforms to the manifest. Every embedded pin matches the file it names on disk, and the 68 tests pass when I rerun them single-process. The read-only plan changes nothing on the host. Every gate and classification reads missing, malformed or unexpected evidence as a failure, so no path lets an error, a missing receipt or a skipped probe be read as success. I found no destructive operation outside the documented one-shot registration and Run. The defects are all low severity. (1) The new exit fallback in observe_child misses the roughly 0.4 ms teardown window, which I reproduced on this host: there the image query returns ERROR_ACCESS_DENIED before the handle is signaled. A fast probe can therefore fail its own attestation and stop the sitting for nothing, though it fails closed. (2) A failure inside New-PrivateDirectory after the directory exists leaves the root consumed with no capture-held.json. (3) Failure phases inside run_probe are always reported as native_launch. (4) The time budget after the probe loop is not guaranteed inside PT5M, and an overrun leaves an empty receipt. Two further items are gate weaknesses that follow the manifest literally and need an architect decision: P2 counts as LOGGED_OUT on any nonzero exit, and any https URL selects a login mode. One evidence gap remains: descendant and browser-launch process counts are not recorded. Before the owner runs -Apply I recommend fixing the observe_child fallback and the New-PrivateDirectory held-record gap (both small and local), re-pinning the helper, and cross-testing the mirrored predicate against step 3's parse_status once that file exists.",
+  "findings": [
+   {
+    "severity": "low",
+    "file": "C:\\Users\\ansac\\Documents\\Codex\\2026-10-06\\the-github-repository-is-located-at\\windows-deployment-next\\agy_status_capture_r4_v1.py",
+    "line": 352,
+    "summary": "The exit fallback in observe_child only covers the state after exit has completed. It accepts ERROR_GEN_FAILURE 31 and requires poll() to be non-None. While the process is still tearing down, QueryFullProcessImageNameW(flags 0) returns ERROR_ACCESS_DENIED 5 and the handle is not yet signaled, so the attestation raises 'Observe native process image failed'.",
+    "failure_scenario": "I reproduced this on AETHERDESK with fast cmd.exe children polled in a tight loop. All 30 of 30 showed a window of about 0.4 ms (median 0.41 ms, max 0.48 ms) in which the query failed with error 5 while WaitForSingleObject(h,0) was not yet signaled. Only after that did it settle to 31. OpenProcessToken never failed during exit. If observe_child for a fast probe lands in this window, the probe raises ValueError and the run fails with CAPTURE_FAILED, which the wrapper turns into SERIES-STOP. Fast probes here are P1 --version (about 0.07 s) and P3/P6 when they fail fast with 'no controlling terminal'. The helper runs at below-normal priority and the Job has a 20% hard CPU cap, so the timing can shift into the window. It fails closed, but it would stop the attended sitting for no real reason.",
+    "fix": "When the query fails for any reason, wait on the owned handle for a bounded time first, for example WaitForSingleObject(process._process, 5000). If the handle is signaled, use the PROCESS_NAME_NATIVE comparison whether the error was 5 or 31. If it is not signaled, raise. Add a test that injects error 5 with poll() returning None first and an exit code second.",
+    "verified": "CONFIRMED"
+   },
+   {
+    "severity": "low",
+    "file": "C:\\Users\\ansac\\Documents\\Codex\\2026-10-06\\the-github-repository-is-located-at\\windows-deployment-next\\agy-status-capture-r4-v1.ps1",
+    "line": 401,
+    "summary": "New-PrivateDirectory runs outside both try blocks of Invoke-AgyCapture. Its checks after creation (Assert-NoReparseAncestors, Assert-PrivateAcl) can throw once the root already exists. That consumes the attempt namespace without writing capture-held.json, contrary to the comment on line 402. The message shown is the raw imported one ('Private backup path grants access beyond SYSTEM/Administrators: ...').",
+    "failure_scenario": "I reproduced this in a throwaway powershell.exe by dot-sourcing the functions and stubbing New-PrivateDirectory to create the directory and then throw. Invoke-AgyCapture ended with root exists=True and held exists=False, and the error text was the raw 'backup path' message. Any later -Attempt with the same value is refused because the root exists, but there is no held record explaining why.",
+    "fix": "Put New-PrivateDirectory inside a try. In the catch, if Test-Path $script:targetRoot is true, write capture-held.json (phase PREPARATION, reason, root_preserved=$true) with Write-RegistrationControl and throw the plain PREPARATION message. Otherwise throw the existing 'held before any change ... Nothing was changed' message.",
+    "verified": "CONFIRMED"
+   },
+   {
+    "severity": "low",
+    "file": "C:\\Users\\ansac\\Documents\\Codex\\2026-10-06\\the-github-repository-is-located-at\\windows-deployment-next\\agy_status_capture_r4_v1.py",
+    "line": 929,
+    "summary": "The phase stays 'native_launch' for the whole run_probe call. Attestation failures (wrong image or SID, profile mismatch) and wait failures are therefore all reported as native_launch, and native_attestation and native_wait in FAILURE_PHASES are never used.",
+    "failure_scenario": "observe_child raises ValueError('Observed worker profile differs ...') for P1. The receipt reports failure.phase='native_launch', and capture-held.json and the owner message point at the launch rather than the attestation. The evidence names the wrong failing step.",
+    "fix": "Have run_probe set the phase as it goes, for example through a one-element list or record['phase']: 'native_attestation' before observe_child, 'native_wait' before wait_probe and 'native_cleanup' around leaving the process block. run() then reads that value in its except clause.",
+    "verified": "CONFIRMED"
+   },
+   {
+    "severity": "low",
+    "file": "C:\\Users\\ansac\\Documents\\Codex\\2026-10-06\\the-github-repository-is-located-at\\windows-deployment-next\\agy_status_capture_r4_v1.py",
+    "line": 482,
+    "summary": "The signed-out gate passes P2 as LOGGED_OUT on any nonzero exit, even with no sign-in marker in the output. A usage error, crash, failed update or network failure therefore meets the first S1-A2 condition. This follows the spec exactly (it mirrors the step-3 predicate), but the capture exists to pin that predicate on evidence.",
+    "failure_scenario": "I ran classify('models_json', ...) on the captured models_json_post output (the 'flags provided but not defined' usage error) with exit 1. It returns status_helper_classification='LOGGED_OUT' and json_envelope_parsed=False. In the same way, a 'Failed to poll FetchAvailableModels' exit 1 under the worker token would pass P2_NOT_LOGGED_OUT_UNDER_STATUS_PREDICATE, and the sitting would go on to an attended login on a CLI that is not working.",
+    "fix": "This is an architect decision. In capture_gate and Get-CaptureGate for the signed-out stage, also require P2 to show sign_in_line_present, auth_required_present, not_logged_in_present or status_value=='ERROR'. Otherwise add the reason P2_LOGGED_OUT_WITHOUT_MARKER (and add it to REASONS). The shipped predicate does not change.",
+    "verified": "PLAUSIBLE"
+   },
+   {
+    "severity": "low",
+    "file": "C:\\Users\\ansac\\Documents\\Codex\\2026-10-06\\the-github-repository-is-located-at\\windows-deployment-next\\agy_status_capture_r4_v1.py",
+    "line": 564,
+    "summary": "The login-mode decision counts any https:// URL, whatever its host and whether the probe was still waiting. A P3 that fails fast and prints a help or docs link decides mode 'print' and passes the signed-out gate. This follows the manifest exactly, but it drops the 'NOT auth_required' guard that the deployment design had. The PowerShell mirror at agy-status-capture-r4-v1.ps1:275 has the same gap.",
+    "failure_scenario": "Suppose P3 prints \"Error: authentication required. Run 'agy' to log in. See https://antigravity.google/docs/...\" and exits 1 within the window, without the 'no controlling terminal' phrase. Then url_present=True and the decision is print/P3, so the gate passes. Slot1's attended sign-in then fails in the bridge, after the Warden is already down and the owner is attending.",
+    "fix": "Count a URL as sign-in evidence only when url_hosts contains 'accounts.google.com', or when paste_prompt_present is true, or when exited_before_window is False (the process was still waiting at the end of the window). Apply the same predicate in Get-LoginModeDecision and add fixtures for these cases.",
+    "verified": "PLAUSIBLE"
+   },
+   {
+    "severity": "low",
+    "file": "C:\\Users\\ansac\\Documents\\Codex\\2026-10-06\\the-github-repository-is-located-at\\windows-deployment-next\\agy_status_capture_r4_v1.py",
+    "line": 926,
+    "summary": "The deadline guard does not cover all the time that can be spent. Each probe reserves 25 s, but its require_stopped call (win._powershell, 45 s timeout) and Job close (up to about 20 s) fall inside that reserve. The checks after the loop (inventory_after, re-hashing agy, require_stopped, which can take up to 45 s) have no budget at all against the PT5M limit.",
+    "failure_scenario": "If PowerShell starts slowly under SYSTEM (for example 30 s or more per require_stopped call), the helper overruns 300 s. Task Scheduler then kills it, and capture-receipt.json is left empty because it was opened with 'x' at the start and never written. The wrapper fails closed at WAIT, but the capture's evidence, including the raw files' digests, is lost.",
+    "fix": "Budget the worst case explicitly. For example, lower CAPTURE_DEADLINE_SECONDS so that the deadline plus the 45 s post-loop require_stopped plus margin fits inside 300 s (about 190-200 s). Also check the deadline again after require_stopped and before launch_worker in launch_probe_process, and skip the probe if the bound plus close time no longer fits.",
+    "verified": "PLAUSIBLE"
+   },
+   {
+    "severity": "low",
+    "file": "C:\\Users\\ansac\\Documents\\Codex\\2026-10-06\\the-github-repository-is-located-at\\windows-deployment-next\\agy_status_capture_r4_v1.py",
+    "line": 745,
+    "summary": "No evidence is kept of descendant processes started inside the probe Job. The CLI design (cli_design[0].open_risks) says the capture must confirm that no browser launch was attempted. The inventory covers token-file writes, but nothing records a rundll32 or browser child that P3 or P6 may have started before the Job killed it.",
+    "failure_scenario": "P6 (bare agy) tries 'Opening browser to authenticate' through rundll32 under the worker token. The Job kills the child silently, the receipt shows only the parent's attestation, and the owner sheet cannot say whether a browser launch was attempted.",
+    "fix": "Before leaving the 'with process' block in run_probe, query QueryInformationJobObject class 1 (JOBOBJECT_BASIC_ACCOUNTING_INFORMATION, the _BASIC_ACCOUNTING struct already in windows.py) on process._job. Record total_processes, active_processes and total_terminated_processes in record['process'], and allowlist them in Assert-ProbeRecord.",
+    "verified": "PLAUSIBLE"
+   }
+  ],
+  "tests_rerun_line": "cd windows-deployment-next && timeout 900 C:\\Users\\ansac\\source\\repos\\Pipeline-Mix-Model-Concurrent\\.venv\\Scripts\\python.exe -I -m pytest -p no:cacheprovider -q test_agy_status_capture_r4_v1.py -> 68 passed in 9.69s (single process). The C:\\Program Files\\CoChem listing was identical before and after. I also reran the unelevated signed-out read-only plan by itself: exit 0, nothing created, holds = ['Daemon task definitions are unreadable without elevation; re-read during -Apply: CoChem-4.2.7-Warden']."
+ },
+ {
+  "component": "status-helper-r4 (build-manifest step 3): worker-native-auth-status-six-r4-v1.py, check-worker-native-auth-status-six-r4-v1.ps1, test_worker_native_auth_status_six_r4_v1.py, test_check_worker_native_auth_status_six_r4_v1.py (all under C:\\Users\\ansac\\Documents\\Codex\\2026-10-06\\the-github-repository-is-located-at\\windows-deployment-next)",
+  "verdict": "The step-3 deliverables are sound enough to approve once the -Apply test is removed; the three other findings are low and fail closed. Every embedded pin matches the bytes on disk. The Python helper matches the manifest: r4 constants, the exact gemini contract, the allowlisted envelope predicate that never persists provider text, 'google' in authentication_decision, verify_r4_runtime binding the real install-after key names (it passes against the real r4 receipts), and agy.exe as the executable. Apart from the documented and test-pinned run() substitutions, the helper is byte-identical to r3-v3. The leaf follows the v2.2 house style: hash-pinned imports, an owner identity gate, a single top-level invocation, a read-only plan, a TASK_CREATE-only SYSTEM task with no triggers, PT3M and the private SDDL read back before the single Run, and CreateNew result and held records. I found no path by which plan mode changes the host, no destructive verb, and no probe error read as clear. One concrete issue must be fixed before anyone reruns the suite: test_check_worker_native_auth_status_six_r4_v1.py:438-447 runs the deployment leaf with -Apply, which the hard rules forbid. It is refused only because the token is unelevated. Three low-severity defects should also be fixed: (1) because run() exits 2 on HOLD, a classification HOLD is mis-bound as 'configuration/result binding differs' with no tag line (inherited from r3-v4; the test hides it with an impossible LastTaskResult 0); (2) a JSON object at exit 0 with no or a non-string status is classified as an explicit logout rather than HOLD; (3) a failure while creating the one-shot root leaves no held record. The manifest's permissive 'exit != 0 means logged out' rule remains an accepted risk until the A2 capture.",
+  "findings": [
+   {
+    "severity": "medium",
+    "file": "C:\\Users\\ansac\\Documents\\Codex\\2026-10-06\\the-github-repository-is-located-at\\windows-deployment-next\\test_check_worker_native_auth_status_six_r4_v1.py",
+    "line": 442,
+    "summary": "test_apply_refuses_before_any_change_from_an_ordinary_token (lines 438-447) runs the deployment leaf with -Apply twice through powershell.exe -File. That breaks the hard rule 'never run any deployment .ps1 with -Apply'. The implementer's reported test command, and any verifier who reruns it as written, executes -Apply.",
+    "failure_scenario": "Someone runs the reported command (pytest over both suites). The leaf starts with -Apply -Attempt 0123...; whether it is refused depends only on the token being unelevated and on ctypes IsUserAnAdmin. The command text has no -Apply in it, so the guard hook cannot see the invocation. I had to --deselect this test to rerun the suite within the rules.",
+    "fix": "Delete the two run_leaf(..., '-Apply') calls. Cover the attempt guard by dot-sourcing Invoke-AuthStatusLeafMain from the AST and calling it with -ApplyRequested $true and the all-zero attempt (refused at its first statement, line 382). Check the owner and elevation guard (line 389) by AST or text, not by running it.",
+    "verified": "CONFIRMED"
+   },
+   {
+    "severity": "low",
+    "file": "C:\\Users\\ansac\\Documents\\Codex\\2026-10-06\\the-github-repository-is-located-at\\windows-deployment-next\\check-worker-native-auth-status-six-r4-v1.ps1",
+    "line": 187,
+    "summary": "A classification HOLD never takes the clean HOLD path. run() exits 2 for any HOLD (worker-native-auth-status-six-r4-v1.py:541), so LastTaskResult is 2. Assert-AuthStatusReceipt requires LastTaskResult 0 for every receipt that is not STATUS_CHECK_FAILED, so a protocol-invalid gemini result is rejected as 'configuration/result binding differs'. The tests hide this because their hold fixture uses LastTaskResult 0, which cannot happen (test_check...py:363).",
+    "failure_scenario": "Gemini before-stage, agy exits 0 with empty stdout (an open A2 shape). Receipt: status AUTHENTICATION_NOT_VERIFIED, decision HOLD, task exit 2. The leaf throws at phase DECISION: the held record has summary null and a misleading reason, and no COCHEM_NATIVE_AUTH_STATUS_RESULT line is printed. The r3-v6-style series then fails with 'could not establish a bound failure receipt' (login-six-workers-status-first-r3-v6.ps1:126) and loses the bound HOLD summary. It still fails closed. Probe: drive_apply with last_result=2 gave phase DECISION, 0 tag lines; with last_result=0 it gave phase HOLD, 1 tag line. Inherited unchanged from r3-v4:136.",
+    "fix": "Compute $result first, then require $Task.LastTaskResult to equal 2 for HOLD and 0 for REUSE_VERIFIED_SESSION or ATTENDED_LOGIN_REQUIRED (keep the early return for STATUS_CHECK_FAILED). Set last_result=2 for the 'hold' fixture in test_apply_tail_failures_leave_a_held_record_and_a_plain_message. Mirror the fix in the r4-v1 series' own Assert-AuthStatusReceipt call.",
+    "verified": "CONFIRMED"
+   },
+   {
+    "severity": "low",
+    "file": "C:\\Users\\ansac\\Documents\\Codex\\2026-10-06\\the-github-repository-is-located-at\\windows-deployment-next\\worker-native-auth-status-six-r4-v1.py",
+    "line": 138,
+    "summary": "The logged-out test `envelope.get('status') != 'SUCCESS'` classifies any JSON object at exit 0 as an explicit logout when it has no status field, a null status, or a status that differs only in case. Each of these offers a browser login. This conflicts with the manifest's HOLD clause ('exit 0 without a success envelope and without a sign-in string -> HOLD') and with the module's own rule that only an explicit logged-out status authorizes a login.",
+    "failure_scenario": "Probe at exit 0 with the fetch line on stderr: b'{}', b'{\"status\":null}', b'{\"error\":\"rate limited\"}' and a full gemini envelope with status 'success' all return ATTENDED_LOGIN_REQUIRED, not HOLD. In a before-stage on a slot that is already signed in, a vendor envelope change or error object would trigger an unnecessary attended consent.",
+    "fix": "Treat an envelope as logged-out only when type(envelope.get('status')) is str and status != 'SUCCESS', optionally also requiring a 'command' object. Otherwise fall through to HOLD. Apply the same change to agy_status_capture_r4_v1.status_helper_predicate so the cross-check test still agrees. Add {} / {\"status\":null} / {\"status\":\"success\"} rows that expect HOLD.",
+    "verified": "CONFIRMED"
+   },
+   {
+    "severity": "low",
+    "file": "C:\\Users\\ansac\\Documents\\Codex\\2026-10-06\\the-github-repository-is-located-at\\windows-deployment-next\\check-worker-native-auth-status-six-r4-v1.ps1",
+    "line": 333,
+    "summary": "New-ProtectedDirectory runs before the try block. If the imported helper creates the root and then its post-create Assert-ProtectedPath throws (stage_aetherdesk_427_payloads.ps1:66), the one-shot root exists with no status-held.json and no message telling the owner to preserve it. The header (lines 18-19) promises a held record for every failure after the root exists.",
+    "failure_scenario": "An ACL or ownership anomaly on the new directory (for example inherited state or a security product rewriting the ACL) makes Assert-ProtectedPath throw 'Untrusted protected owner'. The namespace is consumed, so the next plan reports the root as existing, but no held record explains why.",
+    "fix": "Set $phase='ROOT' and move New-ProtectedDirectory inside the try. In the catch, write status-held.json only when the root exists. If that write fails, make the plain message name the consumed root (Get-AuthStatusHeldMessage default tail) so the owner preserves it.",
+    "verified": "PLAUSIBLE"
+   }
+  ],
+  "tests_rerun_line": "cd windows-deployment-next && timeout 600 C:\\Users\\ansac\\source\\repos\\Pipeline-Mix-Model-Concurrent\\.venv\\Scripts\\python.exe -I -m pytest test_worker_native_auth_status_six_r4_v1.py test_check_worker_native_auth_status_six_r4_v1.py -p no:cacheprovider -q --tb=short -rfEs --deselect test_check_worker_native_auth_status_six_r4_v1.py::test_apply_refuses_before_any_change_from_an_ordinary_token -> 133 passed, 1 deselected in 30.33s. The deselected test runs the leaf with -Apply, which the hard rules forbid. Additional inert probes: parse_status edge inputs in-process, and the leaf's Invoke-AuthStatusApply tail driven by the test file's own stubs in a throwaway powershell.exe under the scratchpad."
+ }
+]

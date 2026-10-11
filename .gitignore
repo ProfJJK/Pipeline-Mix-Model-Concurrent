@@ -38,3 +38,6 @@ config/pipeline.client.local.json
 # Retained deployment instructions are historical evidence, not runtime state.
 !docs/evidence/windows-2026-10-09/continuation/*.txt
 !docs/evidence/windows-2026-10-09/continuation/**/*.txt
+# Published deployment workspace mirror keeps its owner sheets (.txt) and sitting logs (.log).
+!docs/deployment/**/*.txt
+!docs/deployment/**/*.log

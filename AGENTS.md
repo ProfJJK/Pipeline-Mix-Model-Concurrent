@@ -60,13 +60,19 @@ behavioural tests live in the pipeline repository (`pipeline_tests/test_cochem_h
 - If the machine crashes again, the owner can analyze `C:\WINDOWS\Minidump\*.dmp` with WinDbg
   (`!analyze -v`).
 
+## Current handoff
+Start with `docs/WINDOWS_AGENT_HANDOFF_4.2.7_2026-10-11.md` (branch `feature/r5-gemini-and-runtime-fixes`):
+the Warden is down, r5 is installed but not activated, and the owner's sitting rerun is the next step.
+The routing-tier redesign is left open for the next agent. A mirror of the deployment workspace is in
+`docs/deployment/windows-deployment-next/`.
+
 ## Where things are
 | Thing | Path |
 | --- | --- |
 | Pipeline 4.2.7 source (GitHub ProfJJK/Pipeline-Mix-Model-Concurrent) | `C:\Users\ansac\source\repos\Pipeline-Mix-Model-Concurrent` |
-| Installed protected runtime (owner/admin only) | `C:\Program Files\CoChem\Pipeline4.2.7-windows-20261007-r3` |
+| Installed protected runtimes (owner/admin only) | r4 (last active) `C:\Program Files\CoChem\Pipeline4.2.7-windows-20261009-r4`; r5 (installed, not activated) `...\Pipeline4.2.7-windows-20261011-r5`; r3 `...\Pipeline4.2.7-windows-20261007-r3` |
 | Runtime client config used by every GUI's MCP entry | `C:\Users\ansac\CoChem427\pipeline-client-r3.json` |
 | Deployment engineering workspace (installers, freezes, owner sheets) | `C:\Users\ansac\Documents\Codex\2026-10-06\the-github-repository-is-located-at\windows-deployment-next` |
-| Legacy agentic swarm trees (do not start) | `D:\__CoChem\__agentic\v4.1.2`, `D:\__CoChem\__agentic\v4.2.0` |
+| Legacy agentic swarm trees (retired 2026-10-10; never start or restore) | `D:\__CoChem\__agentic\v4.1.2`, `D:\__CoChem\__agentic\v4.2.0` |
 | Workspace folder (untracked inside the `D:\__CoChem` git repo) | `D:\__CoChem\GitHub-Repo` |
 | Owner's hardening notes from earlier BSODs | `D:\__CoChem\PRIORITY-PIPELINE-*.md` |

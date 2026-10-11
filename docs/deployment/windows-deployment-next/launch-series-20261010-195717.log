@@ -1,0 +1,326 @@
+﻿**********************
+Windows PowerShell transcript start
+Start time: 20261010195717
+Username: AETHERDESK\ansac
+RunAs User: AETHERDESK\ansac
+Configuration Name: 
+Machine: AETHERDESK (Microsoft Windows NT 10.0.26300.0)
+Host Application: C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\Users\ansac\Documents\Codex\2026-10-06\the-github-repository-is-located-at\windows-deployment-next\RUN_427_LAUNCH_SERIES.ps1
+Process ID: 15908
+PSVersion: 5.1.26100.9444
+PSEdition: Desktop
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1.26100.9444
+BuildVersion: 10.0.26100.9444
+CLRVersion: 4.0.30319.42000
+WSManStackVersion: 3.0
+PSRemotingProtocolVersion: 2.3
+SerializationVersion: 1.1.0.1
+**********************
+[19:57:17] Stage 0: preconditions
+[19:57:18] Docker engine and execution image: ok
+[19:57:18] Defender exclusions and worker directories: ok
+PS>TerminatingError(Get-NetTCPConnection): "The running command stopped because the preference variable "ErrorActionPreference" or common parameter is set to Stop: No matching MSFT_NetTCPConnection objects found by CIM query for instances of the ROOT/StandardCimv2/MSFT_NetTCPConnection class on the  CIM server: SELECT * FROM MSFT_NetTCPConnection  WHERE ((LocalPort = 47824)) AND ((State = 2)). Verify query parameters and retry."
+[19:57:19] --- install-stopped-runtime-r4.ps1 read-only plan (installer preconditions; nothing changed)
+{
+    "schema":  "cochem-stopped-runtime-update/1",
+    "mode":  "READ_ONLY_PLAN",
+    "target_root":  "C:\\Program Files\\CoChem\\Pipeline4.2.7-windows-20261009-r4",
+    "previous_runtime_root":  "C:\\Program Files\\CoChem\\Pipeline4.2.7-windows-20261007-r3",
+    "previous_install_receipt_sha256":  "3b613128192ac44a0a3d9c4b4476fb4c47541edb7563541b9bbf18f84f9a90f6",
+    "previous_source_manifest_sha256":  "6c33a1434df2e5c3c32697bda5f828fe010f366550beeedde65636de982bbcd1",
+    "source_manifest_sha256":  "1202b1d780f1b8624523cf2ff3ea5084671f9d6921ae3b4c05f42b2df2652189",
+    "source_files":  166,
+    "reviewed_repair":  "src/cochem_pipeline/resource_telemetry.py",
+    "reviewed_repair_sha256":  "e140f8048e2d82b2c1accdfbd8c5d67c1e434b5058e2141b5028c31f0a802afc",
+    "configuration_sha256":  "135cd9eccf9efcdbc910679bde83b571913e731a4041ece62f60e42442f1709c",
+    "configuration_unchanged":  true,
+    "only_config_change":  null,
+    "preserved_denial_receipt_sha256":  "691c70560436f948464c529b9d2d6a3e33ce240749642af86ca79c748791461d",
+    "preserved_denial_task_terminal_check_deferred":  false,
+    "managed_daemon_tasks":  [
+                                 {
+                                     "name":  "CoChem-4.2.7-Warden",
+                                     "state":  "ENABLED=True;STATE=3;INSTANCES=0",
+                                     "references_new_root":  false
+                                 },
+                                 {
+                                     "name":  "CoChem-4.2.7-Supervisor",
+                                     "state":  "ABSENT",
+                                     "references_new_root":  false
+                                 },
+                                 {
+                                     "name":  "CoChem-4.2.2-Warden",
+                                     "state":  "ABSENT",
+                                     "references_new_root":  false
+                                 },
+                                 {
+                                     "name":  "CoChem-4.2.3-Supervisor",
+                                     "state":  "ABSENT",
+                                     "references_new_root":  false
+                                 }
+                             ],
+    "preserved_worker_cleanup_verified":  false,
+    "accounts_provisioned":  0,
+    "tasks_changed":  0,
+    "credentials_modified":  false,
+    "databases_modified":  false,
+    "ram_modified":  false,
+    "pipeline_started":  false,
+    "activation_ready":  false,
+    "holds":  [
+
+              ]
+}
+[19:57:19] installer preflight: clean
+[19:57:19] elapsed 0 min
+[19:57:19] Stage 1: legacy 4.1.2 / 4.2.0 removal
+[19:57:21] task removed: CoChemHostWarden_V412
+[19:57:21] task removed: CoChem V4.1.2 Swarm
+[19:57:22] task removed: CoChem-Fixture-TaskAcl-20261008-bbd9bf8061764e6ba8cdefa47fb6a149-create18
+[19:57:23] task removed: CoChem-Fixture-TaskAcl-20261008-bbd9bf8061764e6ba8cdefa47fb6a149-create2
+[19:57:23] ending legacy process 4516 python.exe: "C:\Python314\python.exe"  -m cochem.warden.mcp_server --transport http --port 47821
+PS>TerminatingError(Get-NetTCPConnection): "The running command stopped because the preference variable "ErrorActionPreference" or common parameter is set to Stop: No matching MSFT_NetTCPConnection objects found by CIM query for instances of the ROOT/StandardCimv2/MSFT_NetTCPConnection class on the  CIM server: SELECT * FROM MSFT_NetTCPConnection  WHERE ((LocalPort = 47821)) AND ((State = 2)). Verify query parameters and retry."
+[19:57:26] startup launcher moved to the archive
+PS>TerminatingError(Move-Item): "The running command stopped because the preference variable "ErrorActionPreference" or common parameter is set to Stop: Cannot remove item D:\__CoChem\__agentic\v4.1.2\.staging\concurrency_vm\.git: You do not have sufficient access rights to perform this operation."
+[19:57:27] WARNING: could not move D:\__CoChem\__agentic\v4.1.2 (You do not have sufficient access rights to perform this operation.); the agent will retire it afterwards. Continuing.
+[19:57:27] tree moved to the archive: D:\__CoChem\__agentic\v4.2.0
+[19:57:27] legacy archive: D:\__CoChem\_retired-legacy-20261010-195717
+[19:57:27] elapsed 0 min
+[19:57:27] Stage 2: repaired r4 runtime
+[19:57:27] --- install-stopped-runtime-r4.ps1 -Apply (downloads ~107 locked wheels; a few minutes)
+{
+    "schema":  "cochem-stopped-runtime-update/1",
+    "mode":  "FRESH_STOPPED_RUNTIME_READY",
+    "target_root":  "C:\\Program Files\\CoChem\\Pipeline4.2.7-windows-20261009-r4",
+    "previous_runtime_root":  "C:\\Program Files\\CoChem\\Pipeline4.2.7-windows-20261007-r3",
+    "previous_install_receipt_sha256":  "3b613128192ac44a0a3d9c4b4476fb4c47541edb7563541b9bbf18f84f9a90f6",
+    "previous_source_manifest_sha256":  "6c33a1434df2e5c3c32697bda5f828fe010f366550beeedde65636de982bbcd1",
+    "source_manifest_sha256":  "1202b1d780f1b8624523cf2ff3ea5084671f9d6921ae3b4c05f42b2df2652189",
+    "source_files":  166,
+    "reviewed_repair":  "src/cochem_pipeline/resource_telemetry.py",
+    "reviewed_repair_sha256":  "e140f8048e2d82b2c1accdfbd8c5d67c1e434b5058e2141b5028c31f0a802afc",
+    "configuration_sha256":  "135cd9eccf9efcdbc910679bde83b571913e731a4041ece62f60e42442f1709c",
+    "configuration_unchanged":  true,
+    "only_config_change":  null,
+    "preserved_denial_receipt_sha256":  "691c70560436f948464c529b9d2d6a3e33ce240749642af86ca79c748791461d",
+    "preserved_denial_task_terminal_check_deferred":  false,
+    "managed_daemon_tasks":  [
+                                 {
+                                     "name":  "CoChem-4.2.7-Warden",
+                                     "state":  "ENABLED=True;STATE=3;INSTANCES=0",
+                                     "references_new_root":  false
+                                 },
+                                 {
+                                     "name":  "CoChem-4.2.7-Supervisor",
+                                     "state":  "ABSENT",
+                                     "references_new_root":  false
+                                 },
+                                 {
+                                     "name":  "CoChem-4.2.2-Warden",
+                                     "state":  "ABSENT",
+                                     "references_new_root":  false
+                                 },
+                                 {
+                                     "name":  "CoChem-4.2.3-Supervisor",
+                                     "state":  "ABSENT",
+                                     "references_new_root":  false
+                                 }
+                             ],
+    "preserved_worker_cleanup_verified":  false,
+    "accounts_provisioned":  0,
+    "tasks_changed":  0,
+    "credentials_modified":  false,
+    "databases_modified":  false,
+    "ram_modified":  false,
+    "pipeline_started":  false,
+    "activation_ready":  false,
+    "holds":  [
+
+              ],
+    "verified_entries":  15013,
+    "verification":  {
+                         "revision":  {
+                                          "schema":  "cochem-installed-revision/1",
+                                          "verified":  true,
+                                          "read_only":  true,
+                                          "files":  109,
+                                          "source_sha256":  "38a99c3fc160558c9f170b5da0b28d815f2172e7338b6849f993fdc57e9abb5e",
+                                          "acceptance_files":  0,
+                                          "acceptance_sha256":  null
+                                      },
+                         "configuration_parsed":  true,
+                         "ram_workspace_root":  "R:\\CoChem427-windows-20261007",
+                         "telemetry_repair_installed":  true,
+                         "no_system_or_model_execution":  true
+                     },
+    "runtime_bindings":  {
+                             "pyvenv_sha256":  "0c2b1a15dcdfe67436882fcf0f8d567d79442bcac41f3b744153c17c21df727d",
+                             "venv_python_sha256":  "560b9ef7d856608ab8da02ded2dc8a1951ad1f424c382c0ec6a698874165a18e",
+                             "base_python_sha256":  "d8e3f0adf246db00358c0c4ed349cf714898178f9558fb0e944f79f5c07f8eaa",
+                             "base_root":  "C:\\Program Files\\CoChem\\Toolchain4.2.7-windows-20261006\\Python312"
+                         }
+}
+[20:00:43] r4 built and verified
+[20:00:43] elapsed 3 min
+[20:00:43] Stage 3: elevated read-only retarget plan
+[20:00:43] --- retarget-warden-r4.ps1 -Attempt v1 (read-only)
+{
+    "schema":  "cochem-warden-retarget-plan/2",
+    "mode":  "READ_ONLY_PLAN",
+    "attempt":  "v1",
+    "start_only":  false,
+    "task_name":  "CoChem-4.2.7-Warden",
+    "from_runtime_root":  "C:\\Program Files\\CoChem\\Pipeline4.2.7-windows-20261007-r3",
+    "to_runtime_root":  "C:\\Program Files\\CoChem\\Pipeline4.2.7-windows-20261009-r4",
+    "r4_runtime_verified":  true,
+    "r3_commissioning_verified":  true,
+    "task_readable":  true,
+    "task_summary":  {
+                         "enabled":  true,
+                         "state":  3,
+                         "instances":  0,
+                         "action_path":  "C:\\Program Files\\CoChem\\Pipeline4.2.7-windows-20261007-r3\\.venv\\Scripts\\python.exe"
+                     },
+    "other_daemon_tasks":  [
+                               {
+                                   "name":  "CoChem-4.2.7-Supervisor",
+                                   "state":  "ABSENT",
+                                   "active":  false
+                               },
+                               {
+                                   "name":  "CoChem-4.2.2-Warden",
+                                   "state":  "ABSENT",
+                                   "active":  false
+                               },
+                               {
+                                   "name":  "CoChem-4.2.3-Supervisor",
+                                   "state":  "ABSENT",
+                                   "active":  false
+                               }
+                           ],
+    "controller_presence":  {
+                                "port":  47824,
+                                "listening":  0,
+                                "controller_processes":  [
+
+                                                         ],
+                                "observer_processes":  [
+                                                           {
+                                                               "pid":  3132,
+                                                               "parent":  2876,
+                                                               "path":  "C:\\Program Files\\CoChem\\Supervisor4.2.7-windows-20261007-staging-v1\\.venv\\Scripts\\python.exe",
+                                                               "command":  "\"C:\\Program Files\\CoChem\\Supervisor4.2.7-windows-20261007-staging-v1\\.venv\\Scripts\\python.exe\" -I -B \"C:\\Program Files\\CoChem\\SupervisorObservation4.2.7-windows-20261007-r3-v1\\held-supervisor-observation-r3-v1.py\" --observe"
+                                                           },
+                                                           {
+                                                               "pid":  9472,
+                                                               "parent":  3132,
+                                                               "path":  "C:\\Program Files\\CoChem\\Toolchain4.2.7-windows-20261006\\Python312\\python.exe",
+                                                               "command":  "\"C:\\Program Files\\CoChem\\Toolchain4.2.7-windows-20261006\\Python312\\python.exe\" -I -B \"C:\\Program Files\\CoChem\\SupervisorObservation4.2.7-windows-20261007-r3-v1\\held-supervisor-observation-r3-v1.py\" --observe"
+                                                           }
+                                                       ],
+                                "client_processes":  [
+
+                                                     ],
+                                "unclassified_runtime_processes":  [
+
+                                                                   ],
+                                "uninspectable_python_processes":  0,
+                                "authoritative":  true
+                            },
+    "worker_processes":  {
+                             "workers":  [
+
+                                         ],
+                             "uninspectable_count":  2,
+                             "uninspectable_with_image":  [
+
+                                                          ],
+                             "exited_during_sweep":  0,
+                             "authoritative":  true
+                         },
+    "loopback_port_free":  true,
+    "backup_copy_rights_verified":  true,
+    "private_root_readable":  true,
+    "private_root_note":  "SYSTEM-only DACL; backups use robocopy backup semantics, queue namespace is guarded by the attempt root",
+    "config_path":  "C:\\Program Files\\CoChem\\WardenCommissioning4.2.7-windows-20261007-r3-v1\\pipeline.json",
+    "config_sha256":  "135cd9eccf9efcdbc910679bde83b571913e731a4041ece62f60e42442f1709c",
+    "queue_launch_output_new":  "C:\\ProgramData\\CoChemPipeline427\\private\\queue-retarget-20261010-r4-v1",
+    "target_root":  "C:\\Program Files\\CoChem\\WardenRetarget4.2.7-windows-20261010-r4-v1",
+    "backup_helper_sha256":  "f00ad064215d1a689f1355a18da9f159b16d45699507975de957a4cb832a0f8b",
+    "backup_copy_flags":  [
+                              "/B"
+                          ],
+    "administrator":  true,
+    "holds":  [
+
+              ],
+    "tasks_changed":  0,
+    "started":  false,
+    "supervisor_and_recorder_rebound":  false,
+    "automatic_retry_allowed":  false
+}
+[20:00:46] plan: zero holds
+[20:00:46] elapsed 3 min
+[20:00:46] Stage 4: retarget to r4 and single start (waits up to 240 s for health)
+[20:00:46] --- retarget-warden-r4.ps1 -Apply -Start -Attempt v1
+{
+    "schema":  "cochem-warden-retarget-result/2",
+    "status":  "WARDEN_R4_RUNNING_HEALTH_VERIFIED",
+    "attempt":  "v1",
+    "receipt_path":  "C:\\Program Files\\CoChem\\WardenRetarget4.2.7-windows-20261010-r4-v1\\retarget-receipt.json",
+    "receipt_sha256":  "1e32c47688ef8ccf7bdd6f2f640ce736e6025508ad7ba04b37543905c3f7feb2",
+    "task_name":  "CoChem-4.2.7-Warden",
+    "to_runtime_root":  "C:\\Program Files\\CoChem\\Pipeline4.2.7-windows-20261009-r4",
+    "started":  true,
+    "start":  {
+                  "schema":  "cochem-warden-start-result/2",
+                  "status":  "WARDEN_R4_RUNNING_HEALTH_VERIFIED",
+                  "receipt_sha256":  "ff6845d18238471775d538641f3e0015aebbbeb73c318c57df177e2a3241db7b",
+                  "controller":  {
+                                     "pid":  20664,
+                                     "instance_id":  "61497bdab0514590b88fd0cab689a404",
+                                     "process_started_at":  1791680462.6393604,
+                                     "source_root":  "C:\\Program Files\\CoChem\\Pipeline4.2.7-windows-20261009-r4\\.venv\\Lib",
+                                     "version":  "4.2.7",
+                                     "admission_capacity":  0,
+                                     "knowledge_ready":  true,
+                                     "trip_errors":  {
+
+                                                     }
+                                 },
+                  "process_proof":  {
+                                        "pid":  20664,
+                                        "image":  "C:\\Program Files\\CoChem\\Toolchain4.2.7-windows-20261006\\Python312\\python.exe",
+                                        "parent_pid":  5320,
+                                        "parent_image":  "C:\\Program Files\\CoChem\\Pipeline4.2.7-windows-20261009-r4\\.venv\\Scripts\\python.exe",
+                                        "owner":  "SYSTEM",
+                                        "port_owner_verified":  true
+                                    }
+              },
+    "retarget_status":  "WARDEN_RETARGETED_TO_R4_NOT_STARTED"
+}
+[20:01:13] r4 Warden running, health verified twice
+[20:01:13] elapsed 4 min
+[20:01:13] Stage 5: /health from the new controller
+[20:01:13]   pid = 20664
+[20:01:13]   instance_id = "61497bdab0514590b88fd0cab689a404"
+[20:01:13]   service_identity = "SYSTEM"
+[20:01:13]   version = "4.2.7"
+[20:01:13]   admission_capacity = 0
+[20:01:13]   active =
+[20:01:13]   quarantined_slots = {}
+[20:01:13] health: answered as SYSTEM
+[20:01:13] elapsed 4 min
+[20:01:13] Stage 6: observer recorders
+[20:01:13] held supervisor observer reports the new controller healthy (self-rebound; nothing was changed)
+[20:01:13] resource recorder (48-hour acceptance instrument): the r3 recorder cannot bind an r4 controller by design and is left untouched; its r4 replacement is a separate reviewed build that needs no owner time until it exists.
+[20:01:13] elapsed 4 min
+
+DONE: the 4.2.7 pipeline is running on the repaired r4 runtime.
+Last manual step: quit and reopen Claude Desktop and Antigravity, and start a fresh Codex/Claude Code session, so their pipeline MCP children use r4.
+Legacy archive (the agent deletes it later): D:\__CoChem\_retired-legacy-20261010-195717
+Log: C:\Users\ansac\Documents\Codex\2026-10-06\the-github-repository-is-located-at\windows-deployment-next\launch-series-20261010-195717.log
+**********************
+Windows PowerShell transcript end
+End time: 20261010200113
+**********************

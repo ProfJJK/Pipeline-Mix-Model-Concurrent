@@ -1,0 +1,97 @@
+CoChem 4.2.7 r5 SITTING - OWNER SHEET                                11 October 2026, AETHERDESK
+One elevated window, one command, about 17 minutes of your attention (six Google sign-ins); the
+rest runs by itself. Claude and Codex end up working whatever happens with Gemini.
+====================================================================================================
+BEFORE: Docker Desktop running ("Engine running"); stay signed in as ansac during and after.
+Internet on (r5 downloads its Python packages); a browser on your Google account. Submit no
+pipeline work from any GUI until the window says DONE or STOP (no GUI needs a change afterwards).
+
+THE COMMAND. Start > type Windows PowerShell (the plain entry: not x86, not PowerShell 7) >
+Run as administrator > accept UAC. Paste these two lines, press Enter ($HOME = C:\Users\ansac):
+
+  cd "$HOME\Documents\Codex\2026-10-06\the-github-repository-is-located-at\windows-deployment-next"
+  powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\RUN_427_R5_SITTING.ps1 -Apply
+
+Options: no -Apply = print the plan only; -Gemini skip = no Gemini (default -Gemini attempt);
+-SkipFixProof = no S14; -Attempt v2 etc. only when the agent names one; default -EffortNullSlug.
+Never press Ctrl+C (with nothing selected it interrupts the sitting) or close the window early.
+If the window returns to the prompt without DONE or STOP, run the same command again.
+====================================================================================================
+WHAT HAPPENS                                                      you          minutes
+S0-S2    checks; install r5 beside r4; disable the idle Warden    not needed   about 7
+S3       Claude + Codex sign-in check on all six slots            not needed   about 6
+         (a slot signed out: one Y/N question, see below)         at the keys  +4 per sign-in
+S5       Gemini sign-in probe on slot1                            not needed   about 3
+S6       six Gemini sign-ins, one slot at a time                  AT THE KEYS  12-17
+S7-S10   Gemini checks; build, stage and preview the r5 config    not needed   about 11
+S11-S13  switch the Warden to r5; health; one test job            not needed   about 10
+S14      two small proof workflows (planning + coding)            not needed   up to 20
+WHEN TO BE THERE: two beeps and a yellow ">>> YOUR ATTENTION:" line mean you are needed; the
+window waits for you. Be back at the screen 12 minutes after starting: the possible Y/N comes at
+about minute 13, the six sign-ins start at about minute 16. After them (about minute 35) you may
+leave; the deployment outcome follows at about minute 50-60 (Gemini fallback +8, busy host +10).
+
+THE ONE POSSIBLE QUESTION (S3): "Sign them in now (about 4 minutes each ...)? [Y/N]"
+  Y  per signed-out slot: type READY in capitals; Claude: open the printed URL, paste the code at
+     the masked Code prompt; Codex: open https://auth.openai.com/codex/device, enter the code.
+  N  those slots stay signed out (their jobs wait until a later sign-in); the sitting continues.
+
+THE SIX GEMINI SIGN-INS (S6): slot1, then slot2 to slot6, the same steps each time
+  1. "For gemini slotN, type READY ..." -> type READY in capitals, press Enter (anything else,
+     even lowercase "ready", pauses the series and leaves Gemini held).
+  2. Copy the printed Google sign-in URL safely: select all of it with the mouse and, while it is
+     highlighted, right-click (or press Enter). Open it in your browser within about 60 seconds,
+     pick your Google account and allow access.
+  3. Copy the code Google shows, paste it at "Code (masked; ...)" (shows as stars), press Enter.
+     P and Q are ordinary code characters. 4. Wait about a minute; the next READY follows.
+  Identity check, appeal page or rate limit: press Escape, then type PAUSE. PAUSE, Escape or a
+  failed sign-in only leave Gemini HELD; signed-in slots stay signed in, nothing to undo.
+
+OUTCOME BLOCKS: "OUTCOME (deployment complete; the fix-proof tail follows)" after the test job,
+then "OUTCOME (final)" and green "DONE: the 4.2.7 pipeline runs on r5."; or "OUTCOME (stopped)".
+  Claude/Codex "6/6 worker sessions verified" = working; "signed out: slotN" = jobs there wait.
+  Gemini   ACTIVE = answered the test job. Its isolation was checked only at S8: if any tool
+           later installs agy hooks, MCP servers or plugins (e.g. in R:\ or C:\ProgramData),
+           tell the agent. HELD - <stage>: <reason> = off, work goes to Claude/Codex (S9/S10:
+           the Gemini configuration failed staging or preview; the sitting went on held).
+           SKIPPED = -Gemini skip. NOT DEPLOYED = stopped before r5 ran the Gemini configuration.
+           CONFIGURED, NOT YET PROVEN = r5 runs the Gemini configuration; no test job yet.
+  Warden   r5 RUNNING (health verified) = done.
+           r4 RESTORED, r5 not installed: ... / r4 RESTORED and running (r5 not deployed) = back
+           on r4. r4 still running (never stopped) / DOWN as before this sitting (...) = untouched.
+           r5 RUNNING, NOT VERIFIED (rollback stop refused | no automatic rollback | rollback not
+           done) = r5 runs, failed a check and was not rolled back. For this one, UNKNOWN ...,
+           pipeline DOWN as before this sitting and any value ending "the agent reviews the log":
+           send the log and do not touch the task.
+  Reboot   SAFE (only on DONE with r5 verified) = after any reboot just sign in and let Docker
+           Desktop start; back about 1-16 minutes later (not back after 20 minutes: tell the agent).
+           NOT VERIFIED - ... = an unverified r5 task may start at your next sign-in: tell the
+           agent first. NOT reboot-safe = r4 does not restart itself: after a reboot the pipeline
+           stays down until an elevated restart, so tell the agent (before rebooting, if you can).
+  Holds    old provider cooldowns the pipeline routes around (reported only); nothing to do.
+  Accept   PASSED = the test job completed. DEFERRED (host busy 10 minutes, after the Gemini
+           fallback, or the test job ended BLOCKED or TIMEOUT on the shared quota) = r5 keeps
+           running, the sitting still ends DONE without S14: tell the agent, nothing to undo.
+           Only a FAILED test job, a refused submission or another provider restores r4.
+  FixProof PASSED or SOFT FAIL per workflow: recorded for the agent; r5 stays either way.
+  Held / Log / Sitting root   files and folders for the agent (Held appears only on trouble).
+
+IF IT ENDS WITH A RED "STOP at Sxx: ..." LINE (for example "STOP at S10: ..."): copy that line
+and the Held, Log and Sitting root lines printed with it, and send them to the agent.
+  "Docker Desktop engine is not answering ..." (S0 or S11): that step changed nothing; start
+  Docker Desktop, wait for "Engine running", stay signed in, then run the same command again.
+  Other reasons (e.g. "S10: the upgrade preview bound another r5 installation", "S11: the r5
+  start receipt does not bind this sitting", "S12: ... admission_ready is not true") are safety
+  checks. On most failures after r5 started or was being started (an interrupted or crashed
+  start and a held task update included) the sitting brings r4 back by itself: yellow
+  "R4-RESTORE: r4 restarted and health verified ..." ("R4-RESTORE: nothing to restore" = r4
+  never stopped). Red "R4-RESTORE NOT DONE: ..." = no automatic way back; send the log and leave
+  the task alone. "stop-warden-r5 did not complete" = r5 could not be stopped and is left as it
+  is (nothing killed); "no automatic restore" = left for review (if it names Docker, also start
+  Docker Desktop); "the r4 restore did not verify" / "the restore itself failed" = r4 is not back.
+  Rerunning the same command is safe: finished stages are skipped; once this attempt has ended
+  it refuses (changing nothing) and the agent names the next -Attempt. Never start, stop or
+  retarget the Warden by hand. A "SERIES-STOP ..." text in a step's own output is not the end.
+
+KNOWN TEXT MISMATCH: the installed acceptance view still quotes the old SRS limit of 50 MiB for
+the controller's memory; r5 enforces 200 MiB (raised 11 October after your question). Not a failure.
