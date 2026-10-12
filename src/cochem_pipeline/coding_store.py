@@ -269,7 +269,9 @@ class CodingStoreMixin:
         validate_dispatch(transition, kind, task)
         task['execution_transition'] = transition
         self._insert(conn, identifier, root['workflow_id'], root['workflow_id'], kind, 'PENDING', task,
-                     max_attempts=self.max_attempts)
+                     max_attempts=self.max_attempts,
+                     quality_routing=state.get('routing_quality') if kind in
+                     ('CODE_EDIT', 'CODE_TEST_AUTHOR', 'CODE_REVIEW', 'CODE_RESEARCH') else None)
         self._event(conn, root, 'CODING_STAGE_CREATED', kind=kind, stage_job_id=identifier, cycle=state['cycle'])
         return identifier
 
@@ -622,11 +624,13 @@ class CodingStoreMixin:
                 state['review_base_snapshot'] = state['current_snapshot']
                 state['test_changes'] = evidence.get('changes', [])
                 state['test_producer'] = {'provider': receipt['provider'], 'model': receipt['requested_model']}
+                state['last_producing_job_id'] = job_id
                 state['status'] = 'TESTING_PRECODE'
                 self._coding_job(conn, root, state, 'CODE_TEST', phase='precode')
             elif kind == 'CODE_EDIT':
                 state['changes'] = evidence['changes']
                 state['chunk_bounds']=evidence['chunk']
+                state['last_producing_job_id'] = job_id
                 if not evidence.get('no_source_change'):
                     state['producer'] = {'provider': receipt['provider'], 'model': receipt['requested_model']}
                 state['producer_done'] = output.get('done') is True
@@ -814,6 +818,29 @@ class CodingStoreMixin:
                 state['consecutive_failures'] = 0
                 state['cycle'] += 1
                 state['strategy'] = output['strategy']
+                captured = routes.get_state(conn, job_id)
+                if captured['policy']['policy_version'] == 3:
+                    from .quality_routing import next_quality_pivot
+                    producing_id = state.get('last_producing_job_id')
+                    producing = self._get(conn, producing_id) if producing_id else None
+                    if (not producing or producing['status'] != 'COMPLETED'
+                            or producing['kind'] not in ('CODE_EDIT', 'CODE_TEST_AUTHOR')
+                            or producing['workflow_id'] != root['workflow_id']
+                            or producing['payload'].get('leaf_index') != state['leaf_index']):
+                        raise ValueError('Quality pivot requires the actual completed producing job for this leaf')
+                    quality = next_quality_pivot(state.get('routing_quality'), route=producing['route'],
+                        leaf_index=state['leaf_index'], pivot_index=state['pivots'], producer_job_id=producing_id,
+                        research_job_id=job_id, research_receipt_sha256=digest(receipt))
+                    state['routing_quality'] = quality
+                    self._event(conn, root, 'CODING_QUALITY_PIVOT', **quality)
+                    from .routing import load_routing_policy
+                    candidates = load_routing_policy(captured['policy']).candidates(quality['floor'])
+                    if all(dict(provider=t.provider, model=t.model) in quality['excluded_models'] for t in candidates):
+                        state['status'] = 'RESEARCH_HOLD'
+                        state['research_hold'] = {'reason': 'quality_model_choices_exhausted', 'quality_routing': quality}
+                        conn.execute("UPDATE pipeline_jobs SET status='BLOCKED',updated_at=? WHERE job_id=?", (time.time(), root['job_id']))
+                        self._save_coding(conn, root['workflow_id'], state)
+                        return self._get(conn, job_id)
                 if cause['category']=='test_assumption':
                     state['current_snapshot']=state['leaf_baseline_snapshot']
                     state['sealed_tests_snapshot']=None
@@ -854,6 +881,8 @@ class CodingStoreMixin:
                     state['completed_leaves'].append({'id':leaf_id,'cycle':state['cycle'],'commit':staged['result_commit']})
                     state['leaf_index']+=1
                     state['cycle'],state['pivots'],state['consecutive_failures']=1,0,0
+                    state.pop('routing_quality', None)
+                    state.pop('last_producing_job_id', None)
                     state['leaf_baseline_snapshot']=state['current_snapshot']
                     state['status']='RESEARCHING'
                     self._coding_job(conn,root,state,'CODE_RESEARCH',research_phase='initial')

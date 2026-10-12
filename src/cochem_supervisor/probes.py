@@ -255,8 +255,8 @@ def configured_routing_policy(raw: dict | None = None) -> dict:
 def configured_current_routing_policy(raw: dict | None = None) -> dict:
     """Require the current catalogue for a new protected supervisor config."""
     policy = configured_routing_policy(raw)
-    _require(policy["policy_version"] == POLICY_VERSION,
-             "New supervisor configuration requires routing policy_version 2; migrate configuration explicitly")
+    _require(policy["policy_version"] in (2, 3),
+             "New supervisor configuration requires routing policy_version 2 or 3; migrate configuration explicitly")
     return policy
 
 
@@ -328,6 +328,10 @@ def verify_routing_assignment(job: dict, routing_policy: dict | None = None) -> 
              and 1 <= score_details["score"] <= 10, "Routing complexity score is invalid")
     version = policy['policy_version']
     recomputed = score_routing_task(job.get("kind"),job.get("payload"), scoring_version=2 if version == 3 else 1)
+    if 'quality_routing' in score_details:
+        from .quality_capture import apply_captured_floor
+        recomputed = apply_captured_floor(recomputed, score_details['quality_routing'],
+                                         kind=job['kind'], leaf_index=job['payload'].get('leaf_index'))
     _require(_digest(score_details) == _digest(recomputed), "Recorded routing score or rationale differs from task content")
     score = score_details["score"]
     tier = "1-3" if score <= 3 else "4-6" if score <= 6 else "7-9" if score <= 9 else "10"
@@ -348,6 +352,9 @@ def verify_routing_assignment(job: dict, routing_policy: dict | None = None) -> 
     index = route.get("candidate_index")
     _require(type(index) is int and 0 <= index < len(candidates), "Routing candidate index is invalid")
     provider, model, effort = _target_identity(route, version)
+    if 'quality_routing' in score_details and job['kind'] in ('CODE_EDIT', 'CODE_TEST_AUTHOR'):
+        _require(dict(provider=provider, model=model) not in score_details['quality_routing']['excluded_models'],
+                 'A quality pivot reused an excluded producing model')
     _require((provider, model, effort) == expected[index], "Selected routing target differs from recorded priority candidate")
     _require(all(type(route.get(key)) is type(candidates[index].get(key)) and route.get(key) == candidates[index].get(key)
                  for key in ("key","quota_pool","max_concurrency")),

@@ -372,8 +372,8 @@ def load_routing_policy(raw: Mapping[str, Any] | None = None) -> RoutingPolicy:
 def load_current_routing_policy(raw: Mapping[str, Any] | None = None) -> RoutingPolicy:
     """Require the current ratified catalogue for new controller configuration."""
     policy = load_routing_policy(raw)
-    if policy.as_dict()["policy_version"] != POLICY_VERSION:
-        raise ValueError("New controller configuration requires routing policy_version 2; migrate configuration explicitly")
+    if policy.as_dict()["policy_version"] not in (2, 3):
+        raise ValueError("New controller configuration requires routing policy_version 2 or 3; migrate configuration explicitly")
     return policy
 
 

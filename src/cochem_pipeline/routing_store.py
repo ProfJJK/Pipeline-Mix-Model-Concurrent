@@ -164,7 +164,7 @@ def capture_workflow(conn, workflow_id, policy, max_dispatches=None):
                      (workflow_id, encoded(snapshot), max_dispatches))
 
 
-def ensure_job(conn, job_id):
+def ensure_job(conn, job_id, *, quality_routing=None):
     row = conn.execute('''SELECT j.*,w.policy_json,w.max_dispatches FROM pipeline_jobs j
         JOIN pipeline_routing_workflows w ON w.workflow_id=j.workflow_id WHERE j.job_id=?''', (job_id,)).fetchone()
     if row is None or row['kind'] in ('MACRO_PLANNING_REQUEST','CODE_REQUEST','CODE_TEST','CODE_INTEGRATE') or (row['kind']=='SYNTHESIS' and row['status']=='BLOCKED'):
@@ -196,6 +196,12 @@ def ensure_job(conn, job_id):
     policy = load_routing_policy(json.loads(row['policy_json']))
     score = score_task(row['kind'], json.loads(row['payload_json']),
                        scoring_version=2 if policy.as_dict()['policy_version'] == 3 else 1)
+    if quality_routing is not None:
+        from .quality_routing import apply_quality_floor
+        if (row['kind'] not in ('CODE_EDIT', 'CODE_TEST_AUTHOR', 'CODE_REVIEW', 'CODE_RESEARCH')
+                or json.loads(row['payload_json']).get('leaf_index') != quality_routing.get('leaf_index')):
+            raise ValueError('Quality routing must bind the controller-created coding leaf')
+        score = apply_quality_floor(score, quality_routing)
     candidates = [target.as_dict() for target in policy.candidates(score['score'], row['kind'])]
     if not candidates:
         raise ValueError('Routing policy must provide at least one target')
@@ -383,6 +389,11 @@ def _candidate_unavailability(conn, job, state, target, current_policy, now):
     same_author = (provider == producer.get('provider') if reconciliation else
                    (provider, target['model']) == (producer.get('provider'), producer.get('model')))
     reason = ('asymmetric_review' if job['kind'] in ('CODE_REVIEW', 'CODE_PLAN_REVIEW') and same_author else None)
+    quality = state['score_details'].get('quality_routing')
+    if quality and job['kind'] in ('CODE_EDIT', 'CODE_TEST_AUTHOR') and any(
+            (provider, target['model']) == (entry['provider'], entry['model'])
+            for entry in quality['excluded_models']):
+        reason = 'quality_pivot_previous_model'
     for scope,value in (('model',key),('provider',provider),('pool',pool)):
         held = conn.execute('SELECT reason FROM pipeline_route_holds WHERE scope=? AND resource_key=? AND until_at>?', (scope,value,now)).fetchone()
         if held:

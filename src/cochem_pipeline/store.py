@@ -451,7 +451,7 @@ class JobStore(CodingStoreMixin):
     @staticmethod
     def _insert(conn: sqlite3.Connection, job_id: str, workflow_id: str, parent: str | None,
                 kind: str, status: str, payload: dict, chapter_id: str | None = None,
-                max_attempts: int = 3) -> None:
+                max_attempts: int = 3, *, quality_routing: dict | None = None) -> None:
         timestamp = time.time()
         if parent is not None and 'governing_requirements' not in payload:
             root = conn.execute('SELECT payload_json FROM pipeline_jobs WHERE job_id=?', (workflow_id,)).fetchone()
@@ -461,7 +461,7 @@ class JobStore(CodingStoreMixin):
         conn.execute("""INSERT INTO pipeline_jobs(job_id,workflow_id,parent_job_id,kind,status,chapter_id,
             payload_json,created_at,updated_at,max_attempts) VALUES(?,?,?,?,?,?,?,?,?,?)""",
                      (job_id, workflow_id, parent, kind, status, chapter_id, canonical_json(payload), timestamp, timestamp, max_attempts))
-        routes.ensure_job(conn, job_id)
+        routes.ensure_job(conn, job_id, quality_routing=quality_routing)
 
     def submit(self, objective: str, requirements: list[str], chapter_count: int = 6,
                workflow_id: str | None = None, *, max_attempts: int | None = None,

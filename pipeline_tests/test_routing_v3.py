@@ -66,6 +66,14 @@ def test_supervisor_independently_decodes_complete_v3_capture():
     assert configured_tiers(policy.as_dict()) == {str(i): row for i, row in enumerate(EXPECTED, 1)}
 
 
+def test_new_configuration_can_explicitly_opt_into_v3_without_rewriting_v2():
+    from cochem_pipeline.routing import load_current_routing_policy
+    from cochem_supervisor.probes import configured_current_routing_policy
+    selected = load_current_routing_policy({'policy_version': 3})
+    assert configured_current_routing_policy(selected.as_dict()) == selected.as_dict()
+    assert load_current_routing_policy({'policy_version': 2}).as_dict()['policy_version'] == 2
+
+
 @pytest.mark.parametrize('kind', ['CODE_EDIT', 'CODE_TEST_AUTHOR', 'CODE_REVIEW'])
 def test_v2_scoring_reaches_small_coding_tiers_without_changing_old_scores(kind):
     from cochem_supervisor.probes import score_routing_task
