@@ -1,11 +1,12 @@
-R6 AGY PREFIX REPAIR + R7 — ONE REPLACEMENT OWNER COMMAND
-Prepared 2026-10-12. Source c3080c9. Supersedes the 70af569 owner command.
+R6 RECEIPT REPAIR + R7 — ONE REPLACEMENT OWNER COMMAND
+Prepared 2026-10-12. Source 2d63521. Supersedes the c3080c9 owner command.
 Earlier packages, failed attempts, sign-ins and the installed R6 are preserved.
 
-Why the earlier run stopped: my checker omitted Agy's exact "Error: " prefix
-on its native signed-out message. The six reported stderr hashes prove this
-specific message. Your regular signed-in Agy profile is separate from these six
-isolated pipeline worker profiles. Codex and Claude passed in all six profiles.
+Why the latest run stopped: my recovery check expected a "started" field that
+the real R4 start receipt does not contain. Your private log confirmed it. The
+check now validates the actual persisted receipt fields. This failure occurred
+before R4 was stopped, before sign-in and before any R7 installation. The earlier
+Agy prefix repair remains included; Codex/Claude sessions are reused.
 
 1. Open Windows PowerShell as Administrator under AETHERDESK\ansac; accept UAC.
 2. Paste the SINGLE command below and press Enter once.
@@ -14,7 +15,7 @@ isolated pipeline worker profiles. Codex and Claude passed in all six profiles.
    native instructions and paste the requested completion value into that same
    PowerShell window. Do not paste codes into this chat. Codex/Claude are reused.
 
-C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -File "C:\Users\ansac\CoChem427\r7-bundle-c3080c9\run_r7_launch.ps1" -LaunchManifest "C:\Users\ansac\CoChem427\r7-bundle-c3080c9\launch-manifest.json" -LaunchManifestSha256 7f68c8b54a7d10df8b725ee2efc8321941d59ee10b41586c6c2a99dbb0c29f40 -Apply
+C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -File "C:\Users\ansac\CoChem427\r7-bundle-2d63521\run_r7_launch.ps1" -LaunchManifest "C:\Users\ansac\CoChem427\r7-bundle-2d63521\launch-manifest.json" -LaunchManifestSha256 196d4e71658b427d3c832f4d4a929209ba35075277acaf7087da87497c6367ee -Apply
 
 All login input is limited to the first 20 minutes after this command starts.
 The command verifies the reviewed earlier failure and completed R4 restoration,
@@ -41,8 +42,8 @@ the prior controller is restored only where the reviewed rollback is safe.
 Success ends with R7_RUNNING_CATALOG_PUBLICATION_VERIFIED. This confirms this
 deployment transaction and control probe, not full 4.2.7 SRS acceptance.
 
-Engineering evidence: 93 focused serialized Windows source/inert PowerShell
-tests passed, including the exact 122-byte error reproduction and prior-task
-review. All three final packaged read-only plans passed. R7's application wheel
+Engineering evidence: 109 focused serialized Windows source/inert PowerShell
+tests passed, including production receipt construction and changed receipt/task
+refusals. All three final packaged read-only plans passed. R7's application wheel
 is identical to the earlier tested wheel; prior runtime verification was 330
 source tests. Actual repaired SYSTEM/provider acceptance is still owner-run work.

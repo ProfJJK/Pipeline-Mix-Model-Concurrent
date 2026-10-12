@@ -1,5 +1,25 @@
 # R7 owner deployment package
 
+## Current replacement: persisted R4 receipt repair
+
+The owner ran `r7-bundle-c3080c9`. Its R6 verification failed on an invented
+`started` field before stopping R4 or running providers. The error is confirmed
+by the owner's private-log excerpt and reproduced using the production receipt
+writer. See [the failure, repair and evidence](R6_RESTORE_RECEIPT_RECOVERY_2026-10-12.md).
+
+The current owner sheet is `docs/deployment/windows-deployment-next/RETURN_SETUP_R7.txt`.
+It points to source `2d63521cb2d4c4084c81f9fce75de615c5d33c8d` and immutable bundle
+`C:\Users\ansac\CoChem427\r7-bundle-2d63521`, with launch manifest SHA256
+`196d4e71658b427d3c832f4d4a929209ba35075277acaf7087da87497c6367ee`.
+Only the recovery receipt verifier differs among the 480 prerequisite inputs
+from the failed package. **109 source/inert tests passed** and all three actual
+packaged read-only plans passed in 9.98 seconds. The application wheel remains
+byte-identical; repaired host acceptance is still pending owner execution.
+
+All subsequent package descriptions below are historical and their commands
+are superseded. The initial 20-minute input window and unattended continuation
+remain unchanged.
+
 ## Replacement after the owner's R6 prerequisite hold
 
 The owner ran the earlier package below. R6 authentication held because the
