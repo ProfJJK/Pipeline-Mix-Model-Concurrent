@@ -2,7 +2,7 @@
   "schema": "cochem-requirements/4.2.7",
   "revision": "model-routing-2026-10-07",
   "specification_id": "COCHEM-4.2.7",
-  "specification_sha256": "724428cabba182bfcc7328200a454c806df45ebe4dcc9289c863b56975db3074",
+  "specification_sha256": "93fc9da6e975bc47a209b95a9d6ac345cba66ae65be7fa3a97b455abaf4ebc90",
   "requirements": [
     {
       "id": "S427-GOV-001",
@@ -1427,7 +1427,7 @@
     {
       "id": "S427-HOST-006",
       "chapter": "07: Shared concurrency and hardware",
-      "requirement": "Warden monitors its own measured RSS/CPU; violation of 50 MiB/5% pauses admission. Required native acceptance includes <15% actual desktop-heap allocation use and a 48-hour handle/resource stability run. USER/GDI counts cannot substitute for desktop-heap used/capacity evidence. Emergency teardown verifies physical descendants/container removal before any reservation is released.",
+      "requirement": "Warden monitors its own measured RSS/CPU; violation of 200 MiB/5% pauses admission. Owner amendment 2026-10-11: 50 MiB left under 10 MiB headroom over the ~40 MiB idle Python footprint and paused admission on allocator high-water; raised to 200 MiB. Required native acceptance includes <15% actual desktop-heap allocation use and a 48-hour handle/resource stability run. USER/GDI counts cannot substitute for desktop-heap used/capacity evidence. Emergency teardown verifies physical descendants/container removal before any reservation is released.",
       "mandatory": true,
       "code": [
         "src/cochem_pipeline/hardware_guard.py",
@@ -2961,7 +2961,7 @@
     {
       "id": "S427-PERF-005",
       "chapter": "16: Performance acceptance",
-      "requirement": "The owner amendment does not waive ≤30-second test+collection, knowledge index ≤4×/RSS <256 MiB, Warden 50 MiB/5%, native desktop heap <15%, 48-hour handle stability, or independent observation/recovery timing. Each needs its own measured disposition. Do not interpret “these numbers are acceptable” as a blanket exemption from other requirements.",
+      "requirement": "The owner amendment does not waive ≤30-second test+collection, knowledge index ≤4×/RSS <256 MiB, Warden 200 MiB/5%, native desktop heap <15%, 48-hour handle stability, or independent observation/recovery timing. Each needs its own measured disposition. Do not interpret “these numbers are acceptable” as a blanket exemption from other requirements. Owner amendment 2026-10-11: 50 MiB left under 10 MiB headroom over the ~40 MiB idle Python footprint and paused admission on allocator high-water; raised to 200 MiB.",
       "mandatory": true,
       "code": [
         "src/cochem_pipeline/queue_launch.py",
