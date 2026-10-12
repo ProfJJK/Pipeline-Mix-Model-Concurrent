@@ -1,7 +1,13 @@
 #Requires -Version 5.1
 <# Ends and disables the r4 CoChem-4.2.7-Warden for the Gemini sign-in series (decision 2B, build-manifest step 1).
    Derived from retarget-warden-r4.ps1 v2.2 (sha256 8ee6b412f6be176dfac7c2c1b2340f1973e08358c7d22da6d4515e79f0327a4e):
-   every function shared with v2.2 is a byte-identical copy, and the reviewed helpers are imported by hash as v2.2 does.
+   every function shared with v2.2 is a byte-identical copy except one line of Get-ControllerPresence (below), and the
+   reviewed helpers are imported by hash as v2.2 does.
+   2026-10-11 17:22 sitting fix: S2 (task enabled, no instance) held on the owner's four Antigravity bridge MCP clients
+   ("<runtime python>" -m cochem_mcp --provider codex|claude --config C:\Users\ansac\CoChem427\bridge.local.json: stdio
+   front ends of the job board that only call 127.0.0.1:47824 as clients, never bind it, never run as SYSTEM). A rooted
+   process whose command line is exactly that entry is now a GUI client, like 'cochem_pipeline mcp'; controller-like command
+   lines stay controllers from any image, and every other rooted process stays unclassified (and holds).
    Default is a read-only plan (cochem-warden-stop-plan/1). It reads the task, the managed daemon tasks, the processes,
    the loopback port and the controller's /health and /operator views, and prints the same idle predicate -Apply
    enforces. Unelevated, the SYSTEM-only task definition is unreadable and is deferred to -Apply.
@@ -180,7 +186,7 @@ function Get-ControllerPresence {
         $entry=[ordered]@{pid=$process.ProcessId;parent=$process.ParentProcessId;path=$path;command=$command}
         if($command -match 'cochem_pipeline\s+daemon\b|cochem_supervisor\b|provision-execution\b|cochem-supervisor\b|cochem-pipeline(\.exe)?"?\s+daemon\b'){$controllers+=$entry}
         elseif($command -match $script:observerPattern){$observers+=$entry}
-        elseif($rooted -and $command -match 'cochem_pipeline\s+(mcp|health|status|submit|cancel|projects|code|code-status|code-cancel|code-resume|knowledge-\w+)\b'){$clients+=$entry}
+        elseif($rooted -and ($command -match 'cochem_pipeline\s+(mcp|health|status|submit|cancel|projects|code|code-status|code-cancel|code-resume|knowledge-\w+)\b' -or $command -cmatch '^"[^"]+\\python\.exe" -m cochem_mcp --provider (codex|claude) --config C:\\Users\\ansac\\CoChem427\\bridge\.local\.json\z')){$clients+=$entry}
         elseif($rooted){$unclassified+=$entry}
         elseif(-not $path -and -not $command -and $name -match '^python(w)?\.exe$'){$uninspectable++}
     }

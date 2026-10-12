@@ -21,6 +21,7 @@ import hashlib
 import http.server
 import json
 from pathlib import Path
+import re
 import subprocess
 import sys
 import threading
@@ -844,6 +845,85 @@ def test_stop_apply_path_with_the_live_mcp_clients_uses_the_real_presence(tmp_pa
         assert value['stops'] == 0 and receipt['mode'] == 'ALREADY_STOPPED'
     for write in value['enabled_writes']:
         assert write['value'] is False and write['instances'] == 0 and write['port_free'] is True and write['alive'] == 0
+
+
+# --------------------------------------------------------------------------------------------------------------------
+# Static binding rules (the two 17:22 failure classes, guarded here although stop-warden-r4.ps1 has neither)
+# --------------------------------------------------------------------------------------------------------------------
+
+def reviewed_imports(text):
+    """The helpers Invoke-StopWardenMain imports by hash: [{path, names}], each file re-hashed against its pin."""
+    main = text[text.index('function Invoke-StopWardenMain'):]
+    copy_helper = re.search(r"\$copyHelper='([^']+)'", main).group(1)
+    out = []
+    for match in re.finditer(r"Import-ReviewedFunctions (\$copyHelper|\(Join-Path \$PSScriptRoot '([^']+)'\)) '([0-9a-f]{64})' @\(([^)]*)\)", main):
+        path = copy_helper if match.group(1) == '$copyHelper' else str(ROOT / match.group(2))
+        assert hashlib.sha256(Path(path).read_bytes()).hexdigest() == match.group(3), path
+        out.append({'path': path, 'names': re.findall(r"'([^']+)'", match.group(4))})
+    return out
+
+
+# Rule (a): no parameter variable is ever assigned at script or global scope, top level or through *-Variable (a script-scope
+# parameter variable keeps its [Validate*] attributes, so '' can throw - the retarget-warden-r5 17:22 crash). Rule (b): no
+# function but the main binds a name that an imported reviewed helper reads freely (by dynamic scope) - the stop-warden-r5
+# Read-StartReceipt $held trap.
+STATIC_RULES = r'''
+$ErrorActionPreference='Stop';Set-StrictMode -Version Latest
+$spec=[IO.File]::ReadAllText('SPECPATH')|ConvertFrom-Json
+$auto=@('_','null','true','false','args','this','input','PSScriptRoot','PSCommandPath','PSHOME','ErrorActionPreference','PSItem','LASTEXITCODE','matches',
+        'PSCmdlet','MyInvocation','PSBoundParameters','Error','ExecutionContext','Host','PID','PWD','HOME','PSVersionTable','ProgressPreference',
+        'VerbosePreference','WarningPreference','ConfirmPreference','DebugPreference','InformationPreference','foreach','switch','StackTrace')
+function Get-BoundNames {param($Ast)
+  foreach($p in $Ast.FindAll({param($n)$n -is [Management.Automation.Language.ParameterAst]},$true)){$p.Name.VariablePath.UserPath}
+  foreach($s in $Ast.FindAll({param($n)$n -is [Management.Automation.Language.AssignmentStatementAst]},$true)){
+    $l=$s.Left;while($l -is [Management.Automation.Language.AttributedExpressionAst]){$l=$l.Child}
+    if($l -is [Management.Automation.Language.VariableExpressionAst] -and -not ($l.VariablePath.IsScript -or $l.VariablePath.IsGlobal)){$l.VariablePath.UserPath}}
+  foreach($s in $Ast.FindAll({param($n)$n -is [Management.Automation.Language.ForEachStatementAst]},$true)){$s.Variable.VariablePath.UserPath}}
+$free=[Collections.Generic.SortedSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+foreach($helper in @($spec.helpers)){
+  $t=$null;$e=$null;$h=[Management.Automation.Language.Parser]::ParseFile([string]$helper.path,[ref]$t,[ref]$e)
+  foreach($name in @($helper.names)){
+    $fn=@($h.FindAll({param($n)$n -is [Management.Automation.Language.FunctionDefinitionAst]},$true)|Where-Object {$_.Name -ceq $name})
+    if($fn.Count -ne 1){throw ('reviewed helper not found exactly once: '+$name)}
+    $bound=[Collections.Generic.HashSet[string]]::new([string[]]@(@(Get-BoundNames $fn[0])+$auto),[StringComparer]::OrdinalIgnoreCase)
+    foreach($v in $fn[0].FindAll({param($n)$n -is [Management.Automation.Language.VariableExpressionAst]},$true)){
+      $p=$v.VariablePath;if($p.IsScript -or $p.IsGlobal -or $p.IsDriveQualified -or $p.IsPrivate){continue}
+      if(-not $bound.Contains($p.UserPath)){$null=$free.Add($p.UserPath)}}}}
+$t=$null;$e=$null;$a=[Management.Automation.Language.Parser]::ParseFile('SCRIPTPATH',[ref]$t,[ref]$e)
+$params=@($a.ParamBlock.Parameters|ForEach-Object {$_.Name.VariablePath.UserPath})
+$writes=@()
+foreach($s in $a.FindAll({param($n)$n -is [Management.Automation.Language.AssignmentStatementAst]},$true)){
+  $l=$s.Left;while($l -is [Management.Automation.Language.AttributedExpressionAst]){$l=$l.Child}
+  if($l -isnot [Management.Automation.Language.VariableExpressionAst]){continue}
+  $path=$l.VariablePath;$name=$path.UserPath -replace '^(?i)(script|global|local|private):',''
+  if($params -notcontains $name){continue}
+  $inFunction=$false;$q=$s.Parent;while($null -ne $q){if($q -is [Management.Automation.Language.FunctionDefinitionAst]){$inFunction=$true;break};$q=$q.Parent}
+  if($path.IsScript -or $path.IsGlobal -or -not $inFunction){$writes+=('line '+$s.Extent.StartLineNumber+': '+$s.Extent.Text)}}
+foreach($c in $a.FindAll({param($n)$n -is [Management.Automation.Language.CommandAst]},$true)){
+  $cn=$c.GetCommandName();if($cn -and @('Set-Variable','New-Variable','Clear-Variable','Remove-Variable','sv','nv','clv','rv') -contains $cn){$writes+=('line '+$c.Extent.StartLineNumber+': '+$c.Extent.Text)}}
+$shadows=@()
+foreach($fn in $a.FindAll({param($n)$n -is [Management.Automation.Language.FunctionDefinitionAst]},$true)){
+  if($fn.Name -ceq 'Invoke-StopWardenMain'){continue}
+  foreach($name in @(Get-BoundNames $fn|Sort-Object -Unique)){if($free.Contains($name)){$shadows+=($fn.Name+' binds $'+$name)}}}
+[ordered]@{params=$params;writes=$writes;free=@($free);shadows=$shadows}|ConvertTo-Json -Depth 4 -Compress
+'''
+
+
+def test_no_parameter_variable_is_assigned_and_no_function_shadows_what_a_reviewed_helper_reads(tmp_path):
+    text = SCRIPT.read_text(encoding='ascii')
+    helpers = reviewed_imports(text)
+    assert [h['names'] for h in helpers] == [['Assert-NoReparseAncestors', 'Assert-ProtectedPath', 'New-CodeAcl', 'New-ProtectedDirectory', 'Initialize-FileIdentity', 'Open-VerifiedFile'],
+                                             ['Read-R3Control', 'Read-R3Text'], ['Assert-RegisteredTaskAcl', 'Write-RegistrationControl'], ['Assert-CodeTreeOnce']]
+    (tmp_path / 'spec.json').write_text(json.dumps({'helpers': helpers}), encoding='utf-8')
+    (tmp_path / 'rules.ps1').write_text(STATIC_RULES.replace('SPECPATH', ps(tmp_path / 'spec.json')).replace('SCRIPTPATH', ps(SCRIPT)), encoding='utf-8')
+    command = "$ErrorActionPreference='Stop';. ([scriptblock]::Create([IO.File]::ReadAllText('" + ps(tmp_path / 'rules.ps1') + "')))"
+    result = subprocess.run(['powershell.exe', '-NoProfile', '-NonInteractive', '-Command', command], capture_output=True, text=True, timeout=120)
+    assert result.returncode == 0, result.stderr[-4000:]
+    value = json.loads(result.stdout)
+    assert value['params'] == ['Apply', 'Attempt', 'IdleWaitSeconds', 'ExitWaitSeconds']
+    assert value['writes'] == [], 'a script-scope parameter variable keeps its [Validate*] attributes; never assign one'
+    assert value['free'] == ['held'], 'Read-R3Control adds each stream to the caller-scope $held list'
+    assert value['shadows'] == [], 'only Invoke-StopWardenMain may bind $held (its stream list)'
 
 
 # --------------------------------------------------------------------------------------------------------------------

@@ -6,8 +6,9 @@ WSL, Docker or a VM. The script's functions are extracted from its AST and dot-s
 (Initialize-StagerHost), the protected-ancestry and ACL reads (Assert-ProtectedPath, Get-StagingAclSummary), the protected
 descriptor applied at creation (New-StagingSecurity: a DACL-only descriptor that keeps the test user able to clean up),
 Read-R3Control (no protection checks under tmp_path) and the r5 parser (Invoke-NativeJudged). The apply path is exercised
-only at function level inside that sandbox. The script file itself is never run top level (deploy audit B-F7): even the
-parameter refusals go through Invoke-StagePipelineConfigR5Entry loaded from the AST with the host calls stubbed. The
+only at function level inside that sandbox. The script file itself is never run top level on the real host (deploy audit
+B-F7): even the parameter refusals go through Invoke-StagePipelineConfigR5Entry loaded from the AST with the host calls
+stubbed; the only top-level runs are the plan-mode smoke tests at the end, through ps_toplevel_smoke.py (stubbed host). The
 real commissioned pipeline.json and the builder are read read-only to build fixtures and pins.
 """
 import hashlib
@@ -18,6 +19,8 @@ import subprocess
 from pathlib import Path
 
 import pytest
+
+import ps_toplevel_smoke as smoke
 
 ROOT = Path(__file__).parent
 SCRIPT = ROOT / 'stage-pipeline-config-r5-v1.ps1'
@@ -1411,3 +1414,27 @@ def test_entry_prints_the_lines_last_the_status_line_and_returns_the_exit_code(t
     assert lines[-4:-1][0] == '{"doc":1}' and json.loads(lines[-3]) == {'status': 'HELD', 'exit_code': 13}
     internal = json.loads(lines[-2])
     assert list(internal) == STATUS_KEYS and internal['status'] == 'HELD' and internal['exit_code'] == 30 and 'boom' in internal['reason']
+
+
+# ------------------------------------------------------------------- top level, plan mode only (ps_toplevel_smoke.py)
+# The REAL script top level (param block, binding, exit mapping: the 2026-10-11 17:22 failure class) with the host stubbed;
+# the helper refuses -Apply. RUN_427_R5_SITTING.ps1 S9 runs '-BuildDirectory <S09 build dir> -Attempt vC' (plan, then -Apply).
+# The stub world has no build directory, so the plan must end in the stager's own HELD document (phase DECISION, exit 10)
+# after the parameter, host, identity, constants and helper-import phases, never in a PowerShell error.
+
+SMOKE_BUILD = r'C:\Program Files\CoChem\R5Sitting4.2.7-windows-20261011-v2\S09-build-20261011-190000'
+
+
+@pytest.mark.parametrize('invocation', ['file', 'command'])
+@pytest.mark.parametrize('attempt', ['v1', 'v2', 'v12'])
+def test_toplevel_documented_sitting_call_reaches_the_decision_read(attempt, invocation):
+    result = smoke.run_toplevel(SCRIPT, ['-BuildDirectory', SMOKE_BUILD, '-Attempt', attempt], invocation=invocation)
+    result.raise_for_harness()
+    assert not result.denied and result.error is None and not result.binding_error, result.describe()
+    lines = [line for line in result.stdout.splitlines() if line.strip()]
+    status = json.loads(lines[-1])
+    assert list(status) == STATUS_KEYS and (status['status'], status['exit_code'], result.exit_code) == ('HELD', 10, 10), result.describe()
+    assert status['reason'] == 'The build directory does not exist: ' + SMOKE_BUILD
+    held = json.loads('\n'.join(lines[:-1]))
+    assert held['schema'] == 'cochem-config-only-staging-held/2' and held['phase'] == 'DECISION' and held['changed'] is False
+    assert held['target_path'] == f'C:\\Program Files\\CoChem\\WardenConfig4.2.7-windows-20261011-r5-{attempt}\\pipeline.json'

@@ -7,8 +7,9 @@ a stub interpreter: a copy of the repository venv launcher whose site-packages h
 prints fixture JSON. One integration test runs the REAL cochem_pipeline upgrade-preview of the repository source
 against a temporary configuration pair and a temporary SQLite job board (in-process only: local files, no provider).
 The wrapper's functions are extracted from its AST and dot-sourced into a throwaway Windows PowerShell 5.1 with every
-system call stubbed (Task Scheduler COM objects, protected-path checks, file copies). The wrapper is never run top
-level and never with -Apply (run_ps refuses any body that names -Apply).
+system call stubbed (Task Scheduler COM objects, protected-path checks, file copies). The wrapper is never run with
+-Apply (run_ps refuses any body that names -Apply), and top level only by the plan-mode smoke tests at the end, through
+ps_toplevel_smoke.py (stubbed host; it refuses -Apply as well).
 """
 import ctypes
 import dataclasses
@@ -24,6 +25,8 @@ import sys
 from types import SimpleNamespace
 
 import pytest
+
+import ps_toplevel_smoke as smoke
 
 ROOT = Path(__file__).parent
 RUNNER = ROOT / 'run_upgrade_preview_r5_v1.py'
@@ -1519,3 +1522,40 @@ def test_write_outcome_prints_success_only_for_an_exact_boolean_pass(tmp_path):
     assert cases['pass'] == {'case': 'pass', 'ok': True, 'value': 'S10 upgrade preview gate passed'}
     assert cases['stop']['ok'] is False and cases['stop']['error'].startswith('SERIES-STOP (S10)')
     assert cases['odd']['ok'] is False
+
+
+# ------------------------------------------------------------------- top level, plan mode only (ps_toplevel_smoke.py)
+# The REAL wrapper top level (param block, binding, the hash-pinned helper imports: the 2026-10-11 17:22 failure class and
+# the retarget-warden-r5 pin cascade) with the host stubbed; the helper refuses -Apply. RUN_427_R5_SITTING.ps1 S10 runs
+# '-Attempt <hex> -CandidateSha256 <staged sha256> -Candidate <staged path>' (plan, then -Apply).
+
+SMOKE_PLAN_SCHEMA = 'cochem-upgrade-preview-r5-plan/1'
+SMOKE_CANDIDATE = r'C:\Program Files\CoChem\WardenConfig4.2.7-windows-20261011-r5-v2\pipeline.json'
+
+
+def test_validated_parameter_variables_are_written_only_with_checked_values():
+    body = ("$t=$null;$e=$null;$a=[Management.Automation.Language.Parser]::ParseFile('" + psq(SCRIPT) + "',[ref]$t,[ref]$e);if($e.Count){throw $e[0]};"
+            "$v=@{};foreach($p in @($a.ParamBlock.Parameters)){if(@($p.Attributes|Where-Object{$_.TypeName.Name -like 'Validate*'}).Count){$v[$p.Name.VariablePath.UserPath.ToLowerInvariant()]=1}};"
+            "$hits=@(foreach($n in $a.FindAll({param($x)$x -is [Management.Automation.Language.AssignmentStatementAst]},$true)){"
+            "$targets=@($n.Left);if($n.Left -is [Management.Automation.Language.ArrayLiteralAst]){$targets=@($n.Left.Elements)};"
+            "foreach($l in $targets){if($l -is [Management.Automation.Language.ConvertExpressionAst]){$l=$l.Child};if($l -isnot [Management.Automation.Language.VariableExpressionAst]){continue};"
+            "$name=($l.VariablePath.UserPath -replace '^(script|global|local|private):','').ToLowerInvariant();"
+            "$f=$n.Parent;while($null -ne $f -and $f -isnot [Management.Automation.Language.FunctionDefinitionAst]){$f=$f.Parent};"
+            "if($v.ContainsKey($name) -and ($l.VariablePath.IsScript -or $l.VariablePath.IsGlobal -or $null -eq $f)){$l.Extent.Text+'='+$n.Right.Extent.Text}}});"
+            "$sv=@($a.FindAll({param($x)$x -is [Management.Automation.Language.CommandAst] -and $x.GetCommandName() -in @('Set-Variable','New-Variable','sv','nv')},$true)).Count;"
+            "'RESULT '+(@{validated=@($v.Keys|Sort-Object);hits=@($hits);set_variable=$sv}|ConvertTo-Json -Compress)")
+    result = subprocess.run([PS, '-NoProfile', '-NonInteractive', '-Command', body], capture_output=True, text=True, timeout=120)
+    assert result.returncode == 0, result.stderr
+    value = json.loads(next(line for line in result.stdout.splitlines() if line.startswith('RESULT '))[len('RESULT '):])
+    assert value['validated'] == ['attempt'] and value['set_variable'] == 0
+    # Set-PreviewConstants receives the -Attempt Assert-PreviewParameters checked (lowercase 32-hex, -cnotmatch).
+    assert value['hits'] == ['$script:Attempt=$Attempt']
+
+
+@pytest.mark.parametrize('invocation', ['file', 'command'])
+def test_toplevel_plan_for_the_documented_sitting_call(invocation):
+    args = ['-Attempt', ATTEMPT, '-CandidateSha256', 'e' * 64, '-Candidate', SMOKE_CANDIDATE]
+    result = smoke.run_toplevel(SCRIPT, args, invocation=invocation)
+    assert smoke.plan_mode_outcome(result, plan_schema=SMOKE_PLAN_SCHEMA) == 'plan', result.describe()
+    plan = result.plan
+    assert plan['attempt'] == ATTEMPT and plan['target_root'] == str(COCHEM / ROOT_NAME) and isinstance(plan['holds'], list)

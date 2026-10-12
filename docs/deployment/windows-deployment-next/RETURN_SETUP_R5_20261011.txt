@@ -5,12 +5,13 @@ rest runs by itself. Claude and Codex end up working whatever happens with Gemin
 BEFORE: Docker Desktop running ("Engine running"); stay signed in as ansac during and after.
 Internet on (r5 downloads its Python packages); a browser on your Google account. Submit no
 pipeline work from any GUI until the window says DONE or STOP (no GUI needs a change afterwards).
+Claude Desktop, Codex, Antigravity and Claude Code may stay open: their MCP clients are recognised.
 
 THE COMMAND. Start > type Windows PowerShell (the plain entry: not x86, not PowerShell 7) >
 Run as administrator > accept UAC. Paste these two lines, press Enter ($HOME = C:\Users\ansac):
 
-  cd "$HOME\Documents\Codex\2026-10-06\the-github-repository-is-located-at\windows-deployment-next"
-  powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\RUN_427_R5_SITTING.ps1 -Apply
+ cd "$HOME\Documents\Codex\2026-10-06\the-github-repository-is-located-at\windows-deployment-next"
+ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\RUN_427_R5_SITTING.ps1 -Apply -Attempt v2
 
 Options: no -Apply = print the plan only; -Gemini skip = no Gemini (default -Gemini attempt);
 -SkipFixProof = no S14; -Attempt v2 etc. only when the agent names one; default -EffortNullSlug.
@@ -80,6 +81,9 @@ IF IT ENDS WITH A RED "STOP at Sxx: ..." LINE (for example "STOP at S10: ..."): 
 and the Held, Log and Sitting root lines printed with it, and send them to the agent.
   "Docker Desktop engine is not answering ..." (S0 or S11): that step changed nothing; start
   Docker Desktop, wait for "Engine running", stay signed in, then run the same command again.
+  "Runtime processes the cutover scripts do not recognise are running: pid ..." (S0): nothing
+  changed; send that line to the agent (or close the program that started the listed
+  processes), then run the same command again.
   Other reasons (e.g. "S10: the upgrade preview bound another r5 installation", "S11: the r5
   start receipt does not bind this sitting", "S12: ... admission_ready is not true") are safety
   checks. On most failures after r5 started or was being started (an interrupted or crashed

@@ -42,7 +42,7 @@ import ps_toplevel_smoke as smoke
 ROOT = Path(__file__).parent
 SCRIPT = ROOT / 'stop-warden-r5.ps1'
 STOP_R4 = ROOT / 'stop-warden-r4.ps1'
-STOP_R4_SHA256 = 'bd54cb8194d256109aa8dae95451b87780566f7094f26f52d251840944bbc71b'
+STOP_R4_SHA256 = '43fc386b1984447c1d5304a8297932c8f825735562b5dbc5dc3f23a211adbe7e'
 V22 = ROOT / 'retarget-warden-r4.ps1'
 V22_SHA256 = '8ee6b412f6be176dfac7c2c1b2340f1973e08358c7d22da6d4515e79f0327a4e'
 REGISTER = ROOT / 'register-stopped-warden-r3.ps1'
@@ -2859,3 +2859,451 @@ def test_retarget_warden_r5_source_lineage_accepts_this_stop_receipt(tmp_path, c
     record = out['record']
     assert record['source_state'] == LINEAGE_CASES[case] and record['stop_start_binding'] == receipt['start_binding']
     assert record['stop_receipt_sha256'] == sha((target / 'stop-receipt.json').read_bytes()) and record['source_receipt_sha256'] == info['retarget_sha256']
+
+
+# --------------------------------------------------------------------------------------------------------------------
+# 2026-10-11 17:22 (1): Read-R3Control finds the caller's stream list $held by dynamic scope
+# --------------------------------------------------------------------------------------------------------------------
+
+def reviewed_imports(text):
+    """The helpers Invoke-StopWardenMain imports by hash: [{path, names}], each file re-hashed against its pin."""
+    main = text[text.index('function Invoke-StopWardenMain'):]
+    copy_helper = re.search(r"\$copyHelper='([^']+)'", main).group(1)
+    out = []
+    for match in re.finditer(r"Import-ReviewedFunctions (\$copyHelper|\(Join-Path \$PSScriptRoot '([^']+)'\)) '([0-9a-f]{64})' @\(([^)]*)\)", main):
+        path = copy_helper if match.group(1) == '$copyHelper' else str(ROOT / match.group(2))
+        assert sha(Path(path).read_bytes()) == match.group(3), path
+        out.append({'path': path, 'names': re.findall(r"'([^']+)'", match.group(4))})
+    return out
+
+
+# Rule (a): no parameter variable is ever assigned at script or global scope, top level or through *-Variable (a script-scope
+# parameter variable keeps its [Validate*] attributes, so '' can throw - the retarget-warden-r5 17:22 crash). Rule (b): no
+# function but the main binds a name that an imported reviewed helper reads freely (by dynamic scope).
+STATIC_RULES = r'''
+$ErrorActionPreference='Stop';Set-StrictMode -Version Latest
+$spec=[IO.File]::ReadAllText('SPECPATH')|ConvertFrom-Json
+$auto=@('_','null','true','false','args','this','input','PSScriptRoot','PSCommandPath','PSHOME','ErrorActionPreference','PSItem','LASTEXITCODE','matches',
+        'PSCmdlet','MyInvocation','PSBoundParameters','Error','ExecutionContext','Host','PID','PWD','HOME','PSVersionTable','ProgressPreference',
+        'VerbosePreference','WarningPreference','ConfirmPreference','DebugPreference','InformationPreference','foreach','switch','StackTrace')
+function Get-BoundNames {param($Ast)
+  foreach($p in $Ast.FindAll({param($n)$n -is [Management.Automation.Language.ParameterAst]},$true)){$p.Name.VariablePath.UserPath}
+  foreach($s in $Ast.FindAll({param($n)$n -is [Management.Automation.Language.AssignmentStatementAst]},$true)){
+    $l=$s.Left;while($l -is [Management.Automation.Language.AttributedExpressionAst]){$l=$l.Child}
+    if($l -is [Management.Automation.Language.VariableExpressionAst] -and -not ($l.VariablePath.IsScript -or $l.VariablePath.IsGlobal)){$l.VariablePath.UserPath}}
+  foreach($s in $Ast.FindAll({param($n)$n -is [Management.Automation.Language.ForEachStatementAst]},$true)){$s.Variable.VariablePath.UserPath}}
+$free=[Collections.Generic.SortedSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+foreach($helper in @($spec.helpers)){
+  $t=$null;$e=$null;$h=[Management.Automation.Language.Parser]::ParseFile([string]$helper.path,[ref]$t,[ref]$e)
+  foreach($name in @($helper.names)){
+    $fn=@($h.FindAll({param($n)$n -is [Management.Automation.Language.FunctionDefinitionAst]},$true)|Where-Object {$_.Name -ceq $name})
+    if($fn.Count -ne 1){throw ('reviewed helper not found exactly once: '+$name)}
+    $bound=[Collections.Generic.HashSet[string]]::new([string[]]@(@(Get-BoundNames $fn[0])+$auto),[StringComparer]::OrdinalIgnoreCase)
+    foreach($v in $fn[0].FindAll({param($n)$n -is [Management.Automation.Language.VariableExpressionAst]},$true)){
+      $p=$v.VariablePath;if($p.IsScript -or $p.IsGlobal -or $p.IsDriveQualified -or $p.IsPrivate){continue}
+      if(-not $bound.Contains($p.UserPath)){$null=$free.Add($p.UserPath)}}}}
+$t=$null;$e=$null;$a=[Management.Automation.Language.Parser]::ParseFile('SCRIPTPATH',[ref]$t,[ref]$e)
+$params=@($a.ParamBlock.Parameters|ForEach-Object {$_.Name.VariablePath.UserPath})
+$writes=@()
+foreach($s in $a.FindAll({param($n)$n -is [Management.Automation.Language.AssignmentStatementAst]},$true)){
+  $l=$s.Left;while($l -is [Management.Automation.Language.AttributedExpressionAst]){$l=$l.Child}
+  if($l -isnot [Management.Automation.Language.VariableExpressionAst]){continue}
+  $path=$l.VariablePath;$name=$path.UserPath -replace '^(?i)(script|global|local|private):',''
+  if($params -notcontains $name){continue}
+  $inFunction=$false;$q=$s.Parent;while($null -ne $q){if($q -is [Management.Automation.Language.FunctionDefinitionAst]){$inFunction=$true;break};$q=$q.Parent}
+  if($path.IsScript -or $path.IsGlobal -or -not $inFunction){$writes+=('line '+$s.Extent.StartLineNumber+': '+$s.Extent.Text)}}
+foreach($c in $a.FindAll({param($n)$n -is [Management.Automation.Language.CommandAst]},$true)){
+  $cn=$c.GetCommandName();if($cn -and @('Set-Variable','New-Variable','Clear-Variable','Remove-Variable','sv','nv','clv','rv') -contains $cn){$writes+=('line '+$c.Extent.StartLineNumber+': '+$c.Extent.Text)}}
+$shadows=@()
+foreach($fn in $a.FindAll({param($n)$n -is [Management.Automation.Language.FunctionDefinitionAst]},$true)){
+  if($fn.Name -ceq 'Invoke-StopWardenMain'){continue}
+  foreach($name in @(Get-BoundNames $fn|Sort-Object -Unique)){if($free.Contains($name)){$shadows+=($fn.Name+' binds $'+$name)}}}
+[ordered]@{params=$params;writes=$writes;free=@($free);shadows=$shadows}|ConvertTo-Json -Depth 4 -Compress
+'''
+
+
+def test_no_parameter_variable_is_assigned_and_no_function_shadows_what_a_reviewed_helper_reads(tmp_path):
+    text = SCRIPT.read_text(encoding='ascii')
+    helpers = reviewed_imports(text)
+    assert [h['names'] for h in helpers] == [['Assert-NoReparseAncestors', 'Assert-ProtectedPath', 'New-CodeAcl', 'New-ProtectedDirectory', 'Initialize-FileIdentity', 'Open-VerifiedFile'],
+                                             ['Read-R3Control', 'Read-R3Text'], ['Assert-RegisteredTaskAcl', 'Write-RegistrationControl'], ['Assert-CodeTreeOnce']]
+    (tmp_path / 'spec.json').write_text(json.dumps({'helpers': helpers}), encoding='utf-8')
+    value = run_json(STATIC_RULES.replace('SPECPATH', ps(tmp_path / 'spec.json')).replace('SCRIPTPATH', ps(SCRIPT)), tmp_path, prelude=False)
+    assert value['params'] == ['Apply', 'Attempt', 'RetargetAttempt', 'RetargetTarget', 'IdleWaitSeconds', 'ExitWaitSeconds', 'RecoverInterruptedStart']
+    assert value['writes'] == [], 'a script-scope parameter variable keeps its [Validate*] attributes; never assign one'
+    assert value['free'] == ['held'], 'Read-R3Control adds each stream to the caller-scope $held list'
+    assert value['shadows'] == [], 'only Invoke-StopWardenMain may bind $held (its stream list); any other binding is found first by the helper'
+    main = text[text.index('function Invoke-StopWardenMain'):]
+    assert main.count('$held=[Collections.Generic.List[IO.FileStream]]::new()') == 1 and 'foreach($stream in $held){$stream.Dispose()}' in main
+
+
+# The reviewed Read-R3Control and Read-R3Text, imported by hash exactly as Invoke-StopWardenMain imports them (so they add every
+# stream to $held by dynamic scope); only what they call underneath is redirected to the fixture tree: the protected-ancestry
+# check (recorded), Get-Item, Get-FileHash and Open-VerifiedFile (a real read-only FileStream, length and digest checked).
+REAL_READ = r'''
+foreach($text in Import-ReviewedFunctions 'CHECKPATH' '18f58ebb448d8a0c6329dd187d4a9a27fa9cbe942cd05e906bb7aabc67e787a7' @('Read-R3Control','Read-R3Text')){. ([scriptblock]::Create($text))}
+$script:protectedChecks=0
+function Assert-ProtectedPath {param([string]$Path)$script:protectedChecks++}
+function Get-Item {param([string]$LiteralPath,[switch]$Force)Microsoft.PowerShell.Management\Get-Item -LiteralPath (Resolve-Fx $LiteralPath) -Force}
+function Get-FileHash {param([string]$LiteralPath,[string]$Algorithm)Microsoft.PowerShell.Utility\Get-FileHash -LiteralPath (Resolve-Fx $LiteralPath) -Algorithm $Algorithm}
+function Open-VerifiedFile {param([string]$Path,[string]$Sha256,[long]$Length)
+  $stream=[IO.File]::Open((Resolve-Fx $Path),[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::Read)
+  try{if($stream.Length -ne $Length){throw ('Source length changed: '+$Path)}
+    $sha=[Security.Cryptography.SHA256]::Create();try{$digest=[BitConverter]::ToString($sha.ComputeHash($stream)).Replace('-','').ToLowerInvariant()}finally{$sha.Dispose()}
+    if($digest -ne $Sha256){throw ('Source digest changed: '+$Path)};$stream.Position=0;return ,$stream}catch{$stream.Dispose();throw}}
+'''.replace('CHECKPATH', ps(ROOT / 'check-worker-native-status-r3.ps1'))
+
+
+def test_read_start_receipt_with_the_real_read_r3_control_binds_every_start_kind(tmp_path):
+    """The 17:22 trap, unstubbed: before the fix every kind threw 'You cannot call a method on a null-valued expression'."""
+    cases = {'r5_start_receipt': (None, False, 'START_RECEIPT'), 'r5_interrupted_held': (held_record(), True, 'START_INTERRUPTED_HELD'),
+             'r5_held_after_health_gate': (held_record(interrupted=False, health_gate_passed=True, stage='RECEIPT'), True, 'START_HELD_AFTER_HEALTH_GATE'),
+             'r5_crashed_no_record': (no_start_receipt, True, 'START_CRASHED_NO_RECORD')}
+    lines = [FX_READ, STUBS, REAL_READ, '$out=[ordered]@{}']
+    for name, (mutator, recover, _) in cases.items():
+        ctx = runtime_ctx()
+        if mutator:
+            mutator(ctx)
+        info = materialize(ctx, tmp_path / name)
+        lines.append(f"Set-StopConstants;$script:RecoverInterruptedStart=${str(recover).lower()};Use-Fixture '{ps(info['base'])}' '{info['config_pin']}' '{info['probe_pin']}' "
+                     f"('{json.dumps(info['pins'])}'|ConvertFrom-Json);$before=$held.Count;$script:protectedChecks=0")
+        lines.append("$m='';$receipt=$null;$bindings=$null;try{$receipt=Read-StartReceipt;$bindings=Assert-TargetRuntimeBindings $receipt}catch{$m=$_.Exception.Message}")
+        lines.append(f"$out['{name}']=[ordered]@{{message=$m;binding=$script:startBinding;added=($held.Count-$before);"
+                     "types=@(@($held)|Select-Object -Skip $before|ForEach-Object {if($null -eq $_){'null'}else{$_.GetType().FullName}}|Sort-Object -Unique);"
+                     "protected=$script:protectedChecks;runtime=$(if($bindings){$bindings.runtime}else{$null})}")
+    info = write_r4_receipt(tmp_path / 'r4', None)
+    lines.append(f"$script:RetargetTarget='r4';Set-StopConstants;$script:RecoverInterruptedStart=$false;Use-Fixture '{ps(info['base'])}' '{CONFIG_PIN}' '{BASE_PY_PIN}';$before=$held.Count;$script:protectedChecks=0")
+    lines.append("$m='';$receipt=$null;$bindings=$null;try{$receipt=Read-StartReceipt;$bindings=Assert-TargetRuntimeBindings $receipt}catch{$m=$_.Exception.Message}")
+    lines.append("$out['r4_start_receipt']=[ordered]@{message=$m;binding=$script:startBinding;added=($held.Count-$before);"
+                 "types=@(@($held)|Select-Object -Skip $before|ForEach-Object {if($null -eq $_){'null'}else{$_.GetType().FullName}}|Sort-Object -Unique);"
+                 "protected=$script:protectedChecks;runtime=$(if($bindings){$bindings.runtime}else{$null})}")
+    lines.append('foreach($stream in $held){if($null -ne $stream){$stream.Dispose()}}')
+    lines.append('$out|ConvertTo-Json -Depth 4 -Compress')
+    value = run_json('\n'.join(lines), tmp_path, timeout=300)
+    cases['r4_start_receipt'] = (None, False, 'START_RECEIPT')
+    for name, (_, _, binding) in cases.items():
+        result = value[name]
+        assert result['message'] == '', (name, result['message'])
+        assert result['binding'] == binding and result['runtime'] == name[:2], (name, result)
+        assert result['added'] >= 4 and result['added'] == result['protected'] and result['types'] == ['System.IO.FileStream'], \
+            (name, result, 'every bound read is held open in the main stream list, behind a protected-path check')
+
+
+# --------------------------------------------------------------------------------------------------------------------
+# 2026-10-11 17:22 (2): the real Get-ControllerPresence over the live MCP clients (Win32_Process and the port stubbed)
+# --------------------------------------------------------------------------------------------------------------------
+
+BRIDGE_CONFIG = r'C:\Users\ansac\CoChem427\bridge.local.json'
+
+
+def proc(pid, path, command, name='python.exe'):
+    return {'pid': pid, 'parent_pid': 1, 'name': name, 'path': path, 'command_line': command}
+
+
+def bridge(image, provider='codex', config=BRIDGE_CONFIG, tail=''):
+    return f'"{image}" -m cochem_mcp --provider {provider} --config {config}{tail}'
+
+
+PYTHONW = BASE_PY.replace('python.exe', 'pythonw.exe')
+OUTSIDE_PY = r'C:\Python314\python.exe'
+R3_PY = R3_ROOT + r'\.venv\Scripts\python.exe'
+SUPERVISOR_OBSERVER = COCHEM + r'\SupervisorObservation4.2.7-windows-20261007-r3-v1\held-supervisor-observation-r3-v1.py'
+RESOURCE_OBSERVER = COCHEM + r'\ResourceObservation4.2.7-windows-20261008-r3-v4\package\observe_resources.py'
+# The two SYSTEM observer recorders (reported, never counted) and the 14 owner MCP clients alive at 17:22 (10 'cochem_pipeline
+# mcp' clients, 4 Antigravity bridges), exactly as ps_toplevel_smoke.live_mcp_clients_20261011() describes them.
+OBSERVERS = [proc(3132, BASE_PY, f'"{BASE_PY}" -I -B "{SUPERVISOR_OBSERVER}" --observe'),
+             proc(9472, BASE_PY, f'"{BASE_PY}" -I -B "{RESOURCE_OBSERVER}" --run-observer')]
+LIVE_CLIENTS = smoke.live_mcp_clients_20261011()
+LIVE_CLIENT_PIDS = sorted(p['pid'] for p in LIVE_CLIENTS)
+LIVE_BRIDGE_PIDS = sorted(p['pid'] for p in LIVE_CLIENTS if ' -m cochem_mcp ' in p['command_line'])
+# Controller-like command lines (assembled, so that no single literal names a daemon start).
+DAEMON = 'daemon'
+SUPERVISOR_MODULE = 'cochem_' + 'supervisor'
+PRESENCE_CASES = {
+    # name: (one process, its class in stop-warden-r5: every Pipeline4.2.7-windows-* root and the toolchain are runtime roots)
+    'bridge_r4_venv_codex': (proc(35760, R4_PY, bridge(R4_PY)), 'client'),
+    'bridge_r4_venv_claude': (proc(17864, R4_PY, bridge(R4_PY, 'claude')), 'client'),
+    'bridge_toolchain_codex': (proc(3192, BASE_PY, bridge(BASE_PY)), 'client'),
+    'bridge_toolchain_claude': (proc(36468, BASE_PY, bridge(BASE_PY, 'claude')), 'client'),
+    'bridge_r5_venv_claude': (proc(120, R5_PY, bridge(R5_PY, 'claude')), 'client'),
+    'bridge_r3_venv_codex': (proc(122, R3_PY, bridge(R3_PY)), 'client'),
+    'pipeline_mcp_client': (proc(19036, R4_PY, f'"{R4_PY}" -I -B -m cochem_pipeline mcp --client-config {CLIENT_CONFIG}'), 'client'),
+    'bridge_outside_the_runtime_roots': (proc(121, OUTSIDE_PY, bridge(OUTSIDE_PY)), 'ignored'),
+    # Near misses of the bridge entry stay unclassified, so they still hold.
+    'bridge_health_probe': (proc(100, R4_PY, bridge(R4_PY, tail=' --health')), 'unclassified'),
+    'bridge_provider_gemini': (proc(101, R4_PY, bridge(R4_PY, 'gemini')), 'unclassified'),
+    'bridge_provider_capitalised': (proc(102, R4_PY, bridge(R4_PY, 'Codex')), 'unclassified'),
+    'bridge_other_config': (proc(103, R4_PY, bridge(R4_PY, config=r'C:\Users\ansac\CoChem427\other.json')), 'unclassified'),
+    'bridge_config_other_case': (proc(104, R4_PY, bridge(R4_PY, config=BRIDGE_CONFIG.upper())), 'unclassified'),
+    'bridge_isolated_flags': (proc(105, BASE_PY, f'"{BASE_PY}" -I -B -m cochem_mcp --provider codex --config {BRIDGE_CONFIG}'), 'unclassified'),
+    'bridge_server_module': (proc(106, BASE_PY, f'"{BASE_PY}" -m cochem_mcp.server --provider codex --config {BRIDGE_CONFIG}'), 'unclassified'),
+    'bridge_extra_argument': (proc(107, BASE_PY, bridge(BASE_PY, tail=' --verbose')), 'unclassified'),
+    'bridge_trailing_newline': (proc(108, BASE_PY, bridge(BASE_PY, tail='\n')), 'unclassified'),
+    'bridge_unquoted_image': (proc(109, BASE_PY, bridge(BASE_PY)[1:].replace('.exe"', '.exe', 1)), 'unclassified'),
+    'bridge_pythonw_image': (proc(110, PYTHONW, bridge(PYTHONW), 'pythonw.exe'), 'unclassified'),
+    'bridge_behind_cmd': (proc(111, BASE_PY, 'cmd /c ' + bridge(BASE_PY)), 'unclassified'),
+    'other_rooted_python': (proc(118, R5_PY, f'"{R5_PY}" -I -B -c "print(1)"'), 'unclassified'),
+    # Controller-like command lines are controllers from any image, before any client test.
+    'controller_from_a_runtime_image': (proc(112, BASE_PY, f'"{BASE_PY}" {R5_ARGS}'), 'controller'),
+    'controller_appended_to_a_bridge_line': (proc(113, R4_PY, bridge(R4_PY, tail=' cochem_pipeline ' + DAEMON)), 'controller'),
+    'supervisor_from_any_image': (proc(114, OUTSIDE_PY, f'"{OUTSIDE_PY}" -m {SUPERVISOR_MODULE} {DAEMON}'), 'controller'),
+    'provision_execution': (proc(115, R5_PY, f'"{R5_PY}" -I -B -m cochem_pipeline provision-' + 'execution'), 'controller'),
+    'observer_recorder': (OBSERVERS[1], 'observer'),
+    'uninspectable_python': (proc(119, None, None), 'uninspectable'),
+}
+
+# The real Get-ControllerPresence (re-dot-sourced after STUBS) over a fixture process list. With $script:liveDaemon set, the
+# fixture's alive pids are the task's controller (20664, toolchain python) and launcher (5320, the bound runtime's venv)
+# running the bound action, and $script:foreignPids are further such command lines.
+PRESENCE_STUB = r'''
+foreach($f in $ast.FindAll({param($n)$n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -ceq 'Get-ControllerPresence'},$true)){. ([scriptblock]::Create($f.Extent.Text))}
+$script:fxProcesses=@();$script:liveDaemon=$false;$script:cimQueries=0
+function Set-FixtureProcesses {param([string]$Json)$parsed=$Json|ConvertFrom-Json;$script:fxProcesses=@($parsed|ForEach-Object {$_})}
+function Get-CimInstance {[CmdletBinding()]param([Parameter(Position=0)][string]$ClassName,[string]$Filter)
+  if($ClassName -cne 'Win32_Process' -or $Filter){throw ('unexpected CIM query: '+$ClassName+' '+$Filter)}
+  $script:cimQueries++
+  foreach($p in @($script:fxProcesses)){[pscustomobject]@{ProcessId=[int]$p.pid;ParentProcessId=[int]$p.parent_pid;Name=[string]$p.name;ExecutablePath=$p.path;CommandLine=$p.command_line}}
+  if($script:liveDaemon -and $null -ne $script:expectedAction){
+    foreach($id in @(@($script:alivePids)+@($script:foreignPids))){
+      $image=$(if([int]$id -eq 5320){[string]$script:runtimePython}else{'BASEPYVALUE'})
+      [pscustomobject]@{ProcessId=[int]$id;ParentProcessId=$(if([int]$id -eq 20664){5320}else{1});Name='python.exe';ExecutablePath=$image;CommandLine=('"'+$image+'" '+[string]$script:expectedAction.arguments)}}}}
+function Get-NetTCPConnection {[CmdletBinding()]param($LocalPort,$State)
+  if($script:liveDaemon -and $script:portListening){[pscustomobject]@{LocalPort=$LocalPort;State='Listen';OwningProcess=20664}}}
+'''.replace('BASEPYVALUE', BASE_PY)
+
+
+def live_presence(processes):
+    return PRESENCE_STUB + f"Set-FixtureProcesses '{ps(json.dumps(processes))}';$script:liveDaemon=$true\n"
+
+
+def presence_table(workdir, cases, admin):
+    lines = [PRESENCE_STUB, '$script:admin=' + ('$true' if admin else '$false') + ';$out=[ordered]@{}']
+    for name, processes in cases.items():
+        lines.append("Set-FixtureProcesses '" + ps(json.dumps(processes)) + "';$p=Get-ControllerPresence;$out['" + name + "']=[ordered]@{"
+                     "controllers=@($p.controller_processes|ForEach-Object {[int]$_.pid});observers=@($p.observer_processes|ForEach-Object {[int]$_.pid});"
+                     "clients=@($p.client_processes|ForEach-Object {[int]$_.pid});unclassified=@($p.unclassified_runtime_processes|ForEach-Object {[int]$_.pid});"
+                     "uninspectable=$p.uninspectable_python_processes;listening=$p.listening;authoritative=$p.authoritative;alive=(Test-ControllerAlive $p)}")
+    lines.append('$out|ConvertTo-Json -Depth 4 -Compress')
+    return run_json('\n'.join(lines), workdir)
+
+
+@pytest.fixture(scope='module')
+def presence_results(tmp_path_factory):
+    cases = {name: [process] for name, (process, _) in PRESENCE_CASES.items()}
+    cases['live_17_22_inventory'] = LIVE_CLIENTS + OBSERVERS
+    cases['live_inventory_and_a_gemini_bridge'] = LIVE_CLIENTS + OBSERVERS + [PRESENCE_CASES['bridge_provider_gemini'][0]]
+    cases['live_inventory_and_a_controller'] = LIVE_CLIENTS + OBSERVERS + [PRESENCE_CASES['controller_from_a_runtime_image'][0]]
+    return {admin: presence_table(tmp_path_factory.mktemp('presence'), cases, admin) for admin in (False, True)}
+
+
+@pytest.mark.parametrize('admin', [False, True], ids=['unelevated', 'elevated'])
+@pytest.mark.parametrize('case', list(PRESENCE_CASES))
+def test_presence_admits_only_the_exact_antigravity_bridge_as_a_new_client(presence_results, case, admin):
+    process, expected = PRESENCE_CASES[case]
+    value = presence_results[admin][case]
+    counts = {'controllers': [], 'observers': [], 'clients': [], 'unclassified': []}
+    key = {'controller': 'controllers', 'observer': 'observers', 'client': 'clients', 'unclassified': 'unclassified'}.get(expected)
+    if key:
+        counts[key] = [process['pid']]
+    assert {k: value[k] for k in counts} == counts, (case, value)
+    assert value['uninspectable'] == (1 if expected == 'uninspectable' else 0) and value['authoritative'] is admin and value['listening'] == 0
+    assert value['alive'] is (expected in ('controller', 'unclassified') or (expected == 'uninspectable' and admin)), (case, value)
+
+
+def test_presence_over_the_live_17_22_inventory_counts_no_runtime_process(presence_results):
+    for admin in (False, True):
+        live = presence_results[admin]['live_17_22_inventory']
+        assert sorted(live['clients']) == LIVE_CLIENT_PIDS and len(LIVE_BRIDGE_PIDS) == 4, 'all 14 owner MCP clients, the 4 bridges included'
+        assert live['unclassified'] == [] and live['controllers'] == [] and sorted(live['observers']) == [3132, 9472] and live['alive'] is False
+        gemini = presence_results[admin]['live_inventory_and_a_gemini_bridge']
+        assert gemini['unclassified'] == [101] and sorted(gemini['clients']) == LIVE_CLIENT_PIDS and gemini['alive'] is True
+        controller = presence_results[admin]['live_inventory_and_a_controller']
+        assert controller['controllers'] == [112] and controller['unclassified'] == [] and controller['alive'] is True
+
+
+GEMINI_BRIDGE = PRESENCE_CASES['bridge_provider_gemini'][0]
+ISOLATED_BRIDGE = PRESENCE_CASES['bridge_isolated_flags'][0]
+LIVE_SESSION_CASES = {
+    # name: (apply, admin, task overrides, flags, runtime mutator) as SESSION_CASES; run over LIVE_CLIENTS + OBSERVERS (+ extra)
+    'plan_already_stopped': (False, True, '@{State=3;Instances=0;LastTaskResult=267014}', '', None),
+    'plan_admin_running': (False, True, '@{}', '', None),
+    'apply_already_stopped_enabled': (True, True, '@{State=3;Instances=0;LastTaskResult=267014}', '', None),
+    'apply_running': (True, True, '@{}', '', None),
+    'apply_already_stopped_and_an_unknown_runtime_process': (True, True, '@{State=3;Instances=0}', '', None),
+    'apply_running_and_an_unknown_runtime_process': (True, True, '@{}', '', None),
+}
+LIVE_SESSION_EXTRA = {'apply_already_stopped_and_an_unknown_runtime_process': [GEMINI_BRIDGE], 'apply_running_and_an_unknown_runtime_process': [ISOLATED_BRIDGE]}
+
+
+@pytest.mark.parametrize('case', list(LIVE_SESSION_CASES))
+def test_stop_session_with_the_live_mcp_clients_uses_the_real_presence(tmp_path, case):
+    """Every rollback and fallback stop over the 17:22 host: the 14 MCP clients and the observers stay alive throughout."""
+    value, target, info = drive_session(tmp_path, case, LIVE_SESSION_CASES, live=LIVE_CLIENTS + OBSERVERS + LIVE_SESSION_EXTRA.get(case, []))
+    if case.startswith('plan_'):
+        assert not value['failed'], value['message']
+        plan = value['value']
+        assert plan['holds'] == [] and plan['stop_mode'] == ('ALREADY_STOPPED' if 'already' in case else 'RUNNING'), plan['holds']
+        presence = plan['controller_presence']
+        assert sorted(p['pid'] for p in presence['client_processes']) == LIVE_CLIENT_PIDS and presence['unclassified_runtime_processes'] == []
+        assert sorted(p['pid'] for p in presence['observer_processes']) == [3132, 9472]
+        if case == 'plan_admin_running':
+            assert sorted(p['pid'] for p in presence['controller_processes']) == [5320, 20664] and plan['process_proof']['controller']['pid'] == 20664
+        else:
+            assert presence['controller_processes'] == [] and plan['loopback_port_free'] is True
+        assert value['stops'] == 0 and value['enabled_writes'] == [] and not target.exists()
+        return
+    if 'unknown' in case:
+        assert value['failed'] and value['stops'] == 0 and value['enabled_writes'] == [] and not target.exists(), value['message']
+        expected = ('The Warden stop is held. Nothing was changed: The task is stopped but a controller process, an unclassified runtime process or the loopback port is alive; investigate.'
+                    if 'already' in case else 'Controller-like or unclassified runtime processes other than the proven controller are alive: 105; nothing was changed.')
+        assert value['message'] == expected, value['message']
+        return
+    assert not value['failed'], value['message']
+    result, receipt = value['value'], read_json(target / 'stop-receipt.json')
+    assert receipt['disabled_by_this_run'] is True and receipt['enabled_after'] is False and sorted(p['pid'] for p in receipt['observer_processes']) == [3132, 9472]
+    if case == 'apply_running':
+        assert result['status'] == 'WARDEN_ENDED_AND_DISABLED_UNCLEAN_SHUTDOWN_EXPECTED' and value['stops'] == 1
+        assert receipt['controller_exit']['controller_processes'] == [] and receipt['controller_exit']['complete'] is True
+    else:
+        assert result['status'] == 'WARDEN_ALREADY_STOPPED_CLEAN_NOOP' and value['stops'] == 0 and receipt['mode'] == 'ALREADY_STOPPED'
+    for write in value['enabled_writes']:
+        assert write['value'] is False and write['instances'] == 0 and write['port_free'] is True and write['alive'] == 0
+
+
+LIVE_R4_SESSION_CASES = {
+    # S2 of the next sitting when the base source is an r4 restore (stop-warden-r5 -RetargetTarget r4), over the 17:22 host.
+    'plan_r4_already_stopped': (False, True, R4_TASK + ';State=3;Instances=0;LastTaskResult=267014}', '', None),
+    'apply_r4_already_stopped_enabled': (True, True, R4_TASK + ';State=3;Instances=0;LastTaskResult=267014}', '', None),
+    'apply_r4_running': (True, True, R4_TASK + '}', '', None),
+}
+
+
+@pytest.mark.parametrize('case', list(LIVE_R4_SESSION_CASES))
+def test_r4_restore_stop_with_the_live_mcp_clients_uses_the_real_presence(tmp_path, case):
+    value, target = drive_session_r4(tmp_path, case, LIVE_R4_SESSION_CASES, live=LIVE_CLIENTS + OBSERVERS)
+    assert not value['failed'], value['message']
+    if case.startswith('plan_'):
+        plan = value['value']
+        assert plan['holds'] == [] and plan['stop_mode'] == 'ALREADY_STOPPED' and plan['retarget_target'] == 'r4', plan['holds']
+        assert sorted(p['pid'] for p in plan['controller_presence']['client_processes']) == LIVE_CLIENT_PIDS
+        assert plan['controller_presence']['unclassified_runtime_processes'] == [] and not target.exists()
+        return
+    result, receipt = value['value'], read_json(target / 'stop-receipt.json')
+    assert receipt['retarget_target'] == 'r4' and receipt['disabled_by_this_run'] is True and receipt['enabled_after'] is False
+    assert result['status'] == ('WARDEN_ENDED_AND_DISABLED_UNCLEAN_SHUTDOWN_EXPECTED' if case == 'apply_r4_running' else 'WARDEN_ALREADY_STOPPED_CLEAN_NOOP')
+
+
+# --------------------------------------------------------------------------------------------------------------------
+# Top-level plan-mode smoke tests: the real script top level through ps_toplevel_smoke (host stubbed, never -Apply)
+# --------------------------------------------------------------------------------------------------------------------
+
+STOP_PLAN_SCHEMA = 'cochem-warden-stop-plan/2'
+PRESENCE_HOLD = 'The task is stopped but a controller process, an unclassified runtime process or the loopback port is alive'
+CUTOVER_DOC = ROOT / 'r5-army-specs' / 'INTERFACES-CUTOVER.md'
+# The doc's attempt placeholders (as test_ps_toplevel_smoke.py fills them): stop attempt vK, r5 attempt vN, r4-restore attempt vM.
+PLACEHOLDERS = {'vK2': 'v2', 'vK': 'v1', 'vN': 'v1', 'vM': 'v2'}
+
+
+def plan_only(args):
+    """A documented call as its read-only plan: every argument that could bind the apply switch is dropped."""
+    return tuple(a for a in args if smoke.apply_argument([a]) is None)
+
+
+def documented_stop_calls():
+    """The '.\\stop-warden-r5.ps1 ...' calls of INTERFACES-CUTOVER.md's Calls section, placeholders filled, as plans."""
+    section = CUTOVER_DOC.read_text(encoding='utf-8').split('## Calls', 1)[1].split('\n## ', 1)[0]
+    calls = []
+    for match in re.finditer(r'\.\\stop-warden-r5\.ps1 ([^\n]+)', section):
+        args = match.group(1).split()
+        args = plan_only(PLACEHOLDERS.get(a, a) for a in args)
+        if args not in calls:
+            calls.append(args)
+    return calls
+
+
+SMOKE_CALLS = [
+    ('-Attempt', 'v1', '-RetargetTarget', 'r5', '-RetargetAttempt', 'v1'),                              # Gemini fallback; rollback after r5 v1 started
+    ('-Attempt', 'v1', '-RetargetTarget', 'r5', '-RetargetAttempt', 'v1', '-RecoverInterruptedStart'),  # r5 start held or interrupted after Run
+    ('-Attempt', 'v1', '-RetargetTarget', 'r4', '-RetargetAttempt', 'v2'),                              # restored r4 back to r5 (doc prose); S2 base r4-restore
+    ('-Attempt', 'v1', '-RetargetTarget', 'r4', '-RetargetAttempt', 'v2', '-RecoverInterruptedStart'),  # an interrupted r4 restore start
+    ('-Attempt', 'v3', '-RetargetTarget', 'r5', '-RetargetAttempt', 'v2', '-IdleWaitSeconds', '120', '-ExitWaitSeconds', '90'),
+    ('-RetargetAttempt', 'v1'),                                                                        # the defaults: -Attempt v1 -RetargetTarget r5
+]
+# The 17:22 host: the two SYSTEM observer recorders are opaque to the unelevated token (no image, no command line).
+SMOKE_SYSTEM_OBSERVERS = [dict(p, owner='NT AUTHORITY\\SYSTEM', pid=p['pid'] + 1) for p in OBSERVERS]
+SMOKE_R5_TASK = {'enabled': True, 'state': 3, 'instances': 0, 'last_task_result': 267014, 'xml': TASK_XML, 'sddl': SDDL,
+                 'principal': {'user_id': 'S-1-5-18', 'logon_type': 5, 'run_level': 1},
+                 'settings': {'multiple_instances': 2, 'execution_time_limit': 'PT0S', 'restart_count': 0, 'allow_demand_start': True},
+                 'actions': [{'path': R5_PY, 'arguments': R5_ARGS, 'working_directory': R5_ROOT}],
+                 'triggers': [{'type': 9, 'enabled': True, 'user_id': 'AETHERDESK\\ansac', 'delay': 'PT1M'}]}
+
+
+def test_smoke_calls_cover_every_documented_stop_call():
+    documented = documented_stop_calls()
+    assert len(documented) >= 2 and all(call in SMOKE_CALLS for call in documented), documented
+    assert ('-Attempt', 'v1', '-RetargetTarget', 'r5', '-RetargetAttempt', 'v1', '-RecoverInterruptedStart') in documented
+
+
+def smoke_stub(task=None, extra=()):
+    stub = smoke.default_stub()
+    stub['processes'] = smoke.live_mcp_clients_20261011() + SMOKE_SYSTEM_OBSERVERS + [dict(p, owner='AETHERDESK\\ansac') for p in extra]
+    if task is not None:
+        stub['tasks'] = {'*': 'denied', 'CoChem-4.2.7-Warden': task, 'CoChem-4.2.7-Supervisor': {'enabled': False, 'state': 1, 'instances': 0},
+                         'CoChem-4.2.2-Warden': {'enabled': False, 'state': 1, 'instances': 0}, 'CoChem-4.2.3-Supervisor': {'enabled': False, 'state': 1, 'instances': 0}}
+    return stub
+
+
+def smoke_plan(args, stub, invocation='file'):
+    assert smoke.apply_argument(args) is None
+    result = smoke.run_toplevel(SCRIPT, args, stub=stub, invocation=invocation)
+    assert smoke.plan_mode_outcome(result, plan_schema=STOP_PLAN_SCHEMA) == 'plan', result.describe()
+    plan = result.plan
+
+    def value(name, default):
+        return args[args.index(name) + 1] if name in args else default
+    target, attempt, retarget_attempt = value('-RetargetTarget', 'r5'), value('-Attempt', 'v1'), value('-RetargetAttempt', None)
+    assert plan['retarget_target'] == target and plan['attempt'] == attempt and plan['retarget_attempt'] == retarget_attempt
+    assert plan['recover_interrupted_start'] is ('-RecoverInterruptedStart' in args)
+    assert plan['target_root'] == COCHEM + r'\WardenStop4.2.7-windows-20261011-r5-' + attempt
+    assert plan['start_receipt_path'] == COCHEM + rf'\WardenRetarget4.2.7-windows-20261011-{target}-{retarget_attempt}\start-receipt.json'
+    assert plan['tasks_changed'] == 0 and plan['ended'] is False and plan['disabled'] is False and plan['processes_killed'] is False
+    assert plan['administrator'] is False and plan['automatic_retry_allowed'] is False
+    assert plan['idle_wait_seconds'] == 120 and plan['exit_wait_seconds'] == 90
+    assert not any('null-valued' in hold or 'method named' in hold for hold in plan['holds']), plan['holds']
+    return plan
+
+
+def assert_live_presence(presence):
+    assert sorted(p['pid'] for p in presence['client_processes']) == LIVE_CLIENT_PIDS, 'all 14 owner MCP clients are clients'
+    assert presence['unclassified_runtime_processes'] == [] and presence['controller_processes'] == [] and presence['listening'] == 0
+    assert presence['uninspectable_python_processes'] == 2 and presence['authoritative'] is False, 'the SYSTEM observers are opaque unelevated'
+
+
+@pytest.mark.parametrize('invocation', ['file', 'command'])
+@pytest.mark.parametrize('args', SMOKE_CALLS, ids=lambda a: '_'.join(x.lstrip('-') for x in a))
+def test_toplevel_plan_smoke_of_every_documented_call_with_the_live_mcp_clients(args, invocation):
+    plan = smoke_plan(args, smoke_stub(), invocation)
+    assert plan['stop_mode'] == 'DEFERRED' and plan['task_readable'] is False
+    target = args[args.index('-RetargetTarget') + 1] if '-RetargetTarget' in args else 'r5'
+    # The smoke host's protected tree has no readable ACL, so no start evidence is ever bound top level.
+    assert any(hold.startswith(target + ' start receipt: ') for hold in plan['holds']) and plan['start_receipt'] is None, plan['holds']
+    assert not any(PRESENCE_HOLD in hold for hold in plan['holds'])
+    assert_live_presence(plan['controller_presence'])
+
+
+@pytest.mark.parametrize('args', [SMOKE_CALLS[0], SMOKE_CALLS[2]], ids=['r5_v1', 'r4_v2'])
+def test_toplevel_plan_smoke_with_a_readable_task_and_the_live_mcp_clients(args):
+    plan = smoke_plan(args, smoke_stub(SMOKE_R5_TASK))
+    assert plan['task_readable'] is True and plan['stop_mode'] == 'UNBOUND', 'no start evidence is bindable in the smoke host'
+    assert plan['task_summary']['triggers'][0]['type'] == 'logon' and plan['task_summary']['task_xml_sha256'] == sha(TASK_XML.encode())
+    assert [d['state'] for d in plan['other_daemon_tasks']] == ['STOPPED_DISABLED'] * 3
+    assert_live_presence(plan['controller_presence'])
+
+
+@pytest.mark.parametrize('name', ['bridge_provider_gemini', 'other_rooted_python', 'controller_from_a_runtime_image'])
+def test_toplevel_plan_smoke_still_reports_any_other_runtime_process(name):
+    process, expected = PRESENCE_CASES[name]
+    plan = smoke_plan(SMOKE_CALLS[0], smoke_stub(extra=[process]))
+    presence = plan['controller_presence']
+    key = 'controller_processes' if expected == 'controller' else 'unclassified_runtime_processes'
+    assert [p['pid'] for p in presence[key]] == [process['pid']] and sorted(p['pid'] for p in presence['client_processes']) == LIVE_CLIENT_PIDS

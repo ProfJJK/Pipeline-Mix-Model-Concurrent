@@ -8,7 +8,8 @@ tmp directories (the workspace ancestor walk is bounded to the tmp world), the A
 creation are recorded (the intended SDDL is asserted and a fake ACL reader serves it back), the Job accounting is canned,
 and a fake clock makes the bounds instant. The receipts it writes are fed to the wrapper's own functions, dot-sourced from
 its AST into a throwaway powershell.exe and driven with COM stubs. Plan-by-default and -Apply gating are exercised at
-function level only; the whole script is started only with arguments that fail parameter binding. One test (O-F3) applies
+function level only; the whole script is started on the real host only with arguments that fail parameter binding, and
+otherwise only through ps_toplevel_smoke.py (stubbed host, plan mode; the tests at the end). One test (O-F3) applies
 the reviewed DACL templates, with the current user standing in for the worker, to its own tmp folders to prove the
 auditor's parent-rename case is refused, then restores them.
 """

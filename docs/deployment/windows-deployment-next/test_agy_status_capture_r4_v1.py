@@ -6,7 +6,8 @@ the 20 s windows and 30 s bounds instant); the receipts it writes are then fed t
 own functions, dot-sourced from its AST into a throwaway powershell.exe and driven with COM
 stubs. One test observes a real, harmless sort.exe child through observe_child (running and
 exited). Two whole-script runs exercise the unelevated read-only plans, which must create
-nothing; the -Apply refusal is exercised through the dot-sourced main function only.
+nothing; the -Apply refusal is exercised through the dot-sourced main function only. The tests at the end run the
+documented sitting calls' plans through ps_toplevel_smoke.py (stubbed host).
 """
 import ctypes as C
 import hashlib
@@ -20,6 +21,8 @@ import subprocess
 from types import SimpleNamespace
 
 import pytest
+
+import ps_toplevel_smoke as smoke
 
 ROOT = Path(__file__).parent
 PY = ROOT / 'agy_status_capture_r4_v1.py'
@@ -1212,3 +1215,48 @@ def test_read_only_plan_reports_the_capture_and_creates_nothing(stage):
     assert plan['task_action']['arguments'] == f'-I -B "{root / m.HELPER_NAME}" --slot slot1 --stage {stage} --nonce <nonce> --attempt {"0" * 32}'
     names = [row['name'] for row in plan['daemon_tasks']]
     assert names == list(m.DAEMON_TASK_NAMES)
+
+
+# ------------------------------------------------------------------- top level, plan mode only (ps_toplevel_smoke.py)
+# The fixtures above dot-source single functions; these run the REAL script top level (real param block and binding,
+# the 2026-10-11 17:22 failure class) with the host stubbed. The helper refuses -Apply, so each documented sitting call
+# (RUN_427_R5_SITTING.ps1 S5 signed-out, S7 signed-in) runs as its plan.
+
+SMOKE_PLAN_SCHEMA = 'cochem-agy-status-capture-plan/1'
+
+
+def validated_parameter_assignments(script):
+    """Assignments that write a [Validate*] script parameter variable: $script:/$global:<name> anywhere (functions run in
+    the script's scope), or a bare <name> at the top level; names compare case-insensitively, as PowerShell does."""
+    code = ("$t=$null;$e=$null;$a=[Management.Automation.Language.Parser]::ParseFile('" + psq(script) + "',[ref]$t,[ref]$e);if($e.Count){throw $e[0]};"
+            "$v=@{};foreach($p in @($a.ParamBlock.Parameters)){if(@($p.Attributes|Where-Object{$_.TypeName.Name -like 'Validate*'}).Count){$v[$p.Name.VariablePath.UserPath.ToLowerInvariant()]=1}};"
+            "$hits=@(foreach($n in $a.FindAll({param($x)$x -is [Management.Automation.Language.AssignmentStatementAst]},$true)){"
+            "$targets=@($n.Left);if($n.Left -is [Management.Automation.Language.ArrayLiteralAst]){$targets=@($n.Left.Elements)};"
+            "foreach($l in $targets){if($l -is [Management.Automation.Language.ConvertExpressionAst]){$l=$l.Child};if($l -isnot [Management.Automation.Language.VariableExpressionAst]){continue};"
+            "$name=($l.VariablePath.UserPath -replace '^(script|global|local|private):','').ToLowerInvariant();"
+            "$f=$n.Parent;while($null -ne $f -and $f -isnot [Management.Automation.Language.FunctionDefinitionAst]){$f=$f.Parent};"
+            "if($v.ContainsKey($name) -and ($l.VariablePath.IsScript -or $l.VariablePath.IsGlobal -or $null -eq $f)){$l.Extent.Text+'='+$n.Right.Extent.Text}}});"
+            "$sv=@($a.FindAll({param($x)$x -is [Management.Automation.Language.CommandAst] -and $x.GetCommandName() -in @('Set-Variable','New-Variable','sv','nv')},$true)).Count;"
+            "'RESULT '+(@{validated=@($v.Keys|Sort-Object);hits=@($hits|Sort-Object);set_variable=$sv}|ConvertTo-Json -Compress)")
+    result = subprocess.run([PS, '-NoProfile', '-NonInteractive', '-Command', code], capture_output=True, text=True, timeout=120)
+    assert result.returncode == 0, result.stderr
+    return json.loads(next(line for line in result.stdout.splitlines() if line.startswith('RESULT '))[len('RESULT '):])
+
+
+def test_validated_parameter_variables_are_written_only_with_checked_values():
+    value = validated_parameter_assignments(SCRIPT)
+    assert value['validated'] == ['attempt', 'slot', 'stage'] and value['set_variable'] == 0
+    # Set-CaptureConstants runs after Invoke-AgyCaptureMain checked each value: a lowercase 32-hex -Attempt (-cnotmatch),
+    # -Slot lowercased and -ceq slot1, -Stage lowercased and -cin signed-out|signed-in. A new write must be reviewed the same way.
+    assert value['hits'] == ['$script:Attempt=$Attempt', '$script:Slot=$Slot', '$script:Stage=$Stage']
+
+
+@pytest.mark.parametrize('invocation', ['file', 'command'])
+@pytest.mark.parametrize('stage', ['signed-out', 'signed-in'], ids=['S5-signed-out', 'S7-signed-in'])
+def test_toplevel_plan_for_each_documented_sitting_call(stage, invocation):
+    result = smoke.run_toplevel(SCRIPT, ['-Slot', 'slot1', '-Stage', stage, '-Attempt', ATTEMPT], invocation=invocation)
+    assert smoke.plan_mode_outcome(result, plan_schema=SMOKE_PLAN_SCHEMA) == 'plan', result.describe()
+    plan = result.plan
+    assert (plan['attempt'], plan['slot'], plan['stage']) == (ATTEMPT, 'slot1', stage)
+    assert plan['target_root'] == str(COCHEM / ('AgyCapture4.2.7-windows-20261010-r4-v1-' + ATTEMPT + '-slot1-' + stage))
+    assert plan['native_commands_executed'] == 0 and plan['native_model_jobs_executed'] == 0 and isinstance(plan['holds'], list)

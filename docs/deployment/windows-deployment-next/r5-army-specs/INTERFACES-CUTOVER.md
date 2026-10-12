@@ -1,8 +1,12 @@
 # Cutover interfaces for RUN_427_R5_SITTING.ps1 (final, 2026-10-11; audit fix wave C-F1..C-F8, re-audit R-F1/R-F3/R-F4)
 
 Files (LF, ASCII; pin by sha256, never convert line endings):
-- retarget-warden-r5.ps1 97403e81c425076acddddc8f9c594143d47a7a449be92806a32fd09c7f8ab65b (harness 469 passed)
-- stop-warden-r5.ps1 6e519927d268cd901843ffe95eaf68965f62cbe288c9a1abbc46a35f5e9feade (harness 486 passed; adds -RecoverInterruptedStart)
+- retarget-warden-r5.ps1 991703ab10b7bf280fb092ec984e79d1095379070857e7c2859d0a5ba0c0dee7 (sitting repair 2026-10-11 evening:
+  no Validate* on the parameter variables, $held renamed in the lineage checks, Antigravity bridge = client; harness 530 passed;
+  was 97403e81)
+- stop-warden-r5.ps1 b5920f379cee10eba101b87adb40b6a500d1bf5f29300f3e56a025182ee407a9 (sitting repair: Read-StartReceipt $held trap,
+  bridge = client; harness 570 passed; adds -RecoverInterruptedStart; was 6e519927)
+- stop-warden-r4.ps1 43fc386b1984447c1d5304a8297932c8f825735562b5dbc5dc3f23a211adbe7e (sitting repair: bridge = client; was bd54cb81)
 Both: exit 0 = plan or success result; exit 1 = refusal or held (terminating error). Without -Apply only a plan.
 Results: cochem-warden-retarget-result/3, cochem-warden-start-result/3, cochem-warden-stop-result/2 (status, receipt_path, receipt_sha256).
 Roots: WardenRetarget4.2.7-windows-20261011-<r5|r4>-<Attempt>; every stop: WardenStop4.2.7-windows-20261011-r5-<Attempt>.

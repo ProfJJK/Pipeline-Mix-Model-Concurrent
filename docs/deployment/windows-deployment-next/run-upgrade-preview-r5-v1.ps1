@@ -145,7 +145,7 @@ function Import-PreviewHelpers {
     foreach($text in Import-ReviewedFunctions (Join-Path $script:workspace 'register-stopped-warden-r3.ps1') 'eccc593f36cbf488a54775b4343bcf3cf8b261b7cd81e5536fb7f2f18466a198' @('Assert-RegisteredTaskAcl','Write-RegistrationControl')){. ([scriptblock]::Create($text))}
     foreach($text in Import-ReviewedFunctions (Join-Path $script:workspace 'protected-code-inspection-v4.ps1') '5c01543cbb8b8d64b2b9f1bab4a13f87f8ff9e1ab3e82dfb6fc547144c77b95d' @('Assert-CodeTreeOnce')){. ([scriptblock]::Create($text))}
     foreach($text in Import-ReviewedFunctions (Join-Path $script:workspace 'retarget-warden-r4.ps1') '8ee6b412f6be176dfac7c2c1b2340f1973e08358c7d22da6d4515e79f0327a4e' @('Test-ExactBool','Test-ExactInt','New-PrivateAcl','Assert-PrivateAcl','New-PrivateDirectory')){. ([scriptblock]::Create($text))}
-    foreach($text in Import-ReviewedFunctions (Join-Path $script:workspace 'retarget-warden-r5.ps1') '97403e81c425076acddddc8f9c594143d47a7a449be92806a32fd09c7f8ab65b' @('Test-Sha256Text','Get-JsonMember','Get-JsonProperty','Get-JsonListField','Get-R5RootCandidates','Find-R5Root','Assert-R5InstalledBindings','Assert-R5Config','Assert-StagingReceipt','Read-JsonControl')){. ([scriptblock]::Create($text))}
+    foreach($text in Import-ReviewedFunctions (Join-Path $script:workspace 'retarget-warden-r5.ps1') '991703ab10b7bf280fb092ec984e79d1095379070857e7c2859d0a5ba0c0dee7' @('Test-Sha256Text','Get-JsonMember','Get-JsonProperty','Get-JsonListField','Get-R5RootCandidates','Find-R5Root','Assert-R5InstalledBindings','Assert-R5Config','Assert-StagingReceipt','Read-JsonControl')){. ([scriptblock]::Create($text))}
     Initialize-FileIdentity
 }
 

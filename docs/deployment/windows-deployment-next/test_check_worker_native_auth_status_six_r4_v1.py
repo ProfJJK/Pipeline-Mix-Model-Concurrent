@@ -6,7 +6,8 @@ in a throwaway powershell.exe with stubs that model the Task Scheduler COM objec
 helper definitions are imported by hash through the script's own Import-ReviewedFunctions. The
 r4 receipts under Program Files are only read. The real script is run only in its read-only plan
 mode or with arguments it refuses before running anything; it is never run with -Apply (its -Apply
-guards are checked at function level from the AST).
+guards are checked at function level from the AST). The tests at the end also run every documented call's plan
+through ps_toplevel_smoke.py (stubbed host).
 """
 import ctypes
 import hashlib
@@ -17,6 +18,8 @@ import re
 import subprocess
 
 import pytest
+
+import ps_toplevel_smoke as smoke
 
 W = Path(__file__).parent
 LEAF = W / 'check-worker-native-auth-status-six-r4-v1.ps1'
@@ -535,3 +538,26 @@ def test_apply_guards_refuse_before_any_change_at_function_level():
     for statement in statements[:guard[0]]:
         for later in ('Set-AuthStatusConstants', 'Get-AuthStatusHelperDefinitions', 'Invoke-AuthStatusApply', 'Schedule.Service', 'New-ProtectedDirectory'):
             assert later not in statement, later
+
+
+# ------------------------------------------------------------------- top level, plan mode only (ps_toplevel_smoke.py)
+# The fixtures above dot-source single functions; these run the REAL leaf top level (real param block and binding, the
+# 2026-10-11 17:22 failure class) with the host stubbed. The helper refuses -Apply, so each documented call runs as its
+# plan: RUN_427_R5_SITTING.ps1 S3 (twelve calls, -Stage before) and the six-worker driver's before/after checks.
+
+PLAN_SCHEMA = 'cochem-worker-native-auth-status-plan/1'
+SMOKE_CALLS = ([pytest.param(provider, slot, 'before', 'file', id=f'S3-{provider}-{slot}') for provider in ('claude', 'codex') for slot in
+                [f'slot{n}' for n in range(1, 7)]]
+               + [pytest.param('gemini', 'slot1', 'before', 'command', id='driver-gemini-before-typed'),
+                  pytest.param('gemini', 'slot6', 'after', 'file', id='driver-gemini-after'),
+                  pytest.param('claude', 'slot3', 'after', 'command', id='driver-claude-after-typed')])
+
+
+@pytest.mark.parametrize('provider,slot,stage,invocation', SMOKE_CALLS)
+def test_toplevel_plan_for_each_documented_call(provider, slot, stage, invocation):
+    args = ['-Slot', slot, '-Provider', provider, '-Stage', stage, '-Attempt', ATTEMPT]
+    result = smoke.run_toplevel(LEAF, args, invocation=invocation)
+    assert smoke.plan_mode_outcome(result, plan_schema=PLAN_SCHEMA) == 'plan', result.describe()
+    plan = result.plan
+    assert (plan['attempt'], plan['slot'], plan['provider'], plan['stage']) == (ATTEMPT, slot, provider, stage)
+    assert plan['native_status_commands_executed'] == 0 and plan['tasks_changed'] == 0 and isinstance(plan['holds'], list)

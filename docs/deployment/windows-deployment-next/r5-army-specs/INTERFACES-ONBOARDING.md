@@ -10,12 +10,14 @@ against the final isolation: 89 passed.
 - agy_status_capture_r4_v1.py ce103aad0f9dae042677ec61c2b16eb5512e9a24f5fca65bc97f4570bb884038
 - check-worker-native-auth-status-six-r4-v1.ps1 (status leaf) c0b5df803a339a7dbbbd59727ea59a75dc4722d474f4bb05852d5cdc8778e265
 - worker-native-auth-status-six-r4-v1.py (helper, unchanged) 45681477194d97b144e8ee4505d4364d73d58aaef19c8428c846df642c834839
-- login-six-workers-status-first-r4-v1.ps1 f4fedd50925dbe8bd0bdb509c449f5085209d3eab665c5917573998ffcd981c4
+- login-six-workers-status-first-r4-v1.ps1 9cfc0a985253da38ddd521d980cf83d9a59cc52079ac40ae8a0c70eb95ef94b5 (sitting repair
+  2026-10-11 evening: -LoginMode no longer [ValidateSet]; was f4fedd50)
 - login_pipeline_worker_interactive_agy_r4_v1.ps1 da166c1dbdb047e93692eeb47abf3d315dbe797cf9040d34b440d9649626014a
 - worker_agy_login_bridge_r4_v1.py 4074878f100ae59b804c95bd97b3280ccaa09f919ffaa365a3e2c6985045b8d9
 - agy-session-history-r4-v1.ps1 4e86b712314e2a6a8ea9f13e1dfcc9e65dda4035d2895b8043fbf6ceed0424d4
 - agy_isolation_evidence_r4_v1.py 767f03af910fb137bd9a08ed82390f08878d802c45cfb9689eadb5ca44af8d60
-- agy-isolation-evidence-r4-v1.ps1 b837f0f42c4cea9293231d58c6930c3a20b41ba53ba3695db0eff2ea2db17070
+- agy-isolation-evidence-r4-v1.ps1 af773b1f03a20fb21391620d1ef6b1ee06cfeef37f09d59e6f617f978bf93edb (sitting repair: -Slot and
+  -EffortNullSlug no longer [ValidateSet]; was b837f0f4)
 - S8 also scans each R run's newly created agy cli log for true fallback phrases (MODEL_FALLBACK_LOGGED holds G3) and
   inventories ~/.gemini/config/sidecars (RG-2, RG-3).
 

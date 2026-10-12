@@ -386,7 +386,7 @@ def test_no_script_scope_assignment_targets_a_validated_parameter_variable(tmp_p
       foreach($as in @($ast.FindAll({param($n)$n -is [Management.Automation.Language.AssignmentStatementAst]},$true))){
         $left=$as.Left;while($left -is [Management.Automation.Language.AttributedExpressionAst]){$left=$left.Child}
         if($left -isnot [Management.Automation.Language.VariableExpressionAst]){continue}
-        $path=$left.VariablePath;$name=$path.UnqualifiedPath.ToLowerInvariant()
+        $path=$left.VariablePath;$name=($path.UserPath -replace '^(script|global|local|private):','').ToLowerInvariant()
         $inFunction=$false;$parent=$as.Parent;while($null -ne $parent){if($parent -is [Management.Automation.Language.FunctionDefinitionAst]){$inFunction=$true;break};$parent=$parent.Parent}
         if($path.IsScript -or $path.IsGlobal -or -not $inFunction){$assigned+=$name;if($validated.Contains($name)){$hits+=$as.Extent.Text}}}
       $setters=@($ast.FindAll({param($n)$n -is [Management.Automation.Language.CommandAst] -and [string]$n.GetCommandName() -in @('Set-Variable','New-Variable','sv','nv')},$true)|ForEach-Object {$_.Extent.Text})
@@ -429,8 +429,8 @@ def test_no_function_shadows_a_variable_the_imported_helpers_resolve_dynamically
         $names=@{};foreach($p in @($f.FindAll({param($n)$n -is [Management.Automation.Language.ParameterAst]},$true))){$names[$p.Name.VariablePath.UserPath.ToLowerInvariant()]=1}
         foreach($as in @($f.FindAll({param($n)$n -is [Management.Automation.Language.AssignmentStatementAst]},$true))){
           $left=$as.Left;while($left -is [Management.Automation.Language.AttributedExpressionAst]){$left=$left.Child}
-          if($left -is [Management.Automation.Language.VariableExpressionAst]){$names[$left.VariablePath.UnqualifiedPath.ToLowerInvariant()]=1}}
-        foreach($loop in @($f.FindAll({param($n)$n -is [Management.Automation.Language.ForEachStatementAst]},$true))){$names[$loop.Variable.VariablePath.UnqualifiedPath.ToLowerInvariant()]=1}
+          if($left -is [Management.Automation.Language.VariableExpressionAst]){$names[($left.VariablePath.UserPath -replace '^(script|global|local|private):','').ToLowerInvariant()]=1}}
+        foreach($loop in @($f.FindAll({param($n)$n -is [Management.Automation.Language.ForEachStatementAst]},$true))){$names[$loop.Variable.VariablePath.UserPath.ToLowerInvariant()]=1}
         foreach($name in $dynamic){if($names.ContainsKey($name)){$shadows+=($f.Name+' assigns $'+$name)}}}
       $main=@($ast.EndBlock.Statements|Where-Object {$_ -is [Management.Automation.Language.FunctionDefinitionAst] -and $_.Name -ceq 'Invoke-RetargetR5Main'})[0].Extent.Text
       [ordered]@{helper_free=$helperFree;dynamic=$dynamic;shadows=$shadows;main_list=$main.Contains('$held=[Collections.Generic.List[IO.FileStream]]::new()')}|ConvertTo-Json -Compress -Depth 4

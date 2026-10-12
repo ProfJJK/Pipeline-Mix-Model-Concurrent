@@ -1413,8 +1413,8 @@
   },
   {
    "path": "RETURN_SETUP_R5_20261011.txt",
-   "bytes": 8297,
-   "sha256": "d448e990644b91a62d1e707eb0ccb535e7e58e2918bee4311d061ba9ea4b6062"
+   "bytes": 8637,
+   "sha256": "80e5e55a140b77ac082ea28b9116c84ae321423f6cac4bb00b2ef7a012bfc055"
   },
   {
    "path": "RETURN_SETUP_RESOURCE_RECOVERY_20261009.txt",
@@ -1554,7 +1554,7 @@
   {
    "path": "run-upgrade-preview-r5-v1.ps1",
    "bytes": 53459,
-   "sha256": "0be2a4acd6b98992f13b750ca817b75407d32444bff4d3ecb8842d4eebf49018"
+   "sha256": "8f4c80647321c6e811ddcb3b8b94824e48c1f4c4e3d29e7f5b149862668bc66e"
   },
   {
    "path": "RUN_427_LAUNCH_SERIES.ps1",
@@ -1563,8 +1563,8 @@
   },
   {
    "path": "RUN_427_R5_SITTING.ps1",
-   "bytes": 129336,
-   "sha256": "fc119c3522feaa997a61002426ffa25f4b3709a024b8797a498612d8087be07c"
+   "bytes": 136389,
+   "sha256": "f875a8f12f3d087e754e43998f8954c778509c27bc0f9caeef1700944821e314"
   },
   {
    "path": "run_publication_focused_validation_20261009.py",
@@ -1603,13 +1603,13 @@
   },
   {
    "path": "stop-warden-r4.ps1",
-   "bytes": 68284,
-   "sha256": "bd54cb8194d256109aa8dae95451b87780566f7094f26f52d251840944bbc71b"
+   "bytes": 69074,
+   "sha256": "43fc386b1984447c1d5304a8297932c8f825735562b5dbc5dc3f23a211adbe7e"
   },
   {
    "path": "stop-warden-r5.ps1",
-   "bytes": 131783,
-   "sha256": "6e519927d268cd901843ffe95eaf68965f62cbe288c9a1abbc46a35f5e9feade"
+   "bytes": 133105,
+   "sha256": "b5920f379cee10eba101b87adb40b6a500d1bf5f29300f3e56a025182ee407a9"
   },
   {
    "path": "stop_owned_publication_fixture_20261009.py",
@@ -1678,8 +1678,8 @@
   },
   {
    "path": "test_agy_isolation_evidence_r4_v1.py",
-   "bytes": 193843,
-   "sha256": "537f1d89abfc247d8c706019bf30a76d0d7af4ce2b03bf794c672014c699063c"
+   "bytes": 193957,
+   "sha256": "70c605e3bca22e6770f34855737dd1ae3182e2d7911d9fbbd52f318b6fc24d35"
   },
   {
    "path": "test_agy_login_bridge_r4_v1.py",
@@ -1693,8 +1693,8 @@
   },
   {
    "path": "test_agy_status_capture_r4_v1.py",
-   "bytes": 87595,
-   "sha256": "172aa0d6a8ef93772ac2d38556b62c918cfaf55bd7d595f643edebbe242d3b20"
+   "bytes": 91740,
+   "sha256": "514263007cd03f21fad6e64c7d56d968c3263b3dcea40cd8255677ae456a8738"
   },
   {
    "path": "test_all_worker_denials.py",
@@ -1733,8 +1733,8 @@
   },
   {
    "path": "test_check_worker_native_auth_status_six_r4_v1.py",
-   "bytes": 41191,
-   "sha256": "7f8a877650b1861779f335b8dd0b6bbac9a113ed5d550aab40530447607b2690"
+   "bytes": 43021,
+   "sha256": "27b4647b2d94466e43a44de5286ba31494a335cc418d2429202561d02ebd44f1"
   },
   {
    "path": "test_claude_code_input_v6.py",
@@ -1918,8 +1918,8 @@
   },
   {
    "path": "test_login_pipeline_worker_interactive_agy_r4_v1.py",
-   "bytes": 62002,
-   "sha256": "3caef180feb974d05299a277e13e64e8373d9aaca425c900424c74763e0a5868"
+   "bytes": 66016,
+   "sha256": "ebcf59a4353e3789c982521a7db8c559167a1ed683e0dacb712c22d61d36a80b"
   },
   {
    "path": "test_login_recovery_commissioning_r3_v2.py",
@@ -1928,8 +1928,8 @@
   },
   {
    "path": "test_login_six_workers_status_first_r4_v1.py",
-   "bytes": 98401,
-   "sha256": "b00db00823bb8fc4f05d37e0c2c3178c93d3001a885e68674ffdefd8f52f5c51"
+   "bytes": 99642,
+   "sha256": "5e7aab6d3dd81346b31fddbb1cee940c864900c70946010cb617a1cdadcc3b6c"
   },
   {
    "path": "test_native_auth_checkpoint_r3_v3.py",
@@ -2008,13 +2008,13 @@
   },
   {
    "path": "test_r5_sitting_flow.py",
-   "bytes": 145386,
-   "sha256": "8064e33fedce7bfc653f085825cad3a5c056c743af545893a090a83534d92f76"
+   "bytes": 182495,
+   "sha256": "dd3edae926c9e643ae6b19c5ac4c4e6632918a634e4b2134547871caa5ae4743"
   },
   {
    "path": "test_r5_sitting_static.py",
-   "bytes": 34232,
-   "sha256": "9519e41ad47d09202bde67bf187e3e28b45a64c51b185a994ff7df3c7f2629b9"
+   "bytes": 40098,
+   "sha256": "ff44944cf310af281e89dcd638188252da9acc7cf7b2eb8d119389ebdb5aa387"
   },
   {
    "path": "test_reboot_setup_launcher_v5.py",
@@ -2073,8 +2073,8 @@
   },
   {
    "path": "test_retarget_warden_r5.py",
-   "bytes": 265828,
-   "sha256": "af91878a8235e0ee68989ea32ddd3ce84d9ceb690550548d5b1c72e1af1d3145"
+   "bytes": 265903,
+   "sha256": "9b1f09e051ea2f21e867f8bde9184ecfa1b24d3ff3e30d20fdf9fecf1d6891f8"
   },
   {
    "path": "test_retire_legacy_hyperv.py",
@@ -2098,8 +2098,8 @@
   },
   {
    "path": "test_run_upgrade_preview_r5_v1.py",
-   "bytes": 116199,
-   "sha256": "ff866303af8c6c001557e6ab35482eab891a7ed4299249ec3c3b12da955778d8"
+   "bytes": 119649,
+   "sha256": "e791d16fbb66a1ff2cba6f4866408287f7a1b5bb62be9ba5589fef6e791ff7d1"
   },
   {
    "path": "test_running_held_wait_utc.py",
@@ -2113,8 +2113,8 @@
   },
   {
    "path": "test_stage_pipeline_config_r5_v1.py",
-   "bytes": 106159,
-   "sha256": "bb3648e22fa3c2f85b4984e4373b06a53f1ee6c5bae9d4fd7412fe5a7ee561ee"
+   "bytes": 108114,
+   "sha256": "6e515d87569bc408b588306c339136a30e66325dc891736afd84cbe48ebffc52"
   },
   {
    "path": "test_status_first_native_six_r3_v1.py",
@@ -2123,13 +2123,13 @@
   },
   {
    "path": "test_stop_warden_r4.py",
-   "bytes": 75953,
-   "sha256": "7340db7db4f208ee332031469638895e06854e029f4110dbf238e40e24405197"
+   "bytes": 82847,
+   "sha256": "8115a8a9bedca11a5daeff985c2a283719fa5b00dc16991b401b56b14c4c122e"
   },
   {
    "path": "test_stop_warden_r5.py",
-   "bytes": 236989,
-   "sha256": "8b941e23f7b92b4dd188b8737df3b72011f6898d46cba05a6d25acec1c575365"
+   "bytes": 272181,
+   "sha256": "413ade7b70eafd401253437a3bb12774cf040567015b2e3804bd6becc5a55fa6"
   },
   {
    "path": "test_stopped_runtime_r1.py",
@@ -2383,13 +2383,13 @@
   },
   {
    "path": "r5-army-specs/INTERFACES-CUTOVER.md",
-   "bytes": 8481,
-   "sha256": "5eec598c213db37921e754dfd12a2f45b8f84c32b32fa8586dc6242c25a7c8a4"
+   "bytes": 8854,
+   "sha256": "27cce16b4ce64551a9bf626890fbce941c5f8a38280327ed8ea40135168bd12c"
   },
   {
    "path": "r5-army-specs/INTERFACES-ONBOARDING.md",
-   "bytes": 4952,
-   "sha256": "f9895f7a5814df5b981c8495e919070a1b88c4e9e8af905407e78c483d1fe16c"
+   "bytes": 5124,
+   "sha256": "10b9828aadd7c7823435bc0d1a764dcfa57b4113264a5ac97614b1188c1cd70a"
   },
   {
    "path": "r5-army-specs/INTERFACES-RUNTIME-BUILD.md",
@@ -2405,6 +2405,11 @@
    "path": "r5-army-specs/R6_SCOPE_V2_20261011.md",
    "bytes": 4140,
    "sha256": "503cd782908cf6048f5da0e943fdd65c8e06a7a8a2a790aea355bb3a19bb3421"
+  },
+  {
+   "path": "r5-army-specs/R6_V3_RESEARCH_20261011.md",
+   "bytes": 33248,
+   "sha256": "439d06d62fd673abb15349a845da4d490d64ab5bc9e5985464fd1745d9ecb5cd"
   },
   {
    "path": "r5-army-specs/R6A_SCOPE_20261011.md",

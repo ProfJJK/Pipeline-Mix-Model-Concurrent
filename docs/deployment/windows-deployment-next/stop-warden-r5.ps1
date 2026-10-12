@@ -1,6 +1,6 @@
 #Requires -Version 5.1
 <# Ends and disables the r5 CoChem-4.2.7-Warden: the rollback and Gemini-fallback stop of the r5 sitting (stages S11-S14,
-   R4-RESTORE). Derived from stop-warden-r4.ps1 (sha256 bd54cb8194d256109aa8dae95451b87780566f7094f26f52d251840944bbc71b),
+   R4-RESTORE). Derived from stop-warden-r4.ps1 (sha256 43fc386b1984447c1d5304a8297932c8f825735562b5dbc5dc3f23a211adbe7e),
    itself derived from retarget-warden-r4.ps1 v2.2 (sha256 8ee6b412f6be176dfac7c2c1b2340f1973e08358c7d22da6d4515e79f0327a4e):
    functions shared unchanged with those scripts are identical copies, and the reviewed helpers are imported by hash as they
    import them.
@@ -67,7 +67,15 @@
      <Settings><Enabled> and the trigger Enabled flags, and for a completed start to its warden-task-started.xml outside
      <Settings><Enabled>. The r5 logon trigger is registered disabled and enabled only after the health gate (two-phase start):
      a completed start must show it enabled; an interrupted or crashed start may show it disabled, or enabled when its held
-     readback says so or no readback exists. stop-receipt.json records start_binding and trigger_enabled_after. #>
+     readback says so or no readback exists. stop-receipt.json records start_binding and trigger_enabled_after.
+   Sitting fixes (2026-10-11 17:22 r5 sitting, R4-RESTORE failure):
+   S-F1 Read-StartReceipt keeps the start-held record in $startHeld. Its old local $held was found, by dynamic scope, by the
+     reviewed Read-R3Control (which adds every stream to the caller-scope $held list of Invoke-StopWardenMain), so every bound
+     read threw 'You cannot call a method on a null-valued expression' and every plan and -Apply held at 'start receipt'.
+   S-F2 Get-ControllerPresence classifies the owner's Antigravity bridge MCP clients ("<runtime python>" -m cochem_mcp
+     --provider codex|claude --config C:\Users\ansac\CoChem427\bridge.local.json: stdio front ends of the job board that only
+     call 127.0.0.1:47824 as clients) as GUI clients, with the same line as stop-warden-r4.ps1; controller-like command lines
+     stay controllers from any image and every other rooted process stays unclassified (and holds). #>
 [CmdletBinding()]
 param([switch]$Apply,[ValidatePattern('^v[0-9]{1,3}$')][string]$Attempt='v1',[Parameter(Mandatory=$true)][ValidatePattern('^v[0-9]{1,3}$')][string]$RetargetAttempt,
       [ValidateSet('r5','r4',IgnoreCase=$false)][string]$RetargetTarget='r5',[ValidateRange(10,900)][int]$IdleWaitSeconds=120,[ValidateRange(10,900)][int]$ExitWaitSeconds=90,
@@ -230,7 +238,7 @@ function Get-ControllerPresence {
         $entry=[ordered]@{pid=$process.ProcessId;parent=$process.ParentProcessId;path=$path;command=$command}
         if($command -match 'cochem_pipeline\s+daemon\b|cochem_supervisor\b|provision-execution\b|cochem-supervisor\b|cochem-pipeline(\.exe)?"?\s+daemon\b'){$controllers+=$entry}
         elseif($command -match $script:observerPattern){$observers+=$entry}
-        elseif($rooted -and $command -match 'cochem_pipeline\s+(mcp|health|status|submit|cancel|projects|code|code-status|code-cancel|code-resume|knowledge-\w+)\b'){$clients+=$entry}
+        elseif($rooted -and ($command -match 'cochem_pipeline\s+(mcp|health|status|submit|cancel|projects|code|code-status|code-cancel|code-resume|knowledge-\w+)\b' -or $command -cmatch '^"[^"]+\\python\.exe" -m cochem_mcp --provider (codex|claude) --config C:\\Users\\ansac\\CoChem427\\bridge\.local\.json\z')){$clients+=$entry}
         elseif($rooted){$unclassified+=$entry}
         elseif(-not $path -and -not $command -and $name -match '^python(w)?\.exe$'){$uninspectable++}
     }
@@ -582,7 +590,9 @@ function Read-StartReceipt {
     $intentPath=Join-Path $root 'start-intent.json';$heldPath=Join-Path $root 'start-held.json'
     $afterPath=Join-Path $root 'warden-task-after.xml';$startedPath=Join-Path $root 'warden-task-started.xml'
     if(Test-Path -LiteralPath (Join-Path $root 'retarget-held.json')){throw ('The retarget attempt '+$target+' '+$script:RetargetAttempt+' holds retarget-held.json; it needs a reviewed recovery, not a stop bound to it.')}
-    $start=$null;$held=$null;$intentPin='';$kind=$null;$heldTrigger=$null
+    # The start-held record is $startHeld, never $held: the reviewed Read-R3Control adds each stream to the caller-scope $held
+    # list (the main's), and a local of that name here would be found first (2026-10-11 17:22 fix).
+    $start=$null;$startHeld=$null;$intentPin='';$kind=$null;$heldTrigger=$null
     if(-not $recover){
         if(Test-Path -LiteralPath $heldPath){throw ('The retarget attempt '+$target+' '+$script:RetargetAttempt+' holds start-held.json; it needs a reviewed recovery, not a stop bound to it (when its stop_recovery_allowed is true, bind it with -RecoverInterruptedStart).')}
         if(-not (Test-Path -LiteralPath $script:startReceiptPath -PathType Leaf)){
@@ -604,7 +614,7 @@ function Read-StartReceipt {
         if(Test-Path -LiteralPath $script:startReceiptPath){throw ('The '+$target+' attempt '+$script:RetargetAttempt+' holds a start receipt: the start completed, so bind it without -RecoverInterruptedStart.')}
         if(-not (Test-Path -LiteralPath $intentPath -PathType Leaf)){throw ('The '+$target+' attempt '+$script:RetargetAttempt+' has no start-intent.json: no start was requested, so there is no interrupted start to recover.')}
         if(Test-Path -LiteralPath $heldPath){
-            $held=Read-BoundJson $heldPath ($target+' start-held record');$value=$held.value
+            $startHeld=Read-BoundJson $heldPath ($target+' start-held record');$value=$startHeld.value
             $interrupted=Get-FieldValue $value 'interrupted';$passed=Get-FieldValue $value 'health_gate_passed'
             $beforeRun=Get-FieldValue $value 'held_before_run';$allowed=Get-FieldValue $value 'stop_recovery_allowed'
             if((Get-StringField $value 'schema') -cne 'cochem-warden-start-held/3' -or (Get-StringField $value 'target') -cne $target -or (Get-StringField $value 'attempt') -cne $script:RetargetAttempt -or
@@ -680,7 +690,7 @@ function Read-StartReceipt {
         action=$script:expectedAction;triggers=$script:expectedTriggers;task_xml_sha256=$startedSha;source_state=(Get-FieldValue $evidence 'source_state');
         source_attempt=(Get-FieldValue $evidence 'source_attempt');stop_attempt=(Get-FieldValue $evidence 'stop_attempt');controller_bound=$false;
         retarget_receipt_path=$retarget.path;retarget_receipt_sha256=$retarget.sha256;start_intent_path=$intent.path;start_intent_sha256=$intent.sha256;
-        start_held_path=$(if($null -ne $held){$held.path}else{$null});start_held_sha256=$(if($null -ne $held){$held.sha256}else{$null});held_trigger_enabled_after=$heldTrigger;
+        start_held_path=$(if($null -ne $startHeld){$startHeld.path}else{$null});start_held_sha256=$(if($null -ne $startHeld){$startHeld.sha256}else{$null});held_trigger_enabled_after=$heldTrigger;
         source_task_xml_after_path=$afterPath;source_task_xml_after_sha256=$afterControl.Sha256;source_task_xml_started_path=$(if($null -ne $start){$startedPath}else{$null});
         source_task_xml_started_sha256=$startedSha;trigger_enabled_allowed=$allowed}
 }

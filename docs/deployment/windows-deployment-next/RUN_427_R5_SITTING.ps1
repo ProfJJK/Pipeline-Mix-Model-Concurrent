@@ -30,7 +30,7 @@
      Assert-R5Pin; r5 interpreter),
      Invoke-R5Control (ControlClient through Invoke-R5Python; parsed object or $null), Read-R5YesNo, Request-R5Attention,
      Wait-R5Seconds, Get-R5Now, Assert-R5OwnerShell, Get-R5WardenState, Get-R5DockerInfo, Test-R5PackageIndex,
-     Get-R5FreeDiskGB, Get-R5ListenerCount, New-R5HexAttempt, Get-R5FileSha256. Read-R5Warden normalizes Get-R5WardenState
+     Get-R5FreeDiskGB, Get-R5ListenerCount, Get-R5ProcessList, New-R5HexAttempt, Get-R5FileSha256. Read-R5Warden normalizes Get-R5WardenState
      (listening as a count or a boolean; running derived when absent). All waits go through Wait-R5Seconds (>= 10 s in S12/S13).
    - Records: Write-R5Record (CreateNew JSON under $script:SittingRoot), Write-R5Receipt <S01..S14> <status> (schema
      cochem-r5-sitting-stage/1 with the whole $script:R5 state), Read-R5Receipt. A rerun with the same -Attempt skips every
@@ -42,8 +42,14 @@
    vN = the first free namespace under B at call time; every child is launched only after Assert-R5Pin)
    S0  preconditions, no child: owner shell; Get-R5PinDrift empty; freeze receipt manifest_sha256 == pin of
        stopped-runtime-r5-source-manifest.json; sitting-end absent; Docker (Get-R5DockerInfo); Warden (Get-R5WardenState:
-       first run needs source r4-v1 or r4-restore); free disk >= 5 GB; PyPI (Test-R5PackageIndex) while r5 is not installed.
-       Writes S00-receipt.json once (base source = the Warden action found at the first run).
+       first run needs source r4-v1 or r4-restore); runtime processes while S11 is not done (2026-10-11 17:22 fix: S2 held on
+       processes no cutover script recognised): Get-R5ProcessList classified by Get-R5RuntimePresence exactly as the cutover
+       scripts' Get-ControllerPresence (stop-warden-r4.ps1, stop-warden-r5.ps1, retarget-warden-r5.ps1: same patterns, same
+       order, the union of their runtime roots); any unclassified rooted process, or a python process whose image and command
+       line cannot be read (S0 runs elevated), -> STOP listing pid, parent and command line, nothing changed (they would hold
+       the S2 stop, the S11 cutover and every rollback). GUI MCP clients (cochem_pipeline mcp ..., the reviewed cochem_mcp
+       bridge form), controllers and the two observer recorders pass; free disk >= 5 GB; PyPI (Test-R5PackageIndex) while r5 is
+       not installed. Writes S00-receipt.json once (base source = the Warden action found at the first run).
    S1  install-stopped-runtime-r5.ps1 -Manifest W\stopped-runtime-r5-source-manifest.json -ManifestSha256 <freeze sha>
        (plan: exit 0, mode READ_ONLY_PLAN, holds []) then the same + -Apply (exit 0, mode FRESH_STOPPED_RUNTIME_READY);
        gate B\Pipeline4.2.7-windows-20261011-r5\install-after.json: schema cochem-stopped-runtime-update/1, mode
@@ -181,9 +187,9 @@ $script:Pins=@{
     'check-worker-denials.ps1'='1576882fe655d27894aa6f9da25a14ae4ddd08540c865d51cc43b26fa3dd6f9d'
     'stopped-runtime-r5-source-manifest.json'='5d8d337baebbc1e4ac29439d418333ab41c0999eb8c0ef8b02acee66850a3045'
     'stopped-runtime-r5-freeze-receipt.json'='5bdd2ad2fdd46ae4451b34a57641cf542b56e1ab83d379ce1048a5eb44b30ceb'
-    'stop-warden-r4.ps1'='bd54cb8194d256109aa8dae95451b87780566f7094f26f52d251840944bbc71b'
-    'stop-warden-r5.ps1'='6e519927d268cd901843ffe95eaf68965f62cbe288c9a1abbc46a35f5e9feade'
-    'retarget-warden-r5.ps1'='97403e81c425076acddddc8f9c594143d47a7a449be92806a32fd09c7f8ab65b'
+    'stop-warden-r4.ps1'='43fc386b1984447c1d5304a8297932c8f825735562b5dbc5dc3f23a211adbe7e'
+    'stop-warden-r5.ps1'='b5920f379cee10eba101b87adb40b6a500d1bf5f29300f3e56a025182ee407a9'
+    'retarget-warden-r5.ps1'='991703ab10b7bf280fb092ec984e79d1095379070857e7c2859d0a5ba0c0dee7'
     'backup-private-databases-r4.py'='f00ad064215d1a689f1355a18da9f159b16d45699507975de957a4cb832a0f8b'
     'check-worker-native-status-r3.ps1'='18f58ebb448d8a0c6329dd187d4a9a27fa9cbe942cd05e906bb7aabc67e787a7'
     'protected-code-inspection-v4.ps1'='5c01543cbb8b8d64b2b9f1bab4a13f87f8ff9e1ab3e82dfb6fc547144c77b95d'
@@ -191,7 +197,7 @@ $script:Pins=@{
     'retarget-warden-r4.ps1'='8ee6b412f6be176dfac7c2c1b2340f1973e08358c7d22da6d4515e79f0327a4e'
     'check-worker-native-auth-status-six-r4-v1.ps1'='c0b5df803a339a7dbbbd59727ea59a75dc4722d474f4bb05852d5cdc8778e265'
     'worker-native-auth-status-six-r4-v1.py'='45681477194d97b144e8ee4505d4364d73d58aaef19c8428c846df642c834839'
-    'login-six-workers-status-first-r4-v1.ps1'='f4fedd50925dbe8bd0bdb509c449f5085209d3eab665c5917573998ffcd981c4'
+    'login-six-workers-status-first-r4-v1.ps1'='9cfc0a985253da38ddd521d980cf83d9a59cc52079ac40ae8a0c70eb95ef94b5'
     'login-six-workers-status-first-r3-v6.ps1'='9e45266bdccbaa7765245eb23091211b669c92504c374dd7ded6eab0699a4665'
     'login_pipeline_worker_interactive_r3_v6.ps1'='837f567c5cae00d30620e313d746df6acf98259c9ffa1ef43ebc217b7cf9c46d'
     'claude-session-history-v6.ps1'='36cac78f54d9a9370991df3a83bfdf36144e7e9f8ed2dabe4da3105e5edd4636'
@@ -203,12 +209,12 @@ $script:Pins=@{
     'agy-session-history-r4-v1.ps1'='4e86b712314e2a6a8ea9f13e1dfcc9e65dda4035d2895b8043fbf6ceed0424d4'
     'agy-status-capture-r4-v1.ps1'='90d5612347748563e05437bb173f05289c669c530d266f109f4ff668077c0f2a'
     'agy_status_capture_r4_v1.py'='ce103aad0f9dae042677ec61c2b16eb5512e9a24f5fca65bc97f4570bb884038'
-    'agy-isolation-evidence-r4-v1.ps1'='b837f0f42c4cea9293231d58c6930c3a20b41ba53ba3695db0eff2ea2db17070'
+    'agy-isolation-evidence-r4-v1.ps1'='af773b1f03a20fb21391620d1ef6b1ee06cfeef37f09d59e6f617f978bf93edb'
     'agy_isolation_evidence_r4_v1.py'='767f03af910fb137bd9a08ed82390f08878d802c45cfb9689eadb5ca44af8d60'
     'cochem-inference-only.agent.md'='5c0082d70d073263a56d748a46187008968c070d0efc7d5b7612c2fd61d11810'
     'build-pipeline-config-r5-candidate.py'='ab01d82486ec54ee8eefa17542d6b58d9811cb94a96a5ceef1f439f0599a19e8'
     'stage-pipeline-config-r5-v1.ps1'='1066f6c3d9fb5be6143075ddf72206af56f64a8240b7e49fc8f0625d32e3c993'
-    'run-upgrade-preview-r5-v1.ps1'='0be2a4acd6b98992f13b750ca817b75407d32444bff4d3ecb8842d4eebf49018'
+    'run-upgrade-preview-r5-v1.ps1'='8f4c80647321c6e811ddcb3b8b94824e48c1f4c4e3d29e7f5b149862668bc66e'
     'run_upgrade_preview_r5_v1.py'='71e0383272057ab7be59f339a9dcb0c57e74ac5329f46d575cc49cde62816051'
 }
 # ---- END PIN TABLE ----
@@ -234,6 +240,15 @@ function Initialize-R5Paths {
     # The only port and token file the owner-writable client config may name (the cutover scripts' Assert-ClientConfig, F6).
     $script:ControlPort=47824;$script:TokenFile='C:\Users\ansac\CoChem427\controller.token'
     $script:ClientConfig='C:\Users\ansac\CoChem427\pipeline-client-r3.json'
+    # S0 runtime-process precheck: the classification of the cutover scripts' Get-ControllerPresence, literal for literal
+    # (test_r5_sitting_static.py compares these with stop-warden-r4.ps1, stop-warden-r5.ps1 and retarget-warden-r5.ps1), over
+    # the union of their runtime roots: every Pipeline4.2.7-windows-* root (stop-warden-r5 runtimePrefix; r3, r4 and r5 of the
+    # other two lie under it) and the Toolchain interpreter (basePythonRoot).
+    $script:RuntimeRoots=@((Join-Path $script:Base 'Pipeline4.2.7-windows-'),(Join-Path $script:Base 'Toolchain4.2.7-windows-20261006\Python312'))
+    $script:ControllerPattern='cochem_pipeline\s+daemon\b|cochem_supervisor\b|provision-execution\b|cochem-supervisor\b|cochem-pipeline(\.exe)?"?\s+daemon\b'
+    $script:ObserverPattern='\\SupervisorObservation4\.2\.7-windows-20261007-r3-v1\\held-supervisor-observation-r3-v1\.py"?\s+--observe\b|\\ResourceObservation4\.2\.7-windows-20261008-r3-v4\\package\\observe_resources\.py"?\s+--run-observer\b'
+    $script:ClientPattern='cochem_pipeline\s+(mcp|health|status|submit|cancel|projects|code|code-status|code-cancel|code-resume|knowledge-\w+)\b'
+    $script:BridgeClientPattern='^"[^"]+\\python\.exe" -m cochem_mcp --provider (codex|claude) --config C:\\Users\\ansac\\CoChem427\\bridge\.local\.json\z'
     $script:Manifest=Join-Path $script:Workspace 'stopped-runtime-r5-source-manifest.json'
     $script:FreezeReceipt=Join-Path $script:Workspace 'stopped-runtime-r5-freeze-receipt.json'
     $script:ExecutionImage='sha256:d9d3e8644b6fc407c7d5ee7151fcb22470d74b8c14a4e6ef8cf8e9acb62877a2'
@@ -454,6 +469,33 @@ function Test-R5PackageIndex {
 
 function Get-R5FreeDiskGB {param([string]$Path)
     try{[double]([IO.DriveInfo]::new([IO.Path]::GetPathRoot($Path)).AvailableFreeSpace)/1GB}catch{-1}}
+
+function Get-R5ProcessList {
+    # Read-only Win32_Process view (image path and command line), the same query the cutover scripts classify; complete only
+    # in an elevated window, as S0 runs. A failed query throws (S0 then stops with nothing changed, as the cutover scripts hold).
+    @(Get-CimInstance Win32_Process -ErrorAction Stop|ForEach-Object {
+        [pscustomobject]@{pid=[int]$_.ProcessId;parent=[int]$_.ParentProcessId;name=[string]$_.Name;path=[string]$_.ExecutablePath;command=[string]$_.CommandLine}})}
+
+function Get-R5RuntimePresence {param($Processes)
+    # The cutover scripts' Get-ControllerPresence classification, in its order: controller-like command lines from any image,
+    # then the two observer recorders, then GUI clients and unclassified processes among the rooted ones (image under
+    # $script:RuntimeRoots), then python processes whose image and command line cannot be read. Pure: no host access.
+    $controllers=@();$observers=@();$clients=@();$unclassified=@();$uninspectable=@()
+    foreach($process in @($Processes|Where-Object {$null -ne $_})){
+        $path=[string](Get-R5Member $process 'path');$command=[string](Get-R5Member $process 'command');$name=[string](Get-R5Member $process 'name')
+        $rooted=$false;if($path){foreach($root in @($script:RuntimeRoots)){if($path.StartsWith($root,[StringComparison]::OrdinalIgnoreCase)){$rooted=$true;break}}}
+        $entry=[pscustomobject]@{pid=(Get-R5Member $process 'pid');parent=(Get-R5Member $process 'parent');name=$name;path=$path;command=$command}
+        if($command -match $script:ControllerPattern){$controllers+=$entry}
+        elseif($command -match $script:ObserverPattern){$observers+=$entry}
+        elseif($rooted -and ($command -match $script:ClientPattern -or $command -cmatch $script:BridgeClientPattern)){$clients+=$entry}
+        elseif($rooted){$unclassified+=$entry}
+        elseif(-not $path -and -not $command -and $name -match '^python(w)?\.exe$'){$uninspectable+=$entry}}
+    [pscustomobject]@{controllers=$controllers;observers=$observers;clients=$clients;unclassified=$unclassified;uninspectable=$uninspectable}}
+
+function Format-R5Process {param($Entry)
+    # One process for the owner: pid, parent and what the cutover scripts saw (command line, else image, else unreadable).
+    $what=$(if($Entry.command){[string]$Entry.command}elseif($Entry.path){[string]$Entry.path+' (no command line)'}else{[string]$Entry.name+' (image and command line unreadable)'})
+    'pid '+[string]$Entry.pid+' (parent '+[string]$Entry.parent+'): '+$what}
 
 # ================================================================== JSON and records
 function Get-R5JsonTail {param([string]$Text)
@@ -795,6 +837,18 @@ function Invoke-R5Stage0 {
         if($warden.running -or $warden.enabled -eq $true){Stop-R5Series 'The Warden task is enabled or running again although this sitting stopped it (S2); nothing was changed. The agent reviews it.'}
     }elseif($warden.source -cne 'r5' -or -not $warden.running){
         Stop-R5Series 'The r5 Warden is not running. After a reboot it restarts itself 1-16 minutes after you sign in (it waits for Docker Desktop); wait, then rerun this same command.'}
+    # 2026-10-11 17:22: S2 held on runtime processes no cutover script recognised. Every later cutover child (the S2 stop, the
+    # S11 retarget and each rollback) holds on such a process, so the owner learns it here, before S1, with nothing changed.
+    # Not needed once r5 runs (S11 done): then the processes under the r5 root are its own.
+    if(-not $script:R5Done.ContainsKey('S11')){
+        $presence=$null
+        try{$presence=Get-R5RuntimePresence (Get-R5ProcessList)}
+        catch{Stop-R5Series ('The process list could not be read ('+$_.Exception.Message+'); the cutover scripts would hold the same way. Nothing was changed.')}
+        $blocking=@(@($presence.unclassified)+@($presence.uninspectable))
+        if($blocking.Count){Stop-R5Series ('Runtime processes the cutover scripts do not recognise are running: '+(@($blocking|ForEach-Object {Format-R5Process $_}) -join '; ')+
+            '. They would hold the Warden stop (S2), the r5 cutover and every rollback, as on 11 October at 17:22. Nothing was changed. Close the program that started them (or send this list to the agent), then rerun this same command.')}
+        Say ('runtime processes: '+@($presence.clients).Count+' MCP client(s) recognised (Claude Desktop, Codex, Antigravity, Claude Code may stay open), '+
+            @($presence.observers).Count+' observer recorder(s), '+@($presence.controllers).Count+' controller process(es); none unclassified')}
     $free=Get-R5FreeDiskGB $script:Base
     if(-not $script:R5Done.ContainsKey('S01') -and $free -ge 0 -and $free -lt 5){Stop-R5Series ('Only '+[Math]::Round($free,1)+' GB are free on the system drive; the r5 build needs at least 5 GB. Nothing was changed.')}
     if(-not $script:R5Done.ContainsKey('S01') -and -not (Test-Path -LiteralPath $script:InstallAfter)){
@@ -1243,7 +1297,16 @@ function Invoke-R5Restore {param([string]$Reason)
 # ================================================================== plan, outcome, series
 function Show-R5Plan {
     Say 'READ-ONLY PLAN (no -Apply): nothing is changed, no child is started.'
-    try{Assert-R5OwnerShell;Say 'shell: elevated 64-bit Windows PowerShell 5.1 as AETHERDESK\ansac'}catch{Say ('shell: '+$_.Exception.Message.Replace('SERIES-STOP: ',''))}
+    $owner=$true
+    try{Assert-R5OwnerShell;Say 'shell: elevated 64-bit Windows PowerShell 5.1 as AETHERDESK\ansac'}catch{$owner=$false;Say ('shell: '+$_.Exception.Message.Replace('SERIES-STOP: ',''))}
+    # The S0 runtime-process precheck, read-only; without elevation other accounts' python processes cannot be read.
+    try{
+        $presence=Get-R5RuntimePresence (Get-R5ProcessList)
+        $blocking=@(@($presence.unclassified)+@($(if($owner){@($presence.uninspectable)}else{@()})))
+        Say ('runtime processes: '+@($presence.clients).Count+' MCP client(s) recognised, '+@($presence.observers).Count+' observer recorder(s), '+@($presence.controllers).Count+' controller process(es)'+
+            $(if($blocking.Count){'; S0 would STOP on: '+(@($blocking|ForEach-Object {Format-R5Process $_}) -join '; ')}else{'; none unclassified'})+
+            $(if(-not $owner -and @($presence.uninspectable).Count){' ('+@($presence.uninspectable).Count+' python process(es) unreadable without elevation; S0 reads them elevated)'}else{''}))}
+    catch{Say ('runtime processes: the process list could not be read ('+$_.Exception.Message+')')}
     $drift=@(Get-R5PinDrift)
     Say ('pins: '+$(if($drift.Count){'NOT READY - '+($drift -join ', ')}else{[string]$script:Pins.Count+' reviewed files match'}))
     $docker=Get-R5DockerInfo;Say ('docker: '+$docker.reason)

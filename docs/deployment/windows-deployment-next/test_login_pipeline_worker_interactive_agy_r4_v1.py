@@ -1,6 +1,7 @@
 """Inert harness for login_pipeline_worker_interactive_agy_r4_v1.ps1 (Gemini build-manifest step 4).
 
-The wrapper is never run as a script and never with -Apply. Its functions are dot-sourced from the AST into a
+The wrapper is never run with -Apply, and as a script only by the top-level smoke tests at the end (ps_toplevel_smoke.py:
+stubbed host, plan mode). Otherwise its functions are dot-sourced from the AST into a
 non-interactive powershell.exe; the console key source, Task Scheduler, protected-path checks, code-tree inspection
 and history review are fixtures. The real console loop, prompt detection, packet hand-off, receipt binding (through the
 real history classifier and real bridge receipts), session records and exit-code mapping are exercised. Every file
@@ -15,8 +16,10 @@ import re
 
 import pytest
 
+import ps_toplevel_smoke as smoke
+
 W = Path(__file__).resolve().parent
-spec = importlib.util.spec_from_file_location('agy_bridge_fixtures_for_wrapper', W / 'test_agy_login_bridge_r4_v1.py')
+spec =importlib.util.spec_from_file_location('agy_bridge_fixtures_for_wrapper', W / 'test_agy_login_bridge_r4_v1.py')
 fx = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(fx)
 
@@ -815,3 +818,48 @@ def test_wrapper_shape_single_invocation_and_input_handling_order():
     # O-F9: the masked prompt is gated on a Google sign-in URL that precedes the native prompt.
     assert '$readyAt=Find-AgyCodePrompt $text' in loop and "'https://accounts.google.com/'" in text
     assert "[ValidateSet('print','tui','none')][string]$LoginMode" in text
+
+
+# ----- top level, plan mode only (ps_toplevel_smoke.py) -----
+# The only place the wrapper runs as a script: the REAL top level (param block, binding, exit mapping) with the host
+# stubbed by ps_toplevel_smoke, which refuses -Apply. That is the 2026-10-11 17:22 failure class (a script parameter
+# variable keeps its [Validate*] attributes for the whole run), invisible to the AST fixtures above.
+SMOKE_ATTEMPT = '0123456789abcdef0123456789abcdef'
+SMOKE_PLAN_SCHEMA = 'cochem-interactive-agy-login-plan/1'
+
+
+def test_no_assignment_writes_a_validated_parameter_variable():
+    body = ("$t=$null;$e=$null;$a=[Management.Automation.Language.Parser]::ParseFile(" + q(WRAPPER) + ",[ref]$t,[ref]$e);if($e.Count){throw $e[0]};"
+            "$v=@{};foreach($p in @($a.ParamBlock.Parameters)){if(@($p.Attributes|Where-Object{$_.TypeName.Name -like 'Validate*'}).Count){$v[$p.Name.VariablePath.UserPath.ToLowerInvariant()]=1}};"
+            "$hits=@(foreach($n in $a.FindAll({param($x)$x -is [Management.Automation.Language.AssignmentStatementAst]},$true)){"
+            "$targets=@($n.Left);if($n.Left -is [Management.Automation.Language.ArrayLiteralAst]){$targets=@($n.Left.Elements)};"
+            "foreach($l in $targets){if($l -is [Management.Automation.Language.ConvertExpressionAst]){$l=$l.Child};if($l -isnot [Management.Automation.Language.VariableExpressionAst]){continue};"
+            "$name=($l.VariablePath.UserPath -replace '^(script|global|local|private):','').ToLowerInvariant();"
+            "$f=$n.Parent;while($null -ne $f -and $f -isnot [Management.Automation.Language.FunctionDefinitionAst]){$f=$f.Parent};"
+            "if($v.ContainsKey($name) -and ($l.VariablePath.IsScript -or $l.VariablePath.IsGlobal -or $null -eq $f)){$l.Extent.Text+'='+$n.Right.Extent.Text}}});"
+            "$sv=@($a.FindAll({param($x)$x -is [Management.Automation.Language.CommandAst] -and $x.GetCommandName() -in @('Set-Variable','New-Variable','sv','nv')},$true)).Count;"
+            "'RESULT '+(@{validated=@($v.Keys|Sort-Object);hits=@($hits);set_variable=$sv}|ConvertTo-Json -Compress)")
+    output = fx.ps_run(body)
+    value = json.loads(next(line for line in output.splitlines() if line.startswith('RESULT '))[len('RESULT '):])
+    assert value['validated'] == ['captureattempt', 'loginmode', 'slot']
+    # Nothing writes them. Note that -CaptureAttempt's default '' fails its own pattern: harmless while unassigned (defaults
+    # are not validated), but a future $script:CaptureAttempt= line would throw for every call without -CaptureAttempt.
+    assert value['hits'] == [] and value['set_variable'] == 0
+
+
+@pytest.mark.parametrize('invocation', ['file', 'command'])
+@pytest.mark.parametrize('slot,mode', [('slot1', 'print'), ('slot4', 'tui'), ('slot6', 'print')])
+def test_toplevel_plan_for_the_drivers_documented_call(slot, mode, invocation):
+    # login-six-workers-status-first-r4-v1.ps1 Invoke-AgyBridgeLogin (S6): -Slot -LoginMode -CaptureAttempt -Apply -Interactive.
+    args = ['-Slot', slot, '-LoginMode', mode, '-CaptureAttempt', SMOKE_ATTEMPT, '-Interactive']
+    result = smoke.run_toplevel(WRAPPER, args, invocation=invocation)
+    assert smoke.plan_mode_outcome(result, plan_schema=SMOKE_PLAN_SCHEMA) == 'plan', result.describe()
+    plan = result.plan
+    assert plan['slot'] == slot and plan['login_mode'] == mode and plan['login_commands_executed'] == 0 and plan['tasks_changed'] == 0
+    assert plan['native_arguments'] == (['-p', '/model'] if mode == 'print' else []) and isinstance(plan['holds'], list)
+
+
+def test_toplevel_plan_without_capture_attempt_keeps_the_unvalidated_default():
+    result = smoke.run_toplevel(WRAPPER, ['-Slot', 'slot2', '-LoginMode', 'tui'])
+    assert smoke.plan_mode_outcome(result, plan_schema=SMOKE_PLAN_SCHEMA) == 'plan', result.describe()
+    assert result.plan['slot'] == 'slot2' and result.plan['login_mode_evidence'] is None

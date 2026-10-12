@@ -133,7 +133,8 @@ def test_declares_one_function_per_stage_and_the_branch_functions():
         'Invoke-R5Restore', 'Invoke-R5GeminiFallback', 'Invoke-R5Series', 'Initialize-R5Paths', 'Assert-R5Pin', 'Get-R5PinDrift',
         'Invoke-R5Native', 'Invoke-R5Child', 'Invoke-R5Attended', 'Invoke-R5Python', 'Invoke-R5Control', 'Read-R5YesNo', 'Request-R5Attention',
         'Wait-R5Seconds', 'Get-R5Now', 'Assert-R5OwnerShell', 'Get-R5WardenState', 'Get-R5DockerInfo', 'Test-R5PackageIndex', 'Get-R5FreeDiskGB',
-        'Get-R5ListenerCount', 'New-R5HexAttempt', 'Write-R5Receipt', 'Read-R5Receipt', 'Get-R5CutoverState', 'Show-R5Plan'}
+        'Get-R5ListenerCount', 'Get-R5ProcessList', 'Get-R5RuntimePresence', 'New-R5HexAttempt', 'Write-R5Receipt', 'Read-R5Receipt',
+        'Get-R5CutoverState', 'Show-R5Plan'}
     assert required <= set(names), sorted(required - set(names))
     assert sorted({n for n in names if names.count(n) > 1}) == [], 'a function defined twice makes the harness ambiguous'
     assert all(f['top'] for f in facts()['functions']), 'no nested function definitions (the harness loads top-level definitions)'
@@ -551,3 +552,84 @@ def test_failure_messages_use_the_series_stop_prefix():
     code = code_without_comments()
     rest = code[:stop['start']] + code[stop['end']:]
     assert not re.search(r"\bthrow\s+['(\"]", rest), 'every planned stop goes through Stop-R5Series'
+
+
+# ---------------------------------------------------------------------------------------------------------------------
+# S0 runtime-process precheck (2026-10-11 17:22: S2 held on runtime processes no cutover script recognised)
+
+CUTOVER_SCRIPTS = ('stop-warden-r4.ps1', 'stop-warden-r5.ps1', 'retarget-warden-r5.ps1')
+
+
+def cutover_text(script):
+    return (ROOT / script).read_text(encoding='ascii')
+
+
+def cutover_function(script, name):
+    match = re.search(r'(?ms)^function ' + re.escape(name) + r' \{.*?^\}', cutover_text(script))
+    assert match, (script, name)
+    return match.group(0)
+
+
+def sitting_pattern(name):
+    match = re.search(r"\$script:" + name + r"='([^']*)'", function_code('Initialize-R5Paths'))
+    assert match, name
+    return match.group(1)
+
+
+def test_s0_process_classification_copies_the_cutover_scripts_literal_for_literal():
+    controller, observer = sitting_pattern('ControllerPattern'), sitting_pattern('ObserverPattern')
+    client, bridge = sitting_pattern('ClientPattern'), sitting_pattern('BridgeClientPattern')
+    for script in CUTOVER_SCRIPTS:
+        body = cutover_function(script, 'Get-ControllerPresence')
+        lines = [line.strip() for line in body.splitlines()]
+        expected = [f"if($command -match '{controller}'){{$controllers+=$entry}}",
+                    "elseif($command -match $script:observerPattern){$observers+=$entry}",
+                    f"elseif($rooted -and ($command -match '{client}' -or $command -cmatch '{bridge}')){{$clients+=$entry}}",
+                    "elseif($rooted){$unclassified+=$entry}",
+                    "elseif(-not $path -and -not $command -and $name -match '^python(w)?\\.exe$'){$uninspectable++}"]
+        positions = [lines.index(line) if line in lines else -1 for line in expected]
+        assert -1 not in positions and positions == sorted(positions) and positions[-1] - positions[0] == 4, (script, positions)
+        assert "foreach($process in @(Get-CimInstance Win32_Process -ErrorAction Stop)){" in body
+        assert "[StringComparison]::OrdinalIgnoreCase" in body
+        assert re.search(r"\$script:observerPattern='([^']*)'", cutover_text(script)).group(1) == observer, script
+        alive = cutover_function(script, 'Test-ControllerAlive')
+        assert '@($Presence.unclassified_runtime_processes).Count -ne 0' in alive and '$Presence.uninspectable_python_processes -ne 0' in alive, script
+    presence = function_code('Get-R5RuntimePresence')
+    order = [presence.index(s) for s in ('-match $script:ControllerPattern', '-match $script:ObserverPattern', '-match $script:ClientPattern',
+                                         '-cmatch $script:BridgeClientPattern', '$unclassified+=$entry', "$name -match '^python(w)?\\.exe$'")]
+    assert order == sorted(order), 'the sitting keeps the cutover order: controllers, observers, clients, unclassified, uninspectable'
+    assert '[StringComparison]::OrdinalIgnoreCase' in presence and '$script:RuntimeRoots' in presence
+    assert "Get-CimInstance Win32_Process -ErrorAction Stop" in function_code('Get-R5ProcessList')
+
+
+def test_s0_runtime_roots_are_the_union_of_the_cutover_scripts_roots():
+    r5 = cutover_text('stop-warden-r5.ps1')
+    prefix = re.search(r"\$script:runtimePrefix=Join-Path \$script:base '([^']+)'", r5).group(1)
+    toolchain = re.search(r"\$script:basePythonRoot=Join-Path \$script:base '([^']+)'", r5).group(1)
+    assert "$script:RuntimeRoots=@((Join-Path $script:Base '" + prefix + "'),(Join-Path $script:Base '" + toolchain + "'))" in function_code('Initialize-R5Paths')
+    assert "if($path){foreach($root in @($script:runtimeRoots))" in cutover_function('retarget-warden-r5.ps1', 'Get-ControllerPresence')
+    for script in CUTOVER_SCRIPTS:
+        text = cutover_text(script)
+        assert re.search(r"\$script:basePythonRoot=Join-Path \$script:base '([^']+)'", text).group(1) == toolchain, script
+        for root in re.findall(r"\$script:r[345]Root=Join-Path \$script:base '([^']+)'", text):
+            assert root.startswith(prefix), (script, root)
+    retarget = cutover_text('retarget-warden-r5.ps1')
+    assert "$script:runtimeRoots=@($script:r3Root,$script:r4Root,$script:basePythonRoot)" in retarget
+    assert re.search(r"\$script:r5RootPattern='\^" + re.escape(prefix.replace('.', '\\.')), retarget), 'the r5 roots the retarget adds lie under the prefix'
+    r4 = cutover_function('stop-warden-r4.ps1', 'Get-ControllerPresence')
+    assert '$path.StartsWith($script:r3Root,' in r4 and '$path.StartsWith($script:r4Root,' in r4 and '$path.StartsWith($script:basePythonRoot,' in r4
+
+
+def test_s0_precheck_stops_before_s1_with_nothing_changed_while_a_cutover_child_is_ahead():
+    stage0 = function_code('Invoke-R5Stage0')
+    guard = re.search(r"(?m)^[ \t]+if\(-not \$script:R5Done\.ContainsKey\('S11'\)\)\{\r?$", stage0)
+    assert guard, 'needed until r5 runs (S2, S11 and every rollback hold on such a process)'
+    start = guard.start()
+    assert start < stage0.index('Get-R5RuntimePresence (Get-R5ProcessList)') < stage0.index('Get-R5FreeDiskGB')
+    assert stage0.index('Read-R5Warden') < start < stage0.index('Get-R5FreeDiskGB') < stage0.index("Write-R5Receipt 'S00'")
+    assert '@(@($presence.unclassified)+@($presence.uninspectable))' in stage0
+    stops = [c['text'] for c in calls('Stop-R5Series') if c['function'] == 'Invoke-R5Stage0']
+    precheck = [t for t in stops if 'do not recognise' in t or 'process list could not be read' in t]
+    assert len(precheck) == 2 and not [t for t in precheck if t.rstrip().endswith('-Restore')], 'a precheck stop never restores'
+    assert all('Nothing was changed' in t for t in precheck) and 'Format-R5Process' in precheck[1] + precheck[0]
+    assert 'Get-R5ProcessList' in function_text('Show-R5Plan') and 'S0 would STOP on: ' in function_text('Show-R5Plan')

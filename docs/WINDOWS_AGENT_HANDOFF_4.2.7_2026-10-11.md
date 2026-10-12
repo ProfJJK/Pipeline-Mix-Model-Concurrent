@@ -1,8 +1,5 @@
 # Windows deployment agent handoff — 11 October 2026 (r5)
 
-> **Preliminary snapshot (2026-10-11 ~18:50 CDT).** The r5 sitting repair was still running when this was
-> committed. A later commit on this branch replaces every *pending* marker. Use the newest version.
-
 This continues the owner's 4.2.7 pipeline deployment on **AETHERDESK** (Windows, account `ansac`).
 It supersedes the deployment-state sections of
 [the 9 October handoff](WINDOWS_AGENT_HANDOFF_4.2.7_2026-10-09.md). Canonical policy is unchanged:
@@ -19,7 +16,7 @@ r5 (Gemini identity policy, reboot-safe Warden start, 200 MiB Warden budget and 
 was built, tested and audited three times, reaching a final GO. The owner's first elevated sitting on
 2026-10-11 17:22 stopped at step S2 and changed nothing that matters: the Warden is still **down**, and the r5
 runtime is installed beside r4 but **never activated**. The cause was two first-contact bugs in the
-deployment scripts (section 5). *(pending: REPAIR_STATUS; filled in by the final handoff commit)* The next
+deployment scripts (section 5). The follow-up audit found four more hazards of the same two kinds. All six are repaired. The runner passes its pin check (33 files) and both sitting suites (68 static, 238 flow tests), and each changed child script passes its own harness. The next
 action is the owner's rerun of the sitting (section 6). The owner has deliberately left the
 **model-tier routing redesign** to the next agent (section 8).
 
@@ -90,7 +87,7 @@ Key W documents:
 - **r5 freeze:** `C:\Users\ansac\CoChem427\stopped-runtime-r5-source` (166 files: 13 changed,
   153 verified unchanged against r4).
 - **Sitting root of attempt v1:** `C:\Program Files\CoChem\R5Sitting4.2.7-windows-20261011-v1`.
-  This attempt has **ended** (stopped at S2). *(pending: RERUN_ATTEMPT; filled in by the final handoff commit)*
+  This attempt has **ended** (stopped at S2). The rerun uses **`-Attempt v2`**. Rerunning v1 stops at S0 with "Sitting attempt v1 has already ended". In v2, S0 skips the PyPI probe and S1 skips the install, because the existing r5 install verifies read-only (`install-after.json`, sha `91c75609…`, no `install-held.json`). S2 can use the stop namespace v1, which is still free because the v1 stop held before it created its folder.
 - **Owner GUI clients:** the owner normally runs about 14 MCP client processes as `AETHERDESK\ansac`
   (Claude Desktop, Codex, Antigravity, Claude Code), from the r4 venv or the Toolchain Python. They are
   clients of the Warden, not controllers. They may stay open during the sitting once the repair is in place.
@@ -129,7 +126,52 @@ Root causes:
 
 The repair (workflow `r5-sitting-repair`, 2026-10-11 evening):
 
-*(pending: REPAIR_DETAILS; filled in by the final handoff commit)*
+Diagnosis (two read-only agents) confirmed both root causes and found four more hazards of the same kinds.
+The PowerShell 5.1 probes used each script's real param block and its real imported helpers.
+
+| # | Script (new sha256 prefix) | Hazard | Would have failed at | Fix |
+| --- | --- | --- | --- | --- |
+| 1 | `retarget-warden-r5.ps1` (`991703ab`, was `97403e81`) | `$script:SourceAttempt/StopAttempt=''` on `[ValidatePattern]` parameters | S11 from base r4-v1, the r4 restore (seen 17:22) | Removed `Validate*` from the four parameters; `Assert-RetargetParameters` already validates them case-sensitively |
+| 2 | `login-six-workers-status-first-r4-v1.ps1` (`9cfc0a98`, was `f4fedd50`) | `$script:LoginMode=''` on `[ValidateSet('print','tui')]` | every S3 Claude/Codex re-login | `-LoginMode` is a plain `[string]`; `Get-LoginModeRefusal` enforces the set |
+| 3 | `agy-isolation-evidence-r4-v1.ps1` (`af773b1f`, was `b837f0f4`) | `$script:Slot=''` / `effortNullSlug=''` on `[ValidateSet]` | S8 `-StageOnly`, always, so Gemini would always be held | Plain `[string]`; the main function enforces slot1 and the three slugs |
+| 4 | `stop-warden-r5.ps1` (`b5920f37`, was `6e519927`) | `Read-StartReceipt` local `$held` shadows the caller's list; the imported `Read-R3Control` calls `$held.Add()` through dynamic scope | **every** stop-warden-r5 run: the Gemini fallback stop, every r5 rollback, S2 after any r4 restore | Local renamed `$startHeld` |
+| 5, 6 | `retarget-warden-r5.ps1` | same `$held` trap in `Assert-HeldStartSourceLineage` and `Assert-RetargetHeldSourceLineage` | r4 restore from held-after-Run and from an unreadable MUTATION_READBACK hold | Renamed `$heldRecord` (plus two hygiene renames) |
+| P | `stop-warden-r4.ps1` (`43fc386b`, was `bd54cb81`), `stop-warden-r5.ps1`, `retarget-warden-r5.ps1` | Antigravity bridge `python.exe -m cochem_mcp --provider (codex\|claude) --config C:\Users\ansac\CoChem427\bridge.local.json` was "unclassified" | S2 (seen 17:22), S11, every restore | One identical client line in all three; it matches that exact command line only (near misses still hold) |
+
+Cascade: `run-upgrade-preview-r5-v1.ps1` was re-pinned to the new retarget (`8f4c8064`, was `0be2a4ac`). The stager's
+byte-identical copies did not change.
+
+New safeguards:
+
+- **`W\ps_toplevel_smoke.py`** + `test_ps_toplevel_smoke.py` (71 tests). It runs a real script top level in plan mode
+  under Windows PowerShell 5.1 against stubs, as `-File` and as `-Command`.
+- **Child-binding smoke** in `test_r5_sitting_flow.py`. Every call shape the runner can build (41 shapes, including
+  every restore, fallback and recovery path) is bound against the real child script with `-Apply` dropped. A test
+  copy of the 17:22 mistake must fail it.
+- **S0 process precheck** in the runner. Before S11 it classifies live processes exactly as the three cutover
+  scripts do, and stops at S0 with nothing changed if anything rooted in a pipeline runtime is unrecognised. It
+  lists pid, parent and command line, and writes no receipt and no `sitting-end.json`. On the live host (read-only)
+  all 16 MCP clients are recognised.
+- Static checks that no script writes a validated parameter variable and no function shadows a variable that an
+  imported reviewed helper reads.
+
+Harness results on the final files, each run alone through `serialize-heavy.py`:
+
+- retarget 530, stop-r5 570, stop-r4 167, smoke 71.
+- preview 101, stager 61, installer/freeze 187, builder 89.
+- driver 103, isolation 121, status leaf 66, capture 88, agy wrapper 82.
+- Runner: static 68, flow 238. Pin check: 33 OK.
+- An independent rerun of static + flow + smoke by the Commander: 377 passed in 417 s (2026-10-11 ~20:00).
+
+Known limits:
+
+- S2 can still hold on checks the S0 precheck does not cover (worker ownership, the port bind test).
+- The bridge pattern is exact. If the owner adds `-I -B` to the Antigravity MCP entries or moves
+  `bridge.local.json`, every stop holds on the bridges again; widen the pattern in all three scripts and in
+  the runner's S0 mirror.
+- The r3_v6 Claude login child loads its copy helper from `D:\Gdrive\...\scripts`, so that Google Drive path
+  must exist on the day (it does now).
+- The installer (S1) cannot run top level against stubs. It ran for real at 17:22 and is skipped in v2.
 
 ## 6. Running the sitting (owner)
 
@@ -137,7 +179,7 @@ The owner opens an **elevated 64-bit Windows PowerShell 5.1** and runs:
 
 ```powershell
 cd "$HOME\Documents\Codex\2026-10-06\the-github-repository-is-located-at\windows-deployment-next"
-*(pending: OWNER_COMMAND; filled in by the final handoff commit)*
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\RUN_427_R5_SITTING.ps1 -Apply -Attempt v2
 ```
 
 - Without `-Apply` the runner only prints the plan. `-Gemini skip` drops the six Google sign-ins.
@@ -226,7 +268,18 @@ Input material (proposals written before the owner deferred the redesign; not de
 - `W\r5-army-specs\R6A_SCOPE_20261011.md`: a deployment-only r6a split (superseded).
 - `W\r5-army-specs\R6_SCOPE_V2_20261011.md`: a routing policy v3 sketch with Pro in tier 4-6 and agy Opus
   as the last fallback in 7-9 and 10.
-- *(pending: RESEARCH_POINTER; filled in by the final handoff commit)*
+- `W\r5-army-specs\R6_V3_RESEARCH_20261011.md`: read-only research (2026-10-11 evening) with two findings.
+  - Whether and how agy serves Opus 5.5. The catalog lists `claude-opus-5-5-high` ("Claude Opus 5.5
+    (High)"); no Opus run has happened on this host.
+  - The exact source footprint of a policy v3. The minimum is `routing.py` + supervisor `probes.py`,
+    `runner.py` is recommended, and the research lists pre-computed routing digests.
+
+Key risk found by that research, for the agy-Opus wish: agy serves Claude models from Google's
+**"Claude and GPT models"** weekly bucket. That bucket is separate from the Gemini bucket and shared
+by the owner's IDE, the owner's CLI and all six worker slots. About 80 Sonnet 5.5 runs on 2026-10-03
+emptied it for a week, and the next call returned `RESOURCE_EXHAUSTED` / "AI credits balance is too
+low". Also, the pipeline's quota pool `gemini` would hold every Gemini route when that bucket runs dry.
+Treat agy Opus as a small, capped fallback, and design the quota pool split before relying on it.
 
 Other deferred items:
 
@@ -246,6 +299,10 @@ Other deferred items:
   see script-scope parameter binding or `Validate*` attribute behaviour. `W\ps_toplevel_smoke.py` runs a
   script top level in plan mode under Windows PowerShell 5.1 with stubs. Every orchestrator-to-child call
   must be bound against the real child script this way before an owner sitting.
+- **PowerShell resolves free variables by dynamic scope.** A reviewed helper that writes to `$held` (meant to
+  be the caller's list) writes to the nearest `$held` up the call stack. A function that declares its own local
+  `$held` therefore breaks the helper. Stubs that do not reproduce such side effects hide this. Stubs must mimic
+  the real helper's free-variable use, and a static test should flag shadowing.
 - **Classify live processes against the real host.** Fixture process lists missed the Antigravity bridge
   client. The sitting S0 now lists any unrecognised rooted process before anything changes.
 - **Pins:** after changing any pinned W file, run the cascade (re-pin dependents), then
@@ -267,4 +324,21 @@ Other deferred items:
 
 Final pinned script hashes (sha256 prefixes):
 
-*(pending: PIN_TABLE; filled in by the final handoff commit)*
+| File | sha256 prefix |
+| --- | --- |
+| `RUN_427_R5_SITTING.ps1` (runner; its table pins 33 files) | `f875a8f1` |
+| `RETURN_SETUP_R5_20261011.txt` (owner sheet) | `80e5e55a` |
+| `retarget-warden-r5.ps1` | `991703ab` |
+| `stop-warden-r4.ps1` | `43fc386b` |
+| `stop-warden-r5.ps1` | `b5920f37` |
+| `run-upgrade-preview-r5-v1.ps1` | `8f4c8064` |
+| `login-six-workers-status-first-r4-v1.ps1` | `9cfc0a98` |
+| `agy-isolation-evidence-r4-v1.ps1` / `agy_isolation_evidence_r4_v1.py` | `af773b1f` / `767f03af` |
+| `build-pipeline-config-r5-candidate.py` | `ab01d824` |
+| `stage-pipeline-config-r5-v1.ps1` | `1066f6c3` |
+| `install-stopped-runtime-r5.ps1` | `1f8041bc` |
+| `cochem-inference-only.agent.md` | `5c0082d7` |
+| `stopped-runtime-r5-source-manifest.json` (freeze manifest) | `5d8d337b` |
+
+`refresh-r5-sitting-pins.py --check` must print `PINS OK: 33 files` before any sitting. Full hashes for every
+mirrored file are in `docs/deployment/windows-deployment-next/EXPORT-MANIFEST.json`.

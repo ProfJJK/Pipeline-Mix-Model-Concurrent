@@ -2,8 +2,8 @@
 
 Nothing here registers or runs a task, runs the status leaf, any login child or the agy/claude/codex CLIs,
 contacts the live controller, reads a worker profile, uses the network, or runs the driver with -Apply.
-Functions are taken from the driver's AST (its only top-level statement is the invocation, which never runs
-here) and driven in a throwaway powershell.exe; every system call is stubbed and every write lands under
+Functions are taken from the driver's AST (its only top-level statement is the invocation, which runs here only
+through ps_toplevel_smoke.py: stubbed host, plan mode, the tests at the end) and driven in a throwaway powershell.exe; every system call is stubbed and every write lands under
 pytest's tmp_path. Reviewed helper definitions are imported read-only through the driver's own hash-pinned
 importer. The -Apply gate is exercised only at function level (Invoke-LoginSeriesMain with stubbed host facts).
 """
@@ -1235,6 +1235,20 @@ def test_toplevel_gemini_plan_without_login_mode_holds_instead_of_failing():
     assert smoke.plan_mode_outcome(result, plan_schema=PLAN_SCHEMA) == 'plan', result.describe()
     assert result.plan['login_mode'] is None
     assert 'Gemini requires -LoginMode print or tui equal to login-mode.json of the signed-out AgyCapture of this -Attempt.' in result.plan['holds']
+
+
+@pytest.mark.parametrize('slot', ['slot2', 'SLOT6'])
+def test_toplevel_claude_child_binds_and_survives_its_top_level_slot_rewrite(slot):
+    # The S3 claude child (pinned r3 login_pipeline_worker_interactive_r3_v6.ps1, started by this driver with -Slot -Apply
+    # -Interactive) rewrites its [ValidateSet] parameter at top level: $Slot=$Slot.ToLowerInvariant(). That is safe (the set
+    # compares case-insensitively and the lowercased value stays in it). It has no plan mode, so in the stub world it stops
+    # at its first protected read; the point is that binding and the rewrite pass. It loads the copy helper from Google Drive.
+    stub = smoke.default_stub()
+    stub['fs']['read_roots'].append(r'D:\Gdrive\__CoChem\GitHub-Repo\Antigravity_additions\scripts')
+    result = smoke.run_toplevel(W / 'login_pipeline_worker_interactive_r3_v6.ps1', ['-Slot', slot, '-Interactive'], stub=stub)
+    result.raise_for_harness()
+    assert not result.denied and not result.binding_error, result.describe()
+    assert result.error.fqid.startswith('PathNotFound,') and 'Pipeline4.2.7-windows-20261007-r3\\install-after.json' in result.error.message, result.describe()
 
 
 def test_toplevel_upper_case_login_mode_is_lowercased_as_before():

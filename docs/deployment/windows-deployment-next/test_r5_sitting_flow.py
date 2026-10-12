@@ -10,7 +10,7 @@ every launcher or host probe is replaced by a recording stub:
   Start-Process          the attended console children (Invoke-R5Attended stays real, so its pin check runs)
   Invoke-R5Control       ControlClient calls (/health, /preflight, /workflow/<id>, /submit, /coding/...)
   Read-R5YesNo, Request-R5Attention, Wait-R5Seconds, Get-R5Now, Assert-R5OwnerShell, Get-R5WardenState,
-  Get-R5DockerInfo, Test-R5PackageIndex, Get-R5FreeDiskGB, Get-R5ListenerCount, New-R5HexAttempt,
+  Get-R5DockerInfo, Test-R5PackageIndex, Get-R5FreeDiskGB, Get-R5ListenerCount, Get-R5ProcessList, New-R5HexAttempt,
   Start-Transcript, Stop-Transcript
 
 Everything else (pin checks, receipts, stage gates, Gemini-held degradation, restore and fallback selection, the series
@@ -20,9 +20,18 @@ scripts (INTERFACES-CUTOVER final: source states, the live task action, start bi
 real script would refuse is refused here too and recorded. Stubs append one JSON line per event to a trace file, so a
 sitting that ends with `exit` (as Invoke-R5Series does) is still observable. Nothing is started, stopped, registered or
 written outside the per-test temporary directories, and no network is used.
+
+The stubs cannot see a defect that exists only at a child's real top level (the 2026-10-11 17:22 R4-RESTORE died on one:
+retarget-warden-r5.ps1 assigned '' to a [ValidatePattern] parameter variable). The CHILD-BINDING smoke therefore harvests
+every child call the orchestrator builds in a set of flows that reach every stage, restore, fallback and recovery path,
+maps the harness paths back to the live ones and runs each REAL child file top level in plan mode through
+ps_toplevel_smoke.py (-Apply dropped, every other argument kept; host stubbed, unelevated); the builder's arguments are
+parsed by its own argparse parser. No binding or validation error may occur. The S0 runtime-process classification is
+also run against the real Get-ControllerPresence of the three cutover scripts.
 """
 import base64
 import hashlib
+import importlib.util
 import json
 import os
 import re
@@ -30,6 +39,8 @@ import subprocess
 from pathlib import Path
 
 import pytest
+
+import ps_toplevel_smoke as smoke
 
 ROOT = Path(__file__).parent
 SCRIPT = Path(os.environ.get('R5_SITTING_SCRIPT', str(ROOT / 'RUN_427_R5_SITTING.ps1')))
@@ -115,7 +126,7 @@ $script:HX=@{
     preview_plan_code=0;preview_apply_code=0;preview_decision='PASSED';preview_install_after_tamper=$false;start_tamper=[Collections.ArrayList]@('')
     retarget_r5=[Collections.ArrayList]@('ok');retarget_r4=[Collections.ArrayList]@('ok');stop_r5=[Collections.ArrayList]@('ok');retarget_mode_override=$null
     health_overrides=@{};admission=[Collections.ArrayList]@(3);preflight=[Collections.ArrayList]@('ok');s14_planning='ok';s14_coding='ok'
-    active_mode='';crash_in=''
+    active_mode='';crash_in='';processes=$null;process_error=''
 }
 $script:HXWorkflows=@{}
 
@@ -146,6 +157,30 @@ function Get-R5DockerInfo {$ok=[bool](HX-Next 'docker' $true);HX-Trace 'docker' 
 function Test-R5PackageIndex {HX-Trace 'pypi';[bool]$script:HX.pypi}
 function Get-R5FreeDiskGB {param([string]$Path)HX-Trace 'disk' @{path=$Path};[double]$script:HX.disk}
 function Get-R5ListenerCount {param([int]$Port)$n=$(if($Port -eq 47824){[int]$script:HX.warden.listening}else{0});HX-Trace 'listeners' @{port=$Port;count=$n};$n}
+function Get-R5ProcessList {HX-Trace 'processes' @{count=@($script:HX.processes).Count}
+    if($script:HX.process_error){throw $script:HX.process_error}
+    @($script:HX.processes|Where-Object {$null -ne $_}|ForEach-Object {[pscustomobject]$_})}
+function HX-LiveProcesses {
+    # Today's host (2026-10-11 17:22, ps_toplevel_smoke.live_mcp_clients_20261011): ten 'cochem_pipeline mcp' GUI clients and
+    # the four Antigravity bridge clients from the r4 venv or the Toolchain interpreter, the two observer recorders, and
+    # processes outside the runtime roots.
+    $r4Python=Join-Path $script:R4Root '.venv\Scripts\python.exe';$toolchain=Join-Path $script:Base 'Toolchain4.2.7-windows-20261006\Python312\python.exe'
+    $list=@();$id=21000
+    foreach($i in 0..9){$image=$(if($i % 2 -eq 0){$r4Python}else{$toolchain})
+        $list+=[ordered]@{pid=$id;parent=(20000+$i);name='python.exe';path=$image;command=('"'+$image+'" -I -B -m cochem_pipeline mcp --client-config C:\Users\ansac\CoChem427\pipeline-client-r3.json')};$id+=4}
+    $i=0
+    foreach($provider in @('codex','claude','codex','claude')){$image=$(if($i -lt 2){$r4Python}else{$toolchain})
+        $list+=[ordered]@{pid=$id;parent=(20100+$i);name='python.exe';path=$image;command=('"'+$image+'" -m cochem_mcp --provider '+$provider+' --config C:\Users\ansac\CoChem427\bridge.local.json')};$id+=4;$i++}
+    $list+=[ordered]@{pid=3000;parent=900;name='python.exe';path=$toolchain;command=('"'+$toolchain+'" "'+(Join-Path $script:Base 'SupervisorObservation4.2.7-windows-20261007-r3-v1\held-supervisor-observation-r3-v1.py')+'" --observe')}
+    $list+=[ordered]@{pid=3004;parent=900;name='python.exe';path=$toolchain;command=('"'+$toolchain+'" "'+(Join-Path $script:Base 'ResourceObservation4.2.7-windows-20261008-r3-v4\package\observe_resources.py')+'" --run-observer')}
+    $list+=[ordered]@{pid=4;parent=0;name='System';path='';command=''}
+    $list+=[ordered]@{pid=5100;parent=5000;name='python.exe';path='C:\Python314\python.exe';command='"C:\Python314\python.exe" -c pass'}
+    $list+=[ordered]@{pid=5200;parent=5000;name='explorer.exe';path='C:\Windows\explorer.exe';command='C:\Windows\explorer.exe'}
+    $list}
+function HX-AddProcess {param([int]$Id,[string]$Image,[string]$Arguments,[string]$Name='python.exe',[switch]$Unquoted,[switch]$NoCommand)
+    # One more process for a scenario (S0 precheck): '"<image>" <arguments>' unless -Unquoted or -NoCommand.
+    $command=$(if($NoCommand){''}elseif($Unquoted){$Image+' '+$Arguments}else{'"'+$Image+'" '+$Arguments})
+    $script:HX.processes=@(@($script:HX.processes)+@([ordered]@{pid=$Id;parent=1;name=$Name;path=$Image;command=$command}))}
 function Read-R5YesNo {param([string]$Question)$answer=$false;if($script:HX.answers.Count){$answer=[bool]$script:HX.answers[0];$script:HX.answers.RemoveAt(0)};HX-Trace 'prompt' @{question=$Question;answer=$answer};$answer}
 function Request-R5Attention {param([string]$Text)HX-Trace 'attention' @{text=[string]$Text}}
 function Wait-R5Seconds {param([int]$Seconds)HX-Trace 'wait' @{seconds=$Seconds};$script:HXClock=$script:HXClock.AddSeconds($Seconds)}
@@ -208,6 +243,9 @@ $script:HXHandlers['install-stopped-runtime-r5.ps1']={param($A,$Exe,$Path,$Pre)
 $script:HXHandlers['stop-warden-r4.ps1']={param($A,$Exe,$Path,$Pre)
     $attempt=HX-Arg $A '-Attempt';$root=Join-Path $script:Base ('WardenStop4.2.7-windows-20261010-r4-'+$attempt)
     if($script:HX.stop_r4 -ceq 'refused'){return (HX-Result 1 'The Warden stop is refused: the controller is not idle (an IN_PROGRESS row). Nothing was changed.')}
+    # 2026-10-11 17:22 (sitting log): the -Apply hold of an idle enabled task on a runtime process no script recognised;
+    # thrown before the stop root exists, so the same -Attempt stays free.
+    if($script:HX.stop_r4 -ceq 'held-unclassified'){return (HX-Result 1 ("The Warden stop is held. Nothing was changed: The task is stopped but a controller process, an unclassified runtime `nprocess or the loopback port is alive; investigate.`nAt "+$Path+":755 char:26"))}
     $null=[IO.Directory]::CreateDirectory($root)
     if($script:HX.stop_r4 -ceq 'held'){HX-WriteJson (Join-Path $root 'stop-held.json') @{reason='a controller-like process survived End'};$script:HX.warden.instances=0;$script:HX.warden.listening=0;return (HX-Result 1 'The Warden stop is held after End: a controller-like process survived; the task is NOT disabled and nothing was killed.')}
     $status=$(if($script:HX.warden.instances -gt 0){'WARDEN_ENDED_AND_DISABLED_UNCLEAN_SHUTDOWN_EXPECTED'}else{'WARDEN_ALREADY_STOPPED_AND_DISABLED'})
@@ -557,7 +595,8 @@ function Initialize-R5Paths {& $script:HXOrig['Initialize-R5Paths'];HX-Trace 'pa
     # Bindings the harness owns: a temp client config (F6) and the venv pins of the stub r5 runtime (F7); the token file path
     # and port stay the orchestrator's constants. The live task starts on today's r4-v1 action (F1).
     $script:ClientConfig=$script:HXClientConfig;$script:R5PyvenvPin=$script:HXPyvenvSha;$script:R5VenvPythonPin=$script:HXVenvPythonSha
-    if($null -eq $script:HX.warden.action){$script:HX.warden.action=HX-ActionFor 'r4-v1' '' ''}}
+    if($null -eq $script:HX.warden.action){$script:HX.warden.action=HX-ActionFor 'r4-v1' '' ''}
+    if($null -eq $script:HX.processes){$script:HX.processes=@(HX-LiveProcesses)}}
 
 # ---- test-specific setup ----
 __OVERRIDES__
@@ -572,9 +611,9 @@ HX-Trace 'end' @{outcome=[string]$hxOutcome}
 class Flow:
     """The trace of one harness run."""
 
-    def __init__(self, returncode, stdout, stderr, events, base, workspace):
+    def __init__(self, returncode, stdout, stderr, events, base, workspace, attempt='v1'):
         self.returncode, self.stdout, self.stderr, self.events = returncode, stdout, stderr, events
-        self.base, self.workspace = base, workspace
+        self.base, self.workspace, self.attempt = base, workspace, attempt
 
     def of(self, kind):
         return [e for e in self.events if e['kind'] == kind]
@@ -601,17 +640,17 @@ class Flow:
     def retargets(self, target=None):
         return [e for e in self.child_runs(RETARGET) if target is None or arg(e, '-Target') == target]
 
-    def sitting_root(self, attempt='v1'):
-        return self.base / f'R5Sitting4.2.7-windows-20261011-{attempt}'
+    def sitting_root(self, attempt=None):
+        return self.base / f'R5Sitting4.2.7-windows-20261011-{attempt or self.attempt}'
 
-    def receipts(self, attempt='v1'):
+    def receipts(self, attempt=None):
         root = self.sitting_root(attempt)
         return sorted(p.name.split('-')[0] for p in root.glob('S*-receipt.json')) if root.exists() else []
 
-    def receipt(self, stage, attempt='v1'):
+    def receipt(self, stage, attempt=None):
         return json.loads((self.sitting_root(attempt) / f'{stage}-receipt.json').read_text(encoding='utf-8-sig'))
 
-    def sitting_end(self, attempt='v1'):
+    def sitting_end(self, attempt=None):
         path = self.sitting_root(attempt) / 'sitting-end.json'
         return json.loads(path.read_text(encoding='utf-8-sig')) if path.exists() else None
 
@@ -693,14 +732,15 @@ def run_sitting(tmp_path, overrides='', *, apply=True, gemini='attempt', attempt
     result = subprocess.run(['powershell.exe', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', str(harness)],
                             capture_output=True, text=True, timeout=timeout, cwd=str(work))
     events = [json.loads(line) for line in trace.read_text(encoding='utf-8').splitlines() if line.strip()] if trace.exists() else []
-    return Flow(result.returncode, result.stdout, result.stderr, events, base, workspace)
+    return Flow(result.returncode, result.stdout, result.stderr, events, base, workspace, attempt)
 
 
 # ---------------------------------------------------------------------------------------------------------------------
 # Harness safety: every host-touching primitive of the sitting lives in a function the harness replaces
 
 STUBBED = {'Invoke-R5Native', 'Invoke-R5Control', 'Read-R5YesNo', 'Request-R5Attention', 'Wait-R5Seconds', 'Get-R5Now', 'Assert-R5OwnerShell',
-           'Get-R5WardenState', 'Get-R5DockerInfo', 'Test-R5PackageIndex', 'Get-R5FreeDiskGB', 'Get-R5ListenerCount', 'New-R5HexAttempt'}
+           'Get-R5WardenState', 'Get-R5DockerInfo', 'Test-R5PackageIndex', 'Get-R5FreeDiskGB', 'Get-R5ListenerCount', 'Get-R5ProcessList',
+           'New-R5HexAttempt'}
 HOST_PRIMITIVES = (r'ComObject|Get-NetTCPConnection|Invoke-WebRequest|Invoke-RestMethod|DriveInfo|Beep|WindowsIdentity|Read-Host|ReadKey|'
                    r'Start-Sleep|Get-CimInstance|Get-WmiObject|Get-MpPreference|Get-Command|Get-Date|NewGuid|&\s*\$Executable|Net\.Sockets|WebClient')
 
@@ -1604,6 +1644,139 @@ def test_s0_placeholder_pin_stops_before_any_child(tmp_path):
     assert flow.runs == []
 
 
+# S0 runtime-process precheck (2026-10-11 17:22: S2 held on runtime processes no cutover script recognised). The default
+# scenario is today's host: 14 owner MCP clients (10 'cochem_pipeline mcp', 4 Antigravity bridge entries), two observer
+# recorders and processes outside the runtime roots.
+R4_PY = r"(Join-Path $script:R4Root '.venv\Scripts\python.exe')"
+TOOLCHAIN_PY = r"(Join-Path $script:Base 'Toolchain4.2.7-windows-20261006\Python312\python.exe')"
+S0_PROCESS_STOPS = {
+    # case: (override, what the STOP line must show for pid 7001)
+    'r4_venv_other_script': (f"HX-AddProcess 7001 {R4_PY} 'C:\\Users\\ansac\\tools\\sync.py';", 'python.exe" C:\\Users\\ansac\\tools\\sync.py'),
+    'toolchain_other_module': (f"HX-AddProcess 7001 {TOOLCHAIN_PY} '-m pip list';", 'python.exe" -m pip list'),
+    'r5_venv_bridge_for_gemini': (r"HX-AddProcess 7001 $script:R5Python '-m cochem_mcp --provider gemini --config C:\Users\ansac\CoChem427\bridge.local.json';",
+                                  '-m cochem_mcp --provider gemini'),
+    'bridge_with_another_config': (f"HX-AddProcess 7001 {R4_PY} '-m cochem_mcp --provider codex --config C:\\Users\\ansac\\CoChem427\\other.json';",
+                                   'other.json'),
+    'bridge_unquoted_image': (f"HX-AddProcess 7001 {R4_PY} '-m cochem_mcp --provider claude --config C:\\Users\\ansac\\CoChem427\\bridge.local.json' -Unquoted;",
+                              'python.exe -m cochem_mcp --provider claude'),
+    'r3_runtime': (r"HX-AddProcess 7001 (Join-Path $script:Base 'Pipeline4.2.7-windows-20261007-r3\.venv\Scripts\python.exe') '-m cochem_pipeline.tools';",
+                   'Pipeline4.2.7-windows-20261007-r3'),
+    'oldest_runtime_r1': (r"HX-AddProcess 7001 (Join-Path $script:Base 'Pipeline4.2.7-windows-20261006\.venv\Scripts\python.exe') 'x.py';",
+                          'Pipeline4.2.7-windows-20261006'),
+    'rooted_without_command_line': (f"HX-AddProcess 7001 {R4_PY} '' -NoCommand;", 'python.exe (no command line)'),
+    'uninspectable_python': ("$script:HX.processes+=@([ordered]@{pid=7001;parent=1;name='python.exe';path='';command=''});",
+                             'python.exe (image and command line unreadable)'),
+}
+
+
+def stop_line(flow):
+    lines = [line.strip() for line in flow.stdout.splitlines() if line.strip().startswith('STOP at ')]
+    assert lines, flow.explain()
+    return lines[-1]
+
+
+def test_s0_runtime_precheck_accepts_todays_owner_mcp_clients(happy):
+    (probe,) = happy.of('processes')
+    assert probe['stage'] == 'S0' and probe['count'] == 19
+    assert ('runtime processes: 14 MCP client(s) recognised (Claude Desktop, Codex, Antigravity, Claude Code may stay open), '
+            '2 observer recorder(s), 0 controller process(es); none unclassified') in happy.stdout, happy.explain()
+    s0 = [e['seq'] for e in happy.of('enter') if e['name'] == 'Invoke-R5Stage0']
+    assert s0 and probe['seq'] > s0[0] and probe['seq'] < happy.of('disk')[0]['seq'], 'checked in S0, before S1 and the disk probe'
+
+
+@pytest.mark.parametrize('case', sorted(S0_PROCESS_STOPS))
+def test_s0_stops_on_a_runtime_process_no_cutover_script_recognises(tmp_path, case):
+    override, shown = S0_PROCESS_STOPS[case]
+    flow = run_sitting(tmp_path, override)
+    assert_stopped(flow, 'STOP at S00: Runtime processes the cutover scripts do not recognise are running: pid 7001 (parent 1): ')
+    line = stop_line(flow)
+    assert shown in line, line
+    assert 'Nothing was changed' in line and 'rerun this same command' in line and 'Warden stop (S2)' in line, line
+    assert 'pid 21000' not in line and 'pid 3000' not in line and 'pid 5100' not in line, 'clients, recorders and other images are not listed'
+    assert flow.runs == [] and not flow.of('prompt') and not flow.of('disk'), 'nothing started, nothing probed after the precheck'
+    assert flow.sitting_end() is None and flow.receipts() == [], 'nothing changed: the same command can run again'
+
+
+def test_s0_precheck_lists_every_blocking_process(tmp_path):
+    flow = run_sitting(tmp_path, f"HX-AddProcess 7001 {R4_PY} 'a.py';HX-AddProcess 7002 {TOOLCHAIN_PY} 'b.py';")
+    line = stop_line(flow)
+    assert 'pid 7001 (parent 1): ' in line and 'pid 7002 (parent 1): ' in line and line.index('pid 7001') < line.index('pid 7002'), line
+
+
+def test_s0_precheck_passes_controllers_recorders_and_images_outside_the_runtime_roots(tmp_path):
+    # A running r4 Warden: its controller is the S2 stop's business, not a precheck stop.
+    flow = run_sitting(tmp_path, "$script:HX.warden.instances=1;$script:HX.warden.listening=1;$script:HX.warden.task_state=4;"
+                                 f"HX-AddProcess 7001 {R4_PY} '-I -B -m cochem_pipeline daemon --config \"x\" --queue-launch-output \"y\"';"
+                                 r"HX-AddProcess 7002 'C:\Users\ansac\AppData\Local\Programs\Python\Python312\python.exe' 'tool.py';", skip_fix_proof=True)
+    assert_succeeded(flow)
+    assert '14 MCP client(s) recognised' in flow.stdout and '1 controller process(es); none unclassified' in flow.stdout, flow.explain()
+    assert flow.child_runs(STOP_R4)
+
+
+def test_s0_process_list_unreadable_stops_with_nothing_changed(tmp_path):
+    flow = run_sitting(tmp_path, "$script:HX.process_error='Access is denied';")
+    assert_stopped(flow, 'The process list could not be read (Access is denied)')
+    assert flow.runs == [] and flow.sitting_end() is None and flow.receipts() == []
+
+
+def test_plan_mode_reports_the_runtime_processes_s0_would_stop_on(tmp_path):
+    clean = run_sitting(tmp_path / 'clean', apply=False)
+    assert clean.returncode == 0 and 'runtime processes: 14 MCP client(s) recognised, 2 observer recorder(s), 0 controller process(es); none unclassified' in clean.stdout, clean.explain()
+    flow = run_sitting(tmp_path / 'held', f"HX-AddProcess 7001 {R4_PY} 'a.py';", apply=False)
+    assert flow.returncode == 0 and flow.runs == [], flow.explain()
+    assert 'S0 would STOP on: pid 7001 (parent 1): ' in flow.stdout, flow.explain()
+
+
+def test_regression_20261011_s2_held_on_an_unclassified_process_restores_r4_with_a_call_that_binds(tmp_path):
+    # The 17:22 sitting: S0 passed, S1 installed r5, then S2 (stop-warden-r4 -Apply -Attempt v1 on the enabled idle task)
+    # held before any change on a runtime process no script recognised (here one that appeared after S0), and the
+    # R4-RESTORE base call - no -SourceAttempt, no -StopAttempt - died binding retarget-warden-r5.ps1 at its top level.
+    flow = run_sitting(tmp_path, "$script:HX.stop_r4='held-unclassified';")
+    assert_stopped(flow, 'STOP at S02: S2: the Warden stop did not complete (exit 1, status ): ')
+    (stop,) = flow.child_runs(STOP_R4)
+    assert stop['args'] == ['-Apply', '-Attempt', 'v1']
+    assert not (flow.base / 'WardenStop4.2.7-windows-20261010-r4-v1').exists(), 'held before its root was created'
+    assert restore_calls(flow) == [(RETARGET, '-Target r4 -Attempt v1 -Apply -Start')], flow.explain()
+    (call,) = flow.retargets('r4')
+    assert '-SourceAttempt' not in call['args'] and '-StopAttempt' not in call['args']
+    assert 'R4-RESTORE: r4 restarted' in flow.stdout and warden_line(flow) == RESTORED
+    # The same arguments against the REAL retarget-warden-r5.ps1, top level (plan mode: -Apply dropped).
+    args = real_args(flow, call)
+    refused = smoke.run_toplevel(ROOT / RETARGET, [a for a in args if a != '-Apply'], stub=smoke_stub())
+    assert not refused.binding_error and smoke.plan_mode_outcome(refused) == 'refusal', refused.describe()
+    assert refused.error.message == '-Start is only meaningful together with -Apply.'
+    planned = smoke.run_toplevel(ROOT / RETARGET, [a for a in args if a not in ('-Apply', '-Start')], stub=smoke_stub())
+    assert smoke.plan_mode_outcome(planned, plan_schema=RETARGET_PLAN) == 'plan', planned.describe()
+    plan = planned.plan
+    assert (plan['target'], plan['attempt'], plan['source_attempt'], plan['stop_attempt']) == ('r4', 'v1', '', '')
+    presence = plan['controller_presence']
+    assert len(presence['client_processes']) == 14 and presence['unclassified_runtime_processes'] == [], \
+        'the owner MCP clients alive at 17:22 are recognised by the fixed retarget'
+
+
+def test_v2_after_todays_ended_v1_reuses_the_verified_r5_install_and_deploys(tmp_path):
+    # The host after 17:27: R5Sitting4.2.7-windows-20261011-v1 holds sitting-end.json (STOPPED at S02, restore not done),
+    # r5 is installed and verified, and neither WardenStop4.2.7-windows-20261010-r4-v1 nor any WardenRetarget r4 root exists.
+    def ended_v1(workspace, base):
+        root = base / 'R5Sitting4.2.7-windows-20261011-v1'
+        root.mkdir(parents=True, exist_ok=True)
+        (root / 'sitting-end.json').write_text(json.dumps({'schema': 'cochem-r5-sitting-end/1', 'attempt': 'v1', 'outcome': 'STOPPED', 'stage': 'S02',
+                                                           'restore_ok': False, 'state': {}}), encoding='ascii')
+        (root / 'restore-intent-20261011-172252.json').write_text(json.dumps({'schema': 'cochem-r5-sitting-intent/1', 'stage': 'R4-RESTORE'}), encoding='ascii')
+    again = run_sitting(tmp_path, 'HX-InstallAfter;', tamper=ended_v1, run_label='v1-again')
+    assert_stopped(again, 'Sitting attempt v1 has already ended')
+    assert again.runs == [] and not again.of('processes'), 'refused before anything else is probed'
+    v2 = run_sitting(tmp_path, 'HX-InstallAfter;', attempt='v2', run_label='v2')
+    assert_succeeded(v2)
+    assert v2.sitting_root().name.endswith('-v2') and v2.receipts() == ['S%02d' % n for n in range(0, 15)]
+    assert not v2.child_runs(INSTALL) and not v2.of('pypi'), 'the verified r5 install is gated, never rebuilt'
+    assert 'r5 is already installed and its install-after.json verifies; the installer is not run again' in v2.stdout
+    assert v2.receipt('S01')['state']['install_after_sha256'] == sha((v2.base / 'Pipeline4.2.7-windows-20261011-r5' / 'install-after.json').read_bytes())
+    (stop,) = v2.child_runs(STOP_R4)
+    assert stop['args'] == ['-Apply', '-Attempt', 'v1'], 'the v1 stop namespace was never created, so it is free'
+    assert (v2.base / 'R5Sitting4.2.7-windows-20261011-v1' / 'sitting-end.json').exists(), 'the ended attempt is preserved'
+
+
 def test_pin_mismatch_mid_sitting_stops_before_that_child_runs(tmp_path):
     overrides = ("$hxS8=$script:HXHandlers['agy-isolation-evidence-r4-v1.ps1'];"
                  "$script:HXHandlers['agy-isolation-evidence-r4-v1.ps1']={param($A,$Exe,$Path,$Pre)"
@@ -1934,3 +2107,332 @@ def test_f8_held_records_of_the_onboarding_roots_are_listed(tmp_path, case):
     assert path.exists(), 'the stub wrote the held record: ' + str(path)
     held = [line.strip() for line in flow.stdout.splitlines() if line.strip().startswith('Held    : ')]
     assert held and str(path) in held[-1], flow.explain()
+
+
+# ---------------------------------------------------------------------------------------------------------------------
+# CHILD-BINDING smoke: every child call the orchestrator builds binds against the REAL child script, run top level
+# (ps_toplevel_smoke.py: plan mode, host stubbed, unelevated; -Apply dropped, every other argument kept)
+
+LIVE_BASE = r'C:\Program Files\CoChem'
+RETARGET_PLAN = 'cochem-warden-retarget-plan/3'
+PLAN_SCHEMAS = {STOP_R4: 'cochem-warden-stop-plan/1', STOP_R5: 'cochem-warden-stop-plan/2', RETARGET: RETARGET_PLAN,
+                LEAF: 'cochem-worker-native-auth-status-plan/1', LOGIN: 'cochem-six-worker-status-first-plan/1',
+                CAPTURE: 'cochem-agy-status-capture-plan/1', ISOLATION: 'cochem-agy-isolation-evidence-plan/1',
+                PREVIEW: 'cochem-upgrade-preview-r5-plan/1'}
+SLUGS = ('gemini-3.8-flash-low', 'gemini-3.8-flash-medium', 'gemini-3.8-flash-high')
+ENUM_PARAMETERS = ('-Target', '-RetargetTarget', '-Provider', '-Stage', '-Slot', '-LoginMode', '-EffortNullSlug', '--mode')
+RESTORED_R4_BASE = ("$script:HX.warden.source='r4-restore';$script:HX.warden.source_attempt='v3';$script:HX.warden.instances=1;$script:HX.warden.listening=1;"
+                    "$script:HX.warden.action=HX-ActionFor 'r4' 'v3' '';HX-StartedRoot 'r4' 'v3' '';")
+# Flows that, with the module's happy path, reach every child call site of the orchestrator (label: overrides, run_sitting kwargs).
+HARVEST = {
+    's3_logins_tui_medium': ("$script:HX.sess['claude:slot3']='ATTENDED_LOGIN_REQUIRED';$script:HX.sess['codex:slot5']='ATTENDED_LOGIN_REQUIRED';"
+                             "$script:HX.answers=[Collections.ArrayList]@($true);$script:HX.s5_mode='tui';", {'slug': SLUGS[1]}),
+    'gemini_fallback_high': ("$script:HX.preflight=[Collections.ArrayList]@('failed','ok');", {'slug': SLUGS[2]}),
+    'restored_r4_base_held': (RESTORED_R4_BASE, {'gemini': 'skip'}),
+    'today_s2_hold_restore': ("$script:HX.stop_r4='held-unclassified';", {}),
+    'restore_interrupted_start': ("$script:HX.retarget_r5=[Collections.ArrayList]@('interrupted');", {}),
+    'restore_never_started': ("$script:HX.retarget_r5=[Collections.ArrayList]@('held-before-run');", {}),
+    'restore_started_unbound': ("$script:HX.start_tamper=[Collections.ArrayList]@('config');", {}),
+}
+
+
+def _shape(child, *flags):
+    return (child, tuple(sorted(flags)))
+
+
+EXPECTED_CALL_SHAPES = {
+    _shape(INSTALL, '-Manifest', '-ManifestSha256'), _shape(INSTALL, '-Apply', '-Manifest', '-ManifestSha256'),
+    _shape(STOP_R4, '-Apply', '-Attempt'),
+    _shape(STOP_R5, '-Apply', '-Attempt', '-RetargetAttempt', '-RetargetTarget=r4'),
+    _shape(STOP_R5, '-Apply', '-Attempt', '-RetargetAttempt', '-RetargetTarget=r5'),
+    _shape(STOP_R5, '-Apply', '-Attempt', '-RecoverInterruptedStart', '-RetargetAttempt', '-RetargetTarget=r5'),
+    *{_shape(LEAF, '-Apply', '-Attempt', f'-Provider={p}', f'-Slot=slot{n}', '-Stage=before') for p in ('claude', 'codex') for n in range(1, 7)},
+    _shape(LOGIN, '-Apply', '-Attempt', '-Interactive', '-Provider=claude'), _shape(LOGIN, '-Apply', '-Attempt', '-Interactive', '-Provider=codex'),
+    _shape(LOGIN, '-Apply', '-Attempt', '-Interactive', '-LoginMode=print', '-Provider=gemini'),
+    _shape(LOGIN, '-Apply', '-Attempt', '-Interactive', '-LoginMode=tui', '-Provider=gemini'),
+    _shape(CAPTURE, '-Apply', '-Attempt', '-Slot=slot1', '-Stage=signed-out'), _shape(CAPTURE, '-Apply', '-Attempt', '-Slot=slot1', '-Stage=signed-in'),
+    *{_shape(ISOLATION, '-Apply', '-Attempt', f'-EffortNullSlug={s}', '-Slot=slot1') for s in SLUGS},
+    _shape(ISOLATION, '-Apply', '-Attempt', '-StageOnly'),
+    _shape(BUILDER, '--capture-root', '--commissioned', '--isolation-root', '--login-root', '--mode=attempt', '--out-dir'),
+    _shape(BUILDER, '--commissioned', '--mode=held', '--out-dir'),
+    _shape(STAGER, '-Attempt', '-BuildDirectory'), _shape(STAGER, '-Apply', '-Attempt', '-BuildDirectory'),
+    _shape(PREVIEW, '-Attempt', '-Candidate', '-CandidateSha256'), _shape(PREVIEW, '-Apply', '-Attempt', '-Candidate', '-CandidateSha256'),
+    _shape(RETARGET, '-Apply', '-Attempt', '-Config', '-Start', '-Target=r5', 'config=staged'),
+    _shape(RETARGET, '-Apply', '-Attempt', '-Config', '-SourceAttempt', '-Start', '-StopAttempt', '-Target=r5', 'config=staged'),
+    _shape(RETARGET, '-Apply', '-Attempt', '-Config', '-SourceAttempt', '-Start', '-StopAttempt', '-Target=r5', 'config=commissioning'),
+    _shape(RETARGET, '-Apply', '-Attempt', '-Start', '-Target=r4'),
+    _shape(RETARGET, '-Apply', '-Attempt', '-SourceAttempt', '-Start', '-Target=r4'),
+    _shape(RETARGET, '-Apply', '-Attempt', '-SourceAttempt', '-Start', '-StopAttempt', '-Target=r4'),
+}
+
+
+def real_args(flow, event):
+    """One recorded child call's exact argument array, mapped back to the live sitting: the harness base and workspace become
+    C:\\Program Files\\CoChem and W, and a sha of a harness stub file (the freeze manifest the sitting passes to the installer)
+    or of the stub commissioned configuration becomes the sha of the real file."""
+    shas = {COMMISSIONED_SHA: '135cd9eccf9efcdbc910679bde83b571913e731a4041ece62f60e42442f1709c'}
+    for path in flow.workspace.iterdir():
+        if path.is_file() and (ROOT / path.name).is_file():
+            shas[sha(path.read_bytes())] = sha((ROOT / path.name).read_bytes())
+    out = []
+    for value in event['args']:
+        text = str(value).replace(str(flow.base), LIVE_BASE).replace(str(flow.workspace), str(ROOT))
+        out.append(shas.get(text, text))
+    return out
+
+
+def call_shape(child, args):
+    flags = [value + ('=' + args[index + 1] if value in ENUM_PARAMETERS and index + 1 < len(args) else '')
+             for index, value in enumerate(args) if value.startswith('-')]
+    if child == RETARGET and '-Config' in args:
+        flags.append('config=' + ('commissioning' if '\\WardenCommissioning' in args[args.index('-Config') + 1] else 'staged'))
+    return _shape(child, *flags)
+
+
+def smoke_stub():
+    stub = smoke.default_stub()
+    stub['processes'] = smoke.live_mcp_clients_20261011()
+    return stub
+
+
+def json_documents(text):
+    """Every JSON object printed at the start of a line, in order (a child may print a document and a status line)."""
+    decoder, found = json.JSONDecoder(), []
+    for match in re.finditer(r'(?m)^\{', text):
+        try:
+            found.append(decoder.raw_decode(text[match.start():])[0])
+        except ValueError:
+            continue
+    return found
+
+
+def load_builder():
+    spec = importlib.util.spec_from_file_location('r5_builder_binding_smoke', ROOT / BUILDER)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def check_builder_binding(builder, args):
+    try:
+        namespace = builder.build_parser().parse_args(args)
+    except SystemExit as exc:
+        raise AssertionError(f'argparse refused {args!r} (exit {exc.code})') from None
+    if namespace.mode == 'attempt':
+        assert namespace.login_root and namespace.capture_root and namespace.isolation_root, f'--mode attempt without its evidence roots: {args!r}'
+
+
+def check_child_binding(child, args):
+    """Run one call of the real child top level in plan mode; raise AssertionError on any binding or validation error."""
+    plan_args = [a for a in args if a != '-Apply']
+    result = smoke.run_toplevel(ROOT / child, plan_args, stub=smoke_stub())
+    result.raise_for_harness()
+    assert not result.binding_error and not result.denied, result.describe()
+    if child == RETARGET:
+        # -Start stays: without -Apply the script's own parameter rules refuse it, after the value rules of -Target,
+        # -Attempt, -SourceAttempt and -StopAttempt; the plan without -Start then exercises every other value.
+        assert smoke.plan_mode_outcome(result) == 'refusal' and result.error.message == '-Start is only meaningful together with -Apply.', result.describe()
+        plan_args = [a for a in plan_args if a != '-Start']
+        result = smoke.run_toplevel(ROOT / child, plan_args, stub=smoke_stub())
+        assert not result.binding_error, result.describe()
+    if child == STAGER:
+        # The build directory exists only during a real sitting: the stager answers its HELD document at phase DECISION
+        # (exit 10), i.e. after Assert-StagerParameters accepted both values and Set-StagerConstants ran.
+        documents = json_documents(result.stdout)
+        assert result.error is None and result.exit_code == 10 and documents, result.describe()
+        held = documents[0]
+        assert held['status'] == 'HELD' and held['phase'] == 'DECISION', held
+        assert held['build_directory'] == args[args.index('-BuildDirectory') + 1] and held['reason'].startswith('The build directory does not exist'), held
+        return
+    if child == INSTALL:
+        # The smoke world cannot provide the frozen source tree; the installer's main reads the -Manifest file, verifies
+        # -ManifestSha256 against it and only then opens the first source file under the manifest's source_repository
+        # (the 17:22 sitting ran these exact arguments for real: plan exit 0, -Apply FRESH_STOPPED_RUNTIME_READY).
+        source = json.loads((ROOT / 'stopped-runtime-r5-source-manifest.json').read_text(encoding='utf-8-sig'))['source_repository']
+        if result.exit_code == 0 and result.error is None:
+            assert smoke.plan_mode_outcome(result) == 'plan'
+            return
+        assert result.error is not None and not result.error.is_clean_refusal and source in result.error.message, result.describe()
+        return
+    assert smoke.plan_mode_outcome(result, plan_schema=PLAN_SCHEMAS[child]) == 'plan', result.describe()
+    plan = result.plan
+    value = lambda name, default=None: plan_args[plan_args.index(name) + 1] if name in plan_args else default
+    if child == RETARGET:
+        assert (plan['target'], plan['attempt'], plan['source_attempt'], plan['stop_attempt']) == \
+            (value('-Target'), value('-Attempt'), value('-SourceAttempt', ''), value('-StopAttempt', '')), plan
+    elif child == STOP_R5:
+        assert (plan['attempt'], plan['retarget_target'], plan['retarget_attempt'], plan['recover_interrupted_start']) == \
+            (value('-Attempt'), value('-RetargetTarget'), value('-RetargetAttempt'), '-RecoverInterruptedStart' in plan_args), plan
+    elif child == STOP_R4:
+        assert plan['attempt'] == value('-Attempt'), plan
+
+
+@pytest.fixture(scope='module')
+def harvested(happy, tmp_path_factory):
+    """Every distinct child call (32-hex attempts and 64-hex shas normalized for de-duplication) with its live arguments."""
+    flows = {'happy': happy}
+    for label, (overrides, kwargs) in HARVEST.items():
+        flows[label] = run_sitting(tmp_path_factory.mktemp('harvest-' + label), overrides, run_label=label, **kwargs)
+    calls = {}
+    for label, flow in flows.items():
+        assert_clean_trace(flow)
+        assert flow.runs, label + '\n' + flow.explain()
+        for event in flow.runs:
+            args = real_args(flow, event)
+            key = (event['child'], tuple(re.sub(r'\b[0-9a-f]{64}\b', '<sha>', re.sub(r'\b[0-9a-f]{32}\b', '<hex>', a)) for a in args))
+            calls.setdefault(key, (event['child'], args, label))
+    return list(calls.values())
+
+
+def test_child_binding_smoke_harvests_every_call_shape_the_orchestrator_builds(harvested):
+    shapes = {call_shape(child, args) for child, args, _ in harvested}
+    assert sorted(EXPECTED_CALL_SHAPES - shapes) == [], 'call sites the harvest flows no longer reach'
+    assert sorted(shapes - EXPECTED_CALL_SHAPES) == [], 'a call shape this smoke does not know yet: add it to EXPECTED_CALL_SHAPES'
+    assert {child for child, _, _ in harvested} == set(CHILDREN)
+    for child, args, label in harvested:
+        assert all(LIVE_BASE in a or '\\' not in a or str(ROOT) in a for a in args), (label, args)
+
+
+@pytest.mark.parametrize('child', [c for c in CHILDREN if c.endswith('.ps1')])
+def test_child_binding_smoke_every_call_binds_against_the_real_child_top_level(harvested, child):
+    calls = [(args, label) for c, args, label in harvested if c == child]
+    assert calls
+    failures = []
+    for args, label in calls:
+        try:
+            check_child_binding(child, args)
+        except AssertionError as exc:
+            failures.append(f'[{label}] {child} {" ".join(args)}\n{exc}')
+    assert failures == [], '\n\n'.join(failures)
+
+
+def test_child_binding_smoke_builder_arguments_bind_to_its_parser(harvested):
+    builder = load_builder()
+    calls = [args for child, args, _ in harvested if child == BUILDER]
+    assert {a[a.index('--mode') + 1] for a in calls} == {'attempt', 'held'}
+    for args in calls:
+        check_builder_binding(builder, args)
+    attempt = next(a for a in calls if a[a.index('--mode') + 1] == 'attempt')
+    stage = attempt[attempt.index('--isolation-root') + 1] + '-relocated'
+    check_builder_binding(builder, attempt[:-2] + ['--stage-root', stage] + attempt[-2:])  # the --stage-root branch of Invoke-R5Build
+    with pytest.raises(AssertionError):
+        check_builder_binding(builder, [a for a in attempt if a != '--commissioned'][1:])
+
+
+def test_child_binding_smoke_detects_the_1722_class_of_defect(tmp_path):
+    # Control: a child whose main copies an omitted value into its validated parameter variable must fail this smoke.
+    fixture = tmp_path / 'validated-parameter-fixture.ps1'
+    fixture.write_text("[CmdletBinding()]\nparam([string]$Target,[ValidatePattern('^v[0-9]{1,3}$')][string]$SourceAttempt='')\n"
+                       "function Invoke-Main {$ErrorActionPreference='Stop';$script:SourceAttempt=[string]''}\nInvoke-Main\n", encoding='ascii')
+    result = smoke.run_toplevel(fixture, ['-Target', 'r4'])
+    assert result.binding_error and result.error.variable == 'SourceAttempt', result.describe()
+
+
+def test_owner_command_binds_against_the_real_sitting_top_level():
+    # The owner's next command is '... RUN_427_R5_SITTING.ps1 -Apply -Attempt v2'; without -Apply its real top level prints
+    # the read-only plan (host stubbed): -Attempt v2 binds and the plan names the v2 sitting root.
+    stub = smoke_stub()
+    stub['pure_extra'] = ['Get-Command']
+    result = smoke.run_toplevel(SCRIPT, ['-Attempt', 'v2'], stub=stub)
+    result.raise_for_harness()
+    assert not result.binding_error and not result.denied and result.error is None and result.exit_code == 0, result.describe()
+    assert 'READ-ONLY PLAN (no -Apply)' in result.stdout and 'sitting root: ' + LIVE_BASE + '\\R5Sitting4.2.7-windows-20261011-v2' in result.stdout, result.stdout
+    assert 'runtime processes: 14 MCP client(s) recognised' in result.stdout and 'none unclassified' in result.stdout, result.stdout
+
+
+# ---------------------------------------------------------------------------------------------------------------------
+# The S0 classification against the real Get-ControllerPresence of the three cutover scripts
+
+PRESENCE_PROBE = r'''
+$ErrorActionPreference='Stop';Set-StrictMode -Version Latest
+function HX-Load {param([string]$Path,[string[]]$Names)
+    $t=$null;$e=$null;$ast=[Management.Automation.Language.Parser]::ParseFile($Path,[ref]$t,[ref]$e);if($e.Count){throw ('parse errors in '+$Path)}
+    foreach($n in $Names){$f=@($ast.FindAll({param($x)$x -is [Management.Automation.Language.FunctionDefinitionAst]},$true)|Where-Object {$_.Name -ceq $n});if($f.Count -ne 1){throw ($n+' in '+$Path)};$f[0].Extent.Text}}
+$script:HXProcs=@(([IO.File]::ReadAllText('__PROCS__')|ConvertFrom-Json)|ForEach-Object {[pscustomobject]@{ProcessId=[uint32]$_.pid;ParentProcessId=[uint32]$_.parent;Name=$_.name;ExecutablePath=$_.path;CommandLine=$_.command}})
+function Get-CimInstance {$script:HXProcs}
+function Get-NetTCPConnection {@()}
+function HX-Pids {param($Items)@($Items|ForEach-Object {[int]$_.pid}|Sort-Object)}
+$out=[ordered]@{}
+$script:admin=$true;$script:Attempt='v1';$script:RetargetTarget='r5';$script:RetargetAttempt='v1';$script:Target='r4';$script:scriptDirectory='__W__'
+foreach($case in @(@('stop-warden-r4','Set-StopConstants'),@('stop-warden-r5','Set-StopConstants'),@('retarget-warden-r5','Set-RetargetConstants'))){
+    foreach($text in HX-Load ('__W__\'+$case[0]+'.ps1') @('Get-ControllerPresence','Test-ControllerAlive',$case[1])){. ([scriptblock]::Create($text))}
+    & $case[1]
+    # Get-R5RootCandidates (a directory listing) adds the installed r5 root in the real run.
+    if($case[0] -ceq 'retarget-warden-r5'){$script:runtimeRoots=@($script:runtimeRoots)+@('C:\Program Files\CoChem\Pipeline4.2.7-windows-20261011-r5')}
+    $p=Get-ControllerPresence
+    $out[$case[0]]=[ordered]@{controllers=@(HX-Pids $p.controller_processes);observers=@(HX-Pids $p.observer_processes);clients=@(HX-Pids $p.client_processes);
+        unclassified=@(HX-Pids $p.unclassified_runtime_processes);uninspectable=[int]$p.uninspectable_python_processes;alive=[bool](Test-ControllerAlive $p)}}
+foreach($text in HX-Load '__SCRIPT__' @('Initialize-R5Paths','Get-R5Now','Get-R5Member','Get-R5ProcessList','Get-R5RuntimePresence')){. ([scriptblock]::Create($text))}
+$script:Workspace='__W__';$script:Base='C:\Program Files\CoChem';$script:Gemini='attempt';$script:EffortNullSlug='gemini-3.8-flash-low'
+Initialize-R5Paths
+$s=Get-R5RuntimePresence (Get-R5ProcessList)
+$out['sitting']=[ordered]@{controllers=@(HX-Pids $s.controllers);observers=@(HX-Pids $s.observers);clients=@(HX-Pids $s.clients);unclassified=@(HX-Pids $s.unclassified);
+    uninspectable=@($s.uninspectable).Count;alive=$false}
+$out|ConvertTo-Json -Depth 5 -Compress
+'''
+
+
+def presence_world():
+    base = LIVE_BASE
+    r4, r5 = base + r'\Pipeline4.2.7-windows-20261009-r4\.venv\Scripts\python.exe', base + r'\Pipeline4.2.7-windows-20261011-r5\.venv\Scripts\python.exe'
+    r3, r1, toolchain = base + r'\Pipeline4.2.7-windows-20261007-r3\.venv\Scripts\python.exe', base + r'\Pipeline4.2.7-windows-20261006\.venv\Scripts\python.exe', smoke.TOOLCHAIN_PYTHON
+    client = r'C:\Users\ansac\CoChem427\pipeline-client-r3.json'
+    bridge = r'C:\Users\ansac\CoChem427\bridge.local.json'
+    world = [{'pid': p['pid'], 'parent': p['parent_pid'], 'name': p['name'], 'path': p['path'], 'command': p['command_line']} for p in smoke.live_mcp_clients_20261011()]
+    extra = [
+        (8001, 'python.exe', toolchain, f'"{toolchain}" "{base}\\SupervisorObservation4.2.7-windows-20261007-r3-v1\\held-supervisor-observation-r3-v1.py" --observe'),
+        (8002, 'python.exe', toolchain, f'"{toolchain}" "{base}\\ResourceObservation4.2.7-windows-20261008-r3-v4\\package\\observe_resources.py" --run-observer'),
+        (8003, 'python.exe', r4, f'"{r4}" -I -B -m cochem_pipeline daemon --config "x" --queue-launch-output "y"'),
+        (8004, 'python.exe', toolchain, f'"{toolchain}" -I -B -m cochem_pipeline daemon --config "x"'),
+        (8005, 'python.exe', r5, f'"{r5}" -I -B -m cochem_pipeline mcp --client-config {client}'),
+        (8006, 'python.exe', r4, f'"{r4}" -m cochem_mcp --provider gemini --config {bridge}'),
+        (8007, 'python.exe', r4, f'{r4} -m cochem_mcp --provider codex --config {bridge}'),
+        (8008, 'python.exe', r5, f'"{r5}" tools\\x.py'),
+        (8009, 'python.exe', r3, f'"{r3}" -m something'),
+        (8010, 'python.exe', r1, f'"{r1}" -m something'),
+        (8011, 'python.exe', None, None),
+        (8012, 'python.exe', r'C:\Python314\python.exe', '"C:\\Python314\\python.exe" -c pass'),
+        (8013, 'pythonw.exe', None, None),
+        (8014, 'python.exe', r4.lower(), f'"{r4.lower()}" -I -B -m cochem_pipeline health --client-config {client}'),
+        (8015, 'python.exe', r4, f'"{r4}" -m cochem_supervisor once'),
+        (8016, 'cmd.exe', r'C:\Windows\System32\cmd.exe', 'cmd.exe /c cochem-pipeline.exe daemon'),
+        (8017, 'python.exe', r4, None),
+        (8018, 'python.exe', toolchain, f'"{toolchain}" -m cochem_mcp --provider claude --config {bridge} --verbose'),
+    ]
+    world += [{'pid': pid, 'parent': 1, 'name': name, 'path': path, 'command': command} for pid, name, path, command in extra]
+    return world
+
+
+def run_presence_probe(tmp_path, world):
+    procs = tmp_path / 'processes.json'
+    procs.write_text(json.dumps(world), encoding='ascii')
+    body = PRESENCE_PROBE.replace('__PROCS__', ps_quote(procs)).replace('__W__', ps_quote(ROOT)).replace('__SCRIPT__', ps_quote(SCRIPT))
+    probe = tmp_path / 'presence-probe.ps1'
+    probe.write_text(body, encoding='utf-8-sig')
+    result = subprocess.run(['powershell.exe', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', str(probe)],
+                            capture_output=True, text=True, timeout=120, cwd=str(tmp_path))
+    assert result.returncode == 0, result.stdout[-3000:] + result.stderr[-3000:]
+    return json.loads(result.stdout.strip().splitlines()[-1])
+
+
+def test_s0_classification_equals_the_cutover_scripts_on_todays_host(tmp_path):
+    out = run_presence_probe(tmp_path, [{'pid': p['pid'], 'parent': p['parent_pid'], 'name': p['name'], 'path': p['path'], 'command': p['command_line']}
+                                        for p in smoke.live_mcp_clients_20261011()])
+    clients = sorted(p['pid'] for p in smoke.live_mcp_clients_20261011())
+    for name in ('stop-warden-r4', 'stop-warden-r5', 'retarget-warden-r5', 'sitting'):
+        assert out[name]['clients'] == clients and out[name]['unclassified'] == [] and out[name]['alive'] is False, (name, out[name])
+
+
+def test_s0_classification_is_the_union_of_the_cutover_scripts(tmp_path):
+    out = run_presence_probe(tmp_path, presence_world())
+    sitting, scripts = out['sitting'], [out[n] for n in ('stop-warden-r4', 'stop-warden-r5', 'retarget-warden-r5')]
+    for script in scripts:
+        assert script['controllers'] == sitting['controllers'] == [8003, 8004, 8015, 8016]
+        assert script['observers'] == sitting['observers'] == [8001, 8002]
+        assert script['uninspectable'] == sitting['uninspectable'] == 2 and script['alive'] is True
+        assert set(script['unclassified']) <= set(sitting['unclassified']) and set(script['clients']) <= set(sitting['clients'])
+    assert sorted(set().union(*(s['unclassified'] for s in scripts))) == sitting['unclassified'] == [8006, 8007, 8008, 8009, 8010, 8017, 8018]
+    assert out['stop-warden-r5']['unclassified'] == sitting['unclassified'] and out['stop-warden-r5']['clients'] == sitting['clients']
+    assert out['stop-warden-r4']['unclassified'] == [8006, 8007, 8009, 8017, 8018], 'r5 and r1 images are not rooted for stop-warden-r4'
+    assert out['retarget-warden-r5']['unclassified'] == [8006, 8007, 8008, 8009, 8017, 8018], 'r1 images are not rooted for the retarget'
+    assert 8005 in sitting['clients'] and 8014 in sitting['clients']
