@@ -2,261 +2,6 @@
  "source": "C:\\Users\\ansac\\Documents\\Codex\\2026-10-06\\the-github-repository-is-located-at\\windows-deployment-next",
  "files": [
   {
-   "path": "ANALYZE_CRASH_DUMPS.ps1",
-   "bytes": 5239,
-   "sha256": "294f2cb89e86b5587e9c91a445b3813cd25bfb36f595a65df727428cedc0d789"
-  },
-  {
-   "path": "DEPLOYMENT_REMAINING_20261007.txt",
-   "bytes": 4158,
-   "sha256": "9758ac01bc307a0e053419bcdd1dde15a8bd277bb24b2067d16476c2b1b546e2"
-  },
-  {
-   "path": "DESKTOP_HEAP_COLLECTOR_NEXT_STEPS.txt",
-   "bytes": 3458,
-   "sha256": "7e4a8252b7859daff4cb9834e21b718ccb0ab36f89bc861fb9607e9f4e44cfcf"
-  },
-  {
-   "path": "EXECUTION_READINESS_NEXT_STEPS.txt",
-   "bytes": 4489,
-   "sha256": "5487a7cb8aa7fba0e4ba146fbf08f0b92b1f63e1874d713b54c34412cc5a325a"
-  },
-  {
-   "path": "GEMINI_BUILD_MANIFEST_20261010.json",
-   "bytes": 94756,
-   "sha256": "a6baf232b09a8621bec1668951e6bedfadde83509159c2d673055b0684b14b40"
-  },
-  {
-   "path": "GEMINI_BUILD_MANIFEST_20261010.txt",
-   "bytes": 45105,
-   "sha256": "17d9716dc555ae9b722d1a95b7c1aec4fa8e52bc78b850fee091c5cabb8e1c2a"
-  },
-  {
-   "path": "GEMINI_DECISION_BRIEF_20261010.md",
-   "bytes": 9112,
-   "sha256": "c455a89809d30d0d83f2e6c195f31b748bb0171ed38242697623298929784d10"
-  },
-  {
-   "path": "HUMAN_NATIVE_LOGIN.txt",
-   "bytes": 3433,
-   "sha256": "9b4411c43a67cb1e4bd50dff4341823d4667c3110d5c9dd587c1a2ce92689ec1"
-  },
-  {
-   "path": "HUMAN_NATIVE_LOGIN_R3.txt",
-   "bytes": 3674,
-   "sha256": "4dbfd7f3ec30e454c8404c4c45bd25300a38a6a95bc419041f9689a445325a2e"
-  },
-  {
-   "path": "HUMAN_NATIVE_LOGIN_SERIES_R3.txt",
-   "bytes": 3321,
-   "sha256": "af9eb92a90cf82d51f8dac5a0d11c51c26b67a5f73f26ab68630ca166ba9230c"
-  },
-  {
-   "path": "KNOWLEDGE_RECOVERY_NEXT_STEPS.txt",
-   "bytes": 3702,
-   "sha256": "c556885bb262e412526e66460b8a365b862c86fdfb7a0782eaaabbe8f85e58a1"
-  },
-  {
-   "path": "LAUNCH_CHECKLIST_427_20261010.md",
-   "bytes": 4869,
-   "sha256": "68be04d8c470d9d7443b11782090ad4a4c655d3d2dd0de90fa6e4919a0eacbbd"
-  },
-  {
-   "path": "LEGACY_HISTORY_NEXT_STEPS.md",
-   "bytes": 6485,
-   "sha256": "1d1b7a743bac77aa1da8d5f7b6e14bcbe15efb147368a75e058603b8db695ea7"
-  },
-  {
-   "path": "MORNING_SETUP.before-return-series.txt",
-   "bytes": 1812,
-   "sha256": "638601cc937c48223acfe0c8ccad24b6b84d548dad6e1e1bcdb758327672e143"
-  },
-  {
-   "path": "MORNING_SETUP.txt",
-   "bytes": 334,
-   "sha256": "e452bff1b76ecc2b2a8c117c47a2ae662f08f7daca9752244a446d8adfec63bf"
-  },
-  {
-   "path": "NATIVE_STATUS_DRAFT.md",
-   "bytes": 7270,
-   "sha256": "669901ba763415e1b5d59267884581f7b741f0a797318f548fe5426fbec7514f"
-  },
-  {
-   "path": "NEXT_STEPS_AFTER_RECORDER_20261009.txt",
-   "bytes": 1610,
-   "sha256": "cc8ad311e44d405c8440eb656b71a0df0f78df2aec40c5b0d37ab9052736f93b"
-  },
-  {
-   "path": "ORACLE_NATIVE_ACCEPTANCE_DESIGN_R3.txt",
-   "bytes": 9603,
-   "sha256": "179e5d7d1dae8b8633b705e42e413b29a93a33ccda6293b1f67fbad44b4508b9"
-  },
-  {
-   "path": "ORACLE_NATIVE_METHOD_INTEGRATION_R3.txt",
-   "bytes": 3698,
-   "sha256": "205adcf63d7500422939805d135e256528e2f5352c46e195812eb5f69c0d6475"
-  },
-  {
-   "path": "POST_COMMISSIONING_SETUP_R3.txt",
-   "bytes": 1912,
-   "sha256": "5a640988f7dbabda68841679a784adaffa7a21764a9b334eae6b9bcdd29b4ee0"
-  },
-  {
-   "path": "PRIVATE_KNOWLEDGE_DRAFT.md",
-   "bytes": 7031,
-   "sha256": "dd10897430857e42cb172eeb21509f2004caab2683259cb22544cd3774308a80"
-  },
-  {
-   "path": "PROTECTED_ACCEPTANCE_SETUP_R3.txt",
-   "bytes": 4068,
-   "sha256": "1781e1c0654ae71a8ac85674dff7a7d3adb75c059d7de9d3547a9ed5501cb706"
-  },
-  {
-   "path": "PROTECTED_PROJECT_NEXT_STEP.txt",
-   "bytes": 2189,
-   "sha256": "e4de688249a22ee76f276167c50881eab6519e66f5d1909ea20f272e0dc4f6e1"
-  },
-  {
-   "path": "R5_CHANGE_SPEC_20261011.json",
-   "bytes": 176002,
-   "sha256": "67336161ff57f2002aeb4e1de5b938f110e31d7ef1b03ed04628bc2db915cc07"
-  },
-  {
-   "path": "R5_CHANGE_SPEC_20261011.txt",
-   "bytes": 86123,
-   "sha256": "b1992d1fb8acc1b03721c85cdf17490a30f4337c06a4eb89dea32fad0986bb6f"
-  },
-  {
-   "path": "R6_DESIGN_20261011.md",
-   "bytes": 61414,
-   "sha256": "7350d8bf54f95d0004f0d069b49c21c4f6ac3c3a2deaa3e67c3c049a2b791e74"
-  },
-  {
-   "path": "RETURN_SETUP.before-chapter-identity-correction-20261007.txt",
-   "bytes": 7042,
-   "sha256": "9029bb62ddd4d43b4506afaba31ce03687de11294e47a47c8b77e1a4fe5bfe57"
-  },
-  {
-   "path": "RETURN_SETUP.before-resource-recovery-20261009.txt",
-   "bytes": 2950,
-   "sha256": "5a01d01523453e5b40f45a953264590dc88478e9ca8f9850458578e088ea0409"
-  },
-  {
-   "path": "RETURN_SETUP.before-user-involvement-correction-20261007.txt",
-   "bytes": 7042,
-   "sha256": "9029bb62ddd4d43b4506afaba31ce03687de11294e47a47c8b77e1a4fe5bfe57"
-  },
-  {
-   "path": "RETURN_SETUP.before-v5-20261008.txt",
-   "bytes": 4358,
-   "sha256": "5aa2c11fc6c9fc6db680f36ae8c4300de3a9909f3b48465358b47a54154ce040"
-  },
-  {
-   "path": "RETURN_SETUP.before-v6-20261008.txt",
-   "bytes": 4788,
-   "sha256": "050fd95cb3ea8c74e6e29adcfe2577603e146ba24b265d33e8127e051dfc453a"
-  },
-  {
-   "path": "RETURN_SETUP.before-v7-20261008.txt",
-   "bytes": 3686,
-   "sha256": "8275347cbaa5d7a57a6d9233ccef5874a046cc1197d72329e45d2abe653226da"
-  },
-  {
-   "path": "RETURN_SETUP.before-v8-20261008.txt",
-   "bytes": 3258,
-   "sha256": "d72df7dab8127464ba4efb490ba3219ffdab30cae1146ac8398f4c4899e9f255"
-  },
-  {
-   "path": "RETURN_SETUP.txt",
-   "bytes": 3145,
-   "sha256": "0effc8e1778b235b8867a3755722be56a5c19513db8c5dd6f02179c7802d9958"
-  },
-  {
-   "path": "RETURN_SETUP_AFTER_REBOOT_V5.txt",
-   "bytes": 4788,
-   "sha256": "050fd95cb3ea8c74e6e29adcfe2577603e146ba24b265d33e8127e051dfc453a"
-  },
-  {
-   "path": "RETURN_SETUP_CONTINUE.before-resource-recovery-20261009.txt",
-   "bytes": 2950,
-   "sha256": "5a01d01523453e5b40f45a953264590dc88478e9ca8f9850458578e088ea0409"
-  },
-  {
-   "path": "RETURN_SETUP_CONTINUE.before-v5-20261008.txt",
-   "bytes": 4598,
-   "sha256": "2b6a898fba3bacf2e0f760d31011de84f3e1c1bb61189ea3f68e411268f2c202"
-  },
-  {
-   "path": "RETURN_SETUP_CONTINUE.before-v6-20261008.txt",
-   "bytes": 4788,
-   "sha256": "050fd95cb3ea8c74e6e29adcfe2577603e146ba24b265d33e8127e051dfc453a"
-  },
-  {
-   "path": "RETURN_SETUP_CONTINUE.before-v7-20261008.txt",
-   "bytes": 3686,
-   "sha256": "8275347cbaa5d7a57a6d9233ccef5874a046cc1197d72329e45d2abe653226da"
-  },
-  {
-   "path": "RETURN_SETUP_CONTINUE.before-v8-20261008.txt",
-   "bytes": 3258,
-   "sha256": "d72df7dab8127464ba4efb490ba3219ffdab30cae1146ac8398f4c4899e9f255"
-  },
-  {
-   "path": "RETURN_SETUP_CONTINUE.txt",
-   "bytes": 3145,
-   "sha256": "0effc8e1778b235b8867a3755722be56a5c19513db8c5dd6f02179c7802d9958"
-  },
-  {
-   "path": "RETURN_SETUP_LOGIN_RECOVERY.txt",
-   "bytes": 4294,
-   "sha256": "86f8ea2a5589cab32b574c4670265225de750fbb1842c6f08b3becb2fbcb95b3"
-  },
-  {
-   "path": "RETURN_SETUP_PASTE_FIX_V6.txt",
-   "bytes": 3686,
-   "sha256": "8275347cbaa5d7a57a6d9233ccef5874a046cc1197d72329e45d2abe653226da"
-  },
-  {
-   "path": "RETURN_SETUP_R4_20261009.txt",
-   "bytes": 21206,
-   "sha256": "636717ab81c1e194a12d97bef9179dac00213b791c1b9c42ae546847efe95711"
-  },
-  {
-   "path": "RETURN_SETUP_R5_20261011.txt",
-   "bytes": 8637,
-   "sha256": "80e5e55a140b77ac082ea28b9116c84ae321423f6cac4bb00b2ef7a012bfc055"
-  },
-  {
-   "path": "RETURN_SETUP_RESOURCE_RECOVERY_20261009.txt",
-   "bytes": 3145,
-   "sha256": "0effc8e1778b235b8867a3755722be56a5c19513db8c5dd6f02179c7802d9958"
-  },
-  {
-   "path": "RETURN_SETUP_RUNNING_MONITOR_V8.txt",
-   "bytes": 2950,
-   "sha256": "5a01d01523453e5b40f45a953264590dc88478e9ca8f9850458578e088ea0409"
-  },
-  {
-   "path": "RETURN_SETUP_TASK_RECOVERY_V7.txt",
-   "bytes": 3258,
-   "sha256": "d72df7dab8127464ba4efb490ba3219ffdab30cae1146ac8398f4c4899e9f255"
-  },
-  {
-   "path": "RUN_427_LAUNCH_SERIES.ps1",
-   "bytes": 23180,
-   "sha256": "bf6e5e8ce157eb1ecfe534ca802438533bb76721e6a8109b6c3d314f35165c6d"
-  },
-  {
-   "path": "RUN_427_R5_SITTING.ps1",
-   "bytes": 136389,
-   "sha256": "f875a8f12f3d087e754e43998f8954c778509c27bc0f9caeef1700944821e314"
-  },
-  {
-   "path": "WINDOWS_AGENT_HANDOFF_4.2.7_2026-10-09.md",
-   "bytes": 19520,
-   "sha256": "65d5a2b976443f2d7c849b0d6ba9115c2d4831ac7f36fb6871b57a1ded36caf4"
-  },
-  {
    "path": "accept-cpu-system.ps1",
    "bytes": 8492,
    "sha256": "07db90e2e435255cadd61ce06af174cebbd167c6fd165be1845cfb9462e91e44"
@@ -288,8 +33,8 @@
   },
   {
    "path": "agy-isolation-evidence-r4-v1.ps1",
-   "bytes": 126051,
-   "sha256": "af773b1f03a20fb21391620d1ef6b1ee06cfeef37f09d59e6f617f978bf93edb"
+   "bytes": 126683,
+   "sha256": "bd87ad3128e6d63e141c23aff15d7fe6b761c88aa6477bf48fe5232df800e326"
   },
   {
    "path": "agy-session-history-r4-v1.ps1",
@@ -298,8 +43,8 @@
   },
   {
    "path": "agy-status-capture-r4-v1.ps1",
-   "bytes": 50002,
-   "sha256": "90d5612347748563e05437bb173f05289c669c530d266f109f4ff668077c0f2a"
+   "bytes": 50644,
+   "sha256": "03198a30d359e59339b95744d21b92964f38d7e996ddd74bf8d2315cddfe03fa"
   },
   {
    "path": "agy_isolation_evidence_r4_v1.py",
@@ -310,6 +55,11 @@
    "path": "agy_status_capture_r4_v1.py",
    "bytes": 56648,
    "sha256": "ce103aad0f9dae042677ec61c2b16eb5512e9a24f5fca65bc97f4570bb884038"
+  },
+  {
+   "path": "ANALYZE_CRASH_DUMPS.ps1",
+   "bytes": 5239,
+   "sha256": "294f2cb89e86b5587e9c91a445b3813cd25bfb36f595a65df727428cedc0d789"
   },
   {
    "path": "archive-foundation-diagnostic-r3-v1.py",
@@ -503,8 +253,8 @@
   },
   {
    "path": "check-worker-native-auth-status-six-r4-v1.ps1",
-   "bytes": 40149,
-   "sha256": "c0b5df803a339a7dbbbd59727ea59a75dc4722d474f4bb05852d5cdc8778e265"
+   "bytes": 40917,
+   "sha256": "34612ac49eb2e455076a01607634f21d4f0b284714ef07d5e614146a1a9a7a85"
   },
   {
    "path": "check-worker-native-status-r3.ps1",
@@ -692,6 +442,16 @@
    "sha256": "e3b4b1055254baaf2a4b68f7bd39a225b9c9b2c987d348e63ea34f607b0e8b0b"
   },
   {
+   "path": "DEPLOYMENT_REMAINING_20261007.txt",
+   "bytes": 4158,
+   "sha256": "9758ac01bc307a0e053419bcdd1dde15a8bd277bb24b2067d16476c2b1b546e2"
+  },
+  {
+   "path": "DESKTOP_HEAP_COLLECTOR_NEXT_STEPS.txt",
+   "bytes": 3458,
+   "sha256": "7e4a8252b7859daff4cb9834e21b718ccb0ab36f89bc861fb9607e9f4e44cfcf"
+  },
+  {
    "path": "diagnose-foundation-docker-r3-v1.ps1",
    "bytes": 25620,
    "sha256": "06522b04378d8d0b6cb915102e7fce1125700d96f68159c13e9d26a5c1c52e0b"
@@ -720,6 +480,16 @@
    "path": "execution-runtime-pins.json",
    "bytes": 8700,
    "sha256": "c838c4ed98c31382229bddc1cf2b00297e1bb2d771404ea1b979727c4472dd48"
+  },
+  {
+   "path": "EXECUTION_READINESS_NEXT_STEPS.txt",
+   "bytes": 4489,
+   "sha256": "5487a7cb8aa7fba0e4ba146fbf08f0b92b1f63e1874d713b54c34412cc5a325a"
+  },
+  {
+   "path": "export-deployment-mirror.py",
+   "bytes": 5436,
+   "sha256": "521f89da1a4695d99c252afd43bf020726c5e69016848f2db0c33cb03eb7f40d"
   },
   {
    "path": "finalize-continuation-publication-manifest-20261009.py",
@@ -752,59 +522,19 @@
    "sha256": "6dd80230afa67a73388d816c04092aa83e96eebedab62b6b938b1f63f9c59c6c"
   },
   {
-   "path": "gemini-build-specs/agy-status-capture.json",
-   "bytes": 115864,
-   "sha256": "adba30b50d06e0a01472a5026a9f237c21cd2c4b98d9505c79e9f3c3074b1323"
+   "path": "GEMINI_BUILD_MANIFEST_20261010.json",
+   "bytes": 94756,
+   "sha256": "a6baf232b09a8621bec1668951e6bedfadde83509159c2d673055b0684b14b40"
   },
   {
-   "path": "gemini-build-specs/config-builder.json",
-   "bytes": 81577,
-   "sha256": "0041df1ccef1eca1b68f257228f92e68f656dc24948bf89f395dcbd4dc885f61"
+   "path": "GEMINI_BUILD_MANIFEST_20261010.txt",
+   "bytes": 45105,
+   "sha256": "17d9716dc555ae9b722d1a95b7c1aec4fa8e52bc78b850fee091c5cabb8e1c2a"
   },
   {
-   "path": "gemini-build-specs/freeze-install-r5.json",
-   "bytes": 61714,
-   "sha256": "9b7203948197155c5a0daecd351d8adf94f48f6d46fb105774f898f38d54b9b1"
-  },
-  {
-   "path": "gemini-build-specs/isolation-evidence.json",
-   "bytes": 114636,
-   "sha256": "3414ae6c257721579eb2bc9561a30815d72eacca214065d919057c1ea64536e4"
-  },
-  {
-   "path": "gemini-build-specs/login-bridge.json",
-   "bytes": 73459,
-   "sha256": "4a18b0049c8b287530b20580f607c8e1f26189b9121e76ee3e0a1a8a4fb5585b"
-  },
-  {
-   "path": "gemini-build-specs/nf1-evidence.json",
-   "bytes": 89757,
-   "sha256": "907932fdf419da04790bfaa74efd79fa5f480f80126aa8735d4bbc7d9fbaf18c"
-  },
-  {
-   "path": "gemini-build-specs/retarget-r5.json",
-   "bytes": 73885,
-   "sha256": "6256bcabc94fc7cc70b9349deb65a1a988a9951fa577becc0721d5f57a2436ae"
-  },
-  {
-   "path": "gemini-build-specs/status-helper-r4.json",
-   "bytes": 109524,
-   "sha256": "c213adc6ae945d02e758540d4694107c08d13c6bcb8765338f28082f06890a1e"
-  },
-  {
-   "path": "gemini-build-specs/stop-warden-r4.json",
-   "bytes": 72393,
-   "sha256": "5152894a6a837697ed16f771459e6cfdfb9024298eb7783ab9ca05353b3329d6"
-  },
-  {
-   "path": "gemini-build-specs/stop-warden-r5.json",
-   "bytes": 68563,
-   "sha256": "0c370ea1e6e8387e6763aacf745cda5309af881b916f0c68e37475c61320b4c2"
-  },
-  {
-   "path": "gemini-build-specs/upgrade-preview.json",
-   "bytes": 55031,
-   "sha256": "59d17759839b353047c4b727788755b978e517fdb16f5ea7e712749365516691"
+   "path": "GEMINI_DECISION_BRIEF_20261010.md",
+   "bytes": 9112,
+   "sha256": "c455a89809d30d0d83f2e6c195f31b748bb0171ed38242697623298929784d10"
   },
   {
    "path": "git-config-before-repository-rename-20261009.txt",
@@ -815,6 +545,21 @@
    "path": "held-supervisor-observation-r3-v1.py",
    "bytes": 23934,
    "sha256": "d2fd68543963a05ba918c6194729a8bca642322565235ab18c7ba17ccad17640"
+  },
+  {
+   "path": "HUMAN_NATIVE_LOGIN.txt",
+   "bytes": 3433,
+   "sha256": "9b4411c43a67cb1e4bd50dff4341823d4667c3110d5c9dd587c1a2ce92689ec1"
+  },
+  {
+   "path": "HUMAN_NATIVE_LOGIN_R3.txt",
+   "bytes": 3674,
+   "sha256": "4dbfd7f3ec30e454c8404c4c45bd25300a38a6a95bc419041f9689a445325a2e"
+  },
+  {
+   "path": "HUMAN_NATIVE_LOGIN_SERIES_R3.txt",
+   "bytes": 3321,
+   "sha256": "af9eb92a90cf82d51f8dac5a0d11c51c26b67a5f73f26ab68630ca166ba9230c"
   },
   {
    "path": "import-disposable-project.py",
@@ -992,9 +737,24 @@
    "sha256": "1f8041bcbab8252f52e5eb585d5fa66c8e9398c8d8bb901a5760a5503fd4e10a"
   },
   {
+   "path": "KNOWLEDGE_RECOVERY_NEXT_STEPS.txt",
+   "bytes": 3702,
+   "sha256": "c556885bb262e412526e66460b8a365b862c86fdfb7a0782eaaabbe8f85e58a1"
+  },
+  {
    "path": "launch-series-20261010-195717.log",
    "bytes": 19111,
    "sha256": "57483e57651d40253632fe478a11272e4c7cca3faeeb69cdfa9460a80f7c20ad"
+  },
+  {
+   "path": "LAUNCH_CHECKLIST_427_20261010.md",
+   "bytes": 4869,
+   "sha256": "68be04d8c470d9d7443b11782090ad4a4c655d3d2dd0de90fa6e4919a0eacbbd"
+  },
+  {
+   "path": "LEGACY_HISTORY_NEXT_STEPS.md",
+   "bytes": 6485,
+   "sha256": "1d1b7a743bac77aa1da8d5f7b6e14bcbe15efb147368a75e058603b8db695ea7"
   },
   {
    "path": "login-continuation-v3-functions.ps1",
@@ -1049,12 +809,12 @@
   {
    "path": "login-six-workers-status-first-r4-v1.ps1",
    "bytes": 53488,
-   "sha256": "9cfc0a985253da38ddd521d980cf83d9a59cc52079ac40ae8a0c70eb95ef94b5"
+   "sha256": "953f49d3aa8e20b4adc7eb38d91346f2b421ced9e70732e6cd6c153f0f1cd15f"
   },
   {
    "path": "login_pipeline_worker_interactive_agy_r4_v1.ps1",
-   "bytes": 48275,
-   "sha256": "da166c1dbdb047e93692eeb47abf3d315dbe797cf9040d34b440d9649626014a"
+   "bytes": 48913,
+   "sha256": "381fb8daec6999d16e75ab163f28d0dda6459b1b44f9695962cf43213cedcb60"
   },
   {
    "path": "login_pipeline_worker_interactive_r3.ps1",
@@ -1107,6 +867,26 @@
    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
   },
   {
+   "path": "MORNING_SETUP.before-return-series.txt",
+   "bytes": 1812,
+   "sha256": "638601cc937c48223acfe0c8ccad24b6b84d548dad6e1e1bcdb758327672e143"
+  },
+  {
+   "path": "MORNING_SETUP.txt",
+   "bytes": 334,
+   "sha256": "e452bff1b76ecc2b2a8c117c47a2ae662f08f7daca9752244a446d8adfec63bf"
+  },
+  {
+   "path": "NATIVE_STATUS_DRAFT.md",
+   "bytes": 7270,
+   "sha256": "669901ba763415e1b5d59267884581f7b741f0a797318f548fe5426fbec7514f"
+  },
+  {
+   "path": "NEXT_STEPS_AFTER_RECORDER_20261009.txt",
+   "bytes": 1610,
+   "sha256": "cc8ad311e44d405c8440eb656b71a0df0f78df2aec40c5b0d37ab9052736f93b"
+  },
+  {
    "path": "oracle-native-components-r3-v1.py",
    "bytes": 28302,
    "sha256": "e32634f56bd67199cde3a7b6501030da892f540fa40e184ac0206639b847d1a0"
@@ -1117,6 +897,16 @@
    "sha256": "137ffae58caee103a8025b7325f64580026ad6aefb10e95c3feba8f4494f0205"
   },
   {
+   "path": "ORACLE_NATIVE_ACCEPTANCE_DESIGN_R3.txt",
+   "bytes": 9603,
+   "sha256": "179e5d7d1dae8b8633b705e42e413b29a93a33ccda6293b1f67fbad44b4508b9"
+  },
+  {
+   "path": "ORACLE_NATIVE_METHOD_INTEGRATION_R3.txt",
+   "bytes": 3698,
+   "sha256": "205adcf63d7500422939805d135e256528e2f5352c46e195812eb5f69c0d6475"
+  },
+  {
    "path": "overlay-publication-source-20261009.py",
    "bytes": 2901,
    "sha256": "1af3242ca4444331d6a06e2d52312005fdca591e10c670f381d3b5d4dcaa25d3"
@@ -1125,6 +915,11 @@
    "path": "portable-continuation-audit-20261009.md",
    "bytes": 11065,
    "sha256": "21e31b356f59109258ad14ab948cdb79111ce1466b1893bbfc662cac4e5fa105"
+  },
+  {
+   "path": "POST_COMMISSIONING_SETUP_R3.txt",
+   "bytes": 1912,
+   "sha256": "5a640988f7dbabda68841679a784adaffa7a21764a9b334eae6b9bcdd29b4ee0"
   },
   {
    "path": "prepare-agent-handoff-repository-20261009.ps1",
@@ -1227,6 +1022,11 @@
    "sha256": "ae79621a5aae0a879426b3da3ce9e42280851b97acbab3b752960a1655fbc05b"
   },
   {
+   "path": "PRIVATE_KNOWLEDGE_DRAFT.md",
+   "bytes": 7031,
+   "sha256": "dd10897430857e42cb172eeb21509f2004caab2683259cb22544cd3774308a80"
+  },
+  {
    "path": "protected-code-inspection-v4.ps1",
    "bytes": 7687,
    "sha256": "5c01543cbb8b8d64b2b9f1bab4a13f87f8ff9e1ab3e82dfb6fc547144c77b95d"
@@ -1250,6 +1050,16 @@
    "path": "protected-inspection-v4-fixtures-20261008T175314-0193f5ca.stderr.txt",
    "bytes": 0,
    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+   "path": "PROTECTED_ACCEPTANCE_SETUP_R3.txt",
+   "bytes": 4068,
+   "sha256": "1781e1c0654ae71a8ac85674dff7a7d3adb75c059d7de9d3547a9ed5501cb706"
+  },
+  {
+   "path": "PROTECTED_PROJECT_NEXT_STEP.txt",
+   "bytes": 2189,
+   "sha256": "e4de688249a22ee76f276167c50881eab6519e66f5d1909ea20f272e0dc4f6e1"
   },
   {
    "path": "provision-execution-foundation-r3-v2.ps1",
@@ -1292,161 +1102,6 @@
    "sha256": "12a93261228805e0e06549e006ad1c3b15a165fbe2fa7e76ddf3d8f234cdddf1"
   },
   {
-   "path": "r5-army-specs/.army-state.md",
-   "bytes": 4282,
-   "sha256": "855cf66626f07196b98ff075a2208484c0241872d1ea15ad1b0b4dd61f16f7f7"
-  },
-  {
-   "path": "r5-army-specs/ARMY_ADDENDUM_20261011.md",
-   "bytes": 4809,
-   "sha256": "164c3dce5b8cb48e0ac31dd1e1bcbe2f5480b0599e735f675668b90ee5ee6bcb"
-  },
-  {
-   "path": "r5-army-specs/BOOT-API.md",
-   "bytes": 1830,
-   "sha256": "ef3dc66b772630672907c8ff4408c2db842e318811aaa11dd9198534fc01275d"
-  },
-  {
-   "path": "r5-army-specs/INTERFACES-CONFIG.md",
-   "bytes": 3246,
-   "sha256": "84616d668af9bd93e70389e3ccd296575003fe0d06f28c189669bd3683e4e440"
-  },
-  {
-   "path": "r5-army-specs/INTERFACES-CUTOVER.md",
-   "bytes": 8854,
-   "sha256": "27cce16b4ce64551a9bf626890fbce941c5f8a38280327ed8ea40135168bd12c"
-  },
-  {
-   "path": "r5-army-specs/INTERFACES-ONBOARDING.md",
-   "bytes": 5124,
-   "sha256": "10b9828aadd7c7823435bc0d1a764dcfa57b4113264a5ac97614b1188c1cd70a"
-  },
-  {
-   "path": "r5-army-specs/INTERFACES-RUNTIME-BUILD.md",
-   "bytes": 2755,
-   "sha256": "5e5bc370778a6f0895f499e22bf1aa8636d6cdb04e9c8749dccd3ca661c2c5f0"
-  },
-  {
-   "path": "r5-army-specs/KEYSTONE-API.md",
-   "bytes": 4733,
-   "sha256": "678116d0e2ee07c64c5d2c94b6bf2c75c5c7be2a1a2b08ff106c0d5d86ee1432"
-  },
-  {
-   "path": "r5-army-specs/R5_SITTING_V2_DIAGNOSIS_20261011.md",
-   "bytes": 57120,
-   "sha256": "082bfa18bd89b87b66e248cea5b6aaedc1230d06460ae5f41c95a1526f2e959e"
-  },
-  {
-   "path": "r5-army-specs/R6A_SCOPE_20261011.md",
-   "bytes": 5641,
-   "sha256": "e9e1e1d7adbaf6ff043066c98708c3774556a66e794feea27f8575fd77c3e78e"
-  },
-  {
-   "path": "r5-army-specs/R6_SCOPE_V2_20261011.md",
-   "bytes": 4140,
-   "sha256": "503cd782908cf6048f5da0e943fdd65c8e06a7a8a2a790aea355bb3a19bb3421"
-  },
-  {
-   "path": "r5-army-specs/R6_V3_RESEARCH_20261011.md",
-   "bytes": 33248,
-   "sha256": "439d06d62fd673abb15349a845da4d490d64ab5bc9e5985464fd1745d9ecb5cd"
-  },
-  {
-   "path": "r5-army-specs/deploy-agy-login-bridge.json",
-   "bytes": 51112,
-   "sha256": "846df3fafe589d0e03fc34723380d0830f1a76f96f3a2eea1c3468dc2e582635"
-  },
-  {
-   "path": "r5-army-specs/deploy-config-builder.json",
-   "bytes": 49443,
-   "sha256": "717165b63141439f50ad1d913d89278810121391e1b726bbe68f6aa22da78967"
-  },
-  {
-   "path": "r5-army-specs/deploy-freeze-install-r5.json",
-   "bytes": 49203,
-   "sha256": "7a9e9bcc28e8db41b6b1ca0263d93b261852797e5ae35aa2b8b7887e63e01e3f"
-  },
-  {
-   "path": "r5-army-specs/deploy-isolation-evidence.json",
-   "bytes": 51108,
-   "sha256": "982ea24a64c8b03f724a102259343a0960bc2318eb5ca2aee10621f1ba532bc0"
-  },
-  {
-   "path": "r5-army-specs/deploy-r5-sitting.json",
-   "bytes": 57270,
-   "sha256": "155ce1de615e3a5b6ae335974ea46eeec0454f7adbfae8ac3fcb6a218b896421"
-  },
-  {
-   "path": "r5-army-specs/deploy-retarget-warden-r5.json",
-   "bytes": 48700,
-   "sha256": "c57753d77d20239440eae3225b44b7ce813bbceb6c67db7618b8a9d43134e127"
-  },
-  {
-   "path": "r5-army-specs/deploy-six-worker-driver.json",
-   "bytes": 47701,
-   "sha256": "ee7269e6390f6a47a1f251330965c2ef4b7901c673cf09c299f49e0f6d173644"
-  },
-  {
-   "path": "r5-army-specs/deploy-stop-warden-r5.json",
-   "bytes": 50271,
-   "sha256": "ef031106437c616f1679224bd6dae5700da564acf4c4bdb545a9a2ab1f353d68"
-  },
-  {
-   "path": "r5-army-specs/deploy-upgrade-preview.json",
-   "bytes": 47120,
-   "sha256": "75514f0e51485102aec3a3ce05574ad822af4f4556e23c371e0025437cc6d695"
-  },
-  {
-   "path": "r5-army-specs/source-C1-N1-coding-failures.json",
-   "bytes": 74530,
-   "sha256": "ffffc506441b7e990ae41a926954af746a8c8483d50600d3c4d9b6642ac43c56"
-  },
-  {
-   "path": "r5-army-specs/source-G1-agy_protocol.json",
-   "bytes": 15329,
-   "sha256": "d375f71bc4dd26837c38f1dfdc08a0fd3f5c969d907c0fb3bd10ddcaae357696"
-  },
-  {
-   "path": "r5-army-specs/source-G3-config.json",
-   "bytes": 13533,
-   "sha256": "50d5e396cb3fc895c7687fb47f6359bc50873bd89c45c9bf37999ad04340f06b"
-  },
-  {
-   "path": "r5-army-specs/source-G4-supervisor-runner.json",
-   "bytes": 13110,
-   "sha256": "cbc7341675df5e88b55bb7323825537b1590e93b9ec505c3cca24b6c5a53648a"
-  },
-  {
-   "path": "r5-army-specs/source-M1-M2-service-views.json",
-   "bytes": 44379,
-   "sha256": "903b986f358f264963b7539c8f487548d93fa2e0b284bf476eb78f710bdacde4"
-  },
-  {
-   "path": "r5-army-specs/source-M3-M4-knowledge-guard.json",
-   "bytes": 44358,
-   "sha256": "4076a4a64a9b93a9bd9e469be2f84c6ded2d9055049e09d381227a8f0cc0f7a1"
-  },
-  {
-   "path": "r5-army-specs/source-R1-reboot-safe-main.json",
-   "bytes": 11933,
-   "sha256": "442a3e7f7c87f680542354800c4d2a0ee13540201c8f9b0a5bc3cfb5ae993ed8"
-  },
-  {
-   "path": "r5-army-specs/source-W1-store.json",
-   "bytes": 39941,
-   "sha256": "a5ee1e3393fb860bfb9cb358e02c4f4d07ee4ee5c84880c8db30c0cc8caf3bbc"
-  },
-  {
-   "path": "r5-army-specs/source-worker-W2-G2-N2.json",
-   "bytes": 79541,
-   "sha256": "86164bc093e0dd750ecca4f74b765e5ffef0db2b7ba7d54e43fdccf7387eb820"
-  },
-  {
-   "path": "r5-army-specs/wave1-verifier-findings.json",
-   "bytes": 32080,
-   "sha256": "b8eb2897708d1a7fe011a2443c55a394389fff60efef0e5a005de87f9327a2ff"
-  },
-  {
    "path": "r5-sitting-20261011-172252.log",
    "bytes": 22930,
    "sha256": "fe7b2da90dda00998bcef984684e02bab53a5784950d2b9c1d60fa0b619f16cf"
@@ -1455,6 +1110,21 @@
    "path": "r5-sitting-20261011-202738.log",
    "bytes": 52063,
    "sha256": "940531ab92e96489445f6601592c65c163b1ba296c2f012d38ab5caef7c76129"
+  },
+  {
+   "path": "R5_CHANGE_SPEC_20261011.json",
+   "bytes": 176002,
+   "sha256": "67336161ff57f2002aeb4e1de5b938f110e31d7ef1b03ed04628bc2db915cc07"
+  },
+  {
+   "path": "R5_CHANGE_SPEC_20261011.txt",
+   "bytes": 86123,
+   "sha256": "b1992d1fb8acc1b03721c85cdf17490a30f4337c06a4eb89dea32fad0986bb6f"
+  },
+  {
+   "path": "R6_DESIGN_20261011.md",
+   "bytes": 61414,
+   "sha256": "7350d8bf54f95d0004f0d069b49c21c4f6ac3c3a2deaa3e67c3c049a2b791e74"
   },
   {
    "path": "reconcile-unchanged-line-endings-20261009.py",
@@ -1662,6 +1332,116 @@
    "sha256": "ae0b7d1fcd87538506be7a47f9a4b6b7151fa1ca4c0df3effd44482989fa5883"
   },
   {
+   "path": "RETURN_SETUP.before-chapter-identity-correction-20261007.txt",
+   "bytes": 7042,
+   "sha256": "9029bb62ddd4d43b4506afaba31ce03687de11294e47a47c8b77e1a4fe5bfe57"
+  },
+  {
+   "path": "RETURN_SETUP.before-resource-recovery-20261009.txt",
+   "bytes": 2950,
+   "sha256": "5a01d01523453e5b40f45a953264590dc88478e9ca8f9850458578e088ea0409"
+  },
+  {
+   "path": "RETURN_SETUP.before-user-involvement-correction-20261007.txt",
+   "bytes": 7042,
+   "sha256": "9029bb62ddd4d43b4506afaba31ce03687de11294e47a47c8b77e1a4fe5bfe57"
+  },
+  {
+   "path": "RETURN_SETUP.before-v5-20261008.txt",
+   "bytes": 4358,
+   "sha256": "5aa2c11fc6c9fc6db680f36ae8c4300de3a9909f3b48465358b47a54154ce040"
+  },
+  {
+   "path": "RETURN_SETUP.before-v6-20261008.txt",
+   "bytes": 4788,
+   "sha256": "050fd95cb3ea8c74e6e29adcfe2577603e146ba24b265d33e8127e051dfc453a"
+  },
+  {
+   "path": "RETURN_SETUP.before-v7-20261008.txt",
+   "bytes": 3686,
+   "sha256": "8275347cbaa5d7a57a6d9233ccef5874a046cc1197d72329e45d2abe653226da"
+  },
+  {
+   "path": "RETURN_SETUP.before-v8-20261008.txt",
+   "bytes": 3258,
+   "sha256": "d72df7dab8127464ba4efb490ba3219ffdab30cae1146ac8398f4c4899e9f255"
+  },
+  {
+   "path": "RETURN_SETUP.txt",
+   "bytes": 3145,
+   "sha256": "0effc8e1778b235b8867a3755722be56a5c19513db8c5dd6f02179c7802d9958"
+  },
+  {
+   "path": "RETURN_SETUP_AFTER_REBOOT_V5.txt",
+   "bytes": 4788,
+   "sha256": "050fd95cb3ea8c74e6e29adcfe2577603e146ba24b265d33e8127e051dfc453a"
+  },
+  {
+   "path": "RETURN_SETUP_CONTINUE.before-resource-recovery-20261009.txt",
+   "bytes": 2950,
+   "sha256": "5a01d01523453e5b40f45a953264590dc88478e9ca8f9850458578e088ea0409"
+  },
+  {
+   "path": "RETURN_SETUP_CONTINUE.before-v5-20261008.txt",
+   "bytes": 4598,
+   "sha256": "2b6a898fba3bacf2e0f760d31011de84f3e1c1bb61189ea3f68e411268f2c202"
+  },
+  {
+   "path": "RETURN_SETUP_CONTINUE.before-v6-20261008.txt",
+   "bytes": 4788,
+   "sha256": "050fd95cb3ea8c74e6e29adcfe2577603e146ba24b265d33e8127e051dfc453a"
+  },
+  {
+   "path": "RETURN_SETUP_CONTINUE.before-v7-20261008.txt",
+   "bytes": 3686,
+   "sha256": "8275347cbaa5d7a57a6d9233ccef5874a046cc1197d72329e45d2abe653226da"
+  },
+  {
+   "path": "RETURN_SETUP_CONTINUE.before-v8-20261008.txt",
+   "bytes": 3258,
+   "sha256": "d72df7dab8127464ba4efb490ba3219ffdab30cae1146ac8398f4c4899e9f255"
+  },
+  {
+   "path": "RETURN_SETUP_CONTINUE.txt",
+   "bytes": 3145,
+   "sha256": "0effc8e1778b235b8867a3755722be56a5c19513db8c5dd6f02179c7802d9958"
+  },
+  {
+   "path": "RETURN_SETUP_LOGIN_RECOVERY.txt",
+   "bytes": 4294,
+   "sha256": "86f8ea2a5589cab32b574c4670265225de750fbb1842c6f08b3becb2fbcb95b3"
+  },
+  {
+   "path": "RETURN_SETUP_PASTE_FIX_V6.txt",
+   "bytes": 3686,
+   "sha256": "8275347cbaa5d7a57a6d9233ccef5874a046cc1197d72329e45d2abe653226da"
+  },
+  {
+   "path": "RETURN_SETUP_R4_20261009.txt",
+   "bytes": 21206,
+   "sha256": "636717ab81c1e194a12d97bef9179dac00213b791c1b9c42ae546847efe95711"
+  },
+  {
+   "path": "RETURN_SETUP_R5_20261011.txt",
+   "bytes": 8830,
+   "sha256": "0835d013c9a95da94b4aeca1dadc827ec3bee03ea9f983d797345de0df28bc34"
+  },
+  {
+   "path": "RETURN_SETUP_RESOURCE_RECOVERY_20261009.txt",
+   "bytes": 3145,
+   "sha256": "0effc8e1778b235b8867a3755722be56a5c19513db8c5dd6f02179c7802d9958"
+  },
+  {
+   "path": "RETURN_SETUP_RUNNING_MONITOR_V8.txt",
+   "bytes": 2950,
+   "sha256": "5a01d01523453e5b40f45a953264590dc88478e9ca8f9850458578e088ea0409"
+  },
+  {
+   "path": "RETURN_SETUP_TASK_RECOVERY_V7.txt",
+   "bytes": 3258,
+   "sha256": "d72df7dab8127464ba4efb490ba3219ffdab30cae1146ac8398f4c4899e9f255"
+  },
+  {
    "path": "run-live-commissioning-r3-v2.py",
    "bytes": 33294,
    "sha256": "cb2c1b834978a310298bb224f526ae880182b00e88f38dec60b7c02d0d45d363"
@@ -1783,8 +1563,18 @@
   },
   {
    "path": "run-upgrade-preview-r5-v1.ps1",
-   "bytes": 53459,
-   "sha256": "8f4c80647321c6e811ddcb3b8b94824e48c1f4c4e3d29e7f5b149862668bc66e"
+   "bytes": 54111,
+   "sha256": "98a8130a6757617d9b69def0e4d46d69421422a502e30ab8f2488522b50daa7f"
+  },
+  {
+   "path": "RUN_427_LAUNCH_SERIES.ps1",
+   "bytes": 23180,
+   "sha256": "bf6e5e8ce157eb1ecfe534ca802438533bb76721e6a8109b6c3d314f35165c6d"
+  },
+  {
+   "path": "RUN_427_R5_SITTING.ps1",
+   "bytes": 148361,
+   "sha256": "e1e52223049f39056043159050ff5fa642eb6fa5f24585ae25b447d04eb9b1ce"
   },
   {
    "path": "run_publication_focused_validation_20261009.py",
@@ -1872,6 +1662,11 @@
    "sha256": "f48d47e33c6a8885d35199456e24f1e606c771ee215c92037686e4399e1f1c47"
   },
   {
+   "path": "task_scheduler_host_projection.py",
+   "bytes": 4845,
+   "sha256": "0afa30c0ad21d6e3a6b38e13b0504bf355eea7f6ecb21eae70404d1204f80067"
+  },
+  {
    "path": "test-claude-console-native-v6.ps1",
    "bytes": 8357,
    "sha256": "ce7ed45f4d8f574d85f0efb2ae1426d6430204340095a962ff00f102ba6008de"
@@ -1898,8 +1693,8 @@
   },
   {
    "path": "test_agy_isolation_evidence_r4_v1.py",
-   "bytes": 193957,
-   "sha256": "70c605e3bca22e6770f34855737dd1ae3182e2d7911d9fbbd52f318b6fc24d35"
+   "bytes": 196783,
+   "sha256": "13a4b5ffcef5310c6c4aab10dbfbb3cb6888dbc00f7010bea9dd691144982fcc"
   },
   {
    "path": "test_agy_login_bridge_r4_v1.py",
@@ -1913,8 +1708,8 @@
   },
   {
    "path": "test_agy_status_capture_r4_v1.py",
-   "bytes": 91740,
-   "sha256": "514263007cd03f21fad6e64c7d56d968c3263b3dcea40cd8255677ae456a8738"
+   "bytes": 94468,
+   "sha256": "d63262f7b625b2708445c533bb492246125c9edcb5354c5612e45ccd9c4aceed"
   },
   {
    "path": "test_all_worker_denials.py",
@@ -1953,8 +1748,8 @@
   },
   {
    "path": "test_check_worker_native_auth_status_six_r4_v1.py",
-   "bytes": 43021,
-   "sha256": "27b4647b2d94466e43a44de5286ba31494a335cc418d2429202561d02ebd44f1"
+   "bytes": 45700,
+   "sha256": "f3fe913c37dde47abeca82e5cb83cea33472829b1fe844ff00a11251b5c30348"
   },
   {
    "path": "test_claude_code_input_v6.py",
@@ -2138,8 +1933,8 @@
   },
   {
    "path": "test_login_pipeline_worker_interactive_agy_r4_v1.py",
-   "bytes": 66016,
-   "sha256": "ebcf59a4353e3789c982521a7db8c559167a1ed683e0dacb712c22d61d36a80b"
+   "bytes": 68455,
+   "sha256": "4ff47ac3667455f6ed1d0407a5ed5b22dcebca5a9befdfe67505a41571c8f84d"
   },
   {
    "path": "test_login_recovery_commissioning_r3_v2.py",
@@ -2148,8 +1943,8 @@
   },
   {
    "path": "test_login_six_workers_status_first_r4_v1.py",
-   "bytes": 99642,
-   "sha256": "5e7aab6d3dd81346b31fddbb1cee940c864900c70946010cb617a1cdadcc3b6c"
+   "bytes": 99740,
+   "sha256": "8806cd93597f966d47d17bd0fc5526ee52ef7cb974a67bfe80f5c69991e78ec0"
   },
   {
    "path": "test_native_auth_checkpoint_r3_v3.py",
@@ -2228,13 +2023,13 @@
   },
   {
    "path": "test_r5_sitting_flow.py",
-   "bytes": 182495,
-   "sha256": "dd3edae926c9e643ae6b19c5ac4c4e6632918a634e4b2134547871caa5ae4743"
+   "bytes": 216055,
+   "sha256": "2253c594e07dde1303429b99525a0a945f293f8e36cb66124ae18f8354432159"
   },
   {
    "path": "test_r5_sitting_static.py",
-   "bytes": 40098,
-   "sha256": "ff44944cf310af281e89dcd638188252da9acc7cf7b2eb8d119389ebdb5aa387"
+   "bytes": 43464,
+   "sha256": "c72273dfcb0a2bd0e30e73194540757fc3cf01290bf9afa744ca7a15c01e1b87"
   },
   {
    "path": "test_reboot_setup_launcher_v5.py",
@@ -2318,8 +2113,8 @@
   },
   {
    "path": "test_run_upgrade_preview_r5_v1.py",
-   "bytes": 119649,
-   "sha256": "e791d16fbb66a1ff2cba6f4866408287f7a1b5bb62be9ba5589fef6e791ff7d1"
+   "bytes": 122467,
+   "sha256": "d8535286724de5f172491f3aa68cb0a595e2070a93ea84b94d3ba40776fb3da4"
   },
   {
    "path": "test_running_held_wait_utc.py",
@@ -2402,6 +2197,11 @@
    "sha256": "1ece9b13edfb4d83240e2c95e5da1dba68981e4945d6834bb01098f471bad549"
   },
   {
+   "path": "test_task_registration_flags_r5.py",
+   "bytes": 14604,
+   "sha256": "360017febe8422bbebda4c752d9c0358e23922575ca7ebc39e09a20b468916b3"
+  },
+  {
    "path": "test_verify_codex_live_bridge_r3.py",
    "bytes": 10723,
    "sha256": "49287bb2f7db2acd4358a457c4dd43f8dcafb2d51f4eb3a0fa5ce70e48ea0734"
@@ -2472,6 +2272,11 @@
    "sha256": "d3564bc82953e8e65ac891316d7c7c4d77ff4b13724c0dab61b78f4b1eab3af0"
   },
   {
+   "path": "WINDOWS_AGENT_HANDOFF_4.2.7_2026-10-09.md",
+   "bytes": 19520,
+   "sha256": "65d5a2b976443f2d7c849b0d6ba9115c2d4831ac7f36fb6871b57a1ded36caf4"
+  },
+  {
    "path": "worker-denial-acceptance-plan.md",
    "bytes": 8429,
    "sha256": "4e65e9f24b2125e1927802398b4d7f01498afa9ea3859c2036d8e0b88f0e0ce6"
@@ -2530,6 +2335,216 @@
    "path": "worker_claude_login_bridge_r3.py",
    "bytes": 16296,
    "sha256": "b5bbede85ceb099460c6d6634f09a361a9b6617740eb082ab8d3bf5931260c73"
+  },
+  {
+   "path": "r5-army-specs/.army-state.md",
+   "bytes": 4282,
+   "sha256": "855cf66626f07196b98ff075a2208484c0241872d1ea15ad1b0b4dd61f16f7f7"
+  },
+  {
+   "path": "r5-army-specs/ARMY_ADDENDUM_20261011.md",
+   "bytes": 4809,
+   "sha256": "164c3dce5b8cb48e0ac31dd1e1bcbe2f5480b0599e735f675668b90ee5ee6bcb"
+  },
+  {
+   "path": "r5-army-specs/BOOT-API.md",
+   "bytes": 1830,
+   "sha256": "ef3dc66b772630672907c8ff4408c2db842e318811aaa11dd9198534fc01275d"
+  },
+  {
+   "path": "r5-army-specs/deploy-agy-login-bridge.json",
+   "bytes": 51112,
+   "sha256": "846df3fafe589d0e03fc34723380d0830f1a76f96f3a2eea1c3468dc2e582635"
+  },
+  {
+   "path": "r5-army-specs/deploy-config-builder.json",
+   "bytes": 49443,
+   "sha256": "717165b63141439f50ad1d913d89278810121391e1b726bbe68f6aa22da78967"
+  },
+  {
+   "path": "r5-army-specs/deploy-freeze-install-r5.json",
+   "bytes": 49203,
+   "sha256": "7a9e9bcc28e8db41b6b1ca0263d93b261852797e5ae35aa2b8b7887e63e01e3f"
+  },
+  {
+   "path": "r5-army-specs/deploy-isolation-evidence.json",
+   "bytes": 51108,
+   "sha256": "982ea24a64c8b03f724a102259343a0960bc2318eb5ca2aee10621f1ba532bc0"
+  },
+  {
+   "path": "r5-army-specs/deploy-r5-sitting.json",
+   "bytes": 57270,
+   "sha256": "155ce1de615e3a5b6ae335974ea46eeec0454f7adbfae8ac3fcb6a218b896421"
+  },
+  {
+   "path": "r5-army-specs/deploy-retarget-warden-r5.json",
+   "bytes": 48700,
+   "sha256": "c57753d77d20239440eae3225b44b7ce813bbceb6c67db7618b8a9d43134e127"
+  },
+  {
+   "path": "r5-army-specs/deploy-six-worker-driver.json",
+   "bytes": 47701,
+   "sha256": "ee7269e6390f6a47a1f251330965c2ef4b7901c673cf09c299f49e0f6d173644"
+  },
+  {
+   "path": "r5-army-specs/deploy-stop-warden-r5.json",
+   "bytes": 50271,
+   "sha256": "ef031106437c616f1679224bd6dae5700da564acf4c4bdb545a9a2ab1f353d68"
+  },
+  {
+   "path": "r5-army-specs/deploy-upgrade-preview.json",
+   "bytes": 47120,
+   "sha256": "75514f0e51485102aec3a3ce05574ad822af4f4556e23c371e0025437cc6d695"
+  },
+  {
+   "path": "r5-army-specs/INTERFACES-CONFIG.md",
+   "bytes": 3246,
+   "sha256": "84616d668af9bd93e70389e3ccd296575003fe0d06f28c189669bd3683e4e440"
+  },
+  {
+   "path": "r5-army-specs/INTERFACES-CUTOVER.md",
+   "bytes": 8854,
+   "sha256": "27cce16b4ce64551a9bf626890fbce941c5f8a38280327ed8ea40135168bd12c"
+  },
+  {
+   "path": "r5-army-specs/INTERFACES-ONBOARDING.md",
+   "bytes": 5124,
+   "sha256": "10b9828aadd7c7823435bc0d1a764dcfa57b4113264a5ac97614b1188c1cd70a"
+  },
+  {
+   "path": "r5-army-specs/INTERFACES-RUNTIME-BUILD.md",
+   "bytes": 2755,
+   "sha256": "5e5bc370778a6f0895f499e22bf1aa8636d6cdb04e9c8749dccd3ca661c2c5f0"
+  },
+  {
+   "path": "r5-army-specs/KEYSTONE-API.md",
+   "bytes": 4733,
+   "sha256": "678116d0e2ee07c64c5d2c94b6bf2c75c5c7be2a1a2b08ff106c0d5d86ee1432"
+  },
+  {
+   "path": "r5-army-specs/R5_SITTING_V2_DIAGNOSIS_20261011.md",
+   "bytes": 57120,
+   "sha256": "082bfa18bd89b87b66e248cea5b6aaedc1230d06460ae5f41c95a1526f2e959e"
+  },
+  {
+   "path": "r5-army-specs/R6_SCOPE_V2_20261011.md",
+   "bytes": 4140,
+   "sha256": "503cd782908cf6048f5da0e943fdd65c8e06a7a8a2a790aea355bb3a19bb3421"
+  },
+  {
+   "path": "r5-army-specs/R6_V3_RESEARCH_20261011.md",
+   "bytes": 33248,
+   "sha256": "439d06d62fd673abb15349a845da4d490d64ab5bc9e5985464fd1745d9ecb5cd"
+  },
+  {
+   "path": "r5-army-specs/R6A_SCOPE_20261011.md",
+   "bytes": 5641,
+   "sha256": "e9e1e1d7adbaf6ff043066c98708c3774556a66e794feea27f8575fd77c3e78e"
+  },
+  {
+   "path": "r5-army-specs/source-C1-N1-coding-failures.json",
+   "bytes": 74530,
+   "sha256": "ffffc506441b7e990ae41a926954af746a8c8483d50600d3c4d9b6642ac43c56"
+  },
+  {
+   "path": "r5-army-specs/source-G1-agy_protocol.json",
+   "bytes": 15329,
+   "sha256": "d375f71bc4dd26837c38f1dfdc08a0fd3f5c969d907c0fb3bd10ddcaae357696"
+  },
+  {
+   "path": "r5-army-specs/source-G3-config.json",
+   "bytes": 13533,
+   "sha256": "50d5e396cb3fc895c7687fb47f6359bc50873bd89c45c9bf37999ad04340f06b"
+  },
+  {
+   "path": "r5-army-specs/source-G4-supervisor-runner.json",
+   "bytes": 13110,
+   "sha256": "cbc7341675df5e88b55bb7323825537b1590e93b9ec505c3cca24b6c5a53648a"
+  },
+  {
+   "path": "r5-army-specs/source-M1-M2-service-views.json",
+   "bytes": 44379,
+   "sha256": "903b986f358f264963b7539c8f487548d93fa2e0b284bf476eb78f710bdacde4"
+  },
+  {
+   "path": "r5-army-specs/source-M3-M4-knowledge-guard.json",
+   "bytes": 44358,
+   "sha256": "4076a4a64a9b93a9bd9e469be2f84c6ded2d9055049e09d381227a8f0cc0f7a1"
+  },
+  {
+   "path": "r5-army-specs/source-R1-reboot-safe-main.json",
+   "bytes": 11933,
+   "sha256": "442a3e7f7c87f680542354800c4d2a0ee13540201c8f9b0a5bc3cfb5ae993ed8"
+  },
+  {
+   "path": "r5-army-specs/source-W1-store.json",
+   "bytes": 39941,
+   "sha256": "a5ee1e3393fb860bfb9cb358e02c4f4d07ee4ee5c84880c8db30c0cc8caf3bbc"
+  },
+  {
+   "path": "r5-army-specs/source-worker-W2-G2-N2.json",
+   "bytes": 79541,
+   "sha256": "86164bc093e0dd750ecca4f74b765e5ffef0db2b7ba7d54e43fdccf7387eb820"
+  },
+  {
+   "path": "r5-army-specs/wave1-verifier-findings.json",
+   "bytes": 32080,
+   "sha256": "b8eb2897708d1a7fe011a2443c55a394389fff60efef0e5a005de87f9327a2ff"
+  },
+  {
+   "path": "gemini-build-specs/agy-status-capture.json",
+   "bytes": 115864,
+   "sha256": "adba30b50d06e0a01472a5026a9f237c21cd2c4b98d9505c79e9f3c3074b1323"
+  },
+  {
+   "path": "gemini-build-specs/config-builder.json",
+   "bytes": 81577,
+   "sha256": "0041df1ccef1eca1b68f257228f92e68f656dc24948bf89f395dcbd4dc885f61"
+  },
+  {
+   "path": "gemini-build-specs/freeze-install-r5.json",
+   "bytes": 61714,
+   "sha256": "9b7203948197155c5a0daecd351d8adf94f48f6d46fb105774f898f38d54b9b1"
+  },
+  {
+   "path": "gemini-build-specs/isolation-evidence.json",
+   "bytes": 114636,
+   "sha256": "3414ae6c257721579eb2bc9561a30815d72eacca214065d919057c1ea64536e4"
+  },
+  {
+   "path": "gemini-build-specs/login-bridge.json",
+   "bytes": 73459,
+   "sha256": "4a18b0049c8b287530b20580f607c8e1f26189b9121e76ee3e0a1a8a4fb5585b"
+  },
+  {
+   "path": "gemini-build-specs/nf1-evidence.json",
+   "bytes": 89757,
+   "sha256": "907932fdf419da04790bfaa74efd79fa5f480f80126aa8735d4bbc7d9fbaf18c"
+  },
+  {
+   "path": "gemini-build-specs/retarget-r5.json",
+   "bytes": 73885,
+   "sha256": "6256bcabc94fc7cc70b9349deb65a1a988a9951fa577becc0721d5f57a2436ae"
+  },
+  {
+   "path": "gemini-build-specs/status-helper-r4.json",
+   "bytes": 109524,
+   "sha256": "c213adc6ae945d02e758540d4694107c08d13c6bcb8765338f28082f06890a1e"
+  },
+  {
+   "path": "gemini-build-specs/stop-warden-r4.json",
+   "bytes": 72393,
+   "sha256": "5152894a6a837697ed16f771459e6cfdfb9024298eb7783ab9ca05353b3329d6"
+  },
+  {
+   "path": "gemini-build-specs/stop-warden-r5.json",
+   "bytes": 68563,
+   "sha256": "0c370ea1e6e8387e6763aacf745cda5309af881b916f0c68e37475c61320b4c2"
+  },
+  {
+   "path": "gemini-build-specs/upgrade-preview.json",
+   "bytes": 55031,
+   "sha256": "59d17759839b353047c4b727788755b978e517fdb16f5ea7e712749365516691"
   }
  ]
 }

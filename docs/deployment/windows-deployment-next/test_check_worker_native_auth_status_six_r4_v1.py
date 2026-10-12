@@ -20,6 +20,7 @@ import subprocess
 import pytest
 
 import ps_toplevel_smoke as smoke
+import task_scheduler_host_projection as hostacl
 
 W = Path(__file__).parent
 LEAF = W / 'check-worker-native-auth-status-six-r4-v1.ps1'
@@ -129,6 +130,7 @@ def test_constants_bind_the_r4_namespace_and_the_python_contracts():
         code = harness(provider, 'after', imports=False) + ("'RESULT '+([ordered]@{root=$script:targetRoot;task=$script:taskName;native=$script:native;hash=$script:nativeHash;"
                                                           f"args=@($script:nativeArguments['{provider}']);"
                                                           "python=$script:python;install=$script:installRoot;limit=$script:taskTimeLimit;sddl=$script:taskSddl;wait=$script:taskWaitSeconds;"
+                                                          "flags=$script:taskRegistrationFlags;"
                                                           "daemons=$script:daemonTaskNames;source=$script:source}|ConvertTo-Json -Compress)")
         out[provider] = success(ps(code))
     for provider, value in out.items():
@@ -139,6 +141,7 @@ def test_constants_bind_the_r4_namespace_and_the_python_contracts():
         assert value['hash'] == status.CONTRACTS[provider]['sha256'] and value['args'] == status.CONTRACTS[provider]['arguments']
         assert value['python'] == str(R4 / '.venv' / 'Scripts' / 'python.exe') and value['install'] == str(R4)
         assert value['limit'] == 'PT3M' and value['sddl'] == SDDL and value['wait'] < 180
+        assert value['flags'] == hostacl.TASK_CREATE_WITHOUT_PRINCIPAL_ACE == 18
         assert value['daemons'] == list(status.DAEMON_TASK_NAMES) and value['source'] == str(W / PY.name)
 
 
@@ -316,7 +319,9 @@ def test_daemon_states_cover_exactly_the_four_names_and_defer_access_denied():
     assert value['presence'] == ['ABSENT', 'ACCESS_DENIED_DEFERRED', 'PRESENT', 'THROWN']
 
 
-APPLY_STUBS = r"""
+# The folder stub reads the task descriptor back the way this host's Task Scheduler stores it
+# (task_scheduler_host_projection.py), never the requested SDDL verbatim (r5 sitting v2, 2026-10-11).
+APPLY_STUBS = hostacl.PS_FUNCTION + r"""
       function Assert-CodeTreeOnce {param($Path)$script:inspected+=$Path;1}
       function Assert-ProtectedPath {param($Path)}
       function New-ProtectedDirectory {param($Path)if(Test-Path -LiteralPath $Path){throw 'exists'}
@@ -347,20 +352,22 @@ APPLY_STUBS = r"""
         [pscustomobject]@{RegistrationInfo=[pscustomobject]@{Description=''};Principal=[pscustomobject]@{UserId='';LogonType=0;RunLevel=0};
           Settings=[pscustomobject]@{Enabled=$false;AllowDemandStart=$false;MultipleInstances=0;ExecutionTimeLimit=''};Triggers=[pscustomobject]@{Count=0};Actions=$actions}}
       $folder=[pscustomobject]@{};$folder|Add-Member ScriptMethod RegisterTaskDefinition {param($n,$d,$f,$u,$p,$l,$s)
-        $script:registered+=[pscustomobject]@{name=$n;flags=$f;user=$u;password_null=($null -eq $p);logon=$l;sddl=$s;
+        $script:registeredSddl=Get-HostTaskSddlProjection $f $s $u
+        $script:registered+=[pscustomobject]@{name=$n;flags=$f;user=$u;password_null=($null -eq $p);logon=$l;sddl=$s;readback=$script:registeredSddl;
           principal=@($d.Principal.UserId,$d.Principal.LogonType,$d.Principal.RunLevel);limit=$d.Settings.ExecutionTimeLimit;multiple=$d.Settings.MultipleInstances;
           enabled=$d.Settings.Enabled;demand=$d.Settings.AllowDemandStart;triggers=$d.Triggers.Count;path=$d.Actions.Item(1).Path;arguments=$d.Actions.Item(1).Arguments;
           working=$d.Actions.Item(1).WorkingDirectory;description=$d.RegistrationInfo.Description}
-        $script:registeredSddl=$s;if($script:fixtureMode -eq 'bad_limit'){$d.Settings.ExecutionTimeLimit='PT0S'}
+        if($script:fixtureMode -eq 'bad_limit'){$d.Settings.ExecutionTimeLimit='PT0S'}
         New-StubTask $d}
 """
 
 
-def drive_apply(tmp_path, mode='', receipt=None, last_result=0, holds=()):
+def drive_apply(tmp_path, mode='', receipt=None, last_result=0, holds=(), flags=None):
     fixture = tmp_path / 'fixture-receipt.json'
     fixture.write_text(json.dumps(receipt or receipt_fixture('gemini', gemini_envelope(), FETCH, 0)))
     holds_ps = ','.join("'" + h + "'" for h in holds) or ''
-    code = harness() + APPLY_STUBS + RUNTIME + (
+    override = '' if flags is None else f'$script:taskRegistrationFlags={int(flags)};'
+    code = harness() + APPLY_STUBS + RUNTIME + override + (
         f"$script:fixtureMode='{mode}';$script:fixtureReceipt='{fixture}';$script:fixtureLastResult={last_result};$script:fixtureHolds=@({holds_ps});"
         f"$script:targetRoot=Join-Path '{tmp_path}' (Split-Path -Leaf $script:targetRoot);$out=$null;$message=$null;"
         f"try{{$out=Invoke-AuthStatusApply $scheduler $folder $runtime 'slot1' 'gemini' 'before' '{ATTEMPT}'}}catch{{$message=$_.Exception.Message}}finally{{foreach($s in $held){{$s.Dispose()}}}};"
@@ -376,8 +383,9 @@ def test_apply_tail_registers_one_reviewed_system_task_and_binds_the_receipt(tmp
     assert value['runs'] == 1 and value['hold_checks'] == 1 and value['inspected'] == [str(R4), str(status.BASE_PYTHON.parent), str(status.NATIVE)]
     [registered] = value['registered']
     assert registered['name'] == f'CoChem-4.2.7-NativeAuthStatusSix-20261010-r4-v1-{ATTEMPT}-slot1-gemini-before'
-    assert registered['flags'] == 2 and registered['user'] == 'SYSTEM' and registered['password_null'] is True and registered['logon'] == 5
+    assert registered['flags'] == 18 and registered['user'] == 'SYSTEM' and registered['password_null'] is True and registered['logon'] == 5
     assert registered['sddl'] == SDDL and registered['principal'] == ['SYSTEM', 5, 1] and registered['triggers'] == 0
+    assert registered['readback'] == hostacl.HOST_SDDL_AFTER_FLAGS_18
     assert registered['limit'] == 'PT3M' and registered['multiple'] == 2 and registered['enabled'] is True and registered['demand'] is True
     assert registered['path'] == str(R4 / '.venv' / 'Scripts' / 'python.exe') and registered['working'] == str(root)
     nonce = value['summary']['nonce']
@@ -393,7 +401,31 @@ def test_apply_tail_registers_one_reviewed_system_task_and_binds_the_receipt(tmp
     assert not (root / 'status-held.json').exists() and 'COCHEM_NATIVE_AUTH_STATUS_RESULT' not in stdout
 
 
-APPLY_TAIL_CASES = [('hold', 'hold', 'HOLD', 2), ('failed', 'failed', 'HOLD', 2), ('failed_exit0', 'failed', 'HOLD', 0), ('no_receipt', 'reuse', 'RECEIPT', 0),
+@pytest.mark.parametrize('flags', [hostacl.TASK_CREATE, hostacl.TASK_CREATE_WITHOUT_PRINCIPAL_ACE])
+def test_registration_flags_against_the_host_task_acl_read_back(tmp_path, flags):
+    """r5 sitting v2 regression (2026-10-11, 12 of 12 S3 checks held at REGISTER): with TASK_CREATE alone (2) this host reads
+    the task DACL back unprotected with an appended (A;;FR;;;SY) ACE, so the exact Assert-RegisteredTaskAcl holds before any
+    Run; the reviewed flags 18 (TASK_CREATE|TASK_DONT_ADD_PRINCIPAL_ACE) read back as D:PAI with exactly the two requested
+    ACEs and the check runs. The realistic folder stub models both (task_scheduler_host_projection.py)."""
+    value, stdout = drive_apply(tmp_path, flags=flags)
+    root = Path(value['root'])
+    [registered] = value['registered']
+    assert registered['flags'] == flags and registered['sddl'] == SDDL == hostacl.PRIVATE_TASK_SDDL
+    assert registered['readback'] == hostacl.host_projection(flags, SDDL, 'SYSTEM')
+    if flags == hostacl.TASK_CREATE:
+        assert registered['readback'] == hostacl.HOST_SDDL_AFTER_FLAGS_2
+        assert value['summary'] is None and value['runs'] == 0 and 'COCHEM_NATIVE_AUTH_STATUS_RESULT' not in stdout
+        assert value['message'].startswith('The status check is held at task registration: ' + hostacl.HELD_ACL_REASON + ' The task may exist but was never run.')
+        held = json.loads((root / 'status-held.json').read_text(encoding='utf-8'))
+        assert held['phase'] == 'REGISTER' and held['reason'] == hostacl.HELD_ACL_REASON
+        assert held['task_registered'] is True and held['run_requested'] is False and not (root / 'status-task-result.json').exists()
+    else:
+        assert registered['readback'] == hostacl.HOST_SDDL_AFTER_FLAGS_18
+        assert value['message'] is None and value['runs'] == 1 and value['summary']['decision'] == 'REUSE_VERIFIED_SESSION'
+        assert (root / 'status-task-result.json').exists() and not (root / 'status-held.json').exists()
+
+
+APPLY_TAIL_CASES =[('hold', 'hold', 'HOLD', 2), ('failed', 'failed', 'HOLD', 2), ('failed_exit0', 'failed', 'HOLD', 0), ('no_receipt', 'reuse', 'RECEIPT', 0),
                     ('bad_limit', 'reuse', 'REGISTER', 0), ('last_result', 'reuse', 'DECISION', 1), ('hold_exit0', 'hold', 'DECISION', 0),
                     ('reuse_exit2', 'reuse', 'DECISION', 2), ('missing_exit2', 'missing', 'DECISION', 2), ('missing', 'missing', '', 0), ('reuse', 'reuse', '', 0)]
 

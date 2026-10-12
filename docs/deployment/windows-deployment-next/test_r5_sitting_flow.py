@@ -125,7 +125,7 @@ $script:HX=@{
     builder_queue=[Collections.ArrayList]@();stager_plan='PLAN_OK';stager_apply='STAGED';stager_code=0;stager_sha_tamper=$false;stager_outcome_override=$null
     preview_plan_code=0;preview_apply_code=0;preview_decision='PASSED';preview_install_after_tamper=$false;start_tamper=[Collections.ArrayList]@('')
     retarget_r5=[Collections.ArrayList]@('ok');retarget_r4=[Collections.ArrayList]@('ok');stop_r5=[Collections.ArrayList]@('ok');retarget_mode_override=$null
-    health_overrides=@{};admission=[Collections.ArrayList]@(3);preflight=[Collections.ArrayList]@('ok');s14_planning='ok';s14_coding='ok'
+    health_overrides=@{};r5_health_overrides=@{};admission=[Collections.ArrayList]@(3);preflight=[Collections.ArrayList]@('ok');s14_planning='ok';s14_coding='ok'
     active_mode='';crash_in='';processes=$null;process_error=''
 }
 $script:HXWorkflows=@{}
@@ -510,7 +510,11 @@ $script:HXHandlers['stop-warden-r5.ps1']={param($A,$Exe,$Path,$Pre)
     $binding=HX-StopBinding $retargetTarget $retargetAttempt $recover
     if(-not $binding.ok){HX-Trace 'stop-refused' @{why=$binding.why};return (HX-Result 1 ('The Warden stop is refused before any change: '+$binding.why+' Nothing was changed.'))}
     $null=[IO.Directory]::CreateDirectory($root)
-    if($kind -ceq 'held'){HX-WriteJson (Join-Path $root 'stop-held.json') @{reason='survivor'};return (HX-Result 1 'The Warden stop is held after End; nothing was killed.')}
+    # The held phases of the real script (stop-held.json 'phase'): END_WAIT after End, PREPARATION before any task change.
+    if($kind -ceq 'held'){HX-WriteJson (Join-Path $root 'stop-held.json') ([ordered]@{schema='cochem-warden-stop-held/2';phase='END_WAIT';reason='survivor';end_requested=$true;disable_requested=$false})
+        return (HX-Result 1 'The Warden stop is held after the End request: survivor. The task was NOT disabled and nothing was killed; the owner reviews stop-held.json before any further action.')}
+    if($kind -ceq 'held-preparation'){HX-WriteJson (Join-Path $root 'stop-held.json') ([ordered]@{schema='cochem-warden-stop-held/2';phase='PREPARATION';reason='the task definition changed during preparation';end_requested=$false;disable_requested=$false})
+        return (HX-Result 1 'The Warden stop is held before any task change: the task definition changed during preparation. Nothing was ended, disabled or killed; preserve the stop root and review stop-held.json before another -Attempt.')}
     HX-WriteJson (Join-Path $root 'stop-receipt.json') ([ordered]@{schema='cochem-warden-stop/2';status='WARDEN_ENDED_AND_DISABLED_UNCLEAN_SHUTDOWN_EXPECTED';retarget_target=$retargetTarget;
         retarget_attempt=$retargetAttempt;recover_interrupted_start=$recover;start_binding=$binding.kind})
     $script:HX.warden.enabled=$false;$script:HX.warden.instances=0;$script:HX.warden.listening=0;$script:HX.warden.task_state=1;$script:HX.active_mode=''
@@ -529,8 +533,11 @@ function HX-Health {
         routing=[ordered]@{holds=@();execution_quarantines=@()};knowledge=[ordered]@{ready=$true;authority_matches_capture=$true};
         admission=[ordered]@{reasons=$(if($capacity -gt 0){@()}else{@('host governor: disk IOPS')})};
         components=[ordered]@{warden_controller=[ordered]@{ready=$true;admission_ready=$true;recovery_hold=$false;rss_mib=41.5}};rss_mib=41.5;controller_rss_mib=41.5}
-    foreach($k in @($script:HX.health_overrides.Keys)){
-        $parts=$k.Split('.');$node=$health;for($i=0;$i -lt $parts.Count-1;$i++){$node=$node[$parts[$i]]};$node[$parts[-1]]=$script:HX.health_overrides[$k]}
+    # health_overrides apply to every controller; r5_health_overrides only while the live action is r5 (a v3 sitting stops a
+    # running r4 at S2 first, and that stop's idle proof reads the r4 controller's /health).
+    $tables=@($script:HX.health_overrides);if($script:HX.warden.source -ceq 'r5'){$tables+=@($script:HX.r5_health_overrides)}
+    foreach($table in $tables){foreach($k in @($table.Keys)){
+        $parts=$k.Split('.');$node=$health;for($i=0;$i -lt $parts.Count-1;$i++){$node=$node[$parts[$i]]};$node[$parts[-1]]=$table[$k]}}
     $health}
 function Invoke-R5Control {param([string]$Operation,$Data=$null)
     HX-Trace 'control' @{operation=$Operation;data=$(if($null -ne $Data){HX-Json $Data}else{$null})}
@@ -1245,17 +1252,18 @@ def test_s10_contract_preview_failure_then_held_preview_deploys_r5_with_gemini_h
 RESTORED = 'Warden  : r4 RESTORED and running (r5 not deployed)'
 
 
-def cutover_restore(vn, previous):
-    """The documented INTERFACES-CUTOVER (final) restore calls for the state an r5 attempt vn reached (vK = v{n}, vM = v1)."""
-    vk = vn
+def cutover_restore(vn, previous, vk=None, vm='v1'):
+    """The documented INTERFACES-CUTOVER (final) restore calls for the state an r5 attempt vn reached: vK is the restore's
+    stop-warden-r5 namespace (default v{n}: no earlier r5 stop exists) and vM its WardenRetarget r4 namespace (default v1)."""
+    vk = vk or vn
     return {
         'previous': previous,
-        'retarget-held': [(RETARGET, f'-Target r4 -Attempt v1 -SourceAttempt {vn} -Apply -Start')],
-        'never-started': [(RETARGET, f'-Target r4 -Attempt v1 -SourceAttempt {vn} -Apply -Start')],
+        'retarget-held': [(RETARGET, f'-Target r4 -Attempt {vm} -SourceAttempt {vn} -Apply -Start')],
+        'never-started': [(RETARGET, f'-Target r4 -Attempt {vm} -SourceAttempt {vn} -Apply -Start')],
         'interrupted': [(STOP_R5, f'-Apply -Attempt {vk} -RetargetTarget r5 -RetargetAttempt {vn} -RecoverInterruptedStart'),
-                        (RETARGET, f'-Target r4 -Attempt v1 -SourceAttempt {vn} -StopAttempt {vk} -Apply -Start')],
+                        (RETARGET, f'-Target r4 -Attempt {vm} -SourceAttempt {vn} -StopAttempt {vk} -Apply -Start')],
         'started': [(STOP_R5, f'-Apply -Attempt {vk} -RetargetTarget r5 -RetargetAttempt {vn}'),
-                    (RETARGET, f'-Target r4 -Attempt v1 -SourceAttempt {vn} -StopAttempt {vk} -Apply -Start')],
+                    (RETARGET, f'-Target r4 -Attempt {vm} -SourceAttempt {vn} -StopAttempt {vk} -Apply -Start')],
         'blocked': [],
     }
 
@@ -1504,6 +1512,66 @@ def test_s12_reports_routing_holds_without_gating_on_them(tmp_path):
 
 def test_s12_with_no_routing_holds_reports_zero(happy):
     assert 'Holds   : 0 active routing hold(s) (reported, not gated)' in happy.stdout
+
+
+# DIAG-NEXT 2026-10-11: r5 keeps r4's 5% Warden CPU budget (controller_guard.py); live r4 then sampled 5.56%. A CPU-only
+# admission pause (no recovery hold, every admission reason the CPU budget) keeps r5: restoring r4 would not help.
+CPU_REASON = "'Warden CPU utilization exceeds its strict 5% budget'"
+CPU_PAUSE = ("$script:HX.health_overrides['components.warden_controller.admission_ready']=$false;"
+             f"$script:HX.health_overrides['components.warden_controller.admission_reasons']=@({CPU_REASON});")
+
+
+def test_s12_cpu_only_admission_pause_keeps_r5_and_s13_defers(tmp_path):
+    flow = run_sitting(tmp_path, CPU_PAUSE + "$script:HX.admission=[Collections.ArrayList]@(0);")
+    assert flow.returncode == 0 and 'DONE: the 4.2.7 pipeline runs on r5.' in flow.stdout, flow.explain()
+    assert flow.receipt('S12')['status'] == 'HEALTH_VERIFIED_ADMISSION_PAUSED_CPU' and set(flow.waits('S12')) == {10}
+    assert sum(flow.waits('S12')) <= 130, 'the S12 gate still polls for 120 s first'
+    assert flow.receipt('S13')['status'] == 'DEFERRED' and not flow.controls('/preflight')
+    assert restore_calls(flow) == [] and not flow.child_runs(STOP_R5) and not flow.retargets('r4')
+    assert 'Warden  : r5 RUNNING (health verified; admission was paused at S12 by the 5% Warden CPU budget alone)' in flow.stdout, flow.explain()
+    assert 'Reboot  : SAFE' in flow.stdout and 'Accept  : DEFERRED' in flow.stdout
+    assert_clean_trace(flow)
+
+
+def test_s12_cpu_only_pause_that_reopens_passes_the_acceptance(tmp_path):
+    flow = run_sitting(tmp_path, CPU_PAUSE + "$script:HX.admission=[Collections.ArrayList]@(0,0,2);", skip_fix_proof=True)
+    assert_succeeded(flow)
+    assert flow.receipt('S12')['status'] == 'HEALTH_VERIFIED_ADMISSION_PAUSED_CPU' and flow.receipt('S13')['status'] == 'PASSED'
+
+
+@pytest.mark.parametrize('case', ['recovery_hold', 'memory_and_cpu', 'memory_only', 'no_reasons'])
+def test_s12_admission_pause_other_than_cpu_alone_still_restores_r4(tmp_path, case):
+    overrides = {
+        'recovery_hold': CPU_PAUSE + "$script:HX.health_overrides['components.warden_controller.recovery_hold']=$true;",
+        'memory_and_cpu': ("$script:HX.health_overrides['components.warden_controller.admission_ready']=$false;"
+                           "$script:HX.health_overrides['components.warden_controller.admission_reasons']=@('Warden resident memory exceeds its strict 200 MiB budget'," + CPU_REASON + ");"),
+        'memory_only': ("$script:HX.health_overrides['components.warden_controller.admission_ready']=$false;"
+                        "$script:HX.health_overrides['components.warden_controller.admission_reasons']=@('Warden resident memory exceeds its strict 200 MiB budget');"),
+        'no_reasons': "$script:HX.health_overrides['components.warden_controller.admission_ready']=$false;",
+    }[case]
+    flow = run_sitting(tmp_path, overrides)
+    assert_stopped(flow, 'S12: the r5 health gate failed: components.warden_controller.admission_ready is not true')
+    assert restore_calls(flow) == [(STOP_R5, '-Apply -Attempt v1 -RetargetTarget r5 -RetargetAttempt v1'),
+                                   (RETARGET, '-Target r4 -Attempt v1 -SourceAttempt v1 -StopAttempt v1 -Apply -Start')]
+
+
+def test_s12_cpu_only_pause_with_knowledge_not_ready_still_restores_r4(tmp_path):
+    flow = run_sitting(tmp_path, CPU_PAUSE + "$script:HX.health_overrides['knowledge.ready']=$false;")
+    assert_stopped(flow, 'S12: the r5 health gate failed: knowledge is not ready')
+    assert [c for c, _ in restore_calls(flow)] == [STOP_R5, RETARGET]
+
+
+def test_gemini_fallback_with_a_cpu_only_pause_keeps_r5(tmp_path):
+    # The S12 check passes on the contract configuration; after the fallback restart the controller samples above 5% CPU.
+    overrides = ("$script:HX.preflight=[Collections.ArrayList]@('failed','ok');"
+                 "$script:HXOrigHealth=(Get-Item -LiteralPath 'function:HX-Health').ScriptBlock;"
+                 "function HX-Health {$h=& $script:HXOrigHealth;if($script:HXStage -ceq 'FALLBACK'){"
+                 "$h.components.warden_controller.admission_ready=$false;$h.components.warden_controller.admission_reasons=@('Warden CPU utilization exceeds its strict 5% budget')};$h};")
+    flow = run_sitting(tmp_path, overrides, skip_fix_proof=True)
+    assert_succeeded(flow)
+    assert 'Invoke-R5GeminiFallback' in flow.stages() and flow.held_stages() == ['S13']
+    assert set(flow.waits('FALLBACK')) == {10} and restore_calls(flow) == []
+    assert 'admission was paused at fallback by the 5% Warden CPU budget alone' in flow.stdout, flow.explain()
 
 
 # ---------------------------------------------------------------------------------------------------------------------
@@ -2110,6 +2178,337 @@ def test_f8_held_records_of_the_onboarding_roots_are_listed(tmp_path, case):
 
 
 # ---------------------------------------------------------------------------------------------------------------------
+# v3 from TODAY'S host (2026-10-11 after r5-sitting-20261011-202738.log): the owner's next command is
+# 'RUN_427_R5_SITTING.ps1 -Apply -Attempt v3'. The Warden runs the restored r4 (WardenRetarget4.2.7-windows-20261011-r4-v1,
+# SYSTEM controller and launcher alive, port 47824 listening); r5 is installed and verified; v1 ended STOPPED at S02 (restore
+# not done) and v2 ended STOPPED at S10 (r4 restored); v2 left 12 NativeAuthStatusSix + 1 AgyCapture + 1 UpgradePreview held
+# roots (one-shot tasks registered, never run), the staged WardenConfig4.2.7-windows-20261011-r5-v1 and its S2 stop
+# WardenStop4.2.7-windows-20261010-r4-v1. Expected namespaces: S2 stop-warden-r5 v1 (-RetargetTarget r4 -RetargetAttempt v1),
+# S9 WardenConfig v2, S11 WardenRetarget r5 v1 (-SourceAttempt v1 -StopAttempt v1), any r4 restore WardenRetarget r4 v2 and
+# any later stop-warden-r5 v2.
+
+V2_STATUS_HEX, V2_GEMINI_HEX, V2_PREVIEW_HEX = 'ea8225f6253040d3b41a9337df83b8a0', '57fbb476c49c4a3ba7be21b3065e53f4', '116bb5fd1bf045c88c1ba36dde4e6404'
+# The live r4 restore action (WardenRetarget4.2.7-windows-20261011-r4-v1\warden-task-started.xml), run by the venv launcher
+# (pid 2692) and the Toolchain controller (pid 37840).
+R4_DAEMON_ARGS = (r'-I -B -m cochem_pipeline daemon --config "C:\Program Files\CoChem\Pipeline4.2.7-windows-20261009-r4\pipeline.json" '
+                  r'--queue-launch-output "C:\ProgramData\CoChemPipeline427\private\queue-restart-20261011-r4-v1"')
+TODAY_V3 = ("HX-InstallAfter;HX-StartedRoot 'r4' 'v1' '';"
+            "$script:HX.warden.source='r4-restore';$script:HX.warden.source_attempt='v1';$script:HX.warden.enabled=$true;$script:HX.warden.task_state=4;"
+            "$script:HX.warden.instances=1;$script:HX.warden.listening=1;$script:HX.warden.action=HX-ActionFor 'r4' 'v1' '';"
+            f"HX-AddProcess 2692 {R4_PY} '{R4_DAEMON_ARGS}';HX-AddProcess 37840 {TOOLCHAIN_PY} '{R4_DAEMON_ARGS}';")
+V3_BASE_RESTORE = [(RETARGET, '-Target r4 -Attempt v2 -SourceAttempt v1 -StopAttempt v1 -Apply -Start')]
+
+
+def write_todays_leftovers(base):
+    """The files the two ended sittings of 2026-10-11 left under the base (paths redirected to the harness base); returns
+    {path: bytes} so a test can prove v3 never touched them. The r5 install and the started r4 restore root come from
+    TODAY_V3 (HX-InstallAfter, HX-StartedRoot)."""
+    written = {}
+
+    def put(relative, value):
+        path = base / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        data = value if isinstance(value, bytes) else json.dumps(value, indent=1).encode('ascii')
+        path.write_bytes(data)
+        written[path] = data
+
+    def held(phase, root, task):
+        return {'phase': phase, 'reason': 'Registered task ownership/private DACL differs.', 'target_root': str(base / root), 'task_name': task,
+                'task_registered': True, 'run_requested': False, 'automatic_retry_allowed': False}
+
+    r5_root, stop_v1, restore_v1 = (str(base / n) for n in ('Pipeline4.2.7-windows-20261011-r5', 'WardenStop4.2.7-windows-20261010-r4-v1',
+                                                            'WardenRetarget4.2.7-windows-20261011-r4-v1'))
+    status_roots = []
+    for provider in ('claude', 'codex'):
+        for n in range(1, 7):
+            root = f'NativeAuthStatusSix4.2.7-windows-20261010-r4-v1-{V2_STATUS_HEX}-slot{n}-{provider}-before'
+            status_roots.append(str(base / root))
+            put(f'{root}/status-held.json', {'schema': 'cochem-worker-native-auth-status-held/1', 'attempt': V2_STATUS_HEX, 'slot': f'slot{n}', 'provider': provider,
+                                             'decision': 'HOLD', **held('REGISTER', root, f'CoChem-4.2.7-NativeAuthStatusSix-20261010-r4-v1-{V2_STATUS_HEX}-slot{n}-{provider}-before')})
+            put(f'{root}/worker-native-auth-status-six-r4-v1.py', b'# copied helper\n')
+    capture = f'AgyCapture4.2.7-windows-20261010-r4-v1-{V2_GEMINI_HEX}-slot1-signed-out'
+    put(f'{capture}/capture-held.json', {'schema': 'cochem-agy-status-capture-held/1', **held('REGISTRATION', capture, 'CoChem-4.2.7-AgyCapture-' + V2_GEMINI_HEX)})
+    preview = f'UpgradePreview4.2.7-windows-20261011-r5-v1-{V2_PREVIEW_HEX}'
+    put(f'{preview}/preview-held.json', {'schema': 'cochem-upgrade-preview-held/1', **held('REGISTRATION', preview, 'CoChem-4.2.7-UpgradePreview-20261011-r5-v1-' + V2_PREVIEW_HEX)})
+    config = 'WardenConfig4.2.7-windows-20261011-r5-v1'
+    put(f'{config}/pipeline.json', COMMISSIONED_BYTES)
+    put(f'{config}/staging-receipt-20261012T013118Z-a7e95ba103df430daaf28288c195f3a6.json', {'schema': 'cochem-config-only-staging/2', 'status': 'STAGED'})
+    put('WardenStop4.2.7-windows-20261010-r4-v1/stop-receipt.json', {'schema': 'cochem-warden-stop/1', 'status': 'WARDEN_ALREADY_STOPPED_AND_DISABLED', 'mode': 'ALREADY_STOPPED', 'attempt': 'v1'})
+    put('WardenRetarget4.2.7-windows-20261010-r4-v1/retarget-receipt.json', {'schema': 'cochem-warden-retarget/2', 'status': 'WARDEN_RETARGETED_TO_R4_V1'})
+    v1, v2 = 'R5Sitting4.2.7-windows-20261011-v1', 'R5Sitting4.2.7-windows-20261011-v2'
+    for stage in ('S00', 'S01'):
+        put(f'{v1}/{stage}-receipt.json', {'schema': 'cochem-r5-sitting-stage/1', 'stage': stage, 'attempt': 'v1', 'status': 'x', 'state': {}})
+    put(f'{v1}/restore-intent-20261011-172252.json', {'schema': 'cochem-r5-sitting-intent/1', 'stage': 'R4-RESTORE'})
+    put(f'{v1}/sitting-end.json', {'schema': 'cochem-r5-sitting-end/1', 'attempt': 'v1', 'outcome': 'STOPPED', 'stage': 'S02', 'restore_ok': False,
+                                   'restore_message': 'the r4 restore did not verify (exit 1, status : + FullyQualifiedErrorId : ValidateSetFailure,retarget-warden-r5.ps1)',
+                                   'state': {'attempt': 'v1', 'base_source': {'kind': 'r4-v1'}, 'staged_path': None, 'touched_roots': [r5_root, stop_v1, restore_v1]}})
+    for n in range(0, 10):
+        put(f'{v2}/S{n:02d}-receipt.json', {'schema': 'cochem-r5-sitting-stage/1', 'stage': f'S{n:02d}', 'attempt': 'v2', 'status': 'x', 'state': {}})
+    put(f'{v2}/restore-intent-20261011-202738.json', {'schema': 'cochem-r5-sitting-intent/1', 'stage': 'R4-RESTORE'})
+    put(f'{v2}/sitting-end.json', {'schema': 'cochem-r5-sitting-end/1', 'attempt': 'v2', 'outcome': 'STOPPED', 'stage': 'S10', 'restore_ok': True,
+                                   'restore_message': 'r4 restarted and health verified (WardenRetarget r4 v1)',
+                                   'state': {'attempt': 'v2', 'gemini': 'held', 'base_source': {'kind': 'r4-v1'}, 'config_attempt': 'v1',
+                                             'staged_path': str(base / config / 'pipeline.json'), 'preview_attempt': V2_PREVIEW_HEX,
+                                             'touched_roots': [r5_root, stop_v1, *status_roots, str(base / capture), str(base / config), str(base / preview), restore_v1]}})
+    return written
+
+
+def todays_host(record=None):
+    """A run_sitting tamper that writes today's leftovers (and keeps what it wrote in `record`)."""
+    def tamper(workspace, base):
+        written = write_todays_leftovers(base)
+        if record is not None:
+            record.update(written)
+    return tamper
+
+
+def run_v3(tmp_path, overrides='', record=None, **kwargs):
+    kwargs.setdefault('attempt', 'v3')
+    return run_sitting(tmp_path, TODAY_V3 + overrides, tamper=todays_host(record), **kwargs)
+
+
+def assert_leftovers_untouched(flow, record):
+    assert record, 'the leftovers were written'
+    changed = [str(p) for p, data in record.items() if not p.exists() or p.read_bytes() != data]
+    assert changed == [], 'v3 changed a leftover of v1/v2: ' + repr(changed[:5])
+    for root in ('R5Sitting4.2.7-windows-20261011-v1', 'R5Sitting4.2.7-windows-20261011-v2'):
+        assert sorted(p.name for p in (flow.base / root).iterdir()) == sorted(p.name for p in record if p.parent.name == root), root
+
+
+@pytest.fixture(scope='module')
+def v3_today(tmp_path_factory):
+    record = {}
+    return run_v3(tmp_path_factory.mktemp('v3-today'), record=record), record
+
+
+def test_v3_today_happy_path_stops_the_restored_r4_first_and_deploys_r5(v3_today):
+    flow, record = v3_today
+    assert_succeeded(flow)
+    assert flow.sitting_root().name == 'R5Sitting4.2.7-windows-20261011-v3' and flow.receipts() == ['S%02d' % n for n in range(0, 15)]
+    assert flow.children() == ([STOP_R5] + [LEAF] * 12 + [CAPTURE, LOGIN, CAPTURE, ISOLATION, ISOLATION, BUILDER, STAGER, STAGER, PREVIEW, PREVIEW, RETARGET])
+    assert not flow.child_runs(INSTALL) and not flow.child_runs(STOP_R4) and not flow.of('pypi'), 'r5 stays installed; the r4-v1 stop is not used'
+    (stop,) = flow.child_runs(STOP_R5)
+    assert stop['args'] == ['-Apply', '-Attempt', 'v1', '-RetargetTarget', 'r4', '-RetargetAttempt', 'v1']
+    receipt = json.loads((flow.base / 'WardenStop4.2.7-windows-20261011-r5-v1' / 'stop-receipt.json').read_text())
+    assert receipt['start_binding'] == 'START_RECEIPT' and receipt['retarget_target'] == 'r4' and receipt['retarget_attempt'] == 'v1'
+    s2 = flow.receipt('S02')
+    assert s2['status'] == 'WARDEN_ENDED_AND_DISABLED_UNCLEAN_SHUTDOWN_EXPECTED' and s2['state']['s2_stop_attempt'] == 'v1'
+    assert s2['state']['base_source'] == {'kind': 'r4-restore', 'source_attempt': 'v1', 'stop_attempt': 'v1'}
+    assert flow.receipt('S00')['state']['warden_initial']['running'] is True
+    applies = [e for e in flow.child_runs(STAGER) if '-Apply' in e['args']]
+    assert [arg(e, '-Attempt') for e in applies] == ['v2'], "v2's staged WardenConfig v1 is never reused or overwritten"
+    staged = flow.base / 'WardenConfig4.2.7-windows-20261011-r5-v2' / 'pipeline.json'
+    assert sha(staged.read_bytes()) == CONTRACT_SHA and arg(flow.child_runs(PREVIEW)[1], '-Candidate') == str(staged)
+    (retarget,) = flow.retargets('r5')
+    assert retarget['args'] == ['-Target', 'r5', '-Config', str(staged), '-Attempt', 'v1', '-SourceAttempt', 'v1', '-StopAttempt', 'v1', '-Apply', '-Start']
+    assert not flow.of('stop-refused') and not flow.of('retarget-refused')
+    hexes = {arg(e, '-Attempt') for e in flow.runs if e['child'] in (LEAF, CAPTURE, LOGIN, ISOLATION, PREVIEW)}
+    assert hexes and not hexes & {V2_STATUS_HEX, V2_GEMINI_HEX, V2_PREVIEW_HEX}, 'fresh one-shot names, never the v2 ones'
+    assert 'Gemini  : ACTIVE' in flow.stdout and 'Warden  : r5 RUNNING (health verified)' in flow.stdout
+    assert_leftovers_untouched(flow, record)
+
+
+def test_v3_today_s0_reports_the_leftovers_plainly_and_does_not_stop_on_them(v3_today):
+    flow, _ = v3_today
+    config = flow.base / 'WardenConfig4.2.7-windows-20261011-r5-v1' / 'pipeline.json'
+    for line in ('Warden task: source r4-restore v1, enabled True, instances 1, port 47824 listeners 1',
+                 'r4 is running now (r4-restore v1); S2 stops it first and R4-RESTORE brings it back if r5 cannot take over',
+                 'earlier sitting v1: ended STOPPED at S02 (R4-RESTORE not done); 0 held record(s) left in its child roots',
+                 'earlier sitting v2: ended STOPPED at S10 (r4 restored); 14 held record(s) left in its child roots (14 name a one-shot task that was '
+                 f'registered and never ran); its staged configuration {config} is not reused',
+                 'leftovers of earlier sittings block nothing: this attempt uses fresh child names and the next free namespaces; keep them for the agent',
+                 'runtime processes: 14 MCP client(s) recognised (Claude Desktop, Codex, Antigravity, Claude Code may stay open), 2 observer recorder(s), '
+                 '2 controller process(es); none unclassified',
+                 'S2: stop the restored r4 Warden (stop-warden-r5 -RetargetTarget r4 -RetargetAttempt v1; it is running: idle proof, Task Scheduler End, wait, '
+                 'disable; about 3-4 min, submit no work meanwhile)'):
+        assert line in flow.stdout, line + '\n' + flow.explain()
+    earlier = flow.receipt('S00')['state']['earlier_sittings']
+    assert [(e['attempt'], e['outcome'], e['stage'], e['held_records'], e['never_run_tasks']) for e in earlier] == [('v1', 'STOPPED', 'S02', 0, 0), ('v2', 'STOPPED', 'S10', 14, 14)]
+
+
+def test_v3_today_plan_mode_names_the_command_state_and_leftovers(tmp_path):
+    flow = run_v3(tmp_path, apply=False)
+    assert flow.returncode == 0 and flow.runs == [], flow.explain()
+    for line in ('READ-ONLY PLAN', 'Warden task: source r4-restore v1', 'S2 runs stop-warden-r5 -RetargetTarget r4 -RetargetAttempt v1 (r4 is running: idle proof, End, disable; it is stopped first)',
+                 'earlier sitting v1: ended STOPPED at S02', 'earlier sitting v2: ended STOPPED at S10 (r4 restored); 14 held record(s)',
+                 'leftovers of earlier sittings block nothing', 'sitting root: ' + str(flow.base / 'R5Sitting4.2.7-windows-20261011-v3'), 'To run it: add -Apply'):
+        assert line in flow.stdout, line + '\n' + flow.explain()
+    assert 'S0 would STOP' not in flow.stdout
+    ended = run_v3(tmp_path / 'again', apply=False, attempt='v2')
+    assert 'S0 would STOP: sitting attempt v2 has already ended' in ended.stdout and 'earlier sitting v1:' in ended.stdout, ended.explain()
+
+
+@pytest.mark.parametrize('attempt', ['v1', 'v2'])
+def test_v3_today_the_ended_attempts_are_refused_at_s0(tmp_path, attempt):
+    flow = run_v3(tmp_path, attempt=attempt)
+    assert_stopped(flow, f'Sitting attempt {attempt} has already ended')
+    assert flow.runs == [] and not flow.of('processes')
+
+
+def test_v3_today_an_earlier_attempt_that_never_ended_stops_s0_with_nothing_changed(tmp_path):
+    def unended_v4(workspace, base):
+        write_todays_leftovers(base)
+        root = base / 'R5Sitting4.2.7-windows-20261011-v4'
+        root.mkdir(parents=True)
+        (root / 'S00-receipt.json').write_text(json.dumps({'schema': 'cochem-r5-sitting-stage/1', 'stage': 'S00', 'attempt': 'v4', 'state': {}}), encoding='ascii')
+    flow = run_sitting(tmp_path, TODAY_V3, attempt='v3', tamper=unended_v4)
+    assert_stopped(flow, 'Sitting attempt v4 started on this host but never ended (no sitting-end.json)')
+    assert 'run the same command with -Attempt v4 instead' in stop_line(flow) and 'Nothing was changed' in stop_line(flow)
+    assert flow.runs == [] and flow.receipts() == [] and flow.sitting_end() is None and not flow.of('docker')
+
+
+@pytest.mark.parametrize('case', ['s5_held_as_in_v2', 's7_failed', 's9_gates_failed'])
+def test_v3_today_gemini_held_still_deploys_r5_on_the_held_configuration(tmp_path, case):
+    overrides = {'s5_held_as_in_v2': "$script:HX.s5_code=1;", 's7_failed': "$script:HX.s7_code=1;",
+                 's9_gates_failed': "$script:HX.builder_queue.Add(@{outcome='GEMINI_HELD_COMMISSIONED_BYTES'})|Out-Null;"}[case]
+    record = {}
+    flow = run_v3(tmp_path, overrides, record=record)
+    assert_succeeded(flow)
+    assert flow.held_stages() == [{'s5_held_as_in_v2': 'S5', 's7_failed': 'S7', 's9_gates_failed': 'S9'}[case]] and 'Gemini  : HELD' in flow.stdout
+    staged = flow.base / 'WardenConfig4.2.7-windows-20261011-r5-v2' / 'pipeline.json'
+    assert sha(staged.read_bytes()) == COMMISSIONED_SHA and flow.receipt('S09')['status'] == 'GEMINI_HELD_COMMISSIONED_BYTES'
+    assert arg(flow.retargets('r5')[0], '-Config') == str(staged) and arg(flow.retargets('r5')[0], '-StopAttempt') == 'v1'
+    assert_claude_and_codex_fine(flow)
+    assert_leftovers_untouched(flow, record)
+
+
+def test_v3_today_contract_preview_failure_stages_the_held_rebuild_past_both_used_configs(tmp_path):
+    flow = run_v3(tmp_path, "$script:HX.preview_apply_code=[Collections.ArrayList]@(1,0);")
+    assert_succeeded(flow)
+    applies = [arg(e, '-Attempt') for e in flow.child_runs(STAGER) if '-Apply' in e['args']]
+    assert applies == ['v2', 'v3'] and flow.held_stages() == ['S10']
+    staged = flow.base / 'WardenConfig4.2.7-windows-20261011-r5-v3' / 'pipeline.json'
+    assert sha(staged.read_bytes()) == COMMISSIONED_SHA and arg(flow.retargets('r5')[0], '-Config') == str(staged)
+
+
+def test_v3_today_s2_refused_while_r4_runs_stops_with_nothing_changed_and_the_same_command_runs_again(tmp_path):
+    flow = run_v3(tmp_path, "$script:HX.stop_r5=[Collections.ArrayList]@('refused');")
+    assert_stopped(flow, 'S2: the Warden stop was refused before any change')
+    assert flow.children() == [STOP_R5] and not flow.retargets() and flow.sitting_end() is None, 'nothing changed: v3 stays rerunnable'
+    assert warden_line(flow) == 'Warden  : r4 still running (never stopped)', flow.explain()
+    assert flow.receipts() == ['S00', 'S01']
+    rerun = run_v3(tmp_path, run_label='rerun', hex_seed=100)
+    assert_succeeded(rerun)
+    assert rerun.children()[0] == STOP_R5 and arg(rerun.child_runs(STOP_R5)[0], '-Attempt') == 'v1', 'the refused stop never consumed v1'
+    assert 'rerun of sitting attempt v3: S00, S01 already done and verified' in rerun.stdout and 'S01: already done by this attempt' in rerun.stdout
+
+
+@pytest.mark.parametrize('kind,phase', [('held', 'END_WAIT'), ('held-preparation', 'PREPARATION')])
+def test_v3_today_s2_held_after_its_root_exists_is_blocked_with_the_stop_named(tmp_path, kind, phase):
+    flow = run_v3(tmp_path, f"$script:HX.stop_r5=[Collections.ArrayList]@('{kind}');")
+    assert_stopped(flow, 'S2: the Warden stop did not complete')
+    held = flow.base / 'WardenStop4.2.7-windows-20261011-r5-v1' / 'stop-held.json'
+    expected = (f'R4-RESTORE NOT DONE: no automatic restore: the S2 stop of the restored r4 (stop-warden-r5 v1) is held at phase {phase} '
+                f'({held}); nothing was killed, r4 may still be running and its task may still be enabled; the owner/agent reviews it')
+    assert expected in flow.stdout, flow.explain()
+    assert 'was not stopped by this sitting' not in flow.stdout
+    assert restore_calls(flow) == [] and flow.children() == [STOP_R5]
+    lines = [line.strip() for line in flow.stdout.splitlines() if line.strip().startswith('Held    : ')]
+    assert lines and str(held) in lines[-1]
+    end = flow.sitting_end()
+    assert end['outcome'] == 'STOPPED' and end['restore_ok'] is False and end['state']['s2_stop_attempt'] == 'v1', 'v3 ends: the agent reviews the held stop'
+
+
+@pytest.mark.parametrize('case', ['s9_builder_twice', 's10_held_preview', 's10_contract_and_held_preview', 's3_unexpected_error'])
+def test_v3_today_failures_after_s2_restore_the_r4_restore_lineage(tmp_path, case):
+    overrides, reason = {
+        's9_builder_twice': ("$script:HX.builder_queue.Add(@{exit=5})|Out-Null;$script:HX.builder_queue.Add(@{exit=3})|Out-Null;", 'S9: the configuration builder failed twice'),
+        's10_held_preview': ("$script:HX.preview_apply_code=1;$script:HX.s5_code=1;", 'S10: the upgrade preview gate did not pass'),
+        's10_contract_and_held_preview': ("$script:HX.preview_apply_code=1;", 'S10: the upgrade preview gate did not pass'),
+        's3_unexpected_error': (f"$script:HX.throw_in='{LEAF}';", 'Unexpected error'),
+    }[case]
+    flow = run_v3(tmp_path, overrides)
+    assert_stopped(flow, reason)
+    assert restore_calls(flow) == V3_BASE_RESTORE, flow.explain()
+    assert not flow.of('retarget-refused') and 'R4-RESTORE: r4 restarted' in flow.stdout and warden_line(flow) == RESTORED
+    assert flow.sitting_end()['outcome'] == 'STOPPED' and flow.sitting_end()['state']['restore']['attempt'] == 'v2'
+
+
+@pytest.mark.parametrize('kind', sorted(CUTOVER_STATES))
+def test_v3_today_s11_failure_chooses_the_cutover_restore_for_the_state_reached(tmp_path, kind):
+    state, binding = CUTOVER_STATES[kind]
+    flow = run_v3(tmp_path, f"$script:HX.retarget_r5=[Collections.ArrayList]@('{kind}');")
+    assert_stopped(flow, 'S11: ')
+    expected = cutover_restore('v1', V3_BASE_RESTORE, vk='v2', vm='v2')[state]
+    assert restore_calls(flow) == expected, flow.explain()
+    assert_restore_outcome(flow, state, binding, 'v2')
+
+
+@pytest.mark.parametrize('case', sorted(S12_FAILURES))
+def test_v3_today_s12_failure_stops_r5_then_restores_r4(tmp_path, case):
+    overrides, reason, _, stoppable = S12_FAILURES[case]
+    flow = run_v3(tmp_path, overrides.replace('$script:HX.health_overrides', '$script:HX.r5_health_overrides'))
+    assert_stopped(flow, 'S12: the r5 health gate failed')
+    assert reason in flow.stdout and flow.receipt('S02')['status'] == 'WARDEN_ENDED_AND_DISABLED_UNCLEAN_SHUTDOWN_EXPECTED'
+    stop = (STOP_R5, '-Apply -Attempt v2 -RetargetTarget r5 -RetargetAttempt v1')
+    if stoppable:
+        assert restore_calls(flow) == [stop, (RETARGET, '-Target r4 -Attempt v2 -SourceAttempt v1 -StopAttempt v2 -Apply -Start')], flow.explain()
+        assert warden_line(flow) == RESTORED
+    else:
+        assert restore_calls(flow) == [stop] and 'R4-RESTORE NOT DONE' in flow.stdout and warden_line(flow) == NOT_VERIFIED, flow.explain()
+
+
+def test_v3_today_s12_cpu_only_pause_keeps_r5(tmp_path):
+    flow = run_v3(tmp_path, CPU_PAUSE + "$script:HX.admission=[Collections.ArrayList]@(0);")
+    assert flow.returncode == 0 and 'DONE: the 4.2.7 pipeline runs on r5.' in flow.stdout, flow.explain()
+    assert flow.receipt('S12')['status'] == 'HEALTH_VERIFIED_ADMISSION_PAUSED_CPU' and flow.receipt('S13')['status'] == 'DEFERRED'
+    assert restore_calls(flow) == [] and [arg(e, '-Attempt') for e in flow.child_runs(STOP_R5)] == ['v1'], 'only the S2 stop ran'
+
+
+@pytest.mark.parametrize('kind', ['failed', 'other-provider'])
+def test_v3_today_s13_failure_restores_r4(tmp_path, kind):
+    flow = run_v3(tmp_path, f"$script:HX.preflight=[Collections.ArrayList]@('{kind}');", gemini='skip')
+    assert_stopped(flow, 'S13: the acceptance preflight failed')
+    assert restore_calls(flow) == [(STOP_R5, '-Apply -Attempt v2 -RetargetTarget r5 -RetargetAttempt v1'),
+                                   (RETARGET, '-Target r4 -Attempt v2 -SourceAttempt v1 -StopAttempt v2 -Apply -Start')]
+    assert warden_line(flow) == RESTORED
+
+
+def test_v3_today_gemini_fallback_keeps_r5_on_the_commissioning_config(tmp_path):
+    flow = run_v3(tmp_path, "$script:HX.preflight=[Collections.ArrayList]@('failed','ok');")
+    assert_succeeded(flow)
+    commissioning = flow.base / 'WardenCommissioning4.2.7-windows-20261007-r3-v1' / 'pipeline.json'
+    fallback = [(e['child'], ' '.join(e['args'])) for e in flow.runs if e['stage'] == 'FALLBACK']
+    assert fallback == [(STOP_R5, '-Apply -Attempt v2 -RetargetTarget r5 -RetargetAttempt v1'),
+                        (RETARGET, f'-Target r5 -Config {commissioning} -Attempt v2 -SourceAttempt v1 -StopAttempt v2 -Apply -Start')]
+    assert flow.held_stages() == ['S13'] and 'Warden  : r5 RUNNING' in flow.stdout
+
+
+@pytest.mark.parametrize('kind', sorted(FALLBACK_STATES))
+def test_v3_today_gemini_fallback_retarget_failure_uses_the_same_cutover_state_machine(tmp_path, kind):
+    state, binding = FALLBACK_STATES[kind]
+    flow = run_v3(tmp_path, f"$script:HX.preflight=[Collections.ArrayList]@('failed','ok');$script:HX.retarget_r5=[Collections.ArrayList]@('ok','{kind}');")
+    assert_stopped(flow, 'Gemini fallback: ')
+    assert [arg(e, '-Attempt') for e in flow.retargets('r5')] == ['v1', 'v2']
+    previous = [(RETARGET, '-Target r4 -Attempt v2 -SourceAttempt v1 -StopAttempt v2 -Apply -Start')]
+    expected = cutover_restore('v2', previous, vk='v3', vm='v2')[state]
+    assert restore_calls(flow) == expected, flow.explain()
+    assert_restore_outcome(flow, state, binding, 'v3')
+
+
+def test_v3_today_a_failed_restore_reports_r4_not_back(tmp_path):
+    flow = run_v3(tmp_path, "$script:HX.preview_apply_code=1;$script:HX.retarget_r4=[Collections.ArrayList]@('held-before-run');")
+    assert_stopped(flow, 'S10:')
+    assert restore_calls(flow) == V3_BASE_RESTORE
+    assert 'R4-RESTORE NOT DONE: the r4 restore did not verify' in flow.stdout and not warden_line(flow).startswith('Warden  : r4 RESTORED')
+    held = [line.strip() for line in flow.stdout.splitlines() if line.strip().startswith('Held    : ')]
+    assert held and str(flow.base / 'WardenRetarget4.2.7-windows-20261011-r4-v2' / 'start-held.json') in held[-1], flow.explain()
+    assert str(flow.base / 'WardenRetarget4.2.7-windows-20261011-r4-v1') not in held[-1], 'the started r4 restore of v2 holds no held record'
+
+
+def test_v3_today_s11_without_docker_stops_and_the_same_command_finishes(tmp_path):
+    flow = run_v3(tmp_path, "$script:HX.docker=[Collections.ArrayList]@($true,$false);")
+    assert_stopped(flow, 'The cutover needs the engine')
+    assert flow.sitting_end() is None and flow.receipts() == ['S%02d' % n for n in range(0, 11)]
+    rerun = run_sitting(tmp_path, "HX-InstallAfter;$script:HX.warden.source='r4-restore';$script:HX.warden.source_attempt='v1';$script:HX.warden.enabled=$false;"
+                                  "$script:HX.warden.task_state=1;$script:HX.warden.action=HX-ActionFor 'r4' 'v1' '';", attempt='v3', run_label='rerun', hex_seed=100)
+    assert_succeeded(rerun)
+    assert rerun.children() == [RETARGET]
+    assert rerun.retargets('r5')[0]['args'] == ['-Target', 'r5', '-Config', str(flow.base / 'WardenConfig4.2.7-windows-20261011-r5-v2' / 'pipeline.json'),
+                                                 '-Attempt', 'v1', '-SourceAttempt', 'v1', '-StopAttempt', 'v1', '-Apply', '-Start']
+
+
+# ---------------------------------------------------------------------------------------------------------------------
 # CHILD-BINDING smoke: every child call the orchestrator builds binds against the REAL child script, run top level
 # (ps_toplevel_smoke.py: plan mode, host stubbed, unelevated; -Apply dropped, every other argument kept)
 
@@ -2133,6 +2532,12 @@ HARVEST = {
     'restore_interrupted_start': ("$script:HX.retarget_r5=[Collections.ArrayList]@('interrupted');", {}),
     'restore_never_started': ("$script:HX.retarget_r5=[Collections.ArrayList]@('held-before-run');", {}),
     'restore_started_unbound': ("$script:HX.start_tamper=[Collections.ArrayList]@('config');", {}),
+    # The owner's next command from today's host: -Apply -Attempt v3 (restored r4 running, v1/v2 leftovers present).
+    'v3_today_happy': (TODAY_V3, {'attempt': 'v3', 'tamper': todays_host()}),
+    'v3_today_s10_base_restore': (TODAY_V3 + "$script:HX.preview_apply_code=1;", {'attempt': 'v3', 'tamper': todays_host(), 'gemini': 'skip'}),
+    'v3_today_s12_restore': (TODAY_V3 + "$script:HX.health_overrides['knowledge.ready']=$false;", {'attempt': 'v3', 'tamper': todays_host()}),
+    'v3_today_fallback_interrupted': (TODAY_V3 + "$script:HX.preflight=[Collections.ArrayList]@('failed','ok');$script:HX.retarget_r5=[Collections.ArrayList]@('ok','interrupted');",
+                                      {'attempt': 'v3', 'tamper': todays_host()}),
 }
 
 
@@ -2329,15 +2734,27 @@ def test_child_binding_smoke_detects_the_1722_class_of_defect(tmp_path):
 
 
 def test_owner_command_binds_against_the_real_sitting_top_level():
-    # The owner's next command is '... RUN_427_R5_SITTING.ps1 -Apply -Attempt v2'; without -Apply its real top level prints
-    # the read-only plan (host stubbed): -Attempt v2 binds and the plan names the v2 sitting root.
+    # The owner's next command is '... RUN_427_R5_SITTING.ps1 -Apply -Attempt v3'; without -Apply its real top level prints
+    # the read-only plan (host stubbed): -Attempt v3 binds, the plan names the v3 sitting root and reports the two ended
+    # attempts of today (virtual sitting-end.json files and one v2 held record, as the unelevated owner window reads them).
     stub = smoke_stub()
     stub['pure_extra'] = ['Get-Command']
-    result = smoke.run_toplevel(SCRIPT, ['-Attempt', 'v2'], stub=stub)
+    held_root = LIVE_BASE + rf'\NativeAuthStatusSix4.2.7-windows-20261010-r4-v1-{V2_STATUS_HEX}-slot1-claude-before'
+    ends = {'v1': {'outcome': 'STOPPED', 'stage': 'S02', 'restore_ok': False, 'state': {'touched_roots': [LIVE_BASE + r'\Pipeline4.2.7-windows-20261011-r5']}},
+            'v2': {'outcome': 'STOPPED', 'stage': 'S10', 'restore_ok': True,
+                   'state': {'staged_path': LIVE_BASE + r'\WardenConfig4.2.7-windows-20261011-r5-v1\pipeline.json', 'touched_roots': [held_root]}}}
+    stub['fs']['virtual_files'].update({LIVE_BASE + rf'\R5Sitting4.2.7-windows-20261011-{a}\sitting-end.json': json.dumps({'schema': 'cochem-r5-sitting-end/1', 'attempt': a, **e})
+                                        for a, e in ends.items()})
+    stub['fs']['virtual_files'][held_root + r'\status-held.json'] = json.dumps({'phase': 'REGISTER', 'task_registered': True, 'run_requested': False})
+    result = smoke.run_toplevel(SCRIPT, ['-Attempt', 'v3'], stub=stub)
     result.raise_for_harness()
     assert not result.binding_error and not result.denied and result.error is None and result.exit_code == 0, result.describe()
-    assert 'READ-ONLY PLAN (no -Apply)' in result.stdout and 'sitting root: ' + LIVE_BASE + '\\R5Sitting4.2.7-windows-20261011-v2' in result.stdout, result.stdout
+    assert 'READ-ONLY PLAN (no -Apply)' in result.stdout and 'sitting root: ' + LIVE_BASE + '\\R5Sitting4.2.7-windows-20261011-v3' in result.stdout, result.stdout
     assert 'runtime processes: 14 MCP client(s) recognised' in result.stdout and 'none unclassified' in result.stdout, result.stdout
+    assert 'earlier sitting v1: ended STOPPED at S02 (R4-RESTORE not done); 0 held record(s) left in its child roots' in result.stdout, result.stdout
+    assert ('earlier sitting v2: ended STOPPED at S10 (r4 restored); 1 held record(s) left in its child roots (1 name a one-shot task that was registered '
+            'and never ran); its staged configuration ' + LIVE_BASE + r'\WardenConfig4.2.7-windows-20261011-r5-v1\pipeline.json is not reused') in result.stdout, result.stdout
+    assert 'leftovers of earlier sittings block nothing' in result.stdout and 'S0 would STOP' not in result.stdout, result.stdout
 
 
 # ---------------------------------------------------------------------------------------------------------------------

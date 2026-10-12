@@ -36,11 +36,12 @@ WRAPPER = W / WRAPPER_NAME
 BRIDGE_PY = W / 'worker_agy_login_bridge_r4_v1.py'
 HISTORY = W / 'agy-session-history-r4-v1.ps1'
 # Final bridge pins handed over by the lead after the onboarding fix wave (also recomputed from disk below).
-FINAL_BRIDGE_PINS = {'agyBridgeWrapperPin': (WRAPPER, 'da166c1dbdb047e93692eeb47abf3d315dbe797cf9040d34b440d9649626014a'),
+FINAL_BRIDGE_PINS = {'agyBridgeWrapperPin': (WRAPPER, '381fb8daec6999d16e75ab163f28d0dda6459b1b44f9695962cf43213cedcb60'),
                      'agyBridgePythonPin': (BRIDGE_PY, '4074878f100ae59b804c95bd97b3280ccaa09f919ffaa365a3e2c6985045b8d9'),
                      'agyHistoryPin': (HISTORY, '4e86b712314e2a6a8ea9f13e1dfcc9e65dda4035d2895b8043fbf6ceed0424d4')}
-# The onboarding-fix status leaf (O-F5: task result 2 on HOLD), pinned by the driver as statusLeafHash.
-FINAL_STATUS_LEAF_PIN = 'c0b5df803a339a7dbbbd59727ea59a75dc4722d474f4bb05852d5cdc8778e265'
+# The onboarding-fix status leaf (O-F5: task result 2 on HOLD) with the r5 sitting v3 registration repair (flags 18 =
+# TASK_CREATE|TASK_DONT_ADD_PRINCIPAL_ACE), pinned by the driver as statusLeafHash.
+FINAL_STATUS_LEAF_PIN = '34612ac49eb2e455076a01607634f21d4f0b284714ef07d5e614146a1a9a7a85'
 LEAF_TESTS = W / 'test_check_worker_native_auth_status_six_r4_v1.py'
 SECRETS = ('owner@example.invalid', 'SECRETSTATE123', 'SECRETCODE456', 'accounts.google.com')
 NEUTRAL_LOG = ('Starting OAuth authentication flow\nPlease visit the following URL to authorize the application:\n'

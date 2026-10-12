@@ -3,23 +3,25 @@ One elevated window, one command, about 17 minutes of your attention (six Google
 rest runs by itself. Claude and Codex end up working whatever happens with Gemini.
 ====================================================================================================
 BEFORE: Docker Desktop running ("Engine running"); stay signed in as ansac during and after.
-Internet on (r5 downloads its Python packages); a browser on your Google account. Submit no
+Internet on (Google sign-ins and the provider check); a browser on your Google account. Submit no
 pipeline work from any GUI until the window says DONE or STOP (no GUI needs a change afterwards).
 Claude Desktop, Codex, Antigravity and Claude Code may stay open: their MCP clients are recognised.
+NOW: the r4 pipeline is running again (v2 brought it back); the sitting stops it first (S2).
+S0 lists what the v1 and v2 sittings left behind (held folders, never-run tasks): expected.
 
 THE COMMAND. Start > type Windows PowerShell (the plain entry: not x86, not PowerShell 7) >
 Run as administrator > accept UAC. Paste these two lines, press Enter ($HOME = C:\Users\ansac):
 
  cd "$HOME\Documents\Codex\2026-10-06\the-github-repository-is-located-at\windows-deployment-next"
- powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\RUN_427_R5_SITTING.ps1 -Apply -Attempt v2
+ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\RUN_427_R5_SITTING.ps1 -Apply -Attempt v3
 
 Options: no -Apply = print the plan only; -Gemini skip = no Gemini (default -Gemini attempt);
--SkipFixProof = no S14; -Attempt v2 etc. only when the agent names one; default -EffortNullSlug.
+-SkipFixProof = no S14; -Attempt v3 etc. only when the agent names one; default -EffortNullSlug.
 Never press Ctrl+C (with nothing selected it interrupts the sitting) or close the window early.
 If the window returns to the prompt without DONE or STOP, run the same command again.
 ====================================================================================================
 WHAT HAPPENS                                                      you          minutes
-S0-S2    checks; install r5 beside r4; disable the idle Warden    not needed   about 7
+S0-S2    checks (r5 is already installed); stop the running r4    not needed   about 5
 S3       Claude + Codex sign-in check on all six slots            not needed   about 6
          (a slot signed out: one Y/N question, see below)         at the keys  +4 per sign-in
 S5       Gemini sign-in probe on slot1                            not needed   about 3
@@ -28,9 +30,9 @@ S7-S10   Gemini checks; build, stage and preview the r5 config    not needed   a
 S11-S13  switch the Warden to r5; health; one test job            not needed   about 10
 S14      two small proof workflows (planning + coding)            not needed   up to 20
 WHEN TO BE THERE: two beeps and a yellow ">>> YOUR ATTENTION:" line mean you are needed; the
-window waits for you. Be back at the screen 12 minutes after starting: the possible Y/N comes at
-about minute 13, the six sign-ins start at about minute 16. After them (about minute 35) you may
-leave; the deployment outcome follows at about minute 50-60 (Gemini fallback +8, busy host +10).
+window waits for you. Be back at the screen 10 minutes after starting: the possible Y/N comes at
+about minute 11, the six sign-ins start at about minute 14. After them (about minute 33) you may
+leave; the deployment outcome follows at about minute 45-55 (Gemini fallback +8, busy host +10).
 
 THE ONE POSSIBLE QUESTION (S3): "Sign them in now (about 4 minutes each ...)? [Y/N]"
   Y  per signed-out slot: type READY in capitals; Claude: open the printed URL, paste the code at

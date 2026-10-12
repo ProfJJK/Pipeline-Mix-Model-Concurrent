@@ -10,14 +10,14 @@ ChatGPT/Codex).
 **Read [AGENTS.md](../AGENTS.md) first.** Its host rules are enforced on this workstation by a PreToolUse
 hook for Claude Code. Codex and Antigravity must follow them by reading the file.
 
-> **Interim update, 2026-10-11 about 21:30 CDT.**
-> - The owner's second sitting (v2, 20:27) got to S10. It then stopped and **restored r4**, so the Warden
->   is **running r4** now.
-> - A third repair is in progress in this Claude Code session (section 5b).
-> - The owner asked the next agent to start in parallel on the model-matrix redesign and on r6/r7.
->   **Section 11 says what you can start now and which files to leave alone.**
-> - The `docs/deployment/` mirror still holds the pre-repair versions of the files under repair.
->   This session pushes the final repair later on this branch.
+> **r5 sitting repair COMPLETE (2026-10-11 about 23:00 CDT).**
+> - The flags-18 repair (section 5b) is implemented, re-tested, reviewed by two adversarial reviewers
+>   (both GO) and re-verified by this session.
+> - The `docs/deployment/` mirror is fully re-exported, and every pin matches.
+> - This session has finished its work. **W (the deployment workspace) is now entirely the takeover
+>   agent's** (section 11).
+> - The Warden is **running r4** with admission paused (section 4).
+> - The repaired r5 v3 sitting is ready, but it is the owner's **option**, not the plan (section 6).
 
 ## 1. Where things stand (one paragraph)
 
@@ -30,8 +30,10 @@ was built, tested and audited three times, reaching a final GO.
   scheduled-task registration flag (section 5b). The sitting **restored r4 automatically**.
 - **Now:** the Warden **runs r4 again**, but r4 admits no work, because the controller is over r4's
   strict 50 MiB memory budget (r5 raises it to 200 MiB). The r5 runtime is installed but not activated.
-- **Next:** the flags-18 repair is being finished and reviewed. After that, the owner runs
-  `-Apply -Attempt v3` (section 6).
+- **Repaired:** the flags-18 repair is complete and reviewed. The runner now also handles today's state:
+  a running restored r4, the leftovers of v1 and v2, and a CPU-only admission pause at S12.
+  `-Apply -Attempt v3` (section 6) is ready if the owner wants r5 now, ahead of the combined package
+  planned in section 11.
 - The owner has left the **model-tier routing redesign** and **r6/r7** to the next agent (sections 8
   and 11).
 
@@ -249,9 +251,9 @@ partner fix.
 - Windows build 26300 (UBR 9457) and PowerShell 5.1.26100.9444 have not changed since.
 - Caveat: that is a single elevated sample.
 
-**Repair status at this interim push.**
+**Repair (workflow `r5-sitting-repair-2`, complete).**
 
-- **FIX-REGISTRATION done.** All five scripts set `$script:taskRegistrationFlags=18` and pass it. The pins
+- **FIX-REGISTRATION.** All five scripts set `$script:taskRegistrationFlags=18` and pass it. The pins
   of the status leaf and the agy wrapper in `login-six-workers-status-first-r4-v1.ps1` were updated.
 - **Realistic test model.** A new shared model, `W\task_scheduler_host_projection.py`, makes every
   Task Scheduler stub return the host's real read-back. Flags 2 now fails the tests exactly as it failed
@@ -270,33 +272,76 @@ partner fix.
   | preview | `98a8130a` |
   | login-six | `953f49d3` |
 
-- **Still running:** FIX-NEXT (refresh the runner's pin table and make the v3 run safe from today's state),
-  then two adversarial reviews. The final push of this session records the outcome and the owner's v3
-  command.
-
-Things the v3 walk-through found:
-
-- S2 will, for the first time, **End a running controller**: an idle proof, then Task Scheduler End, then
-  disable. Nobody may submit pipeline work just before or during the sitting.
-- S9 stages into `WardenConfig…-r5-v2`.
-- Restores use the r4 namespace v2.
-- No v2 leftover blocks v3, because new runs get fresh ids.
+- **FIX-NEXT.** The runner now handles today's state. Final shas: runner `e1e52223`, flow test
+  `2253c594`, static test `c72273df`. One pin refresh covered all 33 entries.
+  - **S0 and the plan** report each earlier attempt (how it ended, its held files, never-run tasks and
+    staged config). These never stop the sitting. The one new stop is an earlier attempt **without**
+    `sitting-end.json`, because it may still be running in another window.
+  - **S2 on the restored r4** records the stop attempt before running the child. A stop held after its
+    folder exists now gives a correct R4-RESTORE message naming the phase. A stop refused with nothing
+    changed ends the sitting cleanly ("r4 still running"), and the same command can be rerun.
+  - **S12, a judgment call to review.**
+    - What changed: if, after 120 s, the only reason left is an admission pause from the **5 % Warden CPU
+      budget** (no recovery hold), r5 is kept and recorded as `HEALTH_VERIFIED_ADMISSION_PAUSED_CPU`. S13
+      then waits up to 10 minutes and defers if admission stays closed. Any other admission reason still
+      restores r4.
+    - Rationale: r4 has the same CPU budget plus the 50 MiB pause, so restoring it would not help. The r4
+      controller was seen at 5.56 % CPU.
+  - **Child JSON parsing** now reads the last document first, which removes harmless `ConvertFrom-Json`
+    noise from the log.
+- **Owner sheet** `RETURN_SETUP_R5_20261011.txt` (sha `0835d013`) now carries:
+  - the v3 command
+  - "NOW: the r4 pipeline is running again; the sitting stops it first (S2)"
+  - "S0 lists what v1 and v2 left behind: expected"
+  - a corrected Internet line, which was the reviewers' only (low) finding
+- **Reviews.**
+  - REVIEW-REGISTRATION gave **GO**. It could not refute that every reachable registration now passes, and
+    found no weakened security check.
+  - REVIEW-NEXT-ATTEMPT gave **GO** with one low sheet finding, now fixed. Its code walk from today's
+    state found every namespace v3 takes free: `R5Sitting…-v3`, `WardenStop…-20261011-r5-v1`,
+    `WardenConfig…-r5-v2`, `WardenRetarget…-20261011-r5-v1` and `…-r4-v2`. The restore attempt's
+    receipts bind for S2 and S11. It ran the runner's real plan mode for `-Attempt v3` (exit 0).
+- **Verification by this session:**
+  - shas on disk equal every report
+  - pins `--check`: 33 OK
+  - independent rerun of all affected suites through the lock: **1026 passed** in 953 s, exit 0 (2026-10-11 about 22:55): the flags static test, the five registration harnesses, login-six, the runner static and flow tests, and the smoke tests
 
 ## 6. Running the sitting (owner)
 
-> Interim note: the command below is the **v2** command and is history. The final push replaces it with the
-> verified **v3** command. Do not hand the v2 line to the owner again.
+> **Status:** this sitting is ready and verified, but it is an **option**. Since it was written, the owner
+> has told the takeover agent to build **one combined runtime with one administrator sitting of 20 minutes
+> or less** (section 11). This r5 sitting takes about 65 minutes. Its value is a working pipeline sooner:
+> r4 admits no work at the moment. Run it only if the owner asks for r5 now.
 
 The owner opens an **elevated 64-bit Windows PowerShell 5.1** and runs:
 
 ```powershell
 cd "$HOME\Documents\Codex\2026-10-06\the-github-repository-is-located-at\windows-deployment-next"
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\RUN_427_R5_SITTING.ps1 -Apply -Attempt v2
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\RUN_427_R5_SITTING.ps1 -Apply -Attempt v3
 ```
 
+- **v3 from today's state:**
+  - **S0** reports v1 and v2 as ended (not blocking).
+  - **S1** is skipped.
+  - **S2 Ends the running r4 for the first time.** It needs an idle proof, so the owner must submit
+    nothing from any GUI before or during the sitting.
+  - **S3** runs the status checks, now with flags 18.
+  - **S5-S8** cover Gemini: six attended sign-ins at S6.
+  - **S9** stages into `WardenConfig…-r5-v2`.
+  - **S10** runs the preview.
+  - **S11** retargets: `-Target r5 -Attempt v1 -SourceAttempt v1 -StopAttempt v1`.
+  - **S12** is the health gate. A CPU-only pause keeps r5.
+  - **S13** waits for admission, then runs one preflight.
+  - **S14** runs the proof workflows.
+  - **Restores** use r4 attempt v2.
 - Without `-Apply` the runner only prints the plan. `-Gemini skip` drops the six Google sign-ins.
   Gemini is attempted by default, and any Gemini gate failure degrades to held without failing the sitting.
-- About 12-17 minutes attended (six Google sign-ins), 70-80 minutes in total.
+- Duration: about 12-17 minutes attended (six Google sign-ins) and about 65 minutes in total, since S1 is
+  skipped.
+- Residual risks:
+  - The flags-18 evidence for a SYSTEM task is one elevated sample (10-09).
+  - The r5 logon-trigger update at S11 has never run on this host.
+  - If either surprises, the scripts fail closed and restore r4.
 - Failures after the Warden switch restore r4 automatically, except for rare reviewed-blocked states, which
   the outcome block names together with their recovery command (`retarget-warden-r5.ps1
   -RecoverInterruptedStart`, `START_HELD_BEFORE_HEALTH_GATE` and the r4-restore variants; see
@@ -444,14 +489,18 @@ Final pinned script hashes (sha256 prefixes):
 
 | File | sha256 prefix |
 | --- | --- |
-| `RUN_427_R5_SITTING.ps1` (runner; its table pins 33 files) | `f875a8f1` |
-| `RETURN_SETUP_R5_20261011.txt` (owner sheet) | `80e5e55a` |
+| `RUN_427_R5_SITTING.ps1` (runner; its table pins 33 files) | `e1e52223` |
+| `RETURN_SETUP_R5_20261011.txt` (owner sheet; not pinned) | `0835d013` |
 | `retarget-warden-r5.ps1` | `991703ab` |
 | `stop-warden-r4.ps1` | `43fc386b` |
 | `stop-warden-r5.ps1` | `b5920f37` |
-| `run-upgrade-preview-r5-v1.ps1` | `8f4c8064` |
-| `login-six-workers-status-first-r4-v1.ps1` | `9cfc0a98` |
-| `agy-isolation-evidence-r4-v1.ps1` / `agy_isolation_evidence_r4_v1.py` | `af773b1f` / `767f03af` |
+| `run-upgrade-preview-r5-v1.ps1` | `98a8130a` |
+| `login-six-workers-status-first-r4-v1.ps1` | `953f49d3` |
+| `check-worker-native-auth-status-six-r4-v1.ps1` (status leaf) | `34612ac4` |
+| `agy-status-capture-r4-v1.ps1` | `03198a30` |
+| `login_pipeline_worker_interactive_agy_r4_v1.ps1` (agy login wrapper) | `381fb8da` |
+| `agy-isolation-evidence-r4-v1.ps1` / `agy_isolation_evidence_r4_v1.py` | `bd87ad31` / `767f03af` |
+| `register-stopped-warden-r3.ps1` (exact descriptor check, imported by hash) | `eccc593f` |
 | `build-pipeline-config-r5-candidate.py` | `ab01d824` |
 | `stage-pipeline-config-r5-v1.ps1` | `1066f6c3` |
 | `install-stopped-runtime-r5.ps1` | `1f8041bc` |
@@ -461,15 +510,14 @@ Final pinned script hashes (sha256 prefixes):
 `refresh-r5-sitting-pins.py --check` must print `PINS OK: 33 files` before any sitting. Full hashes for every
 mirrored file are in `docs/deployment/windows-deployment-next/EXPORT-MANIFEST.json`.
 
-*Interim note:* this table predates the flags-18 repair. Section 5b lists the new shas of the six changed
-files. The final push refreshes both the table and the mirror.
-
 ## 11. Parallel work: what the next agent can start now (model matrix, r6, r7)
 
-The owner (2026-10-11 about 21:20) wants the next agent to start now, in parallel, on the **model-matrix
-change** and the **r6 and r7 revisions**, while this Claude Code session finishes the r5 sitting repair.
+The owner (2026-10-11 about 21:20) asked for the next agent to start in parallel on the **model-matrix
+change** and the **r6 and r7 revisions** while this Claude Code session finished the r5 sitting repair.
+**That repair is now complete** (banner), so all of section 11's "still owned by this session" list is
+released.
 
-### Takeover signal (interim)
+### Takeover signal (final)
 
 This answers the trigger in the takeover agent's `docs/PIPELINE_TAKEOVER_PLAN_2026-10-11.md`, which is
 untracked in the host checkout and written by that agent, not by this session.
@@ -478,16 +526,14 @@ untracked in the host checkout and written by that agent, not by this session.
   (manifest `5d8d337b`). This push adds only documentation and mirror files.
 - **Host state:** section 4, verified about 21:00. The Warden runs r4 (restored), admission is paused, and
   r5 is installed but not active.
-- **Mirror and pins:** the `docs/deployment/` mirror is the `e559706` snapshot plus the v2 log and the v2
-  diagnosis.
-  - The files under repair (listed below) are **newer in W** than in the mirror.
-  - Their interim shas are in section 5b.
-  - The runner's pin table is being refreshed right now.
-- **Completion:**
-  - **Released to you now:** all source, routing, r6 and r7 work, and reading anything in W.
-  - **Not yet complete:** the r5 sitting repair. FIX-NEXT and the two adversarial reviews are running.
-  - When it completes, this session pushes a commit whose banner says **"r5 sitting repair COMPLETE"**,
-    with the final pins, a re-exported mirror and the v3 command. After that commit, W is entirely yours.
+- **Mirror and pins:** the `docs/deployment/` mirror is a full re-export of W after the repair.
+  `EXPORT-MANIFEST.json` lists every file's sha256. `refresh-r5-sitting-pins.py --check` prints
+  `PINS OK: 33`. The final hashes are in section 10.
+- **Completion: r5 sitting repair COMPLETE.** This session has stopped all its work.
+  - **W is entirely yours,** including the r5 sitting files.
+  - Before editing a file, compare W against `EXPORT-MANIFEST.json`. If W differs, someone changed it
+    after this push.
+  - No workflow or agent of this session is still running.
 - **Owner decisions:** the decisions recorded in the takeover plan take precedence over this handoff's
   routing proposals (R6_DESIGN, R6A, R6_SCOPE_V2), because the owner gave them to the takeover agent
   after this handoff was written:
@@ -505,19 +551,20 @@ untracked in the host checkout and written by that agent, not by this session.
   material is `R6_DESIGN_20261011.md`'s draft of restart-free catalog activation, which the takeover plan
   already cites.
 
-### Still owned by this session
+### Formerly owned by this session (released with this push)
 
-Do not edit these until this session's final push lands on this branch:
+These were reserved while the repair ran. They are now yours:
 
 - **The r5 sitting files in W:**
   - `RUN_427_R5_SITTING.ps1`, `RETURN_SETUP_R5_20261011.txt`, `refresh-r5-sitting-pins.py`
   - `test_r5_sitting_static.py`, `test_r5_sitting_flow.py`, `ps_toplevel_smoke.py`
   - The five flags-18 scripts in section 5b and `login-six-workers-status-first-r4-v1.ps1`, with their tests
   - `task_scheduler_host_projection.py`, `test_task_registration_flags_r5.py`
-  - Any other W file the repair review touches
-- **The mirror** `docs/deployment/windows-deployment-next/`. This session re-exports it; never edit it
-  by hand.
-- **The owner's next sitting** (`-Attempt v3`). This session hands the owner the verified command.
+- **The mirror** `docs/deployment/windows-deployment-next/`. Regenerate it with
+  `W\export-deployment-mirror.py`: run `--check` first, which does the secret scan only; then run it
+  without arguments, which replaces the mirror and rewrites `EXPORT-MANIFEST.json`. The repo is public, so
+  never bypass the scan, and never edit the mirror by hand.
+- **Whether to run the r5 v3 sitting.** That is the owner's choice (section 6).
 
 ### What the next agent can start now
 

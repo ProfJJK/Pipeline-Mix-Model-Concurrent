@@ -17,6 +17,7 @@ import re
 import pytest
 
 import ps_toplevel_smoke as smoke
+import task_scheduler_host_projection as hostacl
 
 W = Path(__file__).resolve().parent
 spec =importlib.util.spec_from_file_location('agy_bridge_fixtures_for_wrapper', W / 'test_agy_login_bridge_r4_v1.py')
@@ -477,7 +478,9 @@ catch{$message=$_.Exception.Message}finally{[Console]::SetOut($o)}
 
 # ----- -Apply body through the real functions with fixture scheduler, receipts and roots -----
 
-APPLY_PRELUDE = r'''
+# The folder stub reads the task descriptor back the way this host's Task Scheduler stores it (task_scheduler_host_projection.py;
+# r5 sitting v2, 2026-10-11); $script:sddlOverride replaces that read-back only in the explicit tamper case.
+APPLY_PRELUDE = hostacl.PS_FUNCTION + r'''
 $held=[Collections.Generic.List[IO.FileStream]]::new()
 function Assert-NoReparseAncestors {param([string]$Path)}
 function Assert-ProtectedPath {param([string]$Path)}
@@ -503,12 +506,12 @@ $scheduler|Add-Member ScriptMethod NewTask {param($flags)
 $folder=[pscustomobject]@{Tasks=@{};Registered=0}
 $folder|Add-Member ScriptMethod GetTask {param($name) if($this.Tasks.ContainsKey($name)){return $this.Tasks[$name]};throw [Runtime.InteropServices.COMException]::new('fixture missing',-2147024894)}
 $folder|Add-Member ScriptMethod RegisterTaskDefinition {param($name,$definition,$flags,$user,$password,$logon,$sddl)
-    if($flags -ne 2 -or $user -cne 'SYSTEM' -or $null -ne $password -or $logon -ne 5){throw 'fixture registration arguments differ'}
+    if($user -cne 'SYSTEM' -or $null -ne $password -or $logon -ne 5){throw 'fixture registration arguments differ'}
     $this.Registered++
-    if($script:sddlOverride){$sddl=$script:sddlOverride}
-    $task=[pscustomobject]@{Name=$name;State=3;LastTaskResult=267011;Definition=$definition;Enabled=[bool]$definition.Settings.Enabled;InstanceCount=0;Sddl=$sddl;RunCount=0}
+    $readBack=$(if($script:sddlOverride){$script:sddlOverride}else{Get-HostTaskSddlProjection $flags $sddl $user})
+    $task=[pscustomobject]@{Name=$name;State=3;LastTaskResult=267011;Definition=$definition;Enabled=[bool]$definition.Settings.Enabled;InstanceCount=0;Sddl=$sddl;Flags=$flags;ReadBack=$readBack;RunCount=0}
     $task|Add-Member ScriptMethod GetInstances {param($f)[pscustomobject]@{Count=$this.InstanceCount}}
-    $task|Add-Member ScriptMethod GetSecurityDescriptor {param($f)$this.Sddl}
+    $task|Add-Member ScriptMethod GetSecurityDescriptor {param($f)$this.ReadBack}
     $task|Add-Member ScriptMethod Run {param($p) $this.RunCount++;[pscustomobject]@{fixture=$true}}
     $this.Tasks[$name]=$task;$script:lastTask=$task;$task}
 function Invoke-AgyLoginConsoleLoop {param($Instance,[string]$Root,[string]$Nonce,[DateTime]$DeadlineUtc)
@@ -545,7 +548,8 @@ if($root -and (Test-Path -LiteralPath $root)){
 if($folder.Registered){$t=$script:lastTask;$a=$t.Definition.Actions.Item(1)
     $task=[ordered]@{name=$t.Name;path=$a.Path;arguments=$a.Arguments;working_directory=$a.WorkingDirectory;user=$t.Definition.Principal.UserId;logon=$t.Definition.Principal.LogonType;
         run_level=$t.Definition.Principal.RunLevel;limit=$t.Definition.Settings.ExecutionTimeLimit;instances=$t.Definition.Settings.MultipleInstances;restart=$t.Definition.Settings.RestartCount;
-        enabled=$t.Definition.Settings.Enabled;demand=$t.Definition.Settings.AllowDemandStart;runs=$t.RunCount;sddl=$t.Sddl;description=$t.Definition.RegistrationInfo.Description}}
+        enabled=$t.Definition.Settings.Enabled;demand=$t.Definition.Settings.AllowDemandStart;runs=$t.RunCount;sddl=$t.Sddl;flags=$t.Flags;readback=$t.ReadBack;
+        description=$t.Definition.RegistrationInfo.Description}}
 [ordered]@{exit_code=$(if($null -ne $outcome){$outcome.exit_code}else{$null});result=$(if($null -ne $outcome){$outcome.result}else{$null});message=$message;root=$root;files=$files;
     session_result=$resultRecord;session_held=$heldRecord;task=$task;registered=$folder.Registered;code_trees=$script:codeTrees;history_calls=$script:historyCalls;hosts=@($script:hosts)}|ConvertTo-Json -Depth 8 -Compress
 ''')
@@ -569,7 +573,8 @@ def test_apply_accepts_exit_zero_writes_session_result_and_registers_the_exact_t
     assert task == {'name': f'CoChem-4.2.7-InteractiveAgy-r4-slot3-{NONCE}', 'path': r'C:\Program Files\CoChem\Pipeline4.2.7-windows-20261009-r4\.venv\Scripts\python.exe',
                     'arguments': f'-I -B "{root}\\worker_agy_login_bridge_r4_v1.py" --slot slot3 --nonce {NONCE} --login-mode print',
                     'working_directory': root, 'user': 'SYSTEM', 'logon': 5, 'run_level': 1, 'limit': 'PT15M', 'instances': 2, 'restart': 0,
-                    'enabled': True, 'demand': True, 'runs': 1, 'sddl': 'O:BAG:BAD:P(A;;FA;;;SY)(A;;FA;;;BA)', 'description': task['description']}
+                    'enabled': True, 'demand': True, 'runs': 1, 'sddl': 'O:BAG:BAD:P(A;;FA;;;SY)(A;;FA;;;BA)', 'flags': 18,
+                    'readback': hostacl.HOST_SDDL_AFTER_FLAGS_18, 'description': task['description']}
     assert result['code_trees'] == [r'C:\Program Files\CoChem\Pipeline4.2.7-windows-20261009-r4', r'C:\Program Files\CoChem\Toolchain4.2.7-windows-20261006\Python312',
                                     r'C:\Program Files\CoChem\Native4.2.7-windows-20261006']
     assert result['history_calls'] == ['slot3'] and result['registered'] == 1
@@ -661,6 +666,29 @@ def test_apply_without_a_receipt_and_with_a_wrong_task_acl_holds(tmp_path, gener
     acl = apply_fixture(tmp_path / 'acl', 'print_exit_zero', generated, setup="$script:sddlOverride='O:BAG:BAD:P(A;;FA;;;SY)(A;;FA;;;BA)(A;;FR;;;WD)'\n")
     assert acl['exit_code'] is None and acl['session_held']['phase'] == 'REGISTER' and acl['task']['runs'] == 0
     assert acl['files'] == ['session-held.json', 'worker_agy_login_bridge_r4_v1.py', 'worker_native_status_support.py']
+
+
+@pytest.mark.parametrize('flags', [hostacl.TASK_CREATE, hostacl.TASK_CREATE_WITHOUT_PRINCIPAL_ACE])
+def test_registration_flags_against_the_host_task_acl_read_back(tmp_path, generated, flags):
+    """r5 sitting v2 regression (2026-10-11; S6 shares the registration path that held S3/S5/S10): with TASK_CREATE alone (2)
+    this host reads the task DACL back unprotected with an appended (A;;FR;;;SY) ACE, so the exact Assert-RegisteredTaskAcl
+    holds at REGISTER and leaves a receipt-less InteractiveAgy root (which the agy history review refuses later); the
+    reviewed flags 18 (TASK_CREATE|TASK_DONT_ADD_PRINCIPAL_ACE) read back as D:PAI and the sign-in runs to its receipt."""
+    result = apply_fixture(tmp_path, 'print_exit_zero', generated, setup=f'$script:taskRegistrationFlags={flags}\n')
+    task = result['task']
+    assert result['registered'] == 1 and task['flags'] == flags and task['sddl'] == hostacl.PRIVATE_TASK_SDDL
+    assert task['readback'] == hostacl.host_projection(flags, hostacl.PRIVATE_TASK_SDDL, 'SYSTEM')
+    if flags == hostacl.TASK_CREATE:
+        assert task['readback'] == hostacl.HOST_SDDL_AFTER_FLAGS_2 and task['runs'] == 0
+        assert result['exit_code'] is None and hostacl.HELD_ACL_REASON in result['message']
+        held = result['session_held']
+        assert held['phase'] == 'REGISTER' and held['reason'] == hostacl.HELD_ACL_REASON
+        assert held['task_registered'] is True and held['run_requested'] is False and held['receipt_present'] is False
+        assert result['files'] == ['session-held.json', 'worker_agy_login_bridge_r4_v1.py', 'worker_native_status_support.py']
+    else:
+        assert task['readback'] == hostacl.HOST_SDDL_AFTER_FLAGS_18 and task['runs'] == 1
+        assert result['message'] is None and result['exit_code'] == 0 and result['session_held'] is None
+        assert 'receipt.json' in result['files'] and 'session-result.json' in result['files']
 
 
 def test_apply_refuses_an_existing_root_or_task_before_creating_anything(tmp_path, generated):

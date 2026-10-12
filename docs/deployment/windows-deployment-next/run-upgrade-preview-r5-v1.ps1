@@ -22,7 +22,8 @@
      2. creates C:\Program Files\CoChem\UpgradePreview4.2.7-windows-20261011-r5-v1-<attempt> with a SYSTEM/BA-only DACL,
         copies the hash-pinned run_upgrade_preview_r5_v1.py and writes preview-intent.json before any task exists;
      3. registers ONE trigger-free SYSTEM task CoChem-4.2.7-UpgradePreview-20261011-r5-v1-<attempt> (PT3M, private task
-        DACL) running '<r5 python> -I -B <root>\run_upgrade_preview_r5_v1.py ...', requests exactly one Run and waits;
+        DACL, registration flags 18 = TASK_CREATE|TASK_DONT_ADD_PRINCIPAL_ACE) running
+        '<r5 python> -I -B <root>\run_upgrade_preview_r5_v1.py ...', requests exactly one Run and waits;
      4. verifies upgrade-preview-receipt.json against the bindings, re-reads upgrade-preview.json by its sha256, recomputes
         the S10 gate and writes preview-summary.json. Gate: read_only true; native_models_executed false; no changed
         identity; no changed protected path except the configuration path swap; database.exists true;
@@ -99,6 +100,11 @@ function Set-PreviewConstants {
     $script:targetRoot=Join-Path $script:base ('UpgradePreview4.2.7-windows-'+$script:namespaceDate+'-r5-v1-'+$Attempt)
     $script:taskName='CoChem-4.2.7-UpgradePreview-'+$script:namespaceDate+'-r5-v1-'+$Attempt
     $script:taskSddl='O:BAG:BAD:P(A;;FA;;;SY)(A;;FA;;;BA)';$script:taskTimeLimit='PT3M';$script:taskWaitSeconds=175
+    # Registration flags 18 = TASK_CREATE (0x2) | TASK_DONT_ADD_PRINCIPAL_ACE (0x10), still create-only. With 2 alone this host
+    # stores the task DACL unprotected with an appended (A;;FR;;;SY) ACE, which Assert-RegisteredTaskAcl refuses (r5 sitting v2,
+    # 2026-10-11: S10 held at REGISTRATION, SERIES-STOP). 18 kept the exact protected two-ACE DACL and passed the same validator
+    # on 2026-10-08 (resume-pending-warden-r3-v7.ps1:125, C:\Program Files\CoChem\TaskAclRecovery4.2.7-windows-20261008-r3-v1).
+    $script:taskRegistrationFlags=18
     $script:daemonTaskNames=@('CoChem-4.2.7-Warden','CoChem-4.2.7-Supervisor','CoChem-4.2.2-Warden','CoChem-4.2.3-Supervisor')
     $script:receiptName='upgrade-preview-receipt.json';$script:previewName='upgrade-preview.json';$script:runnerHeldName='upgrade-preview-held.json'
     $script:receiptMaxBytes=1048576;$script:previewMaxBytes=67108864
@@ -493,7 +499,7 @@ function Invoke-UpgradePreview {
         $phase='REGISTRATION'
         $definition=New-PreviewTaskDefinition $Scheduler $destination $nonce $Context
         $registered=$true
-        $task=$Folder.RegisterTaskDefinition($script:taskName,$definition,2,'SYSTEM',$null,5,$script:taskSddl)
+        $task=$Folder.RegisterTaskDefinition($script:taskName,$definition,$script:taskRegistrationFlags,'SYSTEM',$null,5,$script:taskSddl)
         Assert-PreviewTaskRegistration $task $destination $nonce $Context
         $taskXmlHash=Write-RegistrationControl (Join-Path $script:targetRoot 'preview-task.xml') ([string]$task.Xml)
         $phase='RUN'

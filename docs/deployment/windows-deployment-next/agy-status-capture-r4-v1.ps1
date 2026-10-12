@@ -14,7 +14,7 @@
         DACL (raw native output may hold the account email once signed in), copies the hash-pinned helper and writes
         capture-intent.json before any task exists;
      3. registers ONE trigger-free SYSTEM task CoChem-4.2.7-AgyCapture-20261010-r4-v1-<attempt>-slot1-<stage> (PT5M, private
-        task DACL), requests exactly one Run and waits for it to end;
+        task DACL, registration flags 18 = TASK_CREATE|TASK_DONT_ADD_PRINCIPAL_ACE), requests exactly one Run and waits for it to end;
      4. verifies capture-receipt.json (cochem-agy-status-capture/1) against the pins, the probe table, the raw-file digests and
         login-mode.json, recomputes the login-mode decision and the orchestrator gate, and writes capture-summary.json.
    Stage signed-out runs P1-P8 (P3 '-p /model' and P6 bare agy get a held-open stdin pipe for 20 s that is never written,
@@ -75,6 +75,11 @@ function Set-CaptureConstants {
     $script:targetRoot=Join-Path $script:base ('AgyCapture4.2.7-windows-'+$script:captureNamespaceDate+'-r4-v1-'+$Attempt+'-'+$Slot+'-'+$Stage)
     $script:taskName='CoChem-4.2.7-AgyCapture-'+$script:captureNamespaceDate+'-r4-v1-'+$Attempt+'-'+$Slot+'-'+$Stage
     $script:taskSddl='O:BAG:BAD:P(A;;FA;;;SY)(A;;FA;;;BA)';$script:taskTimeLimit='PT5M';$script:taskWaitSeconds=295
+    # Registration flags 18 = TASK_CREATE (0x2) | TASK_DONT_ADD_PRINCIPAL_ACE (0x10), still create-only. With 2 alone this host
+    # stores the task DACL unprotected with an appended (A;;FR;;;SY) ACE, which Assert-RegisteredTaskAcl refuses (r5 sitting v2,
+    # 2026-10-11: the S5 capture held at REGISTRATION). 18 kept the exact protected two-ACE DACL and passed the same validator on
+    # 2026-10-08 (resume-pending-warden-r3-v7.ps1:125, C:\Program Files\CoChem\TaskAclRecovery4.2.7-windows-20261008-r3-v1).
+    $script:taskRegistrationFlags=18
     $script:daemonTaskNames=@('CoChem-4.2.7-Warden','CoChem-4.2.7-Supervisor','CoChem-4.2.2-Warden','CoChem-4.2.3-Supervisor')
     $script:workerIdentity='CoChem422Worker1';$script:workerProfile='C:\Users\CoChem422Worker1'
     $script:inventoryRoots=@('C:\Users\CoChem422Worker1\.gemini','C:\Users\CoChem422Worker1\AppData\Local\agy')
@@ -418,7 +423,7 @@ function Invoke-AgyCapture {
         $phase='REGISTRATION'
         $definition=New-CaptureTaskDefinition $Scheduler $destination $nonce
         $registered=$true
-        $task=$Folder.RegisterTaskDefinition($script:taskName,$definition,2,'SYSTEM',$null,5,$script:taskSddl)
+        $task=$Folder.RegisterTaskDefinition($script:taskName,$definition,$script:taskRegistrationFlags,'SYSTEM',$null,5,$script:taskSddl)
         Assert-CaptureTaskRegistration $task $destination $nonce
         $taskXmlHash=Write-RegistrationControl (Join-Path $script:targetRoot 'capture-task.xml') ([string]$task.Xml)
         $phase='RUN'

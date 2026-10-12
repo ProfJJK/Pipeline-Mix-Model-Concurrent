@@ -49,7 +49,12 @@
        line cannot be read (S0 runs elevated), -> STOP listing pid, parent and command line, nothing changed (they would hold
        the S2 stop, the S11 cutover and every rollback). GUI MCP clients (cochem_pipeline mcp ..., the reviewed cochem_mcp
        bridge form), controllers and the two observer recorders pass; free disk >= 5 GB; PyPI (Test-R5PackageIndex) while r5 is
-       not installed. Writes S00-receipt.json once (base source = the Warden action found at the first run).
+       not installed. Earlier attempts (Get-R5EarlierSittings, 2026-10-11 v3 fix): every other R5Sitting4.2.7-windows-20261011-vK
+       is reported with its sitting-end.json outcome and the held records left in the child roots it touched (state.
+       touched_roots; v2 left 14 one-shot tasks registered but never run, a staged WardenConfig v1 and the r4 restore it
+       started); they never stop S0, because every child of this attempt takes fresh 32-hex names and the next free vN
+       namespaces. Only an attempt without sitting-end.json stops S0 (it may still run in another window; rerun that attempt).
+       Writes S00-receipt.json once (base source = the Warden action found at the first run).
    S1  install-stopped-runtime-r5.ps1 -Manifest W\stopped-runtime-r5-source-manifest.json -ManifestSha256 <freeze sha>
        (plan: exit 0, mode READ_ONLY_PLAN, holds []) then the same + -Apply (exit 0, mode FRESH_STOPPED_RUNTIME_READY);
        gate B\Pipeline4.2.7-windows-20261011-r5\install-after.json: schema cochem-stopped-runtime-update/1, mode
@@ -66,8 +71,10 @@
        WARDEN_ALREADY_STOPPED_AND_DISABLED. It also runs for an enabled idle task (A1 today): the S3 and S5-S8 children refuse
        an enabled Warden task. r4-v1 disabled with 0 instances: skipped. Base source r4-restore vM: stop-warden-r5.ps1 -Apply
        -Attempt vK -RetargetTarget r4 -RetargetAttempt vM (WARDEN_ENDED_AND_DISABLED_UNCLEAN_SHUTDOWN_EXPECTED or
-       WARDEN_ALREADY_STOPPED_CLEAN_NOOP). Refused with "nothing was changed" while r4 runs: STOP; otherwise STOP + R4-RESTORE
-       (s2_attempted is set before the child, so a stop held after End restores r4 instead of reporting it untouched).
+       WARDEN_ALREADY_STOPPED_CLEAN_NOOP; today's v3 base: the restored r4 runs, so this is the first live End - idle proof,
+       End, exit wait, disable). Refused with "nothing was changed" while r4 runs: STOP, no restore, the attempt stays
+       rerunnable; otherwise STOP + R4-RESTORE (s2_attempted and s2_stop_attempt are set before the child, so a stop held after
+       its root exists is classified from WardenStop...-vK\stop-held.json: 'blocked' with that phase for a restored r4 base).
    S3  12 x check-worker-native-auth-status-six-r4-v1.ps1 -Slot slotN -Provider claude|codex -Stage before -Attempt <hex>
        -Apply, strictly sequential (claude slot1-6, codex slot1-6); exit 0 + decision REUSE_VERIFIED_SESSION or
        ATTENDED_LOGIN_REQUIRED, anything else HOLD (recorded). Any ATTENDED_LOGIN_REQUIRED: ONE Read-R5YesNo; Y -> per provider
@@ -114,7 +121,10 @@
    S12 Invoke-R5HealthCheck: Invoke-R5Control '/health' every >= 10 s for up to 120 s: service_identity SYSTEM, source_root ==
        r5 .venv\Lib, active [], quarantined_slots {}, routing.execution_quarantines [] (hard); knowledge.ready and
        authority_matches_capture true, components.warden_controller.admission_ready true (awaited). routing.holds is reported.
-       Failure: STOP + R4-RESTORE (stop-warden-r5 first).
+       Failure: STOP + R4-RESTORE (stop-warden-r5 first). One exception (Test-R5CpuOnlyPause, DIAG-NEXT 2026-10-11): when
+       admission_ready is the only open item after 120 s, recovery_hold is false and every warden_controller.admission_reasons
+       entry is the 5% CPU budget (r5 keeps r4's CPU budget; r4 also pauses on its 50 MiB memory budget), r5 is kept: receipt
+       HEALTH_VERIFIED_ADMISSION_PAUSED_CPU, and S13 waits for admission and defers as below. The fallback check alike.
    S13 Wait-R5Admission: '/health' every 15 s until admission_capacity > 0 (host-governor pauses waited up to 600 s; still
        paused -> acceptance DEFERRED, r5 kept). Then ONE Invoke-R5Control '/preflight' @{workflow_id} and '/workflow/<id>'
        every 10 s up to 300 s; BLOCKED routing_operator_limit -> one resubmit with a new id. Gemini contract: route gemini,
@@ -158,15 +168,17 @@
        blocked              (4) no call; STOP, 'R4-RESTORE NOT DONE: no automatic restore: ...' for owner/agent review: a start
                             receipt that fails the two-phase checks ('the r5 vN start receipt does not record the two-phase
                             start (stop-warden-r5 would refuse it); owner/agent review'); a held stop-warden-r5 (stop-held.json;
-                            no defined recovery); an unreadable held record; a held/intent-only retarget whose live action is
-                            neither the intended nor the previous one (or cannot be read).
+                            no defined recovery), the S2 stop of a restored r4 included (Get-R5UnstoppedRestoreDetail names its
+                            attempt and phase: r4 may still run, nothing was killed); an unreadable held record; a held/intent-
+                            only retarget whose live action is neither the intended nor the previous one (or cannot be read).
        A retarget held in another phase (ROOT, PREPARATION, MUTATION_PREPARATION: the task update never ran) or a root without
        intent falls back to the previous state (base, or r5-stopped after the fallback stop). Gate: exit 0 and status
        WARDEN_R4_RESTARTED_HEALTH_VERIFIED.
    Final console block (Write-R5Outcome, 'OUTCOME (<phase>)'): Claude / Codex (n/6 verified, signed out, unclear); Gemini
    (ACTIVE / HELD - <stage>: <reason> / SKIPPED / CONFIGURED, NOT YET PROVEN only when r5 runs a verified GEMINI_CONTRACT
-   config, else NOT DEPLOYED - the sitting ended before r5 ran the Gemini configuration); Warden (r5 RUNNING (health verified)
-   on DONE; after a STOP the live task is read again (audit F2): r4 RESTORED, r5 not installed: <reason> [S1] | r4 RESTORED
+   config, else NOT DEPLOYED - the sitting ended before r5 ran the Gemini configuration); Warden (r5 RUNNING (health verified[;
+   admission was paused at S12|fallback by the 5% Warden CPU budget alone]) on DONE; after a STOP the live task is read
+   again (audit F2): r4 RESTORED, r5 not installed: <reason> [S1] | r4 RESTORED
    and running (r5 not deployed) | r5 RUNNING, NOT VERIFIED[ (rollback stop refused) | (no automatic rollback) | (rollback
    not done)] | r5 task registered but NOT RUNNING - ... | r4 still running (never stopped) | r4 RUNNING (not restored by this
    sitting) - ... | RUNNING an unrecognized task action - ... | pipeline DOWN as before this sitting [S1 restore failed] |
@@ -195,26 +207,26 @@ $script:Pins=@{
     'protected-code-inspection-v4.ps1'='5c01543cbb8b8d64b2b9f1bab4a13f87f8ff9e1ab3e82dfb6fc547144c77b95d'
     'register-stopped-warden-r3.ps1'='eccc593f36cbf488a54775b4343bcf3cf8b261b7cd81e5536fb7f2f18466a198'
     'retarget-warden-r4.ps1'='8ee6b412f6be176dfac7c2c1b2340f1973e08358c7d22da6d4515e79f0327a4e'
-    'check-worker-native-auth-status-six-r4-v1.ps1'='c0b5df803a339a7dbbbd59727ea59a75dc4722d474f4bb05852d5cdc8778e265'
+    'check-worker-native-auth-status-six-r4-v1.ps1'='34612ac49eb2e455076a01607634f21d4f0b284714ef07d5e614146a1a9a7a85'
     'worker-native-auth-status-six-r4-v1.py'='45681477194d97b144e8ee4505d4364d73d58aaef19c8428c846df642c834839'
-    'login-six-workers-status-first-r4-v1.ps1'='9cfc0a985253da38ddd521d980cf83d9a59cc52079ac40ae8a0c70eb95ef94b5'
+    'login-six-workers-status-first-r4-v1.ps1'='953f49d3aa8e20b4adc7eb38d91346f2b421ced9e70732e6cd6c153f0f1cd15f'
     'login-six-workers-status-first-r3-v6.ps1'='9e45266bdccbaa7765245eb23091211b669c92504c374dd7ded6eab0699a4665'
     'login_pipeline_worker_interactive_r3_v6.ps1'='837f567c5cae00d30620e313d746df6acf98259c9ffa1ef43ebc217b7cf9c46d'
     'claude-session-history-v6.ps1'='36cac78f54d9a9370991df3a83bfdf36144e7e9f8ed2dabe4da3105e5edd4636'
     'claude-code-input-v6.ps1'='74c41bf1b118a62d2decae8d7d9c2ffeb2c19d977033435267f8155fac1f7bf9'
     'worker_claude_login_bridge_r3.py'='b5bbede85ceb099460c6d6634f09a361a9b6617740eb082ab8d3bf5931260c73'
     'worker-native-status-r3.py'='c3c3069f097040442777ea30a6296abc506783968e381611fce26e20c7c4aed5'
-    'login_pipeline_worker_interactive_agy_r4_v1.ps1'='da166c1dbdb047e93692eeb47abf3d315dbe797cf9040d34b440d9649626014a'
+    'login_pipeline_worker_interactive_agy_r4_v1.ps1'='381fb8daec6999d16e75ab163f28d0dda6459b1b44f9695962cf43213cedcb60'
     'worker_agy_login_bridge_r4_v1.py'='4074878f100ae59b804c95bd97b3280ccaa09f919ffaa365a3e2c6985045b8d9'
     'agy-session-history-r4-v1.ps1'='4e86b712314e2a6a8ea9f13e1dfcc9e65dda4035d2895b8043fbf6ceed0424d4'
-    'agy-status-capture-r4-v1.ps1'='90d5612347748563e05437bb173f05289c669c530d266f109f4ff668077c0f2a'
+    'agy-status-capture-r4-v1.ps1'='03198a30d359e59339b95744d21b92964f38d7e996ddd74bf8d2315cddfe03fa'
     'agy_status_capture_r4_v1.py'='ce103aad0f9dae042677ec61c2b16eb5512e9a24f5fca65bc97f4570bb884038'
-    'agy-isolation-evidence-r4-v1.ps1'='af773b1f03a20fb21391620d1ef6b1ee06cfeef37f09d59e6f617f978bf93edb'
+    'agy-isolation-evidence-r4-v1.ps1'='bd87ad3128e6d63e141c23aff15d7fe6b761c88aa6477bf48fe5232df800e326'
     'agy_isolation_evidence_r4_v1.py'='767f03af910fb137bd9a08ed82390f08878d802c45cfb9689eadb5ca44af8d60'
     'cochem-inference-only.agent.md'='5c0082d70d073263a56d748a46187008968c070d0efc7d5b7612c2fd61d11810'
     'build-pipeline-config-r5-candidate.py'='ab01d82486ec54ee8eefa17542d6b58d9811cb94a96a5ceef1f439f0599a19e8'
     'stage-pipeline-config-r5-v1.ps1'='1066f6c3d9fb5be6143075ddf72206af56f64a8240b7e49fc8f0625d32e3c993'
-    'run-upgrade-preview-r5-v1.ps1'='8f4c80647321c6e811ddcb3b8b94824e48c1f4c4e3d29e7f5b149862668bc66e'
+    'run-upgrade-preview-r5-v1.ps1'='98a8130a6757617d9b69def0e4d46d69421422a502e30ab8f2488522b50daa7f'
     'run_upgrade_preview_r5_v1.py'='71e0383272057ab7be59f339a9dcb0c57e74ac5329f46d575cc49cde62816051'
 }
 # ---- END PIN TABLE ----
@@ -260,12 +272,12 @@ function Initialize-R5Paths {
     $script:R5LastControlError=''
     $script:R5Done=@{}
     $script:R5=[ordered]@{schema='cochem-r5-sitting-state/1';attempt=$script:Attempt;gemini=$(if($script:Gemini -ceq 'skip'){'skip'}else{'attempt'});gemini_reason=$null;
-        effort_null_slug=$script:EffortNullSlug;manifest_sha256=$null;warden_initial=$null;base_source=$null;s2=$null;s2_attempted=$false;s2_done=$false;install_after_sha256=$null;
+        effort_null_slug=$script:EffortNullSlug;manifest_sha256=$null;earlier_sittings=$null;warden_initial=$null;base_source=$null;s2=$null;s2_attempted=$false;s2_stop_attempt=$null;s2_done=$false;install_after_sha256=$null;
         sessions=$null;gemini_attempt=$null;login_mode=$null;s6_root=$null;s7_root=$null;s8_root=$null;s8_stage_root=$null;
         decision_outcome=$null;decision_mode=$null;chosen_bindings=$null;build_dir=$null;config_attempt=$null;staged_path=$null;staged_sha256=$null;
         preview_attempt=$null;r5_attempt=$null;r5_running=$false;r5_stopped=$null;r5_stop_held=$false;fallback=$false;
         acceptance=$null;preflight=$null;fix_proof=$null;restore=$null;restore_kind=$null;restore_ok=$null;restore_message=$null;
-        routing_holds=$null;touched_roots=@();stop_reason=$null;pending_restore=$false;current_stage=$null}
+        routing_holds=$null;health_note=$null;touched_roots=@();stop_reason=$null;pending_restore=$false;current_stage=$null}
     $script:R5Initialized=$true
 }
 
@@ -499,9 +511,13 @@ function Format-R5Process {param($Entry)
 
 # ================================================================== JSON and records
 function Get-R5JsonTail {param([string]$Text)
-    # Children print one JSON document last; skip any preamble by trying every column-0 brace from the first.
+    # Children print one JSON document last (the stager prints a pretty document, then a one-line status). Every column-0
+    # brace is tried from the LAST one back: the result is the same document as trying from the first (a suffix holding two
+    # documents never parses), but the usual case parses at once, so the v2 transcript's caught 'TerminatingError(ConvertFrom-
+    # Json): Invalid JSON primitive' lines no longer appear.
     if(-not $Text){return $null}
-    foreach($candidate in [regex]::Matches($Text,'(?m)^\{')){try{return ($Text.Substring($candidate.Index)|ConvertFrom-Json)}catch{}}
+    $starts=@([regex]::Matches($Text,'(?m)^\{')|ForEach-Object {$_.Index})
+    for($index=$starts.Count-1;$index -ge 0;$index--){try{return ($Text.Substring($starts[$index])|ConvertFrom-Json)}catch{}}
     $null}
 
 function Get-R5Member {param($Object,[string]$Path)
@@ -573,6 +589,44 @@ function Get-R5HeldRecords {
         if(Test-Path -LiteralPath $root -PathType Container){$found+=@(Get-ChildItem -LiteralPath $root -Filter '*held*.json' -File -ErrorAction SilentlyContinue|ForEach-Object {$_.FullName})}}
     $found}
 
+function Get-R5EarlierSittings {
+    # Read-only view of the OTHER attempts of this sitting (R5Sitting4.2.7-windows-20261011-vK under $script:Base): whether each
+    # ended (sitting-end.json), how, and the held records left in the child roots it touched (its state.touched_roots, only
+    # those under $script:Base). A held record with task_registered true and run_requested false names a one-shot task that
+    # was registered and never ran (v2: 14). A root this window cannot list (the plan runs unelevated) is counted, not guessed.
+    $found=@();$items=@()
+    try{$items=@(Get-ChildItem -LiteralPath $script:Base -Directory -Filter 'R5Sitting4.2.7-windows-20261011-v*' -ErrorAction Stop)}catch{$items=@()}
+    foreach($item in $items){
+        $name=[string]$item.Name
+        if($name -cnotmatch '^R5Sitting4\.2\.7-windows-20261011-(v[0-9]{1,3})$'){continue}
+        $attempt=$Matches[1]
+        if($attempt -ceq $script:Attempt){continue}
+        $root=Join-Path $script:Base $name;$endPath=Join-Path $root 'sitting-end.json'
+        $ended=[bool](Test-Path -LiteralPath $endPath -PathType Leaf);$end=$(if($ended){Read-R5JsonFile $endPath}else{$null})
+        $held=@();$neverRun=0;$unreadable=0
+        foreach($touched in @(@(Get-R5Member $end 'state.touched_roots')|Where-Object {$_})){
+            $path=[string]$touched
+            if(-not $path.StartsWith($script:Base+'\',[StringComparison]::OrdinalIgnoreCase) -or -not (Test-Path -LiteralPath $path -PathType Container)){continue}
+            $records=@();try{$records=@(Get-ChildItem -LiteralPath $path -Filter '*held*.json' -File -ErrorAction Stop|ForEach-Object {[string]$_.FullName})}catch{$unreadable++;continue}
+            foreach($record in $records){
+                $held+=$record;$value=Read-R5JsonFile $record
+                if((Get-R5Member $value 'task_registered') -eq $true -and (Get-R5Member $value 'run_requested') -eq $false){$neverRun++}}}
+        $found+=[pscustomobject]@{attempt=$attempt;number=[int]$attempt.Substring(1);root=$root;ended=$ended;readable=($null -ne $end);
+            outcome=[string](Get-R5Member $end 'outcome');stage=[string](Get-R5Member $end 'stage');restore_ok=(Get-R5Member $end 'restore_ok');
+            staged_path=[string](Get-R5Member $end 'state.staged_path');held=@($held);never_run_tasks=$neverRun;unreadable_roots=$unreadable}}
+    @($found|Sort-Object number)}
+
+function Format-R5EarlierSitting {param($Sitting)
+    # One plain line per earlier attempt for S0 and the plan.
+    if(-not $Sitting.ended){return ('earlier sitting '+$Sitting.attempt+': started but never ended (no sitting-end.json in '+$Sitting.root+')')}
+    $how=$(if(-not $Sitting.readable){'ended (its sitting-end.json is unreadable here)'}
+           else{'ended '+$Sitting.outcome+$(if($Sitting.stage){' at '+$Sitting.stage}else{''})+$(if($Sitting.restore_ok -eq $true){' (r4 restored)'}elseif($Sitting.restore_ok -eq $false){' (R4-RESTORE not done)'}else{''})})
+    $text='earlier sitting '+$Sitting.attempt+': '+$how+'; '+@($Sitting.held).Count+' held record(s) left in its child roots'
+    if($Sitting.never_run_tasks){$text+=' ('+$Sitting.never_run_tasks+' name a one-shot task that was registered and never ran)'}
+    if($Sitting.unreadable_roots){$text+='; '+$Sitting.unreadable_roots+' of its child roots can be listed only elevated'}
+    if($Sitting.staged_path){$text+='; its staged configuration '+$Sitting.staged_path+' is not reused'}
+    $text}
+
 function Set-R5GeminiHeld {param([string]$Stage,[string]$Reason)
     if($script:R5.gemini -ceq 'skip'){return}
     $script:R5.gemini='held';$script:R5.gemini_reason=($Stage+': '+$Reason)
@@ -597,23 +651,40 @@ function Test-R5HealthGate {param($Health,[string]$SourceRoot)
     $holds=Get-R5Member $Health 'routing.holds'
     [pscustomobject]@{hard=@($hard);soft=@($soft);holds=@($holds|Where-Object {$null -ne $_}).Count}}
 
+function Test-R5CpuOnlyPause {param($Health)
+    # DIAG-NEXT 2026-10-11 (S12): r5 keeps r4's 5% Warden CPU budget (controller_guard.py: a CPU-only violation, memory within
+    # 200 MiB, pauses admission for that sample alone and starts no recovery hold). True only when that is the sole reason the
+    # controller does not admit: recovery_hold false and every components.warden_controller.admission_reasons entry is the CPU
+    # budget. Restoring r4 would not help: r4 has the same CPU budget and also pauses on its 50 MiB memory budget.
+    $controller=Get-R5Member $Health 'components.warden_controller'
+    if($null -eq $controller -or (Get-R5Member $controller 'recovery_hold') -ne $false){return $false}
+    $reasons=@(@(Get-R5Member $controller 'admission_reasons')|Where-Object {$null -ne $_})
+    [bool]($reasons.Count -and -not @($reasons|Where-Object {[string]$_ -cnotmatch '^Warden CPU utilization exceeds its strict [0-9]+% budget$'}).Count)}
+
+function Set-R5RoutingHolds {param($Health)
+    $kinds=@(@(Get-R5Member $Health 'routing.holds')|Where-Object {$null -ne $_}|ForEach-Object {[string](Get-R5Member $_ 'scope')+':'+[string](Get-R5Member $_ 'resource_key')+' ('+[string](Get-R5Member $_ 'reason')+')'})
+    $script:R5.routing_holds=[ordered]@{count=$kinds.Count;kinds=$kinds}
+    if($kinds.Count){Say ('NOTE: '+$kinds.Count+' routing hold(s) are active (observed provider failures; they expire on their own).')}}
+
 function Invoke-R5HealthCheck {param([string]$Label)
-    # S12 gate (also after the Gemini fallback): polls /health no faster than every 10 s for up to 120 s.
-    $deadline=(Get-R5Now).AddSeconds(120);$last='no /health answer';$health=$null
+    # S12 gate (also after the Gemini fallback): polls /health no faster than every 10 s for up to 120 s. cpu_paused: the hard
+    # checks and knowledge passed and the only open item at the deadline is admission_ready, paused by the CPU budget alone.
+    $deadline=(Get-R5Now).AddSeconds(120);$last='no /health answer';$health=$null;$cpuPaused=$false
     while($true){
-        $health=Get-R5Health
+        $health=Get-R5Health;$cpuPaused=$false
         if($null -eq $health){$last=('no /health answer: '+$script:R5LastControlError)}
         else{
             $gate=Test-R5HealthGate $health $script:R5SourceRoot
-            if(@($gate.hard).Count){return [pscustomobject]@{ok=$false;reason=(@($gate.hard) -join '; ');health=$health}}
+            if(@($gate.hard).Count){return [pscustomobject]@{ok=$false;reason=(@($gate.hard) -join '; ');health=$health;cpu_paused=$false}}
             if(-not @($gate.soft).Count){
-                $kinds=@(@(Get-R5Member $health 'routing.holds')|Where-Object {$null -ne $_}|ForEach-Object {[string](Get-R5Member $_ 'scope')+':'+[string](Get-R5Member $_ 'resource_key')+' ('+[string](Get-R5Member $_ 'reason')+')'})
-                $script:R5.routing_holds=[ordered]@{count=$kinds.Count;kinds=$kinds}
-                if($gate.holds){Say ('NOTE: '+$gate.holds+' routing hold(s) are active (observed provider failures; they expire on their own).')}
+                Set-R5RoutingHolds $health
                 Say ($Label+': r5 health verified (SYSTEM, r5 root, idle, no quarantine, knowledge ready, warden_controller.admission_ready true)') 'Green'
-                return [pscustomobject]@{ok=$true;reason='';health=$health}}
+                return [pscustomobject]@{ok=$true;reason='';health=$health;cpu_paused=$false}}
+            $cpuPaused=((@($gate.soft).Count -eq 1) -and (@($gate.soft)[0] -ceq 'components.warden_controller.admission_ready is not true') -and (Test-R5CpuOnlyPause $health))
             $last=(@($gate.soft) -join '; ')}
-        if((Get-R5Now) -ge $deadline){return [pscustomobject]@{ok=$false;reason=$last;health=$health}}
+        if((Get-R5Now) -ge $deadline){
+            if($cpuPaused){Set-R5RoutingHolds $health}
+            return [pscustomobject]@{ok=$false;reason=$last;health=$health;cpu_paused=$cpuPaused}}
         Wait-R5Seconds 10}}
 
 function Wait-R5Admission {
@@ -737,6 +808,20 @@ function Invoke-R5StopR5 {param([string]$StopAttempt,[string]$RetargetTarget,[st
 
 function Get-R5LastLine {param([string]$Text)([string](@(([string]$Text) -split "`n"|Where-Object {$_.Trim()})|Select-Object -Last 1)).Trim()}
 
+function Get-R5UnstoppedRestoreDetail {
+    # The base is a restored r4 that this sitting has not stopped (base_source.stop_attempt is recorded only after S2 passed).
+    # DIAG-NEXT 2026-10-11: say what happened to the S2 stop instead of 'not stopped by this sitting'. Every case is 'blocked':
+    # a held stop has no defined recovery (retarget-warden-r5 refuses a held -StopAttempt) and r4 may still be running.
+    $attempt=[string]$script:R5.s2_stop_attempt
+    if(-not $script:R5.s2_attempted -or -not $attempt){return 'the restored r4 Warden was not stopped by this sitting (S2 did not run); r4 keeps whatever state it had'}
+    $root=Join-Path $script:Base ($script:NsStopR5+$attempt);$heldPath=Join-Path $root 'stop-held.json'
+    if(Test-Path -LiteralPath $heldPath -PathType Leaf){
+        $held=Read-R5JsonFile $heldPath
+        $phase=$(if($null -eq $held){'unknown (stop-held.json unreadable)'}else{[string](Get-R5Member $held 'phase')})
+        return ('the S2 stop of the restored r4 (stop-warden-r5 '+$attempt+') is held at phase '+$phase+' ('+$heldPath+'); nothing was killed, r4 may still be running and its task may still be enabled; the owner/agent reviews it')}
+    if(Test-Path -LiteralPath $root){return ('the S2 stop of the restored r4 (stop-warden-r5 '+$attempt+') did not complete and '+$root+' holds no stop-held.json; r4 may still be running; the owner/agent reviews it')}
+    'the S2 stop of the restored r4 (stop-warden-r5 '+$attempt+') did not complete before creating its root; r4 keeps its state; the owner/agent reviews the log'}
+
 function Get-R5CutoverState {
     # Chooses the exact Cutover call for the state reached, from this sitting's state and the child roots on disk.
     $warden=$script:R5.warden_initial;$base=$script:R5.base_source
@@ -745,7 +830,7 @@ function Get-R5CutoverState {
     $previous=$null
     if($null -ne $script:R5.r5_stopped){$previous=[pscustomobject]@{kind='r5-stopped';source=(Get-R5Member $script:R5.r5_stopped 'source_attempt');stop=(Get-R5Member $script:R5.r5_stopped 'stop_attempt');detail='r5 stopped and disabled'}}
     elseif($null -eq $base){$previous=[pscustomobject]@{kind='blocked';source=$null;stop=$null;detail='the Warden source of this sitting is unknown'}}
-    elseif((Get-R5Member $base 'kind') -ceq 'r4-restore' -and -not (Get-R5Member $base 'stop_attempt')){$previous=[pscustomobject]@{kind='blocked';source=$null;stop=$null;detail='the restored r4 Warden was not stopped by this sitting'}}
+    elseif((Get-R5Member $base 'kind') -ceq 'r4-restore' -and -not (Get-R5Member $base 'stop_attempt')){$previous=[pscustomobject]@{kind='blocked';source=$null;stop=$null;detail=(Get-R5UnstoppedRestoreDetail)}}
     else{$previous=[pscustomobject]@{kind='base';source=(Get-R5Member $base 'source_attempt');stop=(Get-R5Member $base 'stop_attempt');detail=('Warden task on its '+(Get-R5Member $base 'kind')+' action')}}
     $attempt=$script:R5.r5_attempt
     if(-not $attempt){return $previous}
@@ -822,6 +907,15 @@ function Invoke-R5Stage0 {
         Stop-R5Series 'An earlier run of this attempt was interrupted during the Gemini fallback. Do not rerun; the agent reviews the Warden state.'}
     if(@(Get-ChildItem -LiteralPath $script:SittingRoot -Filter 'restore-intent-*.json' -ErrorAction SilentlyContinue).Count){
         Stop-R5Series 'An earlier run of this attempt started an R4-RESTORE that did not finish. Do not rerun; the agent reviews the Warden state.'}
+    # Leftovers of the other attempts (v3 fix, 2026-10-11: v2 left 14 held one-shot roots whose tasks never ran, a staged
+    # WardenConfig v1 and the r4 restore it started) are reported and never stop S0: this attempt's children take fresh
+    # 32-hex names and the next free vN namespaces. An attempt that never ended may still run in another window: STOP.
+    $earlier=@(Get-R5EarlierSittings)
+    foreach($sitting in $earlier){Say (Format-R5EarlierSitting $sitting)}
+    $open=@($earlier|Where-Object {-not $_.ended})
+    if($open.Count){Stop-R5Series ('Sitting attempt '+(@($open|ForEach-Object {$_.attempt}) -join ', ')+' started on this host but never ended (no sitting-end.json): it may still be running in another window, or that window was closed early. Nothing was changed. If no other window runs it, run the same command with -Attempt '+$open[0].attempt+' instead (its finished stages are skipped); otherwise send this line to the agent.')}
+    if($earlier.Count){Say 'leftovers of earlier sittings block nothing: this attempt uses fresh child names and the next free namespaces; keep them for the agent'}
+    $script:R5.earlier_sittings=@($earlier|ForEach-Object {[ordered]@{attempt=$_.attempt;outcome=$_.outcome;stage=$_.stage;restore_ok=$_.restore_ok;held_records=@($_.held).Count;never_run_tasks=$_.never_run_tasks}})
     $docker=Get-R5DockerInfo
     if(-not $docker.ok){Stop-R5Series ('Docker Desktop engine is not answering as the controller needs it ('+$docker.reason+'). Start Docker Desktop, wait for "Engine running", stay signed in, then rerun. Nothing was changed.')}
     Say $docker.reason
@@ -833,6 +927,7 @@ function Invoke-R5Stage0 {
         if($warden.source -notin @('r4-v1','r4-restore')){Stop-R5Series ('The Warden task does not run a reviewed r4 action (found source '+$warden.source+'); nothing was changed. The agent reviews it.')}
         if($null -ne $script:R5.base_source -and [string](Get-R5Member $script:R5.base_source 'kind') -cne $warden.source){Stop-R5Series 'The Warden task changed since the first run of this attempt; nothing was changed.'}
         if($null -eq $script:R5.base_source){$script:R5.warden_initial=$warden;$script:R5.base_source=[pscustomobject]@{kind=$warden.source;source_attempt=$warden.source_attempt;stop_attempt=$null}}
+        if($warden.running){Say ('r4 is running now ('+$warden.source+$(if($warden.source_attempt){' '+$warden.source_attempt}else{''})+'); S2 stops it first and R4-RESTORE brings it back if r5 cannot take over')}
     }elseif(-not $script:R5Done.ContainsKey('S11')){
         if($warden.running -or $warden.enabled -eq $true){Stop-R5Series 'The Warden task is enabled or running again although this sitting stopped it (S2); nothing was changed. The agent reviews it.'}
     }elseif($warden.source -cne 'r5' -or -not $warden.running){
@@ -919,21 +1014,24 @@ function Invoke-R5Stage2 {
             $script:R5.s2='SKIPPED_ALREADY_DISABLED';$script:R5.s2_done=$true;Write-R5Receipt 'S02' 'SKIPPED';return}
         $stopAttempt=Get-R5FreeAttempt $script:NsStopR4
         Say ('S2: stop-warden-r4 '+$(if($wasRunning){'(idle proof, Task Scheduler End, wait, disable; about 3 min)'}else{'(the task is idle but enabled: disable only, no End)'}))
-        $script:R5.s2_attempted=$true;Add-R5TouchedRoot (Join-Path $script:Base ($script:NsStopR4+$stopAttempt))
+        $script:R5.s2_attempted=$true;$script:R5.s2_stop_attempt=$stopAttempt;Add-R5TouchedRoot (Join-Path $script:Base ($script:NsStopR4+$stopAttempt))
         $run=Invoke-R5Child ('stop-warden-r4.ps1 -Apply -Attempt '+$stopAttempt) 'stop-warden-r4.ps1' @('-Apply','-Attempt',$stopAttempt)
         $json=Get-R5JsonTail $run.text;$status=[string](Get-R5Member $json 'status')
         $okStatuses=@('WARDEN_ENDED_AND_DISABLED_UNCLEAN_SHUTDOWN_EXPECTED','WARDEN_ALREADY_STOPPED_AND_DISABLED')
     }elseif($kind -ceq 'r4-restore'){
         $stopAttempt=Get-R5FreeAttempt $script:NsStopR5;$source=[string](Get-R5Member $base 'source_attempt')
-        Say ('S2: stop the restored r4 Warden (stop-warden-r5 -RetargetTarget r4 -RetargetAttempt '+$source+')')
-        $script:R5.s2_attempted=$true;Add-R5TouchedRoot (Join-Path $script:Base ($script:NsStopR5+$stopAttempt))
+        Say ('S2: stop the restored r4 Warden (stop-warden-r5 -RetargetTarget r4 -RetargetAttempt '+$source+$(if($wasRunning){'; it is running: idle proof, Task Scheduler End, wait, disable; about 3-4 min, submit no work meanwhile)'}else{')'}))
+        $script:R5.s2_attempted=$true;$script:R5.s2_stop_attempt=$stopAttempt;Add-R5TouchedRoot (Join-Path $script:Base ($script:NsStopR5+$stopAttempt))
         $run=Invoke-R5Child ('stop-warden-r5.ps1 -Apply -Attempt '+$stopAttempt+' -RetargetTarget r4 -RetargetAttempt '+$source) 'stop-warden-r5.ps1' @('-Apply','-Attempt',$stopAttempt,'-RetargetTarget','r4','-RetargetAttempt',$source)
         $json=Get-R5JsonTail $run.text;$status=[string](Get-R5Member $json 'status')
         $okStatuses=@('WARDEN_ENDED_AND_DISABLED_UNCLEAN_SHUTDOWN_EXPECTED','WARDEN_ALREADY_STOPPED_CLEAN_NOOP')
     }else{Stop-R5Series ('S2: unknown Warden source '+$kind)}
     if($run.code -ne 0 -or $status -notin $okStatuses){
         $line=Get-R5LastLine $run.text
-        if($wasRunning -and $run.text -match 'nothing was changed'){Stop-R5Series ('S2: the Warden stop was refused before any change ('+$line+'). r4 keeps running; nothing was changed.')}
+        if($wasRunning -and $run.text -match 'nothing was changed'){
+            # Refused before its root existed: r4 was not touched (the outcome says 'never stopped') and the attempt stays rerunnable.
+            $script:R5.s2='REFUSED_NOTHING_CHANGED';$script:R5.s2_attempted=$false
+            Stop-R5Series ('S2: the Warden stop was refused before any change ('+$line+'). r4 keeps running; nothing was changed.')}
         Stop-R5Series ('S2: the Warden stop did not complete (exit '+$run.code+', status '+$status+'): '+$line) -Restore}
     if($kind -ceq 'r4-restore'){$script:R5.base_source=[pscustomobject]@{kind='r4-restore';source_attempt=(Get-R5Member $base 'source_attempt');stop_attempt=$stopAttempt}}
     $script:R5.s2=$status;$script:R5.s2_done=$true
@@ -1176,9 +1274,14 @@ function Invoke-R5Stage11 {
     Say ('r5 Warden running ('+$attempt+'), health verified by the retarget script; logon trigger registered') 'Green'
     Write-R5Receipt 'S11' 'WARDEN_R5_RUNNING_HEALTH_VERIFIED'}
 
+function Set-R5CpuPauseNote {param([string]$Label)
+    $script:R5.health_note=('admission was paused at '+$Label+' by the 5% Warden CPU budget alone')
+    Say ($Label+': r5 health verified except admission: the controller''s CPU sample exceeds its 5% budget (no memory or recovery hold; r4 has the same budget). r5 is kept; S13 waits up to 10 minutes for admission.') 'Yellow'}
+
 function Invoke-R5Stage12 {
     Say 'S12: r5 health gate'
     $check=Invoke-R5HealthCheck 'S12'
+    if(-not $check.ok -and $check.cpu_paused){Set-R5CpuPauseNote 'S12';Write-R5Receipt 'S12' 'HEALTH_VERIFIED_ADMISSION_PAUSED_CPU';return}
     if(-not $check.ok){Stop-R5Series ('S12: the r5 health gate failed: '+$check.reason) -Restore}
     # Explicit acceptance field (audit F1): warden_controller.admission_ready, never the bare 'ready'.
     if((Get-R5Member $check.health 'components.warden_controller.admission_ready') -ne $true){Stop-R5Series 'S12: components.warden_controller.admission_ready is not true' -Restore}
@@ -1202,6 +1305,7 @@ function Invoke-R5GeminiFallback {param([string]$Reason)
     if($binding){Stop-R5Series ('Gemini fallback: the r5 start receipt does not bind this sitting: '+$binding) -Restore}
     $script:R5.r5_running=$true
     $check=Invoke-R5HealthCheck 'fallback'
+    if(-not $check.ok -and $check.cpu_paused){Set-R5CpuPauseNote 'fallback';return}
     if(-not $check.ok){Stop-R5Series ('Gemini fallback: the r5 health gate failed: '+$check.reason) -Restore}}
 
 function Invoke-R5Stage13 {
@@ -1315,9 +1419,17 @@ function Show-R5Plan {
         Say ('Warden task: source '+$warden.source+$(if($warden.source_attempt){' '+$warden.source_attempt}else{''})+', enabled '+$warden.enabled+', instances '+$warden.instances+', port 47824 listeners '+$warden.listening)
         $s2=$(if($warden.source -ceq 'r4-v1' -and ($warden.running -or $warden.enabled)){'S2 runs stop-warden-r4 ('+$(if($warden.running){'End + disable'}else{'disable only'})+')'}
               elseif($warden.source -ceq 'r4-v1'){'S2 is skipped (already disabled, no instance)'}
-              elseif($warden.source -ceq 'r4-restore'){'S2 runs stop-warden-r5 -RetargetTarget r4'}else{'S0 would STOP: not a reviewed r4 action'})
+              elseif($warden.source -ceq 'r4-restore'){'S2 runs stop-warden-r5 -RetargetTarget r4 -RetargetAttempt '+$warden.source_attempt+$(if($warden.running){' (r4 is running: idle proof, End, disable; it is stopped first)'}else{''})}
+              else{'S0 would STOP: not a reviewed r4 action'})
         Say $s2}
     else{Say ('Warden task: unreadable here ('+$warden.error+'); run elevated to see it')}
+    if(Test-Path -LiteralPath (Join-Path $script:SittingRoot 'sitting-end.json')){Say ('S0 would STOP: sitting attempt '+$script:Attempt+' has already ended; the agent names the next -Attempt')}
+    $earlier=@(Get-R5EarlierSittings)
+    foreach($sitting in $earlier){Say (Format-R5EarlierSitting $sitting)}
+    $open=@($earlier|Where-Object {-not $_.ended})
+    if($open.Count){Say ('S0 would STOP: sitting attempt '+(@($open|ForEach-Object {$_.attempt}) -join ', ')+' never ended (rerun that attempt instead)')}
+    elseif($earlier.Count){Say 'leftovers of earlier sittings block nothing (fresh child names, next free namespaces)'}
+    else{Say 'earlier sittings: none found here'}
     Say ('Gemini: '+$script:Gemini+'; effort-null slug '+$script:EffortNullSlug+'; fix-proof tail '+$(if($script:SkipFixProof){'skipped'}else{'included'}))
     Say ('sitting root: '+$script:SittingRoot)
     foreach($line in @('S0 preconditions','S1 install r5 (install-stopped-runtime-r5.ps1 plan, then -Apply)','S2 stop/disable the r4 Warden (conditional)',
@@ -1352,7 +1464,7 @@ function Write-R5Outcome {param([string]$Phase)
     if($null -ne $s.restore_ok -and -not $s.restore_ok){
         $message=[string]$s.restore_message
         $rollback=$(if($message.StartsWith('stop-warden-r5 did not complete')){' (rollback stop refused)'}elseif($message.StartsWith('no automatic restore')){' (no automatic rollback)'}else{' (rollback not done)'})}
-    $warden=$(if($verified){'r5 RUNNING (health verified)'}
+    $warden=$(if($verified){'r5 RUNNING (health verified'+$(if($s.health_note){'; '+[string]$s.health_note}else{''})+')'}
               elseif($restored -and $atS1){'r4 RESTORED, r5 not installed: '+[string]$s.stop_reason}
               elseif($restored){'r4 RESTORED and running (r5 not deployed)'}
               elseif($Phase -ceq 'stopped' -and ($null -eq $live -or -not $live.readable)){'UNKNOWN - the Warden task could not be read ('+[string](Get-R5Member $live 'error')+'); the agent reviews the log'}

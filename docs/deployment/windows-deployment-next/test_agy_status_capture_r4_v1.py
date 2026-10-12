@@ -23,6 +23,7 @@ from types import SimpleNamespace
 import pytest
 
 import ps_toplevel_smoke as smoke
+import task_scheduler_host_projection as hostacl
 
 ROOT = Path(__file__).parent
 PY = ROOT / 'agy_status_capture_r4_v1.py'
@@ -935,8 +936,10 @@ def test_wrapper_pins_and_forbidden_operations():
                 m.PRESERVED_DENIAL_SHA256, m.AGY_SHA256, m.CONFIG_SHA256, m.REPAIR_SHA256):
         assert f"'{pin}'" in text, pin
     for needle in ("$script:taskSddl='O:BAG:BAD:P(A;;FA;;;SY)(A;;FA;;;BA)'", "$script:taskTimeLimit='PT5M'", "$script:captureNamespaceDate='20261010'",
-                   "RegisterTaskDefinition($script:taskName,$definition,2,'SYSTEM',$null,5,$script:taskSddl)", "$script:taskWaitSeconds=295"):
+                   "RegisterTaskDefinition($script:taskName,$definition,$script:taskRegistrationFlags,'SYSTEM',$null,5,$script:taskSddl)",
+                   "$script:taskWaitSeconds=295"):
         assert needle in text, needle
+    assert text.count('$script:taskRegistrationFlags=18') == 1, 'TASK_CREATE|TASK_DONT_ADD_PRINCIPAL_ACE (r5 sitting v2 repair)'
     assert text.count('.Run($null)') == 1 and text.count('RegisterTaskDefinition(') == 1
     for forbidden in ('Stop-ScheduledTask', 'Disable-ScheduledTask', 'Register-ScheduledTask', 'Unregister-ScheduledTask', 'Start-ScheduledTask', 'schtasks',
                       'Start-Process', 'Stop-Process', 'taskkill', 'Remove-Item', 'DeleteTask', 'Stop-Service', '.Stop(', '.Kill(', 'Invoke-Expression',
@@ -1020,9 +1023,11 @@ def test_wrapper_receipt_validation_accepts_helper_receipts_and_refuses_tamperin
     assert cases['signed_in']['value'] == {'decision': 'COMPLETE', 'passed': True, 'mode': None}
 
 
-APPLY_FIXTURE = r'''
+# The folder stub reads the task descriptor back the way this host's Task Scheduler stores it (task_scheduler_host_projection.py;
+# r5 sitting v2, 2026-10-11); fx.Sddl replaces that read-back only in the explicit 'acl' tamper case.
+APPLY_FIXTURE = hostacl.PS_FUNCTION + r'''
   $script:registered=@();$script:runs=0;$script:task=$null
-  $script:fx=@{Sddl='O:BAG:BAD:P(A;;FA;;;SY)(A;;FA;;;BA)';LastTaskResult=0;CopyReceipt=$true;RefreshEnds=$true;RootFails='';HeldFails=$false}
+  $script:fx=@{Sddl=$null;LastTaskResult=0;CopyReceipt=$true;RefreshEnds=$true;RootFails='';HeldFails=$false}
   function New-PrivateDirectory {param($Path) if(Test-Path -LiteralPath $Path){throw ('Private directory already exists; preserve it: '+$Path)}
     if($script:fx.RootFails -cne 'before'){$null=[IO.Directory]::CreateDirectory($Path)}
     if($script:fx.RootFails){throw ('Private backup path grants access beyond SYSTEM/Administrators: '+$Path)}}
@@ -1044,10 +1049,11 @@ APPLY_FIXTURE = r'''
     $folder=[pscustomobject]@{}
     $folder|Add-Member ScriptMethod GetTask {param($name) if($null -ne $script:task -and $name -ceq $script:taskName){return $script:task};throw [Runtime.InteropServices.COMException]::new('absent',-2147024894)}
     $folder|Add-Member ScriptMethod RegisterTaskDefinition {param($name,$def,$flags,$user,$pw,$logon,$sddl)
-      $script:registered+=[pscustomobject]@{name=$name;flags=$flags;user=$user;logon=$logon;sddl=$sddl;arguments=$def.Actions.Item(1).Arguments;limit=$def.Settings.ExecutionTimeLimit}
-      $script:task=[pscustomobject]@{Enabled=$def.Settings.Enabled;State=3;LastTaskResult=267011;Definition=$def;Xml='<Task>fixture</Task>';Instances=0}
+      $readBack=$(if($null -ne $script:fx.Sddl){$script:fx.Sddl}else{Get-HostTaskSddlProjection $flags $sddl $user})
+      $script:registered+=[pscustomobject]@{name=$name;flags=$flags;user=$user;logon=$logon;sddl=$sddl;readback=$readBack;arguments=$def.Actions.Item(1).Arguments;limit=$def.Settings.ExecutionTimeLimit}
+      $script:task=[pscustomobject]@{Enabled=$def.Settings.Enabled;State=3;LastTaskResult=267011;Definition=$def;Xml='<Task>fixture</Task>';Instances=0;ReadBack=$readBack}
       $script:task|Add-Member ScriptMethod GetInstances {param($n)[pscustomobject]@{Count=$script:task.Instances}}
-      $script:task|Add-Member ScriptMethod GetSecurityDescriptor {param($n)$script:fx.Sddl}
+      $script:task|Add-Member ScriptMethod GetSecurityDescriptor {param($n)$script:task.ReadBack}
       $script:task|Add-Member ScriptMethod Run {param($a)
         $script:runs++
         if($script:fx.CopyReceipt){foreach($f in Get-ChildItem -LiteralPath $script:fixtureSource -Recurse -File){
@@ -1061,7 +1067,8 @@ APPLY_FIXTURE = r'''
     $script:targetRoot=Join-Path 'TMPROOT' $Name
     if($script:targetRoot -like 'C:\Program Files*'){throw 'fixture roots must be temporary'}
     $script:registered=@();$script:runs=0;$script:task=$null;$script:fixtureSource=$Source
-    $script:fx=@{Sddl='O:BAG:BAD:P(A;;FA;;;SY)(A;;FA;;;BA)';LastTaskResult=0;CopyReceipt=$true;RefreshEnds=$true;RootFails='';HeldFails=$false};foreach($k in $Fx.Keys){$script:fx[$k]=$Fx[$k]}
+    $script:fx=@{Sddl=$null;LastTaskResult=0;CopyReceipt=$true;RefreshEnds=$true;RootFails='';HeldFails=$false};foreach($k in $Fx.Keys){$script:fx[$k]=$Fx[$k]}
+    if($script:fx.ContainsKey('RegistrationFlags')){$script:taskRegistrationFlags=$script:fx.RegistrationFlags}
     if($PreCreate){$null=[IO.Directory]::CreateDirectory($script:targetRoot)}
     $pins=[ordered]@{install_receipt_sha256=$script:r4InstallPin;source_manifest_sha256=$script:r4ManifestPin;revision_sha256=$script:r4RevisionPin;configuration_sha256=$script:configPin;layout_sha256=$script:r4LayoutPin}
     $result=[ordered]@{ok=$true;error=$null;summary=$null}
@@ -1114,8 +1121,9 @@ def test_wrapper_apply_path_is_driven_with_fixtures(produced, tmp_path):
     assert v['pass']['summary']['passed'] is True and v['pass']['summary']['series_stop'] is False and v['pass']['summary']['mode'] == 'print'
     assert v['pass']['summary']['new_files'] == ['.gemini/antigravity-cli/installation_id'] and v['pass']['summary']['minted'] == 1
     assert v['pass']['summary']['message'].startswith('Signed-out capture verified') and v['pass']['summary']['p2'] == 'LOGGED_OUT'
-    assert v['pass']['registered'] == [{'name': f'CoChem-4.2.7-AgyCapture-20261010-r4-v1-{ATTEMPT}-slot1-signed-out', 'flags': 2, 'user': 'SYSTEM', 'logon': 5,
-                                        'sddl': 'O:BAG:BAD:P(A;;FA;;;SY)(A;;FA;;;BA)', 'arguments': expected_args, 'limit': 'PT5M'}]
+    assert v['pass']['registered'] == [{'name': f'CoChem-4.2.7-AgyCapture-20261010-r4-v1-{ATTEMPT}-slot1-signed-out', 'flags': 18, 'user': 'SYSTEM', 'logon': 5,
+                                        'sddl': 'O:BAG:BAD:P(A;;FA;;;SY)(A;;FA;;;BA)', 'readback': hostacl.HOST_SDDL_AFTER_FLAGS_18,
+                                        'arguments': expected_args, 'limit': 'PT5M'}]
     assert v['pass']['runs'] == 1 and v['pass']['held'] is None
     assert v['pass']['files'] == sorted(['agy_status_capture_r4_v1.py', 'capture-intent.json', 'capture-receipt.json', 'capture-summary.json',
                                          'capture-task.xml', 'login-mode.json'])
@@ -1132,6 +1140,27 @@ def test_wrapper_apply_path_is_driven_with_fixtures(produced, tmp_path):
     assert v['root_exists']['ok'] is False and 'held before any change' in v['root_exists']['error'] and 'Nothing was changed' in v['root_exists']['error']
     assert v['root_exists']['registered'] == [] and v['root_exists']['held'] is None and v['root_exists']['files'] == []
     assert v['wait_timeout']['ok'] is False and 'did not end cleanly' in v['wait_timeout']['error'] and v['wait_timeout']['held']['phase'] == 'WAIT'
+
+
+def test_registration_flags_against_the_host_task_acl_read_back(produced, tmp_path):
+    """r5 sitting v2 regression (2026-10-11, S5 held at REGISTRATION): with TASK_CREATE alone (2) this host reads the task DACL
+    back unprotected with an appended (A;;FR;;;SY) ACE and the exact Assert-RegisteredTaskAcl holds before the Run; the
+    reviewed flags 18 (TASK_CREATE|TASK_DONT_ADD_PRINCIPAL_ACE) read back as D:PAI and the capture runs to its summary."""
+    so = produced['print']
+    fixture = APPLY_FIXTURE.replace('ATTEMPTVALUE', ATTEMPT).replace('WORKSPACE', psq(ROOT)).replace('TMPROOT', psq(tmp_path)).replace('NONCEVALUE', NONCE)
+    calls = [f"Invoke-ApplyCase 'flags2' 'signed-out' '{psq(so.root)}' '{psq(so.profile)}' @{{RegistrationFlags={hostacl.TASK_CREATE}}}",
+             f"Invoke-ApplyCase 'flags18' 'signed-out' '{psq(so.root)}' '{psq(so.profile)}' @{{}}"]
+    cases, _ = run_ps(fixture + '\n'.join(calls))
+    v = {name: case['value'] for name, case in cases.items()}
+    old, new = v['flags2'], v['flags18']
+    assert [r['flags'] for r in old['registered']] == [2] and [r['flags'] for r in new['registered']] == [18]
+    assert old['registered'][0]['readback'] == hostacl.HOST_SDDL_AFTER_FLAGS_2 == hostacl.host_projection(2, hostacl.PRIVATE_TASK_SDDL)
+    assert new['registered'][0]['readback'] == hostacl.HOST_SDDL_AFTER_FLAGS_18 == hostacl.host_projection(18, hostacl.PRIVATE_TASK_SDDL)
+    assert old['ok'] is False and old['runs'] == 0
+    assert old['error'].startswith('The agy status capture is held at task registration: ' + hostacl.HELD_ACL_REASON), old['error']
+    assert old['held']['phase'] == 'REGISTRATION' and old['held']['reason'] == hostacl.HELD_ACL_REASON
+    assert old['held']['task_registered'] is True and old['held']['run_requested'] is False and 'capture-task.xml' not in old['files']
+    assert new['ok'] is True and new['runs'] == 1 and new['held'] is None and new['summary']['passed'] is True, new
 
 
 def test_wrapper_output_gates_on_the_summary():

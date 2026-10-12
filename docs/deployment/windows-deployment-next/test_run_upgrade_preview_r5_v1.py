@@ -27,6 +27,7 @@ from types import SimpleNamespace
 import pytest
 
 import ps_toplevel_smoke as smoke
+import task_scheduler_host_projection as hostacl
 
 ROOT = Path(__file__).parent
 RUNNER = ROOT / 'run_upgrade_preview_r5_v1.py'
@@ -884,11 +885,13 @@ def test_wrapper_pins_equal_the_files_on_disk_and_the_contract_strings():
                          (V22, "'retarget-warden-r4.ps1') '"), (RETARGET_R5, "'retarget-warden-r5.ps1') '")):
         assert needle + sha_file(path) + "'" in text, path
     for needle in ("$script:taskSddl='O:BAG:BAD:P(A;;FA;;;SY)(A;;FA;;;BA)'", "$script:taskTimeLimit='PT3M'", "$script:taskWaitSeconds=175",
-                   "RegisterTaskDefinition($script:taskName,$definition,2,'SYSTEM',$null,5,$script:taskSddl)", "$script:namespaceDate='20261011'",
+                   "RegisterTaskDefinition($script:taskName,$definition,$script:taskRegistrationFlags,'SYSTEM',$null,5,$script:taskSddl)",
+                   "$script:taskRegistrationFlags=18", "$script:namespaceDate='20261011'",
                    "$script:configPin='135cd9eccf9efcdbc910679bde83b571913e731a4041ece62f60e42442f1709c'",
                    "('UpgradePreview4.2.7-windows-'+$script:namespaceDate+'-r5-v1-'+$Attempt)", "'CoChem-4.2.7-UpgradePreview-'+$script:namespaceDate+'-r5-v1-'+$Attempt"):
         assert needle in text, needle
     assert text.count('.Run($null)') == 1 and text.count('RegisterTaskDefinition(') == 1 and text.count('NewTask(0)') == 1
+    assert text.count('$script:taskRegistrationFlags=18') == 1, 'TASK_CREATE|TASK_DONT_ADD_PRINCIPAL_ACE (r5 sitting v2 repair)'
     for forbidden in ('Stop-ScheduledTask', 'Disable-ScheduledTask', 'Register-ScheduledTask', 'Unregister-ScheduledTask', 'Start-ScheduledTask', 'schtasks',
                       'Start-Process', 'Stop-Process', 'taskkill', 'Remove-Item', 'DeleteTask', 'Stop-Service', '.Stop(', '.Kill(', 'Invoke-Expression',
                       '.Enabled=$false', 'RunAs', 'Set-Content', 'Out-File', 'robocopy', 'job_board.db'):
@@ -1255,7 +1258,9 @@ def test_wrapper_receipt_validation_accepts_runner_receipts_and_refuses_tamperin
         assert cases[name]['ok'] is False and needle in cases[name]['error'], (name, cases[name])
 
 
-APPLY_FIXTURE = r'''
+# The folder stub reads the task descriptor back the way this host's Task Scheduler stores it (task_scheduler_host_projection.py;
+# r5 sitting v2, 2026-10-11); fx.Sddl replaces that read-back only in the explicit 'acl' tamper case.
+APPLY_FIXTURE = hostacl.PS_FUNCTION + r'''
   $script:registered=@();$script:runs=0;$script:task=$null;$script:newTasks=0
   function New-PrivateDirectory {param($Path) if(Test-Path -LiteralPath $Path){throw ('Private directory already exists; preserve it: '+$Path)};$null=[IO.Directory]::CreateDirectory($Path)}
   function Copy-VerifiedPayload {param($File) if((Get-FileHash -LiteralPath $File.source -Algorithm SHA256).Hash.ToLowerInvariant() -cne $File.sha256){throw 'Source digest changed'};[IO.File]::Copy($File.source,$File.destination)}
@@ -1276,10 +1281,11 @@ APPLY_FIXTURE = r'''
     $folder=[pscustomobject]@{}
     $folder|Add-Member ScriptMethod GetTask {param($name) if(($null -ne $script:task -or $script:fx.TaskExists) -and $name -ceq $script:taskName){return $script:task};throw [Runtime.InteropServices.COMException]::new('absent',-2147024894)}
     $folder|Add-Member ScriptMethod RegisterTaskDefinition {param($name,$def,$flags,$user,$pw,$logon,$sddl)
-      $script:registered+=[pscustomobject]@{name=$name;flags=$flags;user=$user;logon=$logon;sddl=$sddl;arguments=$def.Actions.Item(1).Arguments;path=$def.Actions.Item(1).Path;limit=$def.Settings.ExecutionTimeLimit}
-      $script:task=[pscustomobject]@{Enabled=$def.Settings.Enabled;State=3;LastTaskResult=267011;Definition=$def;Xml='<Task>fixture</Task>';Instances=0}
+      $readBack=$(if($null -ne $script:fx.Sddl){$script:fx.Sddl}else{Get-HostTaskSddlProjection $flags $sddl $user})
+      $script:registered+=[pscustomobject]@{name=$name;flags=$flags;user=$user;logon=$logon;sddl=$sddl;readback=$readBack;arguments=$def.Actions.Item(1).Arguments;path=$def.Actions.Item(1).Path;limit=$def.Settings.ExecutionTimeLimit}
+      $script:task=[pscustomobject]@{Enabled=$def.Settings.Enabled;State=3;LastTaskResult=267011;Definition=$def;Xml='<Task>fixture</Task>';Instances=0;ReadBack=$readBack}
       $script:task|Add-Member ScriptMethod GetInstances {param($n)[pscustomobject]@{Count=$script:task.Instances}}
-      $script:task|Add-Member ScriptMethod GetSecurityDescriptor {param($n)$script:fx.Sddl}
+      $script:task|Add-Member ScriptMethod GetSecurityDescriptor {param($n)$script:task.ReadBack}
       $script:task|Add-Member ScriptMethod Run {param($a)
         $script:runs++
         if($script:fx.CopyReceipt){foreach($f in Get-ChildItem -LiteralPath $script:fixtureSource -File){[IO.File]::Copy($f.FullName,(Join-Path $script:targetRoot $f.Name))}}
@@ -1291,7 +1297,8 @@ APPLY_FIXTURE = r'''
     $script:targetRoot=Join-Path '__TMPROOT__' $Name
     if($script:targetRoot -like 'C:\Program Files*'){throw 'fixture roots must be temporary'}
     $script:registered=@();$script:runs=0;$script:task=$null;$script:fixtureSource=$Source;$script:codeTrees=@();$script:newTasks=0
-    $script:fx=@{Sddl='O:BAG:BAD:PAI(A;;FA;;;SY)(A;;FA;;;BA)';LastTaskResult=0;CopyReceipt=$true;RefreshEnds=$true;TaskExists=$false};foreach($k in $Fx.Keys){$script:fx[$k]=$Fx[$k]}
+    $script:fx=@{Sddl=$null;LastTaskResult=0;CopyReceipt=$true;RefreshEnds=$true;TaskExists=$false};foreach($k in $Fx.Keys){$script:fx[$k]=$Fx[$k]}
+    if($script:fx.ContainsKey('RegistrationFlags')){$script:taskRegistrationFlags=$script:fx.RegistrationFlags}
     if($PreCreate){$null=[IO.Directory]::CreateDirectory($script:targetRoot)}
     $result=[ordered]@{ok=$true;error=$null;summary=$null}
     try{$s=Invoke-UpgradePreview (New-FixtureScheduler) (New-FixtureFolder) $ctx ((Get-Item -LiteralPath $script:helperSource).Length) 6>$null
@@ -1333,8 +1340,9 @@ def test_wrapper_apply_path_is_driven_with_fixtures(produced, tmp_path):
                      f'--install-after-sha256 {ok.fx.settings.install_after_sha256} --venv-python-sha256 {ok.fx.settings.venv_python_sha256} '
                      f'--current "{ok.fx.current_info["path"]}" --current-sha256 {ok.fx.commissioned} --proposed "{ok.fx.proposed_info["path"]}" '
                      f'--proposed-sha256 {ok.fx.proposed_info["sha256"]} --mode held --output "{target / "upgrade-preview.json"}"')
-    assert p['registered'] == [{'name': f'CoChem-4.2.7-UpgradePreview-20261011-r5-v1-{ATTEMPT}', 'flags': 2, 'user': 'SYSTEM', 'logon': 5,
-                                'sddl': SDDL, 'arguments': expected_args, 'path': str(ok.fx.python), 'limit': 'PT3M'}]
+    assert p['registered'] == [{'name': f'CoChem-4.2.7-UpgradePreview-20261011-r5-v1-{ATTEMPT}', 'flags': 18, 'user': 'SYSTEM', 'logon': 5,
+                                'sddl': SDDL, 'readback': hostacl.HOST_SDDL_AFTER_FLAGS_18, 'arguments': expected_args, 'path': str(ok.fx.python),
+                                'limit': 'PT3M'}]
     assert p['runs'] == 1 and p['new_tasks'] == 1 and p['held'] is None and len(p['code_trees']) == 2
     assert sorted(p['files']) == sorted(['run_upgrade_preview_r5_v1.py', 'preview-intent.json', 'preview-task.xml', 'preview-summary.json',
                                          'upgrade-preview-receipt.json', 'upgrade-preview.json', 'upgrade-preview.stderr.txt'])
@@ -1366,6 +1374,30 @@ def test_wrapper_apply_path_is_driven_with_fixtures(produced, tmp_path):
     assert w['ok'] is False and 'did not end cleanly' in w['error'] and w['held']['phase'] == 'WAIT' and w['runs'] == 1
     r = v['wrong_result']
     assert r['ok'] is False and 'contradicts the preview receipt status' in r['error'] and r['held']['phase'] == 'RECEIPT'
+
+
+def test_registration_flags_against_the_host_task_acl_read_back(produced, tmp_path):
+    """r5 sitting v2 regression (2026-10-11, S10 held at REGISTRATION -> SERIES-STOP -> R4-RESTORE): with TASK_CREATE alone (2)
+    this host reads the task DACL back unprotected with an appended (A;;FR;;;SY) ACE and the exact Assert-RegisteredTaskAcl
+    holds before the Run; the reviewed flags 18 (TASK_CREATE|TASK_DONT_ADD_PRINCIPAL_ACE) read back as D:PAI and the
+    preview runs to its PASSED gate."""
+    ok = produced['pass_held']
+    fixture = APPLY_FIXTURE.replace('__NONCE__', NONCE).replace('__ATTEMPT__', ATTEMPT).replace('__WORKSPACE__', psq(ROOT)).replace('__TMPROOT__', psq(tmp_path / 'apply'))
+    (tmp_path / 'apply').mkdir()
+    calls = [ok.fx.ps_context() + fixture,
+             f"Invoke-ApplyCase 'flags2' '{psq(ok.fx.root)}' @{{RegistrationFlags={hostacl.TASK_CREATE}}}",
+             f"Invoke-ApplyCase 'flags18' '{psq(ok.fx.root)}' @{{}}"]
+    cases = run_ps(tmp_path, '\n'.join(calls))
+    v = {name: case['value'] for name, case in cases.items()}
+    old, new = v['flags2'], v['flags18']
+    assert [r['flags'] for r in old['registered']] == [2] and [r['flags'] for r in new['registered']] == [18]
+    assert old['registered'][0]['readback'] == hostacl.HOST_SDDL_AFTER_FLAGS_2 == hostacl.host_projection(2, SDDL)
+    assert new['registered'][0]['readback'] == hostacl.HOST_SDDL_AFTER_FLAGS_18 == hostacl.host_projection(18, SDDL)
+    assert old['ok'] is False and old['runs'] == 0
+    assert old['error'].startswith('The upgrade preview is held at task registration: ' + hostacl.HELD_ACL_REASON), old['error']
+    assert old['held']['phase'] == 'REGISTRATION' and old['held']['reason'] == hostacl.HELD_ACL_REASON
+    assert old['held']['task_registered'] is True and old['held']['run_requested'] is False and 'preview-task.xml' not in old['files']
+    assert new['ok'] is True and new['runs'] == 1 and new['held'] is None and new['summary']['decision'] == 'PASSED', new
 
 
 def make_r5_tree(base: Path, toolchain: Path) -> Path:

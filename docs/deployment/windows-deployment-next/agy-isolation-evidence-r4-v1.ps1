@@ -33,7 +33,8 @@
         the four daemon tasks stopped and disabled, no existing root or task, and inspects the r4, toolchain and native code trees;
      2. creates the root with a SYSTEM/BA-only DACL, copies the hash-pinned helper and agent definition and writes the intent
         record before any task exists;
-     3. registers ONE trigger-free SYSTEM task (PT10M, private task DACL), requests exactly one Run and waits for it to end;
+     3. registers ONE trigger-free SYSTEM task (PT10M, private task DACL, registration flags 18 =
+        TASK_CREATE|TASK_DONT_ADD_PRINCIPAL_ACE), requests exactly one Run and waits for it to end;
      4. verifies the receipt against the pins, recomputes every check, verdict and gate, verifies the raw and replay digests, and
         writes the summary (CreateNew).
    Exit codes: 0 gate passed (summary JSON on stdout); 10 GEMINI-HELD: the evidence is verified but its gate failed (A4: the
@@ -107,6 +108,11 @@ function Set-IsolationConstants {
     $script:resultTag=$(if($Mode -ceq 'stage'){'COCHEM_AGY_AGENT_STAGING_RESULT'}else{'COCHEM_AGY_ISOLATION_EVIDENCE_RESULT'})
     $script:geminiGate=$(if($Mode -ceq 'stage'){'G4'}else{'G3'})
     $script:taskSddl='O:BAG:BAD:P(A;;FA;;;SY)(A;;FA;;;BA)';$script:taskTimeLimit='PT10M';$script:taskWaitSeconds=595
+    # Registration flags 18 = TASK_CREATE (0x2) | TASK_DONT_ADD_PRINCIPAL_ACE (0x10), still create-only. With 2 alone this host
+    # stores the task DACL unprotected with an appended (A;;FR;;;SY) ACE, which Assert-RegisteredTaskAcl refuses (r5 sitting v2,
+    # 2026-10-11, same API path as the held S3/S5/S10 tasks). 18 kept the exact protected two-ACE DACL and passed the same
+    # validator on 2026-10-08 (resume-pending-warden-r3-v7.ps1:125, TaskAclRecovery4.2.7-windows-20261008-r3-v1).
+    $script:taskRegistrationFlags=18
     $script:daemonTaskNames=@('CoChem-4.2.7-Warden','CoChem-4.2.7-Supervisor','CoChem-4.2.2-Warden','CoChem-4.2.3-Supervisor')
     $script:profileParent='C:\Users';$script:workerIdentity='CoChem422Worker1'
     $script:workerIdentities=@(1..6|ForEach-Object {'CoChem422Worker'+$_});$script:stageSlots=@(1..6|ForEach-Object {'slot'+$_})
@@ -1170,7 +1176,7 @@ function Invoke-AgyIsolation {
         $phase='REGISTRATION'
         $definition=New-IsolationTaskDefinition $Scheduler $destination $nonce
         $registered=$true
-        $task=$Folder.RegisterTaskDefinition($script:taskName,$definition,2,'SYSTEM',$null,5,$script:taskSddl)
+        $task=$Folder.RegisterTaskDefinition($script:taskName,$definition,$script:taskRegistrationFlags,'SYSTEM',$null,5,$script:taskSddl)
         Assert-IsolationTaskRegistration $task $destination $nonce
         $taskXmlHash=Write-RegistrationControl (Join-Path $script:targetRoot $script:taskXmlName) ([string]$task.Xml)
         $phase='RUN'

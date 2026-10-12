@@ -9,7 +9,7 @@
         daemon tasks stopped and disabled; reviews every earlier session of the slot (Assert-ReviewedAgyHistory);
      2. creates C:\Program Files\CoChem\InteractiveAgy427-r4-<slot>-<nonce> (SYSTEM/BA only), copies the bridge and the
         support module, registers ONE trigger-free SYSTEM task CoChem-4.2.7-InteractiveAgy-r4-<slot>-<nonce> (PT15M,
-        SDDL O:BAG:BAD:P(A;;FA;;;SY)(A;;FA;;;BA)) whose action is
+        SDDL O:BAG:BAD:P(A;;FA;;;SY)(A;;FA;;;BA), registration flags 18 = TASK_CREATE|TASK_DONT_ADD_PRINCIPAL_ACE) whose action is
         -I -B "<root>\worker_agy_login_bridge_r4_v1.py" --slot <slot> --nonce <nonce> --login-mode <print|tui>
         and requests exactly one Run;
      3. relays the bridge's sanitized operator.log (the Google sign-in URL) to this console until the native code
@@ -80,7 +80,7 @@ function Set-AgyLoginConstants {
     $script:copyHelper='C:\Users\ansac\source\repos\Pipeline-Mix-Model-Concurrent\scripts\stage_aetherdesk_427_payloads.ps1'
     $script:copyHelperHash='0300b82731c0fddb9fad3e2ddb6a20b8368cfa91faf7aceb821752c65b5f6e0b'
     $script:statusFunctions=Join-Path $ScriptRoot 'check-worker-native-status-r3.ps1';$script:statusFunctionsHash='18f58ebb448d8a0c6329dd187d4a9a27fa9cbe942cd05e906bb7aabc67e787a7'
-    $script:leafFunctions=Join-Path $ScriptRoot 'check-worker-native-auth-status-six-r4-v1.ps1';$script:leafFunctionsHash='c0b5df803a339a7dbbbd59727ea59a75dc4722d474f4bb05852d5cdc8778e265'
+    $script:leafFunctions=Join-Path $ScriptRoot 'check-worker-native-auth-status-six-r4-v1.ps1';$script:leafFunctionsHash='34612ac49eb2e455076a01607634f21d4f0b284714ef07d5e614146a1a9a7a85'
     $script:registrationFunctions=Join-Path $ScriptRoot 'register-stopped-warden-r3.ps1';$script:registrationFunctionsHash='eccc593f36cbf488a54775b4343bcf3cf8b261b7cd81e5536fb7f2f18466a198'
     $script:inspectionFunctions=Join-Path $ScriptRoot 'protected-code-inspection-v4.ps1';$script:inspectionFunctionsHash='5c01543cbb8b8d64b2b9f1bab4a13f87f8ff9e1ab3e82dfb6fc547144c77b95d'
     $script:codeInput=Join-Path $ScriptRoot 'claude-code-input-v6.ps1';$script:codeInputHash='74c41bf1b118a62d2decae8d7d9c2ffeb2c19d977033435267f8155fac1f7bf9'
@@ -89,6 +89,11 @@ function Set-AgyLoginConstants {
     $script:captureNamespace='AgyCapture4.2.7-windows-20261010-r4-v1-'
     $script:daemonTaskNames=@('CoChem-4.2.7-Warden','CoChem-4.2.7-Supervisor','CoChem-4.2.2-Warden','CoChem-4.2.3-Supervisor')
     $script:taskTimeLimit='PT15M';$script:taskSddl='O:BAG:BAD:P(A;;FA;;;SY)(A;;FA;;;BA)';$script:wrapperMinutes=14
+    # Registration flags 18 = TASK_CREATE (0x2) | TASK_DONT_ADD_PRINCIPAL_ACE (0x10), still create-only. With 2 alone this host
+    # stores the task DACL unprotected with an appended (A;;FR;;;SY) ACE, which Assert-RegisteredTaskAcl refuses (r5 sitting v2,
+    # 2026-10-11) and which would leave a receipt-less InteractiveAgy root. 18 kept the exact protected two-ACE DACL and passed
+    # the same validator on 2026-10-08 (resume-pending-warden-r3-v7.ps1:125, TaskAclRecovery4.2.7-windows-20261008-r3-v1).
+    $script:taskRegistrationFlags=18
     $script:loginSeconds=600;$script:postInputSeconds=120
     $script:operatorLogLimit=131072;$script:receiptLimit=65536;$script:recordLimit=65536
     $script:sessionRoot=$null;$script:taskName=$null
@@ -483,7 +488,7 @@ function Invoke-AgyLoginApply {
         $phase='REGISTER'
         $arguments=Get-AgyHistoryTaskArguments $script:sessionRoot $Slot $nonce $LoginMode
         $registered=$true
-        $task=$Folder.RegisterTaskDefinition($script:taskName,(New-AgyLoginTaskDefinition $Scheduler $arguments),2,'SYSTEM',$null,5,$script:taskSddl)
+        $task=$Folder.RegisterTaskDefinition($script:taskName,(New-AgyLoginTaskDefinition $Scheduler $arguments),$script:taskRegistrationFlags,'SYSTEM',$null,5,$script:taskSddl)
         Assert-AgyLoginTaskDefinition $task $Slot $nonce $LoginMode
         $phase='RUN'
         Show-AgyLoginInstructions $Slot $LoginMode

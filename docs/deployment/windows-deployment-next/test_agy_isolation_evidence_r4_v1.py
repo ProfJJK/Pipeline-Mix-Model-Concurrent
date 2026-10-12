@@ -28,6 +28,7 @@ from types import SimpleNamespace
 import pytest
 
 import ps_toplevel_smoke as smoke
+import task_scheduler_host_projection as hostacl
 
 ROOT = Path(__file__).parent
 PY = ROOT / 'agy_isolation_evidence_r4_v1.py'
@@ -1912,10 +1913,12 @@ def test_wrapper_pins_equal_the_files_on_disk_and_no_forbidden_operation():
                 m.PRESERVED_DENIAL_SHA256, m.AGY_SHA256, m.CONFIG_SHA256, m.REPAIR_SHA256, m.PROMPT_LINE_SHA256):
         assert f"'{pin}'" in text, pin
     for needle in ("$script:taskSddl='O:BAG:BAD:P(A;;FA;;;SY)(A;;FA;;;BA)'", "$script:taskTimeLimit='PT10M'", "$script:isolationNamespaceDate='20261011'",
-                   "RegisterTaskDefinition($script:taskName,$definition,2,'SYSTEM',$null,5,$script:taskSddl)", "$script:taskWaitSeconds=595",
+                   "RegisterTaskDefinition($script:taskName,$definition,$script:taskRegistrationFlags,'SYSTEM',$null,5,$script:taskSddl)",
+                   "$script:taskWaitSeconds=595",
                    "Write-RegistrationControl (Join-Path $script:targetRoot $script:summaryName)",
                    "Write-RegistrationControl (Join-Path $script:targetRoot $script:heldName)"):
         assert needle in text, needle
+    assert text.count('$script:taskRegistrationFlags=18') == 1, 'TASK_CREATE|TASK_DONT_ADD_PRINCIPAL_ACE (r5 sitting v2 repair)'
     assert text.count('.Run($null)') == 1 and text.count('RegisterTaskDefinition(') == 1 and text.count('exit $Code') == 1
     for forbidden in ('Stop-ScheduledTask', 'Disable-ScheduledTask', 'Register-ScheduledTask', 'Unregister-ScheduledTask', 'Start-ScheduledTask',
                       'schtasks', 'Start-Process', 'Stop-Process', 'taskkill', 'Remove-Item', 'DeleteTask', 'Stop-Service', '.Stop(', '.Kill(',
@@ -2201,7 +2204,9 @@ def test_wrapper_verifies_stage_receipts_and_refuses_tampering(produced):
         assert cases[name]['value'] == {'decision': 'FAILED', 'phase': 'programdata_guard', 'reasons': ['STAGING_NOT_COMPLETE']}, name
 
 
-APPLY_FIXTURE = r'''
+# The folder stub reads the task descriptor back the way this host's Task Scheduler stores it (task_scheduler_host_projection.py;
+# r5 sitting v2, 2026-10-11); fx.Sddl replaces that read-back only in the explicit 'acl' tamper case.
+APPLY_FIXTURE = hostacl.PS_FUNCTION + r'''
   $script:registered=@();$script:runs=0;$script:task=$null
   function New-PrivateDirectory {param($Path) if(Test-Path -LiteralPath $Path){throw ('Private directory already exists; preserve it: '+$Path)};$null=[IO.Directory]::CreateDirectory($Path);if($script:fx.SecureFails){throw 'Untrusted protected owner: simulated'}}
   function Copy-VerifiedPayload {param($File) if((Get-FileHash -LiteralPath $File.source -Algorithm SHA256).Hash.ToLowerInvariant() -cne $File.sha256){throw 'Source digest changed'};[IO.File]::Copy($File.source,$File.destination)}
@@ -2222,10 +2227,11 @@ APPLY_FIXTURE = r'''
     $folder=[pscustomobject]@{}
     $folder|Add-Member ScriptMethod GetTask {param($name) if($null -ne $script:task -and $name -ceq $script:taskName){return $script:task};throw [Runtime.InteropServices.COMException]::new('absent',-2147024894)}
     $folder|Add-Member ScriptMethod RegisterTaskDefinition {param($name,$def,$flags,$user,$pw,$logon,$sddl)
-      $script:registered+=[pscustomobject]@{name=$name;flags=$flags;user=$user;logon=$logon;sddl=$sddl;arguments=$def.Actions.Item(1).Arguments;limit=$def.Settings.ExecutionTimeLimit}
-      $script:task=[pscustomobject]@{Enabled=$def.Settings.Enabled;State=3;LastTaskResult=267011;Definition=$def;Xml='<Task>fixture</Task>';Instances=0}
+      $readBack=$(if($null -ne $script:fx.Sddl){$script:fx.Sddl}else{Get-HostTaskSddlProjection $flags $sddl $user})
+      $script:registered+=[pscustomobject]@{name=$name;flags=$flags;user=$user;logon=$logon;sddl=$sddl;readback=$readBack;arguments=$def.Actions.Item(1).Arguments;limit=$def.Settings.ExecutionTimeLimit}
+      $script:task=[pscustomobject]@{Enabled=$def.Settings.Enabled;State=3;LastTaskResult=267011;Definition=$def;Xml='<Task>fixture</Task>';Instances=0;ReadBack=$readBack}
       $script:task|Add-Member ScriptMethod GetInstances {param($n)[pscustomobject]@{Count=$script:task.Instances}}
-      $script:task|Add-Member ScriptMethod GetSecurityDescriptor {param($n)$script:fx.Sddl}
+      $script:task|Add-Member ScriptMethod GetSecurityDescriptor {param($n)$script:task.ReadBack}
       $script:task|Add-Member ScriptMethod Run {param($a)
         $script:runs++
         if($script:fx.CopyReceipt){foreach($f in Get-ChildItem -LiteralPath $script:fixtureSource -Recurse -File){
@@ -2240,7 +2246,8 @@ APPLY_FIXTURE = r'''
     $script:targetRoot=Join-Path 'TMPROOT' $Name
     if($script:targetRoot -like 'C:\Program Files*'){throw 'fixture roots must be temporary'}
     $script:registered=@();$script:runs=0;$script:task=$null;$script:fixtureSource=$Source
-    $script:fx=@{Sddl='O:BAG:BAD:P(A;;FA;;;SY)(A;;FA;;;BA)';LastTaskResult=0;CopyReceipt=$true;RefreshEnds=$true;SecureFails=$false};foreach($k in $Fx.Keys){$script:fx[$k]=$Fx[$k]}
+    $script:fx=@{Sddl=$null;LastTaskResult=0;CopyReceipt=$true;RefreshEnds=$true;SecureFails=$false};foreach($k in $Fx.Keys){$script:fx[$k]=$Fx[$k]}
+    if($script:fx.ContainsKey('RegistrationFlags')){$script:taskRegistrationFlags=$script:fx.RegistrationFlags}
     if($PreCreate){$null=[IO.Directory]::CreateDirectory($script:targetRoot)}
     $result=[ordered]@{ok=$true;error=$null;summary=$null}
     try{$s=Invoke-AgyIsolation (New-FixtureScheduler) (New-FixtureFolder) (Get-Pins) ((Get-Item -LiteralPath $script:helperSource).Length) ((Get-Item -LiteralPath $script:agentSource).Length)
@@ -2281,8 +2288,9 @@ def test_wrapper_apply_path_is_driven_with_fixtures(produced, tmp_path):
     assert s['passed'] is True and s['outcome'] == 'PASSED' and s['exit_code'] == 0 and s['message'].startswith('Isolation evidence verified (G3 passed)')
     assert s['capability'] == str(root / 'isolation-receipt.json') + '#' + s['receipt_sha'] and s['replay'] == ['R1', 'R2', 'R3', 'R4', 'R5']
     assert s['effort_null'] == {'slug': 'gemini-3.8-flash-low', 'run_id': 'R5', 'executed': True, 'passed': True, 'init_model': 'gemini-3.8-flash-low'}
-    assert v['pass']['registered'] == [{'name': f'CoChem-4.2.7-AgyIsolation-20261011-r4-v1-{ATTEMPT}', 'flags': 2, 'user': 'SYSTEM', 'logon': 5,
-                                        'sddl': 'O:BAG:BAD:P(A;;FA;;;SY)(A;;FA;;;BA)', 'arguments': args, 'limit': 'PT10M'}]
+    assert v['pass']['registered'] == [{'name': f'CoChem-4.2.7-AgyIsolation-20261011-r4-v1-{ATTEMPT}', 'flags': 18, 'user': 'SYSTEM', 'logon': 5,
+                                        'sddl': 'O:BAG:BAD:P(A;;FA;;;SY)(A;;FA;;;BA)', 'readback': hostacl.HOST_SDDL_AFTER_FLAGS_18,
+                                        'arguments': args, 'limit': 'PT10M'}]
     assert v['pass']['runs'] == 1 and v['pass']['held'] is None
     assert v['pass']['files'] == sorted(['agy_isolation_evidence_r4_v1.py', 'cochem-inference-only.agent.md', 'isolation-intent.json',
                                          'isolation-receipt.json', 'isolation-summary.json', 'isolation-task.xml'])
@@ -2337,6 +2345,28 @@ def test_wrapper_apply_path_is_driven_with_fixtures(produced, tmp_path):
     assert refused['ok'] is False and refused['error'].startswith('GEMINI-HELD (G4): the isolation helper reported STAGING_FAILED'), refused
     assert refused['held']['phase'] == 'HELPER' and refused['held']['helper_failure']['phase'] == 'programdata_guard'
     assert 'NOT_EMPTY (preserved for review)' in refused['summary_file']['message'] and refused['summary_file']['programdata_antigravity']['verified'] is False
+
+
+def test_registration_flags_against_the_host_task_acl_read_back(produced, tmp_path):
+    """r5 sitting v2 regression (2026-10-11; S8 shares the S3/S5/S10 registration path that held): with TASK_CREATE alone (2)
+    this host reads the task DACL back unprotected with an appended (A;;FR;;;SY) ACE and the exact Assert-RegisteredTaskAcl
+    holds before the Run, in both modes; the reviewed flags 18 (TASK_CREATE|TASK_DONT_ADD_PRINCIPAL_ACE) read back as D:PAI
+    and the evidence and staging runs complete."""
+    p, stage = produced['pass'], produced['stage']
+    fixture = APPLY_FIXTURE.replace('TMPROOT', psq(tmp_path)).replace('NONCEVALUE', NONCE)
+    calls = [apply_case('flags2', p, f'@{{RegistrationFlags={hostacl.TASK_CREATE}}}'), apply_case('flags18', p),
+             apply_case('stage_flags2', stage, f'@{{RegistrationFlags={hostacl.TASK_CREATE}}}'), apply_case('stage_flags18', stage)]
+    cases, _ = run_ps(fixture + '\n'.join(calls))
+    v = {name: case['value'] for name, case in cases.items()}
+    for old_name, new_name in (('flags2', 'flags18'), ('stage_flags2', 'stage_flags18')):
+        old, new = v[old_name], v[new_name]
+        assert [r['flags'] for r in old['registered']] == [2] and [r['flags'] for r in new['registered']] == [18]
+        assert old['registered'][0]['readback'] == hostacl.HOST_SDDL_AFTER_FLAGS_2 == hostacl.host_projection(2, hostacl.PRIVATE_TASK_SDDL)
+        assert new['registered'][0]['readback'] == hostacl.HOST_SDDL_AFTER_FLAGS_18 == hostacl.host_projection(18, hostacl.PRIVATE_TASK_SDDL)
+        assert old['ok'] is False and old['runs'] == 0 and 'held at task registration: ' + hostacl.HELD_ACL_REASON in old['error'], old
+        assert old['held']['phase'] == 'REGISTRATION' and old['held']['reason'] == hostacl.HELD_ACL_REASON
+        assert old['held']['task_registered'] is True and old['held']['run_requested'] is False
+        assert new['ok'] is True and new['runs'] == 1 and new['summary']['outcome'] == 'PASSED' and new['summary']['exit_code'] == 0, new
 
 
 def test_write_outcome_exit_codes():

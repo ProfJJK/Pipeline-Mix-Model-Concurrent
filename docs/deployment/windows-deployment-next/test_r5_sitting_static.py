@@ -633,3 +633,50 @@ def test_s0_precheck_stops_before_s1_with_nothing_changed_while_a_cutover_child_
     assert len(precheck) == 2 and not [t for t in precheck if t.rstrip().endswith('-Restore')], 'a precheck stop never restores'
     assert all('Nothing was changed' in t for t in precheck) and 'Format-R5Process' in precheck[1] + precheck[0]
     assert 'Get-R5ProcessList' in function_text('Show-R5Plan') and 'S0 would STOP on: ' in function_text('Show-R5Plan')
+
+
+# ---------------------------------------------------------------------------------------------------------------------
+# v3 from today's host (2026-10-11 after the v2 sitting): earlier attempts, the S2 stop of a restored r4, S12 CPU pause
+
+
+def test_s0_reports_earlier_attempts_before_any_host_probe_and_stops_only_on_one_that_never_ended():
+    stage0 = function_code('Invoke-R5Stage0')
+    assert stage0.index("'sitting-end.json'") < stage0.index('Get-R5EarlierSittings') < stage0.index('Get-R5DockerInfo'), \
+        'the current attempt is refused first; earlier attempts are reported before Docker, the Warden and the processes are probed'
+    stops = [c['text'] for c in calls('Stop-R5Series') if c['function'] == 'Invoke-R5Stage0' and 'never ended' in c['text']]
+    assert len(stops) == 1 and not stops[0].rstrip().endswith('-Restore') and 'Nothing was changed' in stops[0]
+    earlier = function_code('Get-R5EarlierSittings')
+    assert "'R5Sitting4.2.7-windows-20261011-v*'" in earlier and '$script:Attempt' in earlier and "'state.touched_roots'" in earlier
+    assert r"$path.StartsWith($script:Base+'\'" in earlier, 'only child roots under the CoChem base are listed'
+    assert not re.search(r'(?i)\b(New-Item|Set-Content|Out-File|Remove-Item|Write-R5Record)\b|::Write|::Create|::Delete', earlier), 'read-only'
+    plan = function_code('Show-R5Plan')
+    assert 'Get-R5EarlierSittings' in plan and 'S0 would STOP: sitting attempt ' in plan
+
+
+def test_s2_records_its_stop_attempt_before_the_child_and_the_restore_names_a_held_s2_stop():
+    stage2 = function_code('Invoke-R5Stage2')
+    for child in ('stop-warden-r4.ps1', 'stop-warden-r5.ps1'):
+        launch = stage2.index("'" + child + "'")
+        assert stage2.rindex('$script:R5.s2_stop_attempt=$stopAttempt', 0, launch) > stage2.rindex('Get-R5FreeAttempt', 0, launch), child
+    cutover = function_code('Get-R5CutoverState')
+    assert 'Get-R5UnstoppedRestoreDetail' in cutover and "was not stopped by this sitting'}" not in cutover
+    detail = function_code('Get-R5UnstoppedRestoreDetail')
+    assert "'stop-held.json'" in detail and "'phase'" in detail and '$script:NsStopR5' in detail
+
+
+def test_s12_keeps_r5_only_on_a_cpu_only_admission_pause():
+    pause = function_code('Test-R5CpuOnlyPause')
+    assert "'recovery_hold') -ne $false" in pause and "'admission_reasons'" in pause
+    assert "'^Warden CPU utilization exceeds its strict [0-9]+% budget$'" in pause and '-cnotmatch' in pause, 'every reason must be the CPU budget'
+    check = function_code('Invoke-R5HealthCheck')
+    assert "@($gate.soft).Count -eq 1" in check and "'components.warden_controller.admission_ready is not true'" in check and 'Test-R5CpuOnlyPause' in check
+    assert check.index('@($gate.hard).Count') < check.index('Test-R5CpuOnlyPause'), 'a hard failure is never deferred'
+    stage12 = function_code('Invoke-R5Stage12')
+    assert stage12.index('$check.cpu_paused') < stage12.index("Stop-R5Series ('S12: the r5 health gate failed")
+    assert "Write-R5Receipt 'S12' 'HEALTH_VERIFIED_ADMISSION_PAUSED_CPU'" in stage12
+    assert '$check.cpu_paused' in function_code('Invoke-R5GeminiFallback')
+
+
+def test_json_tail_tries_the_last_document_first():
+    tail = function_code('Get-R5JsonTail')
+    assert r"(?m)^\{" in tail and re.search(r"for\(\$index=\$starts\.Count-1;\$index -ge 0;\$index--\)", tail), tail

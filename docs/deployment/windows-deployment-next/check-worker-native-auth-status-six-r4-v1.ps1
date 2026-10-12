@@ -14,7 +14,8 @@
    C:\Program Files\CoChem\NativeAuthStatusSix4.2.7-windows-20261010-r4-v1-<attempt>-<slot>-<provider>-<stage>,
    copies the hash-pinned helper, registers ONE SYSTEM task
    CoChem-4.2.7-NativeAuthStatusSix-20261010-r4-v1-<attempt>-<slot>-<provider>-<stage>
-   (no triggers, PT3M, SDDL O:BAG:BAD:P(A;;FA;;;SY)(A;;FA;;;BA)), requests one Run, waits,
+   (no triggers, PT3M, SDDL O:BAG:BAD:P(A;;FA;;;SY)(A;;FA;;;BA), registration flags 18 =
+   TASK_CREATE|TASK_DONT_ADD_PRINCIPAL_ACE so that exact private DACL reads back), requests one Run, waits,
    and binds the helper's receipt (task result 2 for a HOLD classification, 0 for an established
    decision). Every failure after the root exists, including a failed post-create root check, leaves
    status-held.json (CreateNew) and a plain message; a valid decision is recorded in status-task-result.json.
@@ -70,6 +71,11 @@ function Set-AuthStatusConstants {
     $script:sourceHash='45681477194d97b144e8ee4505d4364d73d58aaef19c8428c846df642c834839'
     $script:daemonTaskNames=@('CoChem-4.2.7-Warden','CoChem-4.2.7-Supervisor','CoChem-4.2.2-Warden','CoChem-4.2.3-Supervisor')
     $script:taskTimeLimit='PT3M';$script:taskSddl='O:BAG:BAD:P(A;;FA;;;SY)(A;;FA;;;BA)';$script:taskWaitSeconds=175
+    # Registration flags 18 = TASK_CREATE (0x2) | TASK_DONT_ADD_PRINCIPAL_ACE (0x10), still create-only. With 2 alone this host
+    # stores the task DACL unprotected with an appended (A;;FR;;;SY) ACE, which Assert-RegisteredTaskAcl refuses (r5 sitting v2,
+    # 2026-10-11: 12 of 12 held at REGISTER). 18 kept the exact protected two-ACE DACL and passed the same validator on
+    # 2026-10-08 (resume-pending-warden-r3-v7.ps1:125, C:\Program Files\CoChem\TaskAclRecovery4.2.7-windows-20261008-r3-v1).
+    $script:taskRegistrationFlags=18
     $script:statusTimeoutSeconds=30;$script:outputLimitBytes=65536;$script:receiptLimitBytes=32768
     $script:copyHelper='C:\Users\ansac\source\repos\Pipeline-Mix-Model-Concurrent\scripts\stage_aetherdesk_427_payloads.ps1';$script:copyHelperPin='0300b82731c0fddb9fad3e2ddb6a20b8368cfa91faf7aceb821752c65b5f6e0b'
     $script:statusFunctions=Join-Path $ScriptRoot 'check-worker-native-status-r3.ps1';$script:statusFunctionsPin='18f58ebb448d8a0c6329dd187d4a9a27fa9cbe942cd05e906bb7aabc67e787a7'
@@ -291,7 +297,8 @@ function Assert-AuthStatusTaskDefinition {
 
 function Register-AuthStatusTask {
     param($Scheduler,$Folder,[string]$Arguments)
-    # TASK_CREATE (2) only: an existing task of this one-shot name is never replaced. No trigger is added.
+    # Create-only ($script:taskRegistrationFlags = 18 = TASK_CREATE|TASK_DONT_ADD_PRINCIPAL_ACE, never TASK_UPDATE): an existing
+    # task of this one-shot name is never replaced. No trigger is added.
     $definition=$Scheduler.NewTask(0)
     $definition.RegistrationInfo.Description='One bounded native authentication-status command in one isolated worker profile of the r4 runtime. No login, model inference, daemon activation, credential copying or budget changes.'
     $definition.Principal.UserId='SYSTEM';$definition.Principal.LogonType=5;$definition.Principal.RunLevel=1
@@ -300,7 +307,7 @@ function Register-AuthStatusTask {
     $action=$definition.Actions.Create(0);$action.Path=$script:python
     $action.Arguments=$Arguments
     $action.WorkingDirectory=$script:targetRoot
-    $Folder.RegisterTaskDefinition($script:taskName,$definition,2,'SYSTEM',$null,5,$script:taskSddl)
+    $Folder.RegisterTaskDefinition($script:taskName,$definition,$script:taskRegistrationFlags,'SYSTEM',$null,5,$script:taskSddl)
 }
 
 function Wait-StatusTaskInstance {

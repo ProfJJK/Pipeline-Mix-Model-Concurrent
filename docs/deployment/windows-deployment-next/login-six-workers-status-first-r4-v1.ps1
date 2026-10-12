@@ -69,7 +69,7 @@ function Set-SeriesConstants {
     # Status leaf contract (wave-1 reviewed pins; the leaf fixes its own namespace date 20261010).
     $script:statusNamespaceDate='20261010'
     $script:statusLeaf=Join-Path $ScriptRoot 'check-worker-native-auth-status-six-r4-v1.ps1'
-    $script:statusLeafHash='c0b5df803a339a7dbbbd59727ea59a75dc4722d474f4bb05852d5cdc8778e265'
+    $script:statusLeafHash='34612ac49eb2e455076a01607634f21d4f0b284714ef07d5e614146a1a9a7a85'
     $script:statusPythonName='worker-native-auth-status-six-r4-v1.py'
     $script:statusPython=Join-Path $ScriptRoot $script:statusPythonName
     $script:statusPythonHash='45681477194d97b144e8ee4505d4364d73d58aaef19c8428c846df642c834839'
@@ -89,7 +89,7 @@ function Set-SeriesConstants {
     # AGY BRIDGE CONTRACT (reconciled with the final bridge; see also Invoke-AgyBridgeLogin, the only call site).
     # A pin that differs from the file on disk is a hold in the plan, and -Apply refuses before any change.
     $script:agyBridgeWrapper=Join-Path $ScriptRoot 'login_pipeline_worker_interactive_agy_r4_v1.ps1'
-    $script:agyBridgeWrapperPin='da166c1dbdb047e93692eeb47abf3d315dbe797cf9040d34b440d9649626014a'
+    $script:agyBridgeWrapperPin='381fb8daec6999d16e75ab163f28d0dda6459b1b44f9695962cf43213cedcb60'
     $script:agyBridgePython=Join-Path $ScriptRoot 'worker_agy_login_bridge_r4_v1.py'
     $script:agyBridgePythonPin='4074878f100ae59b804c95bd97b3280ccaa09f919ffaa365a3e2c6985045b8d9'
     $script:agyHistory=Join-Path $ScriptRoot 'agy-session-history-r4-v1.ps1'
