@@ -16,7 +16,7 @@ TIER_SIZES = {str(tier): 3 for tier in range(1, 11)}
 def validate_catalog(raw):
     if not isinstance(raw, Mapping) or set(raw) != {'schema', 'generation', 'tiers'}:
         raise ValueError('Routing catalog requires schema, generation and tiers')
-    if raw['schema'] != 'cochem-routing-catalog/1':
+    if raw['schema'] not in ('cochem-routing-catalog/1', 'cochem-routing-catalog/2'):
         raise ValueError('Unsupported routing catalog schema')
     generation = raw['generation']
     if not isinstance(generation, str) or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.-]{0,127}', generation):
@@ -27,8 +27,9 @@ def validate_catalog(raw):
     normalized = {}
     for tier, count in TIER_SIZES.items():
         entries = tiers[tier]
-        if not isinstance(entries, list) or len(entries) != count:
-            raise ValueError('Each tier requires three ordered candidates')
+        allowed = (count,) if raw['schema'] == 'cochem-routing-catalog/1' else (2, 3)
+        if not isinstance(entries, list) or len(entries) not in allowed:
+            raise ValueError('Each tier requires its versioned two or three ordered candidates')
         candidates, identities = [], set()
         for entry in entries:
             if not isinstance(entry, Mapping) or set(entry) != {'provider', 'model', 'reasoning_effort'}:
@@ -47,6 +48,24 @@ def validate_catalog(raw):
             candidates.append(dict(provider=provider, model=model, reasoning_effort=effort))
         normalized[tier] = candidates
     return dict(schema=raw['schema'], generation=generation, tiers=normalized)
+
+
+def retire_owner_gemini_pro(catalog):
+    """Owner's 2026-10-12 withdrawal; preserve the two surviving reasoning floors.
+
+    This produces a new generation. It never edits a captured policy or assumes
+    Flash High is a substitute for Pro High at the medium tiers.
+    """
+    value = validate_catalog(catalog)
+    if value != default_catalog():
+        raise ValueError('Retirement must start from the exact approved owner catalog')
+    withdrawn = dict(provider='gemini', model='gemini-3.1-pro', reasoning_effort='high')
+    for tier in ('5', '6'):
+        if value['tiers'][tier][-1] != withdrawn:
+            raise ValueError('The owner-reviewed Pro fallback differs')
+        value['tiers'][tier].pop()
+    value.update(schema='cochem-routing-catalog/2', generation='owner-2026-10-12-pro-retired')
+    return validate_catalog(value)
 
 
 def default_catalog():

@@ -9,7 +9,7 @@ sys.path.insert(0,str(SCRIPTS))
 import prepare_r7_bundle as builder
 
 
-def test_candidate_only_enables_catalog_and_keeps_exact_owner_matrix():
+def test_candidate_only_enables_catalog_and_proposal_retires_owner_withdrawn_pro():
     raw=builder.PREVIOUS.read_bytes()
     import json
     before=json.loads(raw);candidate,change=builder.candidate_from_previous(raw)
@@ -17,7 +17,8 @@ def test_candidate_only_enables_catalog_and_keeps_exact_owner_matrix():
     assert candidate==expected
     assert not change.changed_targets
     assert change.previous_policy_digest!=change.policy.digest
-    assert candidate['routing']['catalog']['tiers']==change.policy.as_dict()['catalog']['tiers']
+    for tier,rows in candidate['routing']['catalog']['tiers'].items():
+        assert change.policy.as_dict()['catalog']['tiers'][tier]==rows[:2 if tier in ('5','6') else 3]
 
 
 def test_candidate_refuses_changed_previous_bytes():
@@ -42,19 +43,23 @@ def test_prerequisite_recovery_is_unchanged_except_explicit_inherited_input_dead
     with pytest.raises(ValueError):builder.derive_recovery_entry(raw+b'$script:R6InputDeadline=[DateTime]::UtcNow.AddMinutes(20)')
 
 
-def test_fresh_recovery_repins_only_two_reviewed_helpers_and_deadline(tmp_path):
+def test_fresh_recovery_pins_reviewed_console_auth_and_retirement_helpers(tmp_path):
     import json
     destination = tmp_path/'recovery'
     result = builder.prepare_recovery(destination, Path(__file__).parents[1])
     before=json.loads(builder.RECOVERY.joinpath('launch-manifest.json').read_text())
     after=json.loads(destination.joinpath('launch-manifest.json').read_text())
     changed=[]
-    for old,new in zip(before['scripts'],after['scripts'],strict=True):
+    assert len(after['scripts'])==len(before['scripts'])+1
+    for old,new in zip(before['scripts'],after['scripts'][:-1],strict=True):
         assert old['name']==new['name']
         payload=destination.joinpath(new['name']).read_bytes()
         assert builder.sha(payload)==new['sha256'] and len(payload)==new['length']
         if old!=new:changed.append(old['name'])
-    assert set(changed)=={'run_r6_launch.ps1','r6_auth_recovery.py','verify_r6_auth_recovery.ps1'}
+    assert set(changed)=={'run_r6_launch.ps1','r6_auth_recovery.py','verify_r6_auth_recovery.ps1','run_r6_system_phase.ps1','activate_r6_runtime.ps1'}
+    added=after['scripts'][-1]
+    assert added['name']=='r6_native_retirement.py'
+    assert builder.sha(destination.joinpath(added['name']).read_bytes())==added['sha256']
     assert result['reviewed_prefix_recovery']
     assert builder.sha(builder.RECOVERY.joinpath('launch-manifest.json').read_bytes())==builder.RECOVERY_PIN
     assert destination.joinpath('run_r6_launch.ps1').read_bytes()==builder.derive_recovery_entry(

@@ -6,7 +6,8 @@
 [CmdletBinding()]
 param([string]$CoreSha256,[string]$InstallerSha256,[string]$ManifestSha256,
     [string]$CandidateSha256,[string]$EvidencePath,[string]$EvidenceSha256,
-    [string]$Attempt,[string]$SourceAttempt='',[string]$StopAttempt='',[switch]$Apply)
+    [string]$Attempt,[string]$SourceAttempt='',[string]$StopAttempt='',
+    [string]$RetirementHelperSha256='',[switch]$Apply)
 
 function Import-R6ActivationFunctions {
     param([string]$Path,[string]$Hash)
@@ -24,7 +25,7 @@ function Import-R6ActivationFunctions {
 }
 
 function Assert-R6AcceptanceIndex {
-    param($Index,[string]$ManifestHash,[string]$CandidateHash)
+    param($Index,[string]$ManifestHash,[string]$CandidateHash,[string]$RetirementHelperHash='')
     if($Index.schema -cne 'cochem-r6-acceptance-index/1' -or $Index.manifest_sha256 -cne $ManifestHash -or
         $Index.candidate_sha256 -cne $CandidateHash -or @($Index.phases).Count -ne 5){throw 'R6 acceptance index binding differs.'}
     $seen=@{};$revision=$null
@@ -51,18 +52,25 @@ function Assert-R6AcceptanceIndex {
             'agent' {if($result.status -cne 'SIX_WORKER_AGENT_CUSTODY_VERIFIED'){throw 'Six-worker custody was not verified.'}}
             'knowledge' {if($result.status -cne 'NEW_KNOWLEDGE_AUTHORITY_VERIFIED'){throw 'R6 knowledge authority was not verified.'}}
             'native' {
+                $expectedTargets=if($RetirementHelperHash){26}else{27}
                 if($result.status -cnotin @('ALL_NATIVE_SELECTORS_ACCEPTED','NATIVE_ACCEPTANCE_PARTIAL_AVAILABILITY') -or
-                    @($result.targets).Count -ne 27){throw 'Native selector evidence is incomplete.'}
+                    @($result.targets).Count -ne $expectedTargets){throw 'Native selector evidence is incomplete.'}
                 # Quota exhaustion is not a protocol defect. Record unavailable
                 # targets without blocking lower tiers on exhausted upper-tier
-                # subscriptions. The owner explicitly requires Gemini Pro High.
+                # subscriptions. The separate owner-pinned retirement amendment
+                # omits only Pro High; it never attests or replaces that model.
+                if($RetirementHelperHash){
+                    Assert-R6NativeRetirement $result $RetirementHelperHash
+                    if($result.owner_retirement.original_plan_sha256 -cne $row.native_plan_sha256){
+                        throw 'Retirement evidence does not bind the original installed plan.'}
+                }
                 $covered=@{};$pro=$false
                 foreach($target in @($result.targets)){
                     if($target.status -ceq 'NATIVE_SELECTOR_ACCEPTED'){
                         foreach($position in @($target.route_positions)){$covered[[int]$position.tier]=$true}
                         if($target.provider -ceq 'gemini' -and $target.model -ceq 'gemini-3.1-pro' -and $target.effort -ceq 'high'){$pro=$true}}
                     elseif($target.status -cnotin @('NOT_PROBED_POOL_UNAVAILABLE','PROVIDER_TEMPORARILY_UNAVAILABLE')){throw 'A native protocol or identity check failed.'}}
-                if(-not $pro){throw 'The owner-required Gemini Pro High route has not passed native acceptance.'}
+                if(-not $RetirementHelperHash -and -not $pro){throw 'The owner-required Gemini Pro High route has not passed native acceptance.'}
             }
             'preview' {if(@($result.identities).Count -or @($result.database.schema_changes).Count -or
                 -not (Test-ExactBool $result.database.migration_executed $false)){throw 'Unreviewed identity or database migration.'}}
@@ -70,6 +78,20 @@ function Assert-R6AcceptanceIndex {
         $seen[$phase]=$true
     }
     $revision
+}
+
+function Assert-R6NativeRetirement {
+    param($Result,[string]$HelperHash)
+    $value=$Result.owner_retirement
+    if($HelperHash -cnotmatch '^[a-f0-9]{64}$' -or $value.schema -cne 'cochem-owner-model-retirement/1' -or
+        $value.decision -cne 'owner-2026-10-12-pro-retired' -or $value.helper_sha256 -cne $HelperHash -or
+        $value.original_plan_sha256 -cnotmatch '^[a-f0-9]{64}$' -or
+        $value.retired_target.provider -cne 'gemini' -or $value.retired_target.model -cne 'gemini-3.1-pro' -or
+        $value.retired_target.reasoning_effort -cne 'high' -or $value.retired_status -cne 'OWNER_RETIRED_MODEL_NOT_PROBED' -or
+        $value.retired_model_jobs_executed -ne 0 -or -not (Test-ExactBool $value.replacement_selected $false) -or
+        $Result.count -ne 26 -or @($Result.targets).Count -ne 26 -or
+        @($Result.targets|Where-Object {$_.provider -ceq 'gemini' -and $_.model -ceq 'gemini-3.1-pro'}).Count){
+        throw 'The owner-pinned model retirement evidence differs.'}
 }
 
 function New-R6TargetContext {
@@ -87,9 +109,14 @@ function New-R6TargetContext {
 
 function Invoke-R6Activation {
     param([string]$CoreHash,[string]$InstallerHash,[string]$ManifestHash,[string]$CandidateHash,
-        [string]$EvidencePath,[string]$EvidenceHash,[string]$Attempt,[string]$SourceAttempt,[string]$StopAttempt,[bool]$ApplyRequested)
+        [string]$EvidencePath,[string]$EvidenceHash,[string]$Attempt,[string]$SourceAttempt,[string]$StopAttempt,[bool]$ApplyRequested,
+        [string]$RetirementHelperHash='')
     foreach($hash in @($CoreHash,$InstallerHash,$ManifestHash,$CandidateHash,$EvidenceHash)){
         if($hash -cnotmatch '^[a-f0-9]{64}$'){throw 'Activation requires exact reviewed hashes.'}}
+    if($RetirementHelperHash -and ($RetirementHelperHash -cnotmatch '^[a-f0-9]{64}$' -or
+        $ManifestHash -cne 'bffcf617620320109a3ff1bcbdcc2e1d4918f9571721dc4642efeed4d0b7a2c4' -or
+        $CandidateHash -cne 'a8b9b2052402f30860188721f986686c5a2f6785e563045edf295adae250f288')){
+        throw 'Model retirement is restricted to the exact installed R6.'}
     if($Attempt -cnotmatch '^v[1-9][0-9]{0,2}$' -or ($SourceAttempt -and $SourceAttempt -cnotmatch '^v[1-9][0-9]{0,2}$') -or
         ($StopAttempt -and ($StopAttempt -cnotmatch '^v[1-9][0-9]{0,2}$' -or -not $SourceAttempt))){throw 'Invalid source/stop/target attempt.'}
     if($EvidencePath -cnotmatch '^C:\\Program Files\\CoChem\\R6Sitting4\.2\.7-windows-20261012-[a-f0-9]{32}\\acceptance-index\.json$'){
@@ -120,7 +147,7 @@ function Invoke-R6Activation {
         $null=Read-R3Control (Join-Path $runtimeRoot 'pipeline.json') $CandidateHash
         Assert-PrivateAcl $EvidencePath
         $index=(Read-R3Text (Read-R3Control $EvidencePath $EvidenceHash))|ConvertFrom-Json
-        $revision=Assert-R6AcceptanceIndex $index $ManifestHash $CandidateHash
+        $revision=Assert-R6AcceptanceIndex $index $ManifestHash $CandidateHash $RetirementHelperHash
         if($revision -cne $installed.revision.source_sha256){throw 'R6 acceptance revision differs from installation.'}
         $null=Assert-R4Pins (Assert-R4InstalledBindings);$lineage=Assert-R4RetargetLineage;$null=Assert-ClientConfig
         $null=Assert-CodeTreeOnce $script:r4Root
@@ -147,4 +174,4 @@ function Invoke-R6Activation {
 }
 
 $ErrorActionPreference='Stop';Set-StrictMode -Version Latest
-Invoke-R6Activation $CoreSha256 $InstallerSha256 $ManifestSha256 $CandidateSha256 $EvidencePath $EvidenceSha256 $Attempt $SourceAttempt $StopAttempt ([bool]$Apply)
+Invoke-R6Activation $CoreSha256 $InstallerSha256 $ManifestSha256 $CandidateSha256 $EvidencePath $EvidenceSha256 $Attempt $SourceAttempt $StopAttempt ([bool]$Apply) $RetirementHelperSha256

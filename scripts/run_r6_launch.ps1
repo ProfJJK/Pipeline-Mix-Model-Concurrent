@@ -95,6 +95,8 @@ function Invoke-R6AcceptancePhase {
         '-Attempt',[Guid]::NewGuid().ToString('N'),'-Apply')
     if($Phase -ceq 'auth' -and (Test-R6AuthRecovery $Manifest)){
         $arguments+=@('-AuthRecoverySha256',$script:R6Pins['r6_auth_recovery.py'])}
+    if($Phase -ceq 'native' -and $script:R6Pins.ContainsKey('r6_native_retirement.py')){
+        $arguments+=@('-NativeRetirementSha256',$script:R6Pins['r6_native_retirement.py'])}
     Invoke-R6LaunchChild 'run_r6_system_phase.ps1' $arguments
 }
 
@@ -207,6 +209,8 @@ function Invoke-R6LaunchSequence {
         '-EvidencePath',$indexPath,'-EvidenceSha256',$indexHash,'-Attempt',$targetAttempt,'-Apply')
     if($script:R5.base_source.kind -ceq 'r4-restore'){
         $arguments+=@('-SourceAttempt',$script:R5.base_source.source_attempt,'-StopAttempt',$script:R5.base_source.stop_attempt)}
+    if($script:R6Pins.ContainsKey('r6_native_retirement.py')){
+        $arguments+=@('-RetirementHelperSha256',$script:R6Pins['r6_native_retirement.py'])}
     $script:R6CutoverRequested=$true
     $activated=Invoke-R6LaunchChild 'activate_r6_runtime.ps1' $arguments
     if($activated.status -cne 'WARDEN_R6_RUNNING_HEALTH_VERIFIED'){throw 'R6 activation was not verified.'}
@@ -237,8 +241,11 @@ function Invoke-R6LaunchMain {
         if(Test-R6AuthRecovery $manifest){
             foreach($name in @('r6_auth_recovery.py','verify_r6_auth_recovery.ps1')){
                 if(-not $script:R6Pins.ContainsKey($name)){throw 'Recovery helper is not pinned.'}}}
-        if(-not $ApplyRequested){@{status='R6_LAUNCH_PLAN';model_targets=27;maximum_shared_slots=4;input_window_minutes=20;
-            later_prompts=$false;installation_and_host_acceptance_executed=$false}|ConvertTo-Json;return}
+        if(-not $ApplyRequested){
+            $retired=$script:R6Pins.ContainsKey('r6_native_retirement.py')
+            @{status='R6_LAUNCH_PLAN';model_targets=$(if($retired){26}else{27});retired_model_targets=$(if($retired){1}else{0});
+                maximum_shared_slots=4;input_window_minutes=20;later_prompts=$false;installation_and_host_acceptance_executed=$false}|ConvertTo-Json;return
+        }
         $identity=[Security.Principal.WindowsIdentity]::GetCurrent()
         if($PSVersionTable.PSEdition -cne 'Desktop' -or -not [Environment]::Is64BitProcess -or $env:COMPUTERNAME -cne 'AETHERDESK' -or
             $identity.Name -cne 'AETHERDESK\ansac' -or -not ([Security.Principal.WindowsPrincipal]::new($identity)).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)){

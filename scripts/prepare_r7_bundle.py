@@ -10,7 +10,9 @@ import re
 from cochem_pipeline.config import load_config
 from cochem_pipeline.routing import load_routing_policy
 from cochem_pipeline.catalog_activation import compile_change
+from cochem_pipeline.routing_catalog import retire_owner_gemini_pro
 from prepare_r6_install_bundle import read_pinned, relative
+from prepare_r6_launch_package import read_regular
 from build_r6_application import verify_wheel
 
 def sha(data):return hashlib.sha256(data).hexdigest()
@@ -40,26 +42,27 @@ def prepare_recovery(destination, repository):
         if '/' in row['name']:raise ValueError('Unexpected recovery input path')
         payload=read_pinned(RECOVERY/row['name'],row['sha256'],row['length'])
         if row['name']=='run_r6_launch.ps1':
-            from prepare_r6_launch_package import read_regular
             payload=derive_recovery_entry(read_regular(Path(repository)/'scripts'/row['name']))
-        elif row['name'] in ('r6_auth_recovery.py','verify_r6_auth_recovery.ps1'):
+        elif row['name'] in ('r6_auth_recovery.py','verify_r6_auth_recovery.ps1','run_r6_system_phase.ps1','activate_r6_runtime.ps1'):
             # Replace only reviewed recovery helpers in this fresh copy. Earlier
             # delivered packages and all remaining R5/R6 inputs stay untouched.
-            from prepare_r6_launch_package import read_regular
             payload=read_regular(Path(repository)/'scripts'/row['name'])
         with (destination/row['name']).open('xb') as out:out.write(payload)
         row.update(sha256=sha(payload),length=len(payload))
+    payload=read_regular(Path(repository)/'scripts/r6_native_retirement.py')
+    with destination.joinpath('r6_native_retirement.py').open('xb') as out:out.write(payload)
+    manifest['scripts'].append(dict(name='r6_native_retirement.py',sha256=sha(payload),length=len(payload)))
     raw=(json.dumps(manifest,indent=2)+'\n').encode()
     with destination.joinpath('launch-manifest.json').open('xb') as out:out.write(raw)
     return dict(directory=str(destination),manifest_sha256=sha(raw),original_manifest_sha256=RECOVERY_PIN,
         entry_sha256=sha(destination.joinpath('run_r6_launch.ps1').read_bytes()),input_deadline_inherited=True,
-        reviewed_prefix_recovery=True)
+        reviewed_prefix_recovery=True,owner_model_retirement='owner-2026-10-12-pro-retired')
 
 def candidate_from_previous(data):
     if sha(data)!=PREVIOUS_PIN:raise ValueError('Previously installed R6 configuration differs')
     candidate=json.loads(data);candidate['catalog_activation']=True
     policy=load_routing_policy(candidate['routing'])
-    catalog=policy.as_dict()['catalog'];catalog['generation']='owner-2026-10-12-r7-v1'
+    catalog=retire_owner_gemini_pro(policy.as_dict()['catalog'])
     change=compile_change(policy,catalog,expected_policy_digest=policy.digest)
     return candidate,change
 

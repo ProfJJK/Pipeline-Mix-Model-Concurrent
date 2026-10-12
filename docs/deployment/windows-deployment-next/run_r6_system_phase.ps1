@@ -5,7 +5,7 @@
 [CmdletBinding()]
 param([ValidateSet('auth','knowledge','agent','native','preview')][string]$Phase,
     [string]$ManifestSha256,[string]$CandidateSha256,[string]$InstallerSha256,
-    [string]$Attempt,[string]$AuthRecoverySha256,[switch]$Apply)
+    [string]$Attempt,[string]$AuthRecoverySha256,[string]$NativeRetirementSha256,[switch]$Apply)
 
 function Import-R6PhaseInstaller {
     param([string]$Hash,[string]$Directory=$PSScriptRoot)
@@ -96,6 +96,13 @@ function Invoke-R6PhaseTask {
             sha256=$script:AuthRecoverySha256;length=(Get-Item -LiteralPath $source).Length})
         $arguments='-I -B "'+$helper+'" --output "'+$Root+'" --manifest-hash '+$ManifestHash+' --candidate-hash '+$CandidateHash
     }
+    if($Phase -ceq 'native' -and $script:NativeRetirementSha256){
+        $helper=Join-Path $Root 'r6_native_retirement.py'
+        $source=Join-Path $PSScriptRoot 'r6_native_retirement.py'
+        Copy-R6Payload ([pscustomobject]@{source=$source;destination=$helper;relative='source/knowledge/control';
+            sha256=$script:NativeRetirementSha256;length=(Get-Item -LiteralPath $source).Length})
+        $arguments='-I -B "'+$helper+'" --output "'+$Root+'" --manifest-hash '+$ManifestHash+' --candidate-hash '+$CandidateHash
+    }
     $definition=$Scheduler.NewTask(0)
     $definition.RegistrationInfo.Description='One reviewed R6 '+$Phase+' acceptance; no daemon launch, triggers, retries or automatic cleanup.'
     $definition.Principal.UserId='SYSTEM';$definition.Principal.LogonType=5;$definition.Principal.RunLevel=1
@@ -141,6 +148,10 @@ function Invoke-R6PhaseMain {
     foreach($value in @($ManifestHash,$CandidateHash,$InstallerHash)){if($value -cnotmatch '^[a-f0-9]{64}$'){throw 'Exact reviewed hashes are required.'}}
     if($script:AuthRecoverySha256 -and ($Phase -cne 'auth' -or $script:AuthRecoverySha256 -cnotmatch '^[a-f0-9]{64}$')){
         throw 'The reviewed recovery helper is restricted to authentication.'}
+    if($script:NativeRetirementSha256 -and ($Phase -cne 'native' -or $script:NativeRetirementSha256 -cnotmatch '^[a-f0-9]{64}$' -or
+        $ManifestHash -cne 'bffcf617620320109a3ff1bcbdcc2e1d4918f9571721dc4642efeed4d0b7a2c4' -or
+        $CandidateHash -cne 'a8b9b2052402f30860188721f986686c5a2f6785e563045edf295adae250f288')){
+        throw 'Native retirement is restricted to the exact installed R6 native phase.'}
     if($Phase -notin @('auth','knowledge','agent','native','preview') -or $Attempt -cnotmatch '^[a-f0-9]{32}$'){throw 'A reviewed phase and fresh attempt are required.'}
     if($PSVersionTable.PSEdition -cne 'Desktop' -or -not [Environment]::Is64BitProcess -or $env:COMPUTERNAME -cne 'AETHERDESK'){throw 'Use 64-bit Windows PowerShell 5.1 on AETHERDESK.'}
     if($ApplyRequested){

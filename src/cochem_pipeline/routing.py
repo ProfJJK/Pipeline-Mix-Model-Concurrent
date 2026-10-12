@@ -179,7 +179,8 @@ def _normalize(raw: Mapping[str, Any] | None) -> dict:
         raise ValueError("Routing policy must be an object containing only documented policy fields")
     data = {**defaults, **raw}
     tiers = data["tiers"]
-    tier_sizes = TIER_SIZES if version == 3 else _TIER_SIZES
+    tier_sizes = ({tier: len(rows) for tier, rows in catalog['tiers'].items()}
+                  if version == 3 else _TIER_SIZES)
     if not isinstance(tiers, Mapping) or set(tiers) != set(tier_sizes):
         raise ValueError("Routing tiers must exactly match the captured policy version")
     normalized_tiers = {}
