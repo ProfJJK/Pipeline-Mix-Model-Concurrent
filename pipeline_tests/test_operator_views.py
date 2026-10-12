@@ -32,6 +32,20 @@ def test_document_and_preflight_views_report_their_actual_captured_contracts(end
             assert capture['captured_specification_sha256'] is None  # Test controller has no installed authority capture.
 
 
+def test_hot_catalog_view_reports_transactional_generation_and_preserves_old_capture(endpoint,tmp_path):
+    from pipeline_tests.test_catalog_slots import prepared,reserve
+    from cochem_pipeline import catalog_slots
+    store,baseline,authority=prepared(tmp_path)
+    endpoint.controller.store.close();endpoint.controller.store=store
+    with store._write() as conn:
+        token=reserve(conn,authority)
+        catalog_slots.finish(conn,token,cleanup_verified=True,accepted=True)
+        catalog_slots.publish(conn,authority)  # Temporary SQLite fixture, never native acceptance.
+    result=operator_snapshot(endpoint.controller)
+    assert result['current_specification']['routing_policy_sha256']==authority.change.policy.digest
+    assert endpoint.controller.store.routing_policy['catalog']['generation']==baseline.as_dict()['catalog']['generation']
+
+
 def test_operator_routes_require_authentication_and_preserve_database_authority(endpoint):
     submitted(endpoint)
     for path in ('/operator', '/operator/workflow/service-workflow'):

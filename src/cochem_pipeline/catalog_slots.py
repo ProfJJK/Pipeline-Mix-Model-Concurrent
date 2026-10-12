@@ -53,9 +53,36 @@ def occupancy(conn, worker_slot=None):
         WHERE cleanup_at IS NULL AND worker_slot=?''',(worker_slot,)).fetchone()[0]
 
 
+def route_occupancy(conn, *, providers=None, target=None):
+    if not occupancy(conn):return 0
+    rows=conn.execute('SELECT target_json FROM pipeline_catalog_probes WHERE cleanup_at IS NULL')
+    return sum((target is None or tuple(json.loads(row[0]))==tuple(target))
+        and (providers is None or json.loads(row[0])[0] in providers) for row in rows)
+
+
+def admitted(conn, authority, target):
+    """Read existing holds and shared model/provider/pool limits in the write transaction."""
+    policy=authority.change.policy.as_dict();provider,model,effort=target
+    key=':'.join(target);limits=policy['provider_limits'];pool=limits[provider]['quota_pool']
+    for scope,value in (('model',key),('provider',provider),('pool',pool)):
+        if conn.execute('SELECT 1 FROM pipeline_route_holds WHERE scope=? AND resource_key=? AND until_at>?',
+                (scope,value,time.time())).fetchone():return False
+    groups=[p for p,spec in limits.items() if spec['quota_pool']==pool]
+    for column,values,limit,extra in (
+        ('model_key',[key],policy['model_limits'].get(key),route_occupancy(conn,target=target)),
+        ('provider',[provider],limits[provider]['max_concurrency'],route_occupancy(conn,providers=[provider])),
+        ('provider',groups,policy['quota_pool_limits'][pool],route_occupancy(conn,providers=groups)),
+        ('provider',['claude'],20 if provider=='claude' else None,route_occupancy(conn,providers=['claude']))):
+        if limit is None:continue
+        marks=','.join('?' for _ in values)
+        count=conn.execute(f'SELECT count(*) FROM pipeline_route_reservations WHERE released_at IS NULL AND {column} IN ({marks})',values).fetchone()[0]
+        if count+extra>=limit:return False
+    return True
+
+
 def reserve(conn, authority, target, *, worker_slot, containment_id, boot_id,
             lease_seconds=1800, max_workers=4):
-    """Account for capacity only; target/provider admission is still required.
+    """Account for shared capacity and current model/provider/pool admission.
 
     This is intentionally not a dispatch API. A returned reservation never proves
     credentials, selector support, native containment or permission to execute.
@@ -74,6 +101,7 @@ def reserve(conn, authority, target, *, worker_slot, containment_id, boot_id,
         raise ValueError('Target is outside protected change plan')
     if journal.active_policy(conn).digest!=authority.change.previous_policy_digest:
         raise ValueError('Catalog plan is stale')
+    if not admitted(conn,authority,target):return None
     encoded=_json(list(target))
     if conn.execute('SELECT 1 FROM pipeline_catalog_probes WHERE request_id=? AND target_json=?',
                     (authority.request_id,encoded)).fetchone() is not None:

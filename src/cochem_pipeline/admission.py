@@ -36,7 +36,30 @@ class JointAdmission:
         self.update_capacity(capacity)
 
     def _native_active(self):
-        return sum(job['kind']!='CODE_TEST' for job in self.store.active_jobs())
+        from .catalog_slots import occupancy
+        with self.store._connection() as conn:probes=occupancy(conn)
+        return sum(job['kind']!='CODE_TEST' for job in self.store.active_jobs())+probes
+
+    def reserve_catalog(self, authority, target, *, worker_slot, containment_id, boot_id):
+        """Reserve one native seat after warm Docker capacity has drained."""
+        from .catalog_slots import reserve
+        if not self.lock.acquire(blocking=False):return None
+        try:
+            with self._budget_lock:
+                capacity=self._capacity
+                residual=self._publish_locked()
+                if capacity<=0:return None
+                if self.docker is not None:
+                    census=self.docker.census()
+                    if census['quarantined']:return None
+                    if census['owned']>max(0,residual-1):
+                        self._request_drain(max(0,residual-1));return None
+                with self.store._write() as conn:
+                    result=reserve(conn,authority,target,worker_slot=worker_slot,
+                        containment_id=containment_id,boot_id=boot_id,max_workers=min(4,capacity),lease_seconds=180)
+                self._publish_locked()
+                return result
+        finally:self.lock.release()
 
     def request_maintenance(self):
         """Do not lose a concurrent handoff/completion/pressure notification."""

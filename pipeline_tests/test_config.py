@@ -57,6 +57,12 @@ def test_load_six_slot_configuration_with_bom_and_default_budgets(tmp_path):
     assert not config.private_root.exists(), "Loading configuration must not provision privileged paths"
 
 
+@pytest.mark.parametrize('enabled,version,slots',[(1,3,4),(True,2,4),(True,3,6)])
+def test_catalog_opt_in_requires_explicit_boolean_v3_and_four_shared_slots(tmp_path,enabled,version,slots):
+    raw=config_document(tmp_path);raw.update(catalog_activation=enabled,max_execution_slots=slots,routing={'policy_version':version})
+    with pytest.raises(ValueError,match='Catalog activation'):load_config(write_config(tmp_path,raw))
+
+
 def test_deployment_requires_explicit_migration_of_legacy_routing_configuration(tmp_path):
     raw = config_document(tmp_path)
     raw['routing'] = {'policy_version': 1}

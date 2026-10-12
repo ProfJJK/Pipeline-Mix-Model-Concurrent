@@ -116,3 +116,59 @@ def test_reservation_history_and_completed_result_cannot_be_rewritten(tmp_path):
                       'DELETE FROM pipeline_catalog_probes'):
         with pytest.raises(sqlite3.IntegrityError),store._write() as conn:conn.execute(statement)
     store.close()
+
+
+def limited_store(tmp_path,scope):
+    from cochem_pipeline.routing import load_routing_policy
+    from cochem_pipeline.catalog_journal import initialize
+    raw=load_routing_policy({'policy_version':3}).as_dict()
+    # Match the fixture planner's tier-3 floor to the tier-1 control, so the
+    # exact model/effort cap is exercised rather than provider-only sharing.
+    raw['tiers']['3'][0]=dict(raw['tiers']['1'][0]);raw['catalog']['tiers']['3'][0]=dict(raw['tiers']['1'][0])
+    keys={':'.join(row[k] for k in ('provider','model','reasoning_effort')) for rows in raw['tiers'].values() for row in rows}
+    raw['model_limits']={key:value for key,value in raw['model_limits'].items() if key in keys}
+    target=tuple(raw['tiers']['1'][0][k] for k in ('provider','model','reasoning_effort'))
+    provider=target[0];pool=raw['provider_limits'][provider]['quota_pool']
+    if scope=='provider':raw['provider_limits'][provider]['max_concurrency']=1
+    elif scope=='pool':raw['quota_pool_limits'][pool]=1
+    else:raw['model_limits'][':'.join(target)]=1
+    baseline=load_routing_policy(raw);path=tmp_path/'limited.db'
+    store=JobStore(path,routing_policy=baseline);store.submit('Existing note',['Work'],1);store.close()
+    with sqlite3.connect(path,isolation_level=None) as conn:
+        conn.execute('PRAGMA foreign_keys=ON');conn.execute('PRAGMA synchronous=FULL');conn.execute('BEGIN IMMEDIATE')
+        initialize(conn,baseline);slots.initialize(conn);conn.commit()
+    return JobStore(path,routing_policy=baseline,catalog_enabled=True),change(baseline,2)[0]
+
+
+@pytest.mark.parametrize('scope',['model','provider','pool'])
+def test_probe_limits_block_normal_route_in_same_budget(tmp_path,scope):
+    store,authority=limited_store(tmp_path,scope)
+    with store._write() as conn:assert reserve(conn,authority)
+    job=store.claim('owner',worker_slot='slot1',max_workers=4)
+    assert job is not None
+    assert tuple(job['route'][k] for k in ('provider','model','reasoning_effort'))!=authority.change.control_target
+    store.close()
+
+
+@pytest.mark.parametrize('scope',['model','provider','pool'])
+def test_normal_route_limits_block_probe_in_same_budget(tmp_path,scope):
+    store,authority=limited_store(tmp_path,scope)
+    job=store.claim('owner',worker_slot='slot1',max_workers=4)
+    assert tuple(job['route'][k] for k in ('provider','model','reasoning_effort'))==authority.change.control_target
+    with store._write() as conn:assert reserve(conn,authority) is None
+    store.close()
+
+
+@pytest.mark.parametrize('scope',['model','provider','pool'])
+def test_existing_hold_prevents_probe_without_mutating_ledger(tmp_path,scope):
+    import time
+    store,baseline,authority=prepared(tmp_path)
+    target=authority.change.control_target
+    resource={ 'model':':'.join(target),'provider':target[0],
+        'pool':baseline.as_dict()['provider_limits'][target[0]]['quota_pool']}[scope]
+    with store._write() as conn:
+        conn.execute('INSERT INTO pipeline_route_holds(scope,resource_key,until_at,reason,updated_at) VALUES(?,?,?,?,?)',
+            (scope,resource,time.time()+3600,'fixture hold',time.time()))
+        assert reserve(conn,authority) is None
+        assert slots.occupancy(conn)==0
+    store.close()

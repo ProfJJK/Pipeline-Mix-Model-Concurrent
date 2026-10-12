@@ -599,6 +599,7 @@ def operator_snapshot(runtime, workflow_id=None, *, job_id=None, after_event_id=
     hardware = health.get('admission') or health.get('hardware', {})
     with runtime.store._connection() as conn:
         conn.execute('BEGIN')
+        current_policy=runtime.store._current_routing_policy(conn)
         if job_id is not None:
             workflow_id = runtime.store._get(conn, job_id)['workflow_id']
         if workflow_id is not None:
@@ -616,7 +617,7 @@ def operator_snapshot(runtime, workflow_id=None, *, job_id=None, after_event_id=
             job_id LIMIT 200''', params).fetchall()
         jobs = [runtime.store._get(conn, row['job_id']) for row in identifiers]
         from .routing_store import preview_next_route
-        route_previews = {job['job_id']: preview_next_route(conn, job, runtime.store.routing_policy, now=now)
+        route_previews = {job['job_id']: preview_next_route(conn, job, current_policy, now=now)
                           for job in jobs if job['kind'] not in {'MACRO_PLANNING_REQUEST', 'CODE_REQUEST'}}
         event_where = where + (' AND ' if where else ' WHERE ') + 'id>?' if after_event_id is not None else where
         event_params = (*params, after_event_id) if after_event_id is not None else params
@@ -670,7 +671,7 @@ def operator_snapshot(runtime, workflow_id=None, *, job_id=None, after_event_id=
     from .document_governance import execution_contract as document_contract
     current_contracts = {'coding': current_contract,
                          **{kind: digest(document_contract(kind)) for kind in ('document_plan', 'provider_preflight')}}
-    current_routing = digest(runtime.store.routing_policy) if runtime.store.routing_policy is not None else None
+    current_routing = digest(current_policy) if current_policy is not None else None
     for row in governing:
         for key, captured, current in (
                 ('matches_current_specification', row['captured_specification_sha256'], dashboard['specification_sha256']),
@@ -693,7 +694,7 @@ def operator_snapshot(runtime, workflow_id=None, *, job_id=None, after_event_id=
             ('status', 'planning_hold', 'leaf_index', 'cycle', 'integration_reconciliation_required')}}
             for identifier, state in coding.items()],
         'prerequisites': [{'job_id': job['job_id'], **(synthesis_blocks.get(job['job_id']) or _blocked(job, jobs, hardware))} for job in jobs],
-        'queue': [_queue(job, health.get('routing', {}).get('holds', []), now, runtime.store.routing_policy) for job in jobs
+        'queue': [_queue(job, health.get('routing', {}).get('holds', []), now, current_policy) for job in jobs
                   if job['kind'] not in {'MACRO_PLANNING_REQUEST', 'CODE_REQUEST'}],
         'resources': resource_plot(samples), 'deployment': deployment_view(runtime, jobs, health),
         'acceptance': dashboard}

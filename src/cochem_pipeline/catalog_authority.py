@@ -28,7 +28,7 @@ class CatalogAuthority:
 
 
 @contextmanager
-def _read_locked(root, current, backend):
+def _read_locked(root, current, backend, resolver=None):
     """Injection boundary for ordinary-path fixtures, never a controller endpoint."""
     root = Path(root)
     if not root.is_absolute():
@@ -65,6 +65,9 @@ def _read_locked(root, current, backend):
             raise ValueError('Invalid protected catalog pointer')
         # A digest-derived leaf eliminates supplied absolute/traversal paths.
         proposal = read_file(root/(pointer['proposal_sha256']+'.json'), 1024*1024)
+        if resolver is not None:
+            previous=_strict_json(proposal.decode('utf-8')).get('previous_policy_digest')
+            current=resolver(previous)
         change = decode_proposal(proposal, current, expected_sha256=pointer['proposal_sha256'])
         yield CatalogAuthority(pointer['request_id'], hashlib.sha256(data).hexdigest(),
             pointer['proposal_sha256'], change)
@@ -106,8 +109,8 @@ class _WindowsCustody:
 
 
 @contextmanager
-def protected_catalog_request(current):
+def protected_catalog_request(current, resolver=None):
     from . import windows as win
     win.require_system()
-    with _read_locked(AUTHORITY_ROOT, current, _WindowsCustody(win)) as authority:
+    with _read_locked(AUTHORITY_ROOT, current, _WindowsCustody(win), resolver) as authority:
         yield authority

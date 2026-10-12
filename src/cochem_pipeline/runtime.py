@@ -114,7 +114,8 @@ class Runtime:
         if self.containment_id is not None and not re.fullmatch(r'[0-9a-f]{32}',self.containment_id):
             raise RuntimeError('Invalid privileged launcher containment identity')
         self.store = JobStore(config.job_db,max_attempts=config.max_attempts,routing_policy=config.routing,
-                              cleanup_boot_id=self.boot_id,governing_requirements=self.canonical_authority)
+                              cleanup_boot_id=self.boot_id,governing_requirements=self.canonical_authority,
+                              catalog_enabled=getattr(config,'catalog_activation',False))
         self.store.recover_execution_quarantines_after_boot(self.boot_id)
         previous_cleanup = self.store.quarantine_unclosed_executions('Warden restarted before native cleanup was confirmed')
         execution_policy = effective_execution_policy(getattr(config,'hardware',None),
@@ -184,6 +185,15 @@ class Runtime:
         self.last_capacity = 0
         self.heartbeat = Heartbeat(config.private_root,__version__)
         self.pool = ThreadPoolExecutor(max_workers=min(getattr(config,'max_execution_slots',4),len(config.workers)),thread_name_prefix='pipeline')
+        self.catalog=None
+        if getattr(config,'catalog_activation',False):
+            from .catalog_runtime import CatalogController
+            self.catalog=CatalogController(self)
+            from .catalog_slots import occupancy
+            with self.store._connection() as conn:
+                # No restart guesses about probe tree closure or worker profiles.
+                for slot in config.slot_roots:
+                    if occupancy(conn,slot):self.quarantined[slot]='Catalog native cleanup remains unverified'
         for slot,root in config.slot_roots.items():
             # Windows Job Object kill-on-close terminates former workers after service death.
             # This step must happen before any new identity can execute.
@@ -484,6 +494,10 @@ class Runtime:
             self.admission.update_capacity(ceiling)
         self._container_maintenance(ceiling)
         self.last_capacity = ceiling
+        if getattr(self,'catalog',None) is not None:
+            with self.lock:
+                busy={value['slot'] for value in self.active.values()}
+                self.catalog.step([s for s in self.config.slot_roots if s not in busy and s not in self.quarantined],ceiling)
         if ceiling<=0:
             return
         with self.lock:
@@ -582,6 +596,7 @@ class Runtime:
         return {'version':__version__,'service_identity':'SYSTEM','hardware':self.guard.latest_snapshot() if hasattr(self.guard,'latest_snapshot') else self.guard.snapshot(),
                 'admission':self.store.transition_telemetry,'admission_capacity':self.last_capacity,
                 'active':active,'quarantined_slots':dict(self.quarantined),
+                'catalog_activation':dict(self.catalog.status) if getattr(self,'catalog',None) is not None else {'status':'DISABLED'},
                 'trip_errors':self.oracle.trip_errors,'pid':os.getpid(),
                 'instance_id':self.heartbeat.instance_id,'process_started_at':self.heartbeat.started_at,
                 'routing':self.store.routing_status(),'components':dict(self.components),'execution_bounds':self.execution_bounds(),
@@ -624,6 +639,7 @@ class Runtime:
             for job_id in ids:
                 self.runner.terminate(job_id)
             self.pool.shutdown(wait=True)
+            if getattr(self,'catalog',None) is not None:self.catalog.close()
             if getattr(self,'objectives',None) is not None:
                 try:
                     self.objectives.close()

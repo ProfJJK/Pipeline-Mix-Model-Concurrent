@@ -374,6 +374,7 @@ def _backoff(conn, job, state):
 
 def _candidate_unavailability(conn, job, state, target, current_policy, now):
     """Read-only candidate checks shared by prediction and atomic reservation."""
+    from .catalog_slots import route_occupancy
     policy = state['policy']
     key,provider,pool = target['key'],target['provider'],target['quota_pool']
     # The immutable old candidate list is never upgraded in place. Skip a
@@ -403,7 +404,7 @@ def _candidate_unavailability(conn, job, state, target, current_policy, now):
     # must affect the next attempt, without rewriting active reservations.
     admission = current_policy if current_policy is not None else policy
     if provider == 'claude' and conn.execute(
-            "SELECT count(*) FROM pipeline_route_reservations WHERE provider='claude' AND released_at IS NULL").fetchone()[0] >= 20:
+            "SELECT count(*) FROM pipeline_route_reservations WHERE provider='claude' AND released_at IS NULL").fetchone()[0] + route_occupancy(conn,providers=['claude']) >= 20:
         reason = 'claude_cli_concurrency'
     if reason is None:
         model_limit = admission['model_limits'].get(key)
@@ -416,13 +417,14 @@ def _candidate_unavailability(conn, job, state, target, current_policy, now):
             if limit is not None:
                 count = conn.execute(f'SELECT count(*) FROM pipeline_route_reservations WHERE {column}=? AND released_at IS NULL',
                                      (value,)).fetchone()[0]
+                count += route_occupancy(conn,target=(provider,target['model'],target.get('reasoning_effort'))) if column=='model_key' else route_occupancy(conn,providers=[provider])
                 counts.append((count, limit))
         pool_limit = admission['quota_pool_limits'][current_pool]
         if pool_limit is not None:
             placeholders = ','.join('?' for _ in pool_providers)
             count = conn.execute('SELECT count(*) FROM pipeline_route_reservations WHERE released_at IS NULL AND (quota_pool=? OR provider IN ('+placeholders+'))',
                                  [current_pool, *pool_providers]).fetchone()[0]
-            counts.append((count, pool_limit))
+            counts.append((count + route_occupancy(conn,providers=pool_providers), pool_limit))
         if held or any(count >= limit for count, limit in counts):
             reason = 'busy' if not held else 'quota_pool_hold'
     threshold = policy.get('backlog_threshold', 0)
