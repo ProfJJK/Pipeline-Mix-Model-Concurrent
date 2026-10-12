@@ -10,6 +10,7 @@ Destination: <repo>\\docs\\deployment\\windows-deployment-next\\ (flat files + r
 plus EXPORT-MANIFEST.json (relative path, bytes, sha256). Refuses (exit 2) if the scan finds a credential-like value,
 an e-mail address or a private key.
 """
+import argparse
 import hashlib
 import json
 import re
@@ -76,7 +77,19 @@ def selected():
 
 
 def main() -> int:
-    check = '--check' in sys.argv[1:]
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--check', action='store_true')
+    parser.add_argument('--repo', type=Path, default=REPO)
+    args = parser.parse_args()
+    check = args.check
+    repository = args.repo.resolve(strict=True)
+    if not (repository / '.git').exists() or not (repository / 'AGENTS.md').is_file():
+        parser.error('--repo must identify an existing pipeline Git checkout')
+    destination = repository / 'docs' / 'deployment' / 'windows-deployment-next'
+    # Refuse redirected ancestry before any recursive removal. The original
+    # checkout and a separate maintenance worktree must never be confused.
+    if destination.resolve() != destination or not destination.is_relative_to(repository):
+        parser.error('Deployment mirror destination must be inside the selected checkout without links')
     files = selected()
     problems, manifest = [], []
     for path in files:
@@ -100,14 +113,14 @@ def main() -> int:
     if check:
         print('scan clean (check mode; nothing copied)')
         return 0
-    if DEST.exists():
-        shutil.rmtree(DEST)
+    if destination.exists():
+        shutil.rmtree(destination)
     for path, item in zip(files, manifest):
-        target = DEST / item['path']
+        target = destination / item['path']
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(path.read_bytes())
-    (DEST / 'EXPORT-MANIFEST.json').write_text(json.dumps({'source': str(W), 'files': manifest}, indent=1) + '\n', encoding='utf-8')
-    print(f'exported to {DEST}')
+    (destination / 'EXPORT-MANIFEST.json').write_text(json.dumps({'source': str(W), 'files': manifest}, indent=1) + '\n', encoding='utf-8')
+    print(f'exported to {destination}')
     return 0
 
 

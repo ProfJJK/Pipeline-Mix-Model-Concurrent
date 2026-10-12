@@ -1215,6 +1215,43 @@ def test_run_log_scan_flags_only_the_true_fallback_phrases(tmp_path):
     assert m.isolation_gate('EVIDENCE_COMPLETE', {'passed': True, 'reasons': []}, [r1])['passed'] is True
 
 
+def test_appended_log_is_scanned_without_attributing_old_fallback_to_current_run(tmp_path):
+    profile = tmp_path / 'profile'
+    log = profile / LOG_DIR / 'cli-existing.log'
+    log.parent.mkdir(parents=True)
+    old = FALLBACK_LOG
+    log.write_bytes(old)
+    def snapshot(raw):
+        return {'trees': {'.gemini/antigravity-cli/log': {'entries': [
+            {'path': log.name, 'kind': 'file', 'size': len(raw), 'sha256': hashlib.sha256(raw).hexdigest()}]}}}
+    for appended, hit in ((BENIGN_LOG, False), (BENIGN_LOG + FALLBACK_LOG, True)):
+        log.write_bytes(old + appended)
+        changes = m.inventory_changes(snapshot(old), snapshot(old + appended))
+        result = m.scan_run_logs(profile, changes)
+        assert result['log_scanned'] is True
+        assert result['fallback_found'] is hit
+        assert result['files'][0]['offset'] == len(old)
+        assert result['files'][0]['bytes'] == len(appended)
+        assert result['files'][0]['sha256'] == hashlib.sha256(appended).hexdigest()
+    old, appended = b'Restoring ', b'model other\n'
+    log.write_bytes(old + appended)
+    result = m.scan_run_logs(profile, m.inventory_changes(snapshot(old), snapshot(old + appended)))
+    assert result['fallback_found'] is True, 'A marker spanning the append boundary is still detected'
+
+
+def test_changed_log_without_bounded_prefix_proof_cannot_claim_clean_scan(tmp_path):
+    profile = tmp_path / 'profile'
+    log = profile / LOG_DIR / 'cli-old.log'
+    log.parent.mkdir(parents=True)
+    log.write_bytes(BENIGN_LOG)
+    scan = m.scan_run_logs(profile, {'new_files': [], 'changed_files': [LOG_DIR + log.name]})
+    assert scan['incomplete'] and not scan['log_scanned']
+    run = run_row('R1', classify(stream()))
+    run['log_scan'] = scan
+    assert 'MODEL_LOG_SCAN_INCOMPLETE' in m.isolation_gate('EVIDENCE_COMPLETE', {'passed': True, 'reasons': []}, [run])['reasons']
+    assert not m.identity_verdict([run], m.run_matrix(), 'gemini-3.8-flash-low')['reroute_scan_clean']
+
+
 def test_profile_inventory_inspects_the_declared_user_configurations(tmp_path):
     """Present-but-clear user configurations keep the six-profile flags clear; a flagged one names its file and keys."""
     assert m.PROFILE_PATHS[-3:] == m.DECLARED_CONFIG_PATHS == ('.gemini/config/config.json', '.gemini/config/skills.json',

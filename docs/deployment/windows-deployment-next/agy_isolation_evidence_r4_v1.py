@@ -319,7 +319,7 @@ RUN_CHECK_REASONS = (('exited_zero', 'R1_EXIT_NOT_ZERO'), ('init_present', 'R1_I
 ECHO_EXEMPT_CHECKS = ('model_matches', 'step_models_match', 'result_model_absent_or_equal')
 REASONS = ('EVIDENCE_NOT_COMPLETE', 'PRECHECK_VERSION_MISMATCH', 'PRECHECK_NOT_SIGNED_IN', 'AGENTS_PRECHECK_FAILED',
            'AGENT_SHADOW_FOUND', 'R1_NOT_RUN', *[reason for _, reason in RUN_CHECK_REASONS], 'ISOLATION_BREACH_IN_MATRIX',
-           'JOB_PROCESSES_BEYOND_AGY_TREE', 'MODEL_FALLBACK_LOGGED', 'PROFILE_INVENTORY_NOT_CLEAR', 'PROGRAMDATA_ANTIGRAVITY_NOT_CLEAR')
+           'JOB_PROCESSES_BEYOND_AGY_TREE', 'MODEL_FALLBACK_LOGGED', 'MODEL_LOG_SCAN_INCOMPLETE', 'PROFILE_INVENTORY_NOT_CLEAR', 'PROGRAMDATA_ANTIGRAVITY_NOT_CLEAR')
 STAGE_REASONS = ('STAGING_NOT_COMPLETE', 'SLOT_NOT_PROCESSED', 'AGENT_NOT_STAGED_AT_BOTH_LOCATIONS', 'AGENT_SHADOW_FOUND',
                  'AGENTS_JSON_LISTING_FAILED', 'AGENTS_TEXT_LISTING_FAILED')
 
@@ -1080,6 +1080,8 @@ def isolation_gate(status, precheck, runs, verdict=None):
         reasons.append('JOB_PROCESSES_BEYOND_AGY_TREE')
     if any(log_fallback_found(run) for run in runs if 'checks' in run and run['checks'].get('accepted') is True):
         reasons.append('MODEL_FALLBACK_LOGGED')
+    if any(log_scan_incomplete(run) for run in runs if 'checks' in run and run['checks'].get('accepted') is True):
+        reasons.append('MODEL_LOG_SCAN_INCOMPLETE')
     if verdict is not None and not all(verdict.get(key) is True for key in INVENTORY_KEYS):
         reasons.append('PROFILE_INVENTORY_NOT_CLEAR')
     if verdict is not None:
@@ -1190,7 +1192,7 @@ def identity_verdict(runs, matrix=RUNS, effort_null_slug=DEFAULT_EFFORT_NULL_SLU
             'stderr_markers': sorted(marker for marker, hit in c['stderr_markers'].items() if hit),
             'reroute_keys': list(s['reroute_keys']),
             'log_scanned': isinstance(run.get('log_scan'), dict) and run['log_scan'].get('log_scanned') is True,
-            'log_fallback_found': log_fallback_found(run)}
+            'log_fallback_found': log_fallback_found(run), 'log_scan_incomplete': log_scan_incomplete(run)}
     empty = {'executed': False}
     r1, r2, r3, r4, r5 = (rows.get(name, empty) for name in ('R1', 'R2', 'R3', 'R4', 'R5'))
     accepted = [row for row in rows.values() if row.get('accepted') is True]
@@ -1211,7 +1213,7 @@ def identity_verdict(runs, matrix=RUNS, effort_null_slug=DEFAULT_EFFORT_NULL_SLU
             # Reroute scan over every accepted run (R4's expected AGY_ERROR line is not an accepted run): stderr markers,
             # stream reroute keys and (RG-2) a true fallback phrase in the run's own cli-*.log.
             'reroute_scan_clean': (r1.get('executed') is True and bool(accepted)
-                                   and all(row['stderr_markers'] == [] and row['reroute_keys'] == [] and row['log_fallback_found'] is False
+                                   and all(row['stderr_markers'] == [] and row['reroute_keys'] == [] and row['log_fallback_found'] is False and row['log_scan_incomplete'] is False
                                            for row in accepted)),
             'result_model_field_present_any': any(row.get('result_model_field_present') is True for row in rows.values())}
 
@@ -1281,6 +1283,8 @@ def hash_inventory_file(path):
 
 def file_row(relative, path, info):
     row = {'path': relative, 'kind': 'file', 'size': info.st_size, 'sha256': None}
+    if LOG_PATH_PATTERN.fullmatch(relative) and not token_like(relative):
+        row['mtime_ns'] = info.st_mtime_ns
     if token_like(relative):
         row['token_file'] = True
     elif info.st_nlink != 1:
@@ -1565,21 +1569,30 @@ def inventory_changes(before, after):
     new_files = [{'path': key, 'size': new[key]['size'], 'token_file': new[key].get('token_file', False)}
                  for key in sorted(set(new) - set(old))]
     changed = [key for key in sorted(set(new) & set(old))
-               if (new[key]['size'], new[key]['sha256']) != (old[key]['size'], old[key]['sha256'])]
+               if (new[key]['size'], new[key]['sha256'], new[key].get('mtime_ns')) !=
+                  (old[key]['size'], old[key]['sha256'], old[key].get('mtime_ns'))]
     removed = sorted(set(old) - set(new))
     directories = sorted(set(rows(after, 'dir')) - set(rows(before, 'dir')))
-    return {'new_files': new_files[:MAX_TREE_ENTRIES], 'changed_files': changed[:MAX_TREE_ENTRIES],
+    prior = {key: {'size': old[key]['size'], 'sha256': old[key]['sha256']}
+             for key in changed[:MAX_TREE_ENTRIES] if LOG_PATH_PATTERN.fullmatch(key) and not token_like(key)}
+    return {'new_files': new_files[:MAX_TREE_ENTRIES], 'changed_files': changed[:MAX_TREE_ENTRIES], 'prior_logs': prior,
             'removed_files': removed[:MAX_TREE_ENTRIES], 'new_directories': directories[:MAX_TREE_ENTRIES]}
 
 
 def scan_run_logs(profile, changes):
-    """RG-2: the cli-*.log files this run created in the worker profile, each read once up to LOG_SCAN_MAXIMUM bytes (never
-    copied or published); records names, sizes, digests and phrase COUNTS only. No log found: log_scanned false, no hold."""
+    """Scan new logs and additions to existing logs; never publish log contents.
+
+    A prior bounded hash proves the unchanged prefix before it is excluded.
+    Rewritten files are scanned from zero. An unprovable/over-limit range is
+    recorded as incomplete, never promoted to a clean identity observation.
+    """
     result = {'log_scanned': False, 'files': [], 'files_skipped': [], 'files_unscanned': 0, 'maximum_bytes_per_file': LOG_SCAN_MAXIMUM,
               'fallback_phrases': dict.fromkeys(LOG_FALLBACK_PHRASES, 0), 'benign_phrases': dict.fromkeys(LOG_BENIGN_PHRASES, 0),
               'fallback_found': False}
-    names = sorted(item['path'] for item in (changes or {}).get('new_files') or []
-                   if isinstance(item.get('path'), str) and LOG_PATH_PATTERN.fullmatch(item['path']) and not token_like(item['path']))
+    changes = changes or {}
+    changed = {name for name in changes.get('changed_files', []) if isinstance(name, str)}
+    names = sorted({item['path'] for item in changes.get('new_files') or [] if isinstance(item.get('path'), str)} | changed)
+    names = [name for name in names if LOG_PATH_PATTERN.fullmatch(name) and not token_like(name)]
     result['files_unscanned'] = max(0, len(names) - LOG_SCAN_FILES)
     for relative in names[:LOG_SCAN_FILES]:
         path = profile.joinpath(*relative.split('/'))
@@ -1588,28 +1601,59 @@ def scan_run_logs(profile, changes):
             if is_reparse(info) or not stat.S_ISREG(info.st_mode):
                 result['files_skipped'].append(relative)
                 continue
+            offset = 0
+            prefix_context = b''
             with open_for_hash(path) as stream:
+                before = os.fstat(stream.fileno())
+                prior = changes.get('prior_logs', {}).get(relative)
+                if relative in changed:
+                    if (not isinstance(prior, dict) or type(prior.get('size')) is not int
+                            or not 0 <= prior['size'] <= LOG_SCAN_MAXIMUM
+                            or not isinstance(prior.get('sha256'), str)):
+                        result['files_skipped'].append(relative)
+                        continue
+                    prefix = stream.read(prior['size'])
+                    if hashlib.sha256(prefix).hexdigest() == prior['sha256']:
+                        offset = len(prefix)
+                        prefix_context = prefix[-256:]
+                    else:
+                        stream.seek(0)
                 data = stream.read(LOG_SCAN_MAXIMUM + 1)
+                after = os.fstat(stream.fileno())
+                if (before.st_size, before.st_mtime_ns) != (after.st_size, after.st_mtime_ns):
+                    result['files_skipped'].append(relative)
+                    continue
         except OSError:
             result['files_skipped'].append(relative)
             continue
         truncated = len(data) > LOG_SCAN_MAXIMUM
         data = data[:LOG_SCAN_MAXIMUM]
-        text = strip_ansi(data.decode('utf-8', 'replace'))
+        previous_text = strip_ansi(prefix_context.decode('utf-8', 'replace'))
+        text = strip_ansi((prefix_context + data).decode('utf-8', 'replace'))
         for phrase in LOG_FALLBACK_PHRASES:
-            result['fallback_phrases'][phrase] += text.count(phrase)
+            result['fallback_phrases'][phrase] += text.count(phrase) - previous_text.count(phrase)
         for phrase in LOG_BENIGN_PHRASES:
-            result['benign_phrases'][phrase] += text.count(phrase)
-        result['files'].append({'path': relative, 'bytes': len(data), 'sha256': hashlib.sha256(data).hexdigest(), 'truncated': truncated})
+            result['benign_phrases'][phrase] += text.count(phrase) - previous_text.count(phrase)
+        row = {'path': relative, 'bytes': len(data), 'sha256': hashlib.sha256(data).hexdigest(), 'truncated': truncated}
+        if relative in changed:
+            row['offset'] = offset
+        result['files'].append(row)
         del data, text
     result['log_scanned'] = bool(result['files'])
     result['fallback_found'] = any(result['fallback_phrases'].values())
+    result['incomplete'] = bool(result['files_skipped'] or result['files_unscanned']
+                                or any(row['truncated'] for row in result['files']))
     return result
 
 
 def log_fallback_found(run):
     scan = run.get('log_scan') if isinstance(run, dict) else None
     return isinstance(scan, dict) and scan.get('fallback_found') is True
+
+
+def log_scan_incomplete(run):
+    scan = run.get('log_scan') if isinstance(run, dict) else None
+    return isinstance(scan, dict) and scan.get('incomplete') is True
 
 
 # ----- the protected custom agent -----

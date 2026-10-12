@@ -91,7 +91,7 @@ function Set-IsolationConstants {
     $script:nativeRoot=Join-Path $script:base 'Native4.2.7-windows-20261006';$script:nativeExecutable=Join-Path $script:nativeRoot 'agy.exe'
     $script:agyPin='38f30c7dd1ed808f5cf98fe2014de3d30903035a4f0df02d3eb72a9ff8993741';$script:agyVersion='1.3.1'
     $script:helperName='agy_isolation_evidence_r4_v1.py';$script:helperSource=Join-Path $Workspace $script:helperName
-    $script:helperPin='767f03af910fb137bd9a08ed82390f08878d802c45cfb9689eadb5ca44af8d60'
+    $script:helperPin='e6e2af9a69a6b14a57b215d47dbd4d3040610b5f812f6ea3bd36d9ffbf1705d1'
     $script:agentFileName='cochem-inference-only.agent.md';$script:agentSource=Join-Path $Workspace $script:agentFileName
     $script:agentPin='5c0082d70d073263a56d748a46187008968c070d0efc7d5b7612c2fd61d11810';$script:agentBytes=478;$script:agentName='cochem-inference-only'
     $script:agentRelatives=@('.gemini/agents/cochem-inference-only/agent.md','.gemini/config/agents/cochem-inference-only/agent.md')
@@ -406,7 +406,7 @@ function Assert-JobAccounting {
 
 function Assert-LogScan {
     param($Record,[string]$Label)
-    # Mirrors scan_run_logs (RG-2): only the cli-*.log files this run created; names, sizes, digests and phrase counts only.
+    # Mirrors scan_run_logs (RG-2): new and changed cli-*.log files; no log contents.
     if(-not (Test-HasProperty $Record 'log_scan') -or $null -eq $Record.log_scan){throw ($Label+' carries no log scan.')}
     $l=$Record.log_scan
     foreach($key in @('log_scanned','files','files_skipped','files_unscanned','maximum_bytes_per_file','fallback_phrases','benign_phrases','fallback_found')){
@@ -419,14 +419,17 @@ function Assert-LogScan {
         if($f.path -cnotmatch $script:logPathPattern -or $f.sha256 -cnotmatch '^[a-f0-9]{64}$' -or (($f.bytes -isnot [int]) -and ($f.bytes -isnot [long])) -or
            $f.bytes -lt 0 -or $f.bytes -gt $script:logScanMaximum -or $f.truncated -isnot [bool]){throw ($Label+' log scan file record is invalid.')}}
     foreach($p in $skipped){if($p -isnot [string] -or $p -cnotmatch $script:logPathPattern){throw ($Label+' log scan file record is invalid.')}}
+    $incomplete=($skipped.Count -gt 0 -or $l.files_unscanned -gt 0 -or @($files|Where-Object {$_.truncated}).Count -gt 0)
+    if(-not (Test-HasProperty $l 'incomplete') -or -not (Test-ExactBool $l.incomplete $incomplete)){throw ($Label+' log scan completeness differs from its retained ranges.')}
     $changes=$(if(Test-HasProperty $Record 'profile_changes'){$Record.profile_changes}else{$null})
     if($null -ne $changes -and -not (Test-HasProperty $changes 'omitted_for_receipt_bound')){
         $created=@(@($changes.new_files)|Where-Object {$null -ne $_ -and $_.path -cmatch $script:logPathPattern -and $_.path -cnotmatch '(?i)token'}|ForEach-Object {$_.path})
+        $created=@(@($created)+@($changes.changed_files|Where-Object {$_ -is [string] -and $_ -cmatch $script:logPathPattern -and $_ -cnotmatch '(?i)token'})|Sort-Object -Unique -CaseSensitive)
         $covered=@(@($files|ForEach-Object {$_.path})+$skipped)
         $exact=$(if($created.Count -le $script:logScanFiles){Test-SameStrings @($covered|Sort-Object -CaseSensitive) @($created|Sort-Object -CaseSensitive)}
                  else{($covered.Count -eq $script:logScanFiles) -and @($covered|Where-Object {$_ -cnotin $created}).Count -eq 0})
         if(-not $exact -or -not (Test-ExactInt $l.files_unscanned ([long][Math]::Max(0,$created.Count-$script:logScanFiles)))){
-            throw ($Label+' log scan does not cover exactly the log files this run created.')}}
+            throw ($Label+' log scan does not cover exactly the log files this run created or changed.')}}
     $sums=@{}
     foreach($pair in @(@('fallback_phrases',$script:logFallbackPhrases),@('benign_phrases',$script:logBenignPhrases))){
         $counts=$l.($pair[0]);$sum=0
@@ -782,6 +785,9 @@ function Get-IsolationGate {
     foreach($run in @($Runs)){
         if($RunChecks.Contains($run.id) -and $RunChecks[$run.id].accepted -and (Test-HasProperty $run 'log_scan') -and $null -ne $run.log_scan -and $run.log_scan.fallback_found -eq $true){
             $reasons.Add('MODEL_FALLBACK_LOGGED');break}}
+    foreach($run in @($Runs)){
+        if($RunChecks.Contains($run.id) -and $RunChecks[$run.id].accepted -and (Test-HasProperty $run 'log_scan') -and $null -ne $run.log_scan -and
+           (Test-HasProperty $run.log_scan 'incomplete') -and $run.log_scan.incomplete -eq $true){$reasons.Add('MODEL_LOG_SCAN_INCOMPLETE');break}}
     if($null -ne $Verdict){foreach($key in @('hooks_absent','mcp_absent','plugins_absent','skills_absent')){if(-not (Test-ExactBool $Verdict[$key] $true)){$reasons.Add('PROFILE_INVENTORY_NOT_CLEAR');break}}}
     if($null -ne $Verdict){foreach($item in @($FlaggedConfigs)){if($null -ne $item){$reasons.Add('PROFILE_CONFIG_FLAGGED:'+$item)}}}
     if($null -ne $Verdict -and -not (Test-ExactBool $Verdict['programdata_antigravity_clear'] $true)){$reasons.Add('PROGRAMDATA_ANTIGRAVITY_NOT_CLEAR')}
@@ -800,7 +806,8 @@ function Get-IdentityExpectation {
         $acceptedCount++
         $markers=@($script:stderrMarkers|Where-Object {$run.classification.stderr_markers.$_ -eq $true})
         if($markers.Count -or @($run.classification.stream.reroute_keys).Count){$clean=$false}
-        if((Test-HasProperty $run 'log_scan') -and $null -ne $run.log_scan -and $run.log_scan.fallback_found -eq $true){$clean=$false}}
+        if((Test-HasProperty $run 'log_scan') -and $null -ne $run.log_scan){
+            if($run.log_scan.fallback_found -eq $true -or ((Test-HasProperty $run.log_scan 'incomplete') -and $run.log_scan.incomplete -eq $true)){$clean=$false}}}
     [ordered]@{slug_form_accepted=($null -ne $r1 -and $r1.accepted -and $r1.model_matches);slug_form_passes_contract=($null -ne $r1 -and $r1.passes_contract);
         slug_with_effort_accepted=($null -ne $r2 -and $r2.accepted);slug_with_effort_passes_contract=($null -ne $r2 -and $r2.passes_contract);
         family_with_effort_accepted=($null -ne $r3 -and $r3.accepted);family_with_effort_passes_with_echo=($null -ne $r3 -and $r3.passes_with_echo);

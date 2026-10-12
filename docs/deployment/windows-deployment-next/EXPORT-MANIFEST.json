@@ -254,7 +254,7 @@
   {
    "path": "RUN_427_R5_SITTING.ps1",
    "bytes": 148361,
-   "sha256": "e1e52223049f39056043159050ff5fa642eb6fa5f24585ae25b447d04eb9b1ce"
+   "sha256": "9c5cf6dbe6d52e96b19bfe10fb9ec261ed7ae4722a7af3709f150a48774c701a"
   },
   {
    "path": "WINDOWS_AGENT_HANDOFF_4.2.7_2026-10-09.md",
@@ -293,8 +293,8 @@
   },
   {
    "path": "agy-isolation-evidence-r4-v1.ps1",
-   "bytes": 126683,
-   "sha256": "bd87ad3128e6d63e141c23aff15d7fe6b761c88aa6477bf48fe5232df800e326"
+   "bytes": 127578,
+   "sha256": "0ad6468a25457a62cb4a7d96335ae8148b2b7059f2d3a91e65ab2e1084c597ea"
   },
   {
    "path": "agy-session-history-r4-v1.ps1",
@@ -308,8 +308,8 @@
   },
   {
    "path": "agy_isolation_evidence_r4_v1.py",
-   "bytes": 149017,
-   "sha256": "767f03af910fb137bd9a08ed82390f08878d802c45cfb9689eadb5ca44af8d60"
+   "bytes": 151554,
+   "sha256": "e6e2af9a69a6b14a57b215d47dbd4d3040610b5f812f6ea3bd36d9ffbf1705d1"
   },
   {
    "path": "agy_status_capture_r4_v1.py",
@@ -433,8 +433,8 @@
   },
   {
    "path": "build-pipeline-config-r5-candidate.py",
-   "bytes": 71382,
-   "sha256": "ab01d82486ec54ee8eefa17542d6b58d9811cb94a96a5ceef1f439f0599a19e8"
+   "bytes": 73023,
+   "sha256": "86c4d12d541d8dff2c5202ede6a854b00451de5da9fad4c241f4f1fb90b2d297"
   },
   {
    "path": "build_foundation_v2_wrapper.py",
@@ -728,8 +728,8 @@
   },
   {
    "path": "export-deployment-mirror.py",
-   "bytes": 5436,
-   "sha256": "521f89da1a4695d99c252afd43bf020726c5e69016848f2db0c33cb03eb7f40d"
+   "bytes": 6318,
+   "sha256": "65a62c0b9d37e26242ba9995e6be9dafb6e5419597a41788da5ef40685d4c750"
   },
   {
    "path": "finalize-continuation-publication-manifest-20261009.py",
@@ -1829,7 +1829,7 @@
   {
    "path": "stage-pipeline-config-r5-v1.ps1",
    "bytes": 52986,
-   "sha256": "1066f6c3d9fb5be6143075ddf72206af56f64a8240b7e49fc8f0625d32e3c993"
+   "sha256": "b3a2789326e784ef4ba24abc5f864b3cee39781d8d7430403a1926fbb562d17c"
   },
   {
    "path": "stop-warden-r4.ps1",
@@ -1913,8 +1913,8 @@
   },
   {
    "path": "test_agy_isolation_evidence_r4_v1.py",
-   "bytes": 196783,
-   "sha256": "13a4b5ffcef5310c6c4aab10dbfbb3cb6888dbc00f7010bea9dd691144982fcc"
+   "bytes": 198776,
+   "sha256": "47e806fe8ccd450d3da422ae334bf594eda738ab908321ec4c3c58b9ac7120ed"
   },
   {
    "path": "test_agy_login_bridge_r4_v1.py",
@@ -1963,8 +1963,8 @@
   },
   {
    "path": "test_build_pipeline_config_r5_candidate.py",
-   "bytes": 89969,
-   "sha256": "868a2a8a0026f1c041917064687dc8f292b409e6173b97c8e8b0973bd068b6b9"
+   "bytes": 90837,
+   "sha256": "ce6550128a5270c11e1e0ecf1b1499e21950b6258dd87a4b1265622d5770b11b"
   },
   {
    "path": "test_check_worker_native_auth_status_six_r4_v1.py",

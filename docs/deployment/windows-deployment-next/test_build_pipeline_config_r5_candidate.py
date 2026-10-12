@@ -725,6 +725,21 @@ def replay_identity_mismatch(root, report):
     report['replay_streams']['R5']['stdout'].update(bytes=len(data), sha256=sha(data))
 
 
+def replay_agent_mismatch(root, report):
+    # Re-pin the raw replay, leaving all summary/check booleans claiming success.
+    path = root / 'replay' / 'R1.stdout'
+    data = path.read_bytes().replace(b'"agent":"cochem-inference-only"', b'"agent":"default"')
+    path.write_bytes(data)
+    report['replay_streams']['R1']['stdout'].update(bytes=len(data), sha256=sha(data))
+
+
+def replay_false_reroute_member(root, report):
+    path = root / 'replay' / 'R1.stdout'
+    data = path.read_bytes().replace(b'"init":{', b'"init":{"fallback_model":null,')
+    path.write_bytes(data)
+    report['replay_streams']['R1']['stdout'].update(bytes=len(data), sha256=sha(data))
+
+
 def slot4_listing_empty(slot, entry, listing):
     if slot == 'slot4':
         listing['PC3'] = AGENTS_NONE
@@ -744,6 +759,8 @@ ALONE = {
     'G4-slot4-listing-empty': ('G4', {'stage': {'slot_patch': slot4_listing_empty}}),
     'G5-replay-stderr-marker': ('G5', {'isolation': {'replay_patch': replay_stderr_marker}}),
     'G5-replay-identity-mismatch': ('G5', {'isolation': {'replay_patch': replay_identity_mismatch}}),
+    'G5-replay-agent-mismatch': ('G5', {'isolation': {'replay_patch': replay_agent_mismatch}}),
+    'G5-replay-false-reroute-member': ('G5', {'isolation': {'replay_patch': replay_false_reroute_member}}),
 }
 
 

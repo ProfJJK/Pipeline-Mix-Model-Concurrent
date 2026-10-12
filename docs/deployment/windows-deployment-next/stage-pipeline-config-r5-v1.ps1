@@ -169,7 +169,7 @@ function Set-StagerConstants {
         'candidate_length','commissioned_path','commissioned_sha256','evidence','builder')
     $script:candidateFileName='pipeline.json';$script:maxJsonBytes=1048576
     # The reviewed build-pipeline-config-r5-candidate.py; decision.json builder.script_sha256 must equal it (B-F2).
-    $script:builderPin='ab01d82486ec54ee8eefa17542d6b58d9811cb94a96a5ceef1f439f0599a19e8'
+    $script:builderPin='86c4d12d541d8dff2c5202ede6a854b00451de5da9fad4c241f4f1fb90b2d297'
     $script:receiptNamePattern='^staging-receipt-[0-9]{8}T[0-9]{6}Z-[0-9a-f]{32}\.json$'
     $script:copyHelper='C:\Users\ansac\source\repos\Pipeline-Mix-Model-Concurrent\scripts\stage_aetherdesk_427_payloads.ps1'
     $script:copyHelperPin='0300b82731c0fddb9fad3e2ddb6a20b8368cfa91faf7aceb821752c65b5f6e0b'

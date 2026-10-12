@@ -862,6 +862,30 @@ def changed_paths(old, new, prefix='providers.gemini'):
 
 # ----- G5: replay through the r5 worker; G6: r5 load_config and the structural diff -----
 
+def replay_agent_and_reroute_checks(text):
+    """Recompute acceptance-only predicates from replay, not receipt booleans.
+
+    The production parser below independently validates model identity, empty
+    tools, permitted steps, session consistency and the successful single turn.
+    A5 additionally requires this reviewed agent and no reroute member at all
+    (including a false/null member); neither can be inferred from its summary.
+    """
+    records = [strict_json(line.encode('utf-8'), 'replay event') for line in text.split('\n') if line.strip()]
+    init = dig(records[0], 'init') if records else None
+    stack = list(records)
+    no_reroute_members = True
+    while stack:
+        value = stack.pop()
+        if isinstance(value, dict):
+            for key, child in value.items():
+                if any(part in key.casefold() for part in ('reroute', 'fallback', 'deprecat', 'resolved', 'substitut', 'downgrad')):
+                    no_reroute_members = False
+                stack.append(child)
+        elif isinstance(value, list):
+            stack.extend(value)
+    return dig(init, 'agent') == AGENT_NAME, no_reroute_members
+
+
 def gate_replay(iso, evidence, selection, gemini, pipeline):
     receipt = iso.receipt
     runs = {run['id']: run for run in receipt.get('runs') or [] if isinstance(run, dict) and isinstance(run.get('id'), str)}
@@ -894,6 +918,12 @@ def gate_replay(iso, evidence, selection, gemini, pipeline):
         except ValueError as exc:
             c.expect(False, f'{label}: r5 parse_gemini rejected the {run_id} replay ({describe(exc)})')
             continue
+        agent_matches, no_reroute_members = replay_agent_and_reroute_checks(texts['stdout'])
+        c.expect(agent_matches, f'{label}: raw replay does not name the reviewed inference-only agent')
+        c.expect(no_reroute_members, f'{label}: raw replay contains a reroute member')
+        run = runs.get(run_id)
+        c.expect(dig(run, 'outcome') == 'exited' and type(dig(run, 'exit_code')) is int
+                 and dig(run, 'exit_code') == 0, f'{label}: native run did not exit zero')
         c.expect(parsed.get('reported_model') == model, f"{label}: reported_model {parsed.get('reported_model')!r} is not {model}")
         c.expect(parsed.get('native_reported_model') == native['reports'],
                  f"{label}: native_reported_model {parsed.get('native_reported_model')!r} is not {native['reports']}")
