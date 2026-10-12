@@ -1,5 +1,36 @@
 # R7 owner deployment package
 
+## Replacement after the owner's R6 prerequisite hold
+
+The owner ran the earlier package below. R6 authentication held because the
+status checker omitted the native `Error: ` sign-out prefix; R4 restore v3 was
+health verified and no R7 installation or cutover was attempted. See
+[the exact Windows evidence and repair](R6_AGY_PREFIX_RECOVERY_2026-10-12.md).
+
+Use the updated `docs/deployment/windows-deployment-next/RETURN_SETUP_R7.txt`.
+Replacement source is `c3080c9631b58252a31cc3fe38da9f131e4f7787`;
+fresh bundle is `C:\Users\ansac\CoChem427\r7-bundle-c3080c9`, with 307 installer
+inputs and all 480 copied R6 prerequisite inputs. Only the two reviewed recovery
+helpers and the inherited-deadline launch entry differ from the original R6
+recovery. Prior immutable staging roots remain untouched.
+
+Replacement launch manifest SHA256:
+`7f68c8b54a7d10df8b725ee2efc8321941d59ee10b41586c6c2a99dbb0c29f40`.
+Source manifest SHA256:
+`107d9943b30d7c7c4194459685ca524e4bf8d717f8a9d75dfbe1c60cb09b2736`.
+The verified application wheel remains byte-identical:
+`8bb9c33b35228df23bc23fb5f4b4b0f1aae61d6a3a657c63a3bd660dbb636c1d`.
+All three replacement packaged read-only plans passed in 9.37 seconds; 93 focused
+source/inert PowerShell tests passed. These are not repaired host acceptance.
+
+The six isolated Agy profiles require browser sign-in. Existing Codex/Claude
+sessions are reused; all requested input remains inside the initial 20-minute
+window. No timing guarantee for six provider authorizations is inferred from
+source tests. A closed input window holds rather than prompting later.
+
+The sections below preserve the initial package record and its earlier tests;
+its command is superseded.
+
 R7 coding and non-administrator preparation are complete. Source commit:
 `70af5692399068814bc115af802ff7baec13e8a7`. The initial source/runtime integration
 is `b9ba102`; `70af569` adds the temporary thread-scoped awake request for this

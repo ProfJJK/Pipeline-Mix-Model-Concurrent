@@ -1,35 +1,48 @@
-R7 — ONE OWNER COMMAND, WITH PENDING R6 RECOVERY INCLUDED
-Prepared 2026-10-12. Source 70af569. Reviewed offline package; not deployed yet.
+R6 AGY PREFIX REPAIR + R7 — ONE REPLACEMENT OWNER COMMAND
+Prepared 2026-10-12. Source c3080c9. Supersedes the 70af569 owner command.
+Earlier packages, failed attempts, sign-ins and the installed R6 are preserved.
 
-1. Open Windows PowerShell as Administrator under AETHERDESK\ansac and accept UAC.
+Why the earlier run stopped: my checker omitted Agy's exact "Error: " prefix
+on its native signed-out message. The six reported stderr hashes prove this
+specific message. Your regular signed-in Agy profile is separate from these six
+isolated pipeline worker profiles. Codex and Claude passed in all six profiles.
+
+1. Open Windows PowerShell as Administrator under AETHERDESK\ansac; accept UAC.
 2. Paste the SINGLE command below and press Enter once.
-3. If the reviewed R6 recovery requests a browser sign-in, complete it at the start.
-   Existing verified sessions are reused. The input window closes 20 minutes after
-   this command starts. Unknown authentication fails without guessing a logout.
+3. Complete the Agy browser sign-in for each requested worker profile at the start.
+   Open the URL printed by the CLI if no browser opens automatically. Follow its
+   native instructions and paste the requested completion value into that same
+   PowerShell window. Do not paste codes into this chat. Codex/Claude are reused.
 
-C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -File "C:\Users\ansac\CoChem427\r7-bundle-70af569\run_r7_launch.ps1" -LaunchManifest "C:\Users\ansac\CoChem427\r7-bundle-70af569\launch-manifest.json" -LaunchManifestSha256 91ed05ee223f1ab2f867b492095a07d135248098bc5ce07a9727ac7acee5f435 -Apply
+C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -File "C:\Users\ansac\CoChem427\r7-bundle-c3080c9\run_r7_launch.ps1" -LaunchManifest "C:\Users\ansac\CoChem427\r7-bundle-c3080c9\launch-manifest.json" -LaunchManifestSha256 7f68c8b54a7d10df8b725ee2efc8321941d59ee10b41586c6c2a99dbb0c29f40 -Apply
 
-When the green message says "You can walk away", leave the window open and go
-about your other work. Remaining installation, tests and cutovers are unattended.
-They can take much longer than 20 minutes. There are no planned late questions,
-restarts or continuation commands. A temporary awake request lets the display
-sleep while keeping this sitting running; it ends when the command exits.
+All login input is limited to the first 20 minutes after this command starts.
+The command verifies the reviewed earlier failure and completed R4 restoration,
+reuses installed R6 without reinstalling, and requests login only for an explicit
+signed-out Agy profile. Unknown errors hold with private diagnostic evidence.
 
-This command reuses completed R6, or performs the reviewed pending R6 recovery
-first. It then installs the fresh offline R7 runtime, waits for idle R6, keeps a
-full job-database backup, migrates catalog tables, stages protected authority and
-checks R7 health plus native control-probe publication. The approved matrix,
-four shared slots, Chapter 06, R:, sign-ins and existing repair budgets are kept.
+When the green message says "You can walk away", leave the window open. You can
+use other apps. Remaining native acceptance, installation and cutovers are
+unattended and can take substantially longer than 20 minutes. No late questions,
+restart or manual continuation is planned. A temporary awake request allows the
+display to sleep and is released when the command exits; no power plan is changed.
 
-Do not run the older R5/R6 sitting commands separately for this sitting.
-If it reports HELD or an error, leave its files/tasks/running state in place.
-Do not repeat the command. It saves sanitized status and failure metadata and
-restores the prior controller only where the reviewed rollback is safe.
+After R6 acceptance and activation, this same command installs fresh R7 offline,
+waits for idle R6, preserves a full job-database backup, migrates catalog tables,
+stages protected catalog authority, and verifies R7 health/control publication.
+The exact owner matrix, Gemini Pro High at tier 6, four shared slots, Chapter 06,
+R:, credentials, original captures/databases and repair budgets are preserved.
+
+Do not run earlier R5/R6/R7 commands separately for this sitting. If it reports
+HELD or an error, leave every task, file and running process in place and return
+the printed output. Do not repeat it. Sanitized status records are saved, and
+the prior controller is restored only where the reviewed rollback is safe.
 
 Success ends with R7_RUNNING_CATALOG_PUBLICATION_VERIFIED. This confirms this
-deployment transaction and catalog control probe, not full 4.2.7 SRS acceptance.
+deployment transaction and control probe, not full 4.2.7 SRS acceptance.
 
-Engineering verification: 330 full regression tests passed, 1 SYSTEM-only metric
-test skipped, 2 real-process cleanup tests excluded; 16 final owner-package tests
-passed, including 2 additional fake-native awake-request cases. All three final
-packaged read-only plans passed. No engineering Apply or host acceptance was run.
+Engineering evidence: 93 focused serialized Windows source/inert PowerShell
+tests passed, including the exact 122-byte error reproduction and prior-task
+review. All three final packaged read-only plans passed. R7's application wheel
+is identical to the earlier tested wheel; prior runtime verification was 330
+source tests. Actual repaired SYSTEM/provider acceptance is still owner-run work.
