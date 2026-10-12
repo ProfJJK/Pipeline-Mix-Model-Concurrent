@@ -92,3 +92,24 @@ $held=$false;try{Invoke-R7Prerequisite ([pscustomobject]@{expected_r6_candidate_
 @{held=$held}|ConvertTo-Json -Compress
 ''')
     assert row==dict(held=True)
+
+
+@pytest.mark.parametrize('fail',[False,True])
+def test_awake_request_is_temporary_and_failure_precedes_deployment(run_ps,fail):
+    # Fake native methods: this never makes an OS power request.
+    row=run_ps(r'''
+Add-Type -TypeDefinition @'
+using System.Collections.Generic;
+public static class CoChemR7Awake {
+ public static List<uint> Calls = new List<uint>();
+ public static uint GetCurrentThreadId() { return 7; }
+ public static uint SetThreadExecutionState(uint flags) { Calls.Add(flags); return RETURN; }
+}
+'@
+$held=$false;$lease=$null
+try{$lease=Start-R7AwakeLease}catch{$held=$true}
+if($null -ne $lease){Stop-R7AwakeLease $lease}
+@{held=$held;calls=@([CoChemR7Awake]::Calls)}|ConvertTo-Json -Compress
+'''.replace('RETURN','0' if fail else '2147483648'))
+    assert row['held'] is fail
+    assert row['calls']==([2147483649] if fail else [2147483649,2147483648])

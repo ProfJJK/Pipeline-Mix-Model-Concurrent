@@ -242,9 +242,38 @@ function Invoke-R7Prerequisite {
     if(@(Get-R7CompletedR6 $Manifest.expected_r6_candidate_sha256).Count -ne 1){throw 'R6 prerequisite completion did not verify.'}
 }
 
+function Start-R7AwakeLease {
+    # Temporary request on this thread; no power-plan or registry changes.
+    if(-not ('CoChemR7Awake' -as [type])){
+        Add-Type -TypeDefinition @'
+using System.Runtime.InteropServices;
+public static class CoChemR7Awake {
+    [DllImport("kernel32.dll")] public static extern uint SetThreadExecutionState(uint flags);
+    [DllImport("kernel32.dll")] public static extern uint GetCurrentThreadId();
+}
+'@
+    }
+    [Threading.Thread]::BeginThreadAffinity()
+    try{
+        $thread=[CoChemR7Awake]::GetCurrentThreadId()
+        $previous=[CoChemR7Awake]::SetThreadExecutionState([uint32]2147483649) # CONTINUOUS | SYSTEM_REQUIRED
+        if($previous -eq 0){throw 'Could not establish the temporary unattended awake request.'}
+        return [pscustomobject]@{thread=$thread;previous=$previous}
+    }catch{[Threading.Thread]::EndThreadAffinity();throw}
+}
+
+function Stop-R7AwakeLease {
+    param($Lease)
+    try{
+        if([CoChemR7Awake]::GetCurrentThreadId() -ne $Lease.thread){throw 'Awake request thread changed.'}
+        $restored=[CoChemR7Awake]::SetThreadExecutionState([uint32]$Lease.previous)
+        if($restored -eq 0){throw 'Awake request restoration did not verify.'}
+    }finally{[Threading.Thread]::EndThreadAffinity()}
+}
+
 function Invoke-R7Launch {
     param([string]$ManifestPath,[string]$ManifestHash,[bool]$ApplyRequested,[string]$Directory)
-    $pins=[Collections.Generic.List[IO.Stream]]::new();$processes=$null;$mutex=$null;$locked=$false;$ownerMutex=$null;$ownerLocked=$false
+    $pins=[Collections.Generic.List[IO.Stream]]::new();$processes=$null;$mutex=$null;$locked=$false;$ownerMutex=$null;$ownerLocked=$false;$awake=$null
     $stopped=$false;$stopRequested=$false;$migrationRequested=$false;$migrated=$false;$startRequested=$false;$phase='package'
     $script:R7Root='C:\Program Files\CoChem\Pipeline4.2.7-windows-20261012-r7-v1'
     $old='C:\Program Files\CoChem\Pipeline4.2.7-windows-20261012-r6-v1'
@@ -287,6 +316,7 @@ function Invoke-R7Launch {
         try{$ownerLocked=$ownerMutex.WaitOne(0)}catch [Threading.AbandonedMutexException]{$ownerLocked=$true;throw 'An earlier R7 sitting was interrupted; preserve evidence.'}
         if(-not $ownerLocked){throw 'Another R7 sitting is already active.'}
         foreach($path in @($script:R7Root,$script:R7Migration,$authority)){if(Test-Path -LiteralPath $path){throw 'A prior R7 target exists. Preserve it; no automatic repeat.'}}
+        $awake=Start-R7AwakeLease
         $phase='r6_prerequisite'
         Invoke-R7Prerequisite $manifest $Directory $inputDeadline
         $mutex=[Threading.Mutex]::new($false,'Global\CoChem427-R6Launch')
@@ -417,6 +447,7 @@ function Invoke-R7Launch {
         foreach($stream in $pins){$stream.Dispose()}
         if($locked){$mutex.ReleaseMutex()};if($null -ne $mutex){$mutex.Dispose()}
         if($ownerLocked){$ownerMutex.ReleaseMutex()};if($null -ne $ownerMutex){$ownerMutex.Dispose()}
+        if($null -ne $awake){try{Stop-R7AwakeLease $awake}catch{Write-Warning 'The temporary awake request ends when this command process exits.'}}
         $script:R7Headers=$null
     }
 }
