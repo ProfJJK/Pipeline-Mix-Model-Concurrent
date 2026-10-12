@@ -110,6 +110,11 @@ def validate_model_bindings(spec):
             if not isinstance(contract, dict):
                 raise ValueError('Agy effort model binding requires a reviewed effort contract')
             arguments = contract.get('arguments')
+            if 'slug_effort' in contract:
+                effort = key.rsplit(':', 1)[-1]
+                if (effort not in ('low', 'medium', 'high') or contract['slug_effort'] != effort
+                        or arguments != [] or any(not slug.endswith('-' + effort) for slug in (argv, reports))):
+                    raise ValueError('Agy model binding must encode the exact reviewed slug effort')
             if isinstance(arguments, list) and len(arguments) == 2 and arguments[0] == '--effort':
                 for slug in (argv, reports):
                     suffix = _SLUG_EFFORT.search(slug)

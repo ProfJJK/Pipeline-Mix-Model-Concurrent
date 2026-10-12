@@ -54,8 +54,14 @@ def effort_contract(provider, model, effort, spec):
         raise ValueError('Unsupported provider reasoning effort profile')
     contracts = spec.get('effort_contracts', {}) if isinstance(spec, dict) else {}
     contract = contracts.get(f'{model}:{effort}') if isinstance(contracts, dict) else None
-    if not isinstance(contract, dict) or set(contract) != _FIELDS:
+    slug_encoded = isinstance(contract, dict) and 'slug_effort' in contract
+    if not isinstance(contract, dict) or set(contract) != (_FIELDS | {'slug_effort'} if slug_encoded else _FIELDS):
         raise ValueError('Native reasoning effort requires an exact reviewed model/profile contract')
+    if slug_encoded and (provider != 'gemini' or spec.get('protocol') != 'agy-stream-json'
+            or spec.get('identity_policy') != 'reported-model-equality'
+            or effort not in ('low', 'medium', 'high') or contract['slug_effort'] != effort
+            or contract['arguments'] != [] or contract['native_metadata'] is not None):
+        raise ValueError('Slug effort requires an explicit Agy identity binding without an extra effort flag')
     if (not isinstance(contract['executable_sha256'], str)
             or not re.fullmatch('[0-9a-f]{64}', contract['executable_sha256'])):
         raise ValueError('Native reasoning effort requires the exact executable digest')
@@ -63,7 +69,7 @@ def effort_contract(provider, model, effort, spec):
         if (not isinstance(contract[field], str) or not contract[field].strip()
                 or len(contract[field]) > 2048):
             raise ValueError('Native reasoning effort requires version and capability provenance')
-    args = _argv(contract['arguments'], 'arguments')
+    args = [] if slug_encoded else _argv(contract['arguments'], 'arguments')
     _argv(contract['version_arguments'], 'version arguments')
     if contract['version_arguments'] != ['--version']:
         raise ValueError('Native reasoning effort version probe must use the offline --version selector')
@@ -83,15 +89,20 @@ def effort_contract(provider, model, effort, spec):
         # not assumed Agy capabilities: an exact reviewed binary contract is
         # still mandatory. Never accept arbitrary flags or configuration files
         # that could enable tools, change the selected model or start a prompt.
-        if (len(args) != 2 or not (
+        if not slug_encoded and (len(args) != 2 or not (
                 (args[0] == '--thinking-level' and args[1] in
                  ('minimal', 'low', 'medium', 'high', 'MINIMAL', 'LOW', 'MEDIUM', 'HIGH'))
                 or (args[0] == '--effort' and args[1] in ('low', 'medium', 'high', 'xhigh', 'max'))
                 or (args[0] == '--thinking-budget' and re.fullmatch('[0-9]{1,6}', args[1])
                     and 1 <= int(args[1]) <= 131072))):
             raise ValueError('Agy reasoning effort requires a bounded reviewed thinking-only selector')
-        if effort != 'extended' and args not in (['--thinking-level', effort], ['--thinking-level', effort.upper()], ['--effort', effort]):
+        if not slug_encoded and effort != 'extended' and args not in (['--thinking-level', effort], ['--thinking-level', effort.upper()], ['--effort', effort]):
             raise ValueError('Agy explicit effort must select the same native level; no alias is allowed')
+        if slug_encoded:
+            from .agy_protocol import native_model_binding
+            binding = native_model_binding(spec, model, effort)
+            if any(not value.endswith('-' + effort) for value in binding.values()):
+                raise ValueError('Agy selected and reported model names must encode the exact effort')
         inference = spec.get('inference_only', {})
         if contract['thinking_enabled'] is not None or any(
                 contract[field] != inference.get(field)

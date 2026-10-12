@@ -379,6 +379,9 @@ def _reviewed_effort_contract(provider: str, model: str, effort: str, spec: dict
     contract = contracts.get(model + ":" + effort) if isinstance(contracts, dict) else None
     fields = {"arguments", "version_arguments", "executable_sha256", "version", "capability_reference",
               "native_metadata", "thinking_enabled"}
+    slug_encoded = isinstance(contract, dict) and 'slug_effort' in contract
+    if slug_encoded:
+        fields.add('slug_effort')
     _require(isinstance(contract, dict) and set(contract) == fields,
              "Reasoning profile lacks its exact protected model/profile contract")
     _require(isinstance(contract["executable_sha256"], str)
@@ -390,9 +393,22 @@ def _reviewed_effort_contract(provider: str, model: str, effort: str, spec: dict
     _require(contract["version_arguments"] == ["--version"],
              "Reasoning profile version probe must use the offline version selector")
     args = contract["arguments"]
-    _require(isinstance(args, list) and len(args) == 2
+    if slug_encoded:
+        _require(provider == 'gemini' and effort in ('low', 'medium', 'high')
+                 and contract['slug_effort'] == effort and args == []
+                 and contract['native_metadata'] is None and spec.get('protocol') == 'agy-stream-json'
+                 and spec.get('identity_policy') == 'reported-model-equality',
+                 'Encoded effort requires an exact Agy identity contract')
+        bindings = spec.get('model_bindings')
+        value = bindings.get(model + ':' + effort) if isinstance(bindings, dict) else None
+        binding = dict(argv=value, reports=value) if isinstance(value, str) else value
+        _require(isinstance(binding, dict) and set(binding) == {'argv', 'reports'}
+                 and all(isinstance(slug, str) and bool(re.fullmatch('[a-z0-9][a-z0-9.-]{0,127}', slug))
+                         and slug.endswith('-' + effort) for slug in binding.values()),
+                 'Selected and reported model slugs must encode the exact effort')
+    _require(slug_encoded or (isinstance(args, list) and len(args) == 2
              and all(isinstance(arg, str) and 0 < len(arg) <= 2048
-                     and not any(ord(char) < 32 for char in arg) for arg in args),
+                     and not any(ord(char) < 32 for char in arg) for arg in args)),
              "Reasoning profile arguments must be a bounded thinking-only selector")
     if provider == "claude":
         _require(effort in ('low', 'medium', 'high', 'xhigh', 'max', 'extended') and args[0] == "--effort"
@@ -402,13 +418,13 @@ def _reviewed_effort_contract(provider: str, model: str, effort: str, spec: dict
                  "Claude reasoning profile requires reviewed native effort and enabled thinking")
     else:
         _require(provider == "gemini" and effort in ("extended", "low", "medium", "high")
-                 and ((args[0] == "--thinking-level" and args[1] in
+                 and (slug_encoded or (args[0] == "--thinking-level" and args[1] in
                        ("minimal", "low", "medium", "high", "MINIMAL", "LOW", "MEDIUM", "HIGH"))
                       or (args[0] == "--effort" and args[1] in ("low", "medium", "high", "xhigh", "max"))
                       or (args[0] == "--thinking-budget" and bool(re.fullmatch("[0-9]{1,6}", args[1]))
                           and 1 <= int(args[1]) <= 131072)),
                  "Agy reasoning profile requires a reviewed thinking-only selector")
-        _require(effort == "extended" or args in (["--thinking-level", effort], ["--thinking-level", effort.upper()], ["--effort", effort]),
+        _require(slug_encoded or effort == "extended" or args in (["--thinking-level", effort], ["--thinking-level", effort.upper()], ["--effort", effort]),
                  "Agy explicit reasoning profile must select the exact native thinking level")
         inference = spec.get("inference_only")
         _require(isinstance(inference, dict) and set(inference) == {

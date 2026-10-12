@@ -62,7 +62,7 @@ def test_deployment_requires_explicit_migration_of_legacy_routing_configuration(
     raw['routing'] = {'policy_version': 1}
     filename = write_config(tmp_path, raw)
     before = Path(filename).read_bytes()
-    with pytest.raises(ValueError, match='routing policy_version 2; migrate configuration explicitly'):
+    with pytest.raises(ValueError, match='routing policy_version 2 or 3; migrate configuration explicitly'):
         load_config(filename)
     assert Path(filename).read_bytes() == before
     assert not Path(raw['private_root']).exists()
@@ -440,7 +440,7 @@ def _contract(raw, key):
     (lambda raw: _contract(raw, 'gemini-3.8-flash:extended').update(version_arguments=['version']), 'offline --version'),
     (lambda raw: _contract(raw, 'gemini-3.8-flash:extended').pop('native_metadata'), 'exact reviewed model/profile'),
     (lambda raw: _contract(raw, 'gemini-3.1-pro-preview:high').update(arguments=['--effort', 'medium']),
-     'Agy High must select native high'),
+     'Agy explicit effort must select the same native level'),
 ], ids=['orphan-unrouted-effort-null', 'orphan-other-provider', 'orphan-unrouted-effort', 'wrong-policy',
         'null-policy', 'policy-on-gemini-json', 'effort-key-without-contract', 'zero-bindings',
         'missing-bindings', 'bindings-without-policy', 'effort-version-drift', 'effort-digest-drift',
