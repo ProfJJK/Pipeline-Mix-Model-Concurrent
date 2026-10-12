@@ -56,8 +56,7 @@ function Get-R6InstallFiles {
     foreach($file in @($Inventory.files)){
         $relative=[string]$file.relative;Assert-R6Relative $relative
         if(-not $seen.Add($relative) -or [string]$file.sha256 -cnotmatch '^[a-f0-9]{64}$' -or
-            $file.length -isnot [ValueType] -or $file.length -lt 0 -or $file.length -gt 268435456 -or
-            [long]$file.length -ne $file.length){throw 'Invalid or duplicate R6 payload record.'}
+            ($file.length -isnot [int] -and $file.length -isnot [long]) -or $file.length -lt 0 -or $file.length -gt 268435456){throw 'Invalid or duplicate R6 payload record.'}
         $source=[IO.Path]::GetFullPath([string]$file.source)
         if($source -cne [string]$file.source -or $source -notmatch '^[A-Za-z]:\\' -or
             $source -match '(?i)\\(?:gdrive|google drive)\\'){throw 'R6 sources must be literal local paths outside Google Drive.'}
@@ -77,6 +76,37 @@ function Get-R6InstallFiles {
 function Get-R6VenvArguments {
     @('--no-config','--no-cache','--offline','venv',(Join-Path $script:targetRoot '.venv'),
       '--python',$script:python,'--no-python-downloads','--prompt','cochem')
+}
+
+function New-R6PayloadAcl {
+    param([string]$Relative,[bool]$Directory)
+    $acl=New-CodeAcl $Directory
+    if($Relative -ceq 'source/knowledge' -or $Relative.StartsWith('source/knowledge/',[StringComparison]::Ordinal)){
+        $users=[Security.Principal.SecurityIdentifier]::new('S-1-5-32-545')
+        foreach($rule in @($acl.GetAccessRules($true,$false,[Security.Principal.SecurityIdentifier]))){
+            if($rule.IdentityReference -eq $users){$acl.RemoveAccessRuleSpecific($rule)}}
+    }
+    $acl
+}
+
+function New-R6PayloadDirectory {
+    param([string]$Path)
+    if(Test-Path -LiteralPath $Path){throw 'Preserve existing payload directory.'}
+    Assert-ProtectedPath (Split-Path -Parent $Path)
+    $relative=$Path.Substring($script:targetRoot.Length+1).Replace('\','/')
+    $directory=[IO.DirectoryInfo]::new($Path);$directory.Create((New-R6PayloadAcl $relative $true))
+    Assert-ProtectedPath $Path
+}
+
+function Copy-R6Payload {
+    param($File)
+    $source=Open-VerifiedFile $File.source $File.sha256 $File.length
+    try{
+        Assert-ProtectedPath (Split-Path -Parent $File.destination)
+        $target=[IO.FileStream]::new($File.destination,[IO.FileMode]::CreateNew,[Security.AccessControl.FileSystemRights]::Write,[IO.FileShare]::None,1048576,[IO.FileOptions]::None,(New-R6PayloadAcl $File.relative $false))
+        try{$source.CopyTo($target);$target.Flush($true)}finally{$target.Dispose()}
+    }finally{$source.Dispose()}
+    $verify=Open-VerifiedFile $File.destination $File.sha256 $File.length;$verify.Dispose()
 }
 function Get-R6InstallArguments {
     @('--no-config','--no-cache','--offline','pip','install','--python',(Join-Path $script:targetRoot '.venv\Scripts\python.exe'),
@@ -146,7 +176,10 @@ function Assert-R6NotReferenced {
     $scheduler=New-Object -ComObject 'Schedule.Service';$scheduler.Connect();$folder=$scheduler.GetFolder('\')
     foreach($name in @('CoChem-4.2.7-Warden','CoChem-4.2.7-Supervisor')){
         $task=$null
-        try{$task=$folder.GetTask($name)}catch{if($_.Exception.HResult -ne -2147024894){throw}}
+        try{$task=$folder.GetTask($name)}catch{
+            $cause=$_.Exception
+            while($null -ne $cause.InnerException){$cause=$cause.InnerException}
+            if($cause.HResult -ne -2147024894){throw}}
         if($null -ne $task){
             foreach($action in $task.Definition.Actions){
                 if(([string]$action.Path).IndexOf($script:targetRoot,[StringComparison]::OrdinalIgnoreCase) -ge 0 -or
@@ -168,9 +201,9 @@ function Invoke-R6Installation {
         $directories=[Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
         foreach($file in $Files){$parent=Split-Path -Parent $file.destination
             while($parent -ne $script:targetRoot){$null=$directories.Add($parent);$parent=Split-Path -Parent $parent}}
-        foreach($directory in @($directories|Sort-Object Length)){New-ProtectedDirectory $directory}
+        foreach($directory in @($directories|Sort-Object Length)){New-R6PayloadDirectory $directory}
         $phase='copy'
-        foreach($file in $Files){Copy-VerifiedPayload $file}
+        foreach($file in $Files){Copy-R6Payload $file}
         Copy-VerifiedPayload ([pscustomobject]@{source=$ManifestPath;destination=(Join-Path $script:targetRoot 'install-manifest.json');sha256=$ManifestHash;length=(Get-Item -LiteralPath $ManifestPath).Length})
         Write-R6InstallRecord 'install-before.json' @{schema='cochem-r6-offline-install/1';status='PREPARED';manifest_sha256=$ManifestHash;source_commit=$Inventory.source_commit}
         $environmentChanged=$true

@@ -126,3 +126,21 @@ def test_script_parameter_boundary_rejects_unpinned_input_without_host_work():
                             capture_output=True, timeout=15)
     assert result.returncode != 0
     assert b'pinned R6 manifest is required' in result.stderr
+
+
+def test_corpus_payload_acl_excludes_worker_read_without_changing_code_acl():
+    data = run_ps("""
+function New-CodeAcl {param([bool]$Directory)
+ $acl=if($Directory){[Security.AccessControl.DirectorySecurity]::new()}else{[Security.AccessControl.FileSecurity]::new()}
+ $acl.SetAccessRuleProtection($true,$false)
+ foreach($sid in @('S-1-5-18','S-1-5-32-544','S-1-5-32-545')){
+  $acl.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new([Security.Principal.SecurityIdentifier]::new($sid),'ReadAndExecute','Allow'))}
+ $acl
+}
+$private=New-R6PayloadAcl 'source/knowledge/.sources/doc.md' $false
+$public=New-R6PayloadAcl 'source/src/cochem_pipeline/runtime.py' $false
+$getSids={param($acl) @($acl.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier])|ForEach-Object{$_.IdentityReference.Value})}
+@{corpus=@(& $getSids $private);code=@(& $getSids $public)}|ConvertTo-Json -Compress
+""")
+    assert 'S-1-5-32-545' not in data['corpus']
+    assert 'S-1-5-32-545' in data['code']
