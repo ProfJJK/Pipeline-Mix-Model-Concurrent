@@ -7,7 +7,8 @@
 param([string]$Manifest,[string]$ManifestSha256,[switch]$Apply)
 
 function Import-R6CopyFunctions {
-    $path=Join-Path $PSScriptRoot 'stage_aetherdesk_427_payloads.ps1'
+    param([string]$Directory)
+    $path=Join-Path $Directory 'stage_aetherdesk_427_payloads.ps1'
     $pin='0300b82731c0fddb9fad3e2ddb6a20b8368cfa91faf7aceb821752c65b5f6e0b'
     $stream=[IO.File]::Open($path,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::Read)
     try {
@@ -252,7 +253,7 @@ function Invoke-R6InstallerMain {
         if($identity.Name -cne 'AETHERDESK\ansac' -or -not ([Security.Principal.WindowsPrincipal]::new($identity)).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)){
             throw 'Only the owner runs Apply in Administrator PowerShell.'}}
     Set-R6Constants
-    foreach($definition in @(Import-R6CopyFunctions)){. ([scriptblock]::Create($definition))}
+    foreach($definition in @(Import-R6CopyFunctions $PSScriptRoot)){. ([scriptblock]::Create($definition))}
     Initialize-FileIdentity
     $inventory=Read-Inventory $ManifestPath $ManifestHash;$files=@(Get-R6InstallFiles $inventory)
     if(Test-Path -LiteralPath $script:targetRoot){throw 'Preserve the existing R6 root; do not reuse.'}

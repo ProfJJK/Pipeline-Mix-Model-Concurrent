@@ -61,3 +61,14 @@ def test_changed_foundation_is_not_silently_repaired(tmp_path, mutation):
 def test_production_entry_requires_exact_commissioned_bytes():
     with pytest.raises(ValueError, match='reviewed base'):
         from_commissioned_bytes(b'{}')
+
+
+def test_catalog_change_preserves_operational_limits(tmp_path):
+    raw = base(tmp_path)
+    raw['routing'] = dict(max_dispatches=17, max_routing_seconds=900,
+        backoff_base_seconds=45, backoff_max_seconds=510,
+        provider_limits={'claude': {'max_concurrency': 2, 'quota_pool': 'claude'}})
+    candidate, _ = propose(raw)
+    for key in ('max_dispatches', 'max_routing_seconds', 'backoff_base_seconds', 'backoff_max_seconds'):
+        assert candidate['routing'][key] == raw['routing'][key]
+    assert candidate['routing']['provider_limits']['claude']['max_concurrency'] == 2

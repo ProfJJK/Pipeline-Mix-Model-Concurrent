@@ -40,7 +40,19 @@ def propose(base):
             raise ValueError('R6 proposal must preserve the reviewed native executable')
         if provider != 'gemini' and 'integration_hold' in providers[provider]:
             raise ValueError('An additional integration hold needs explicit review')
-    candidate['routing'] = RoutingPolicy.from_dict({'policy_version': 3}).as_dict()
+    # Changing the catalog must not reset operator quota/concurrency limits,
+    # retry timing or dispatch ceilings. Obsolete nonempty model limits need
+    # an explicit mapping; silently dropping one could increase expenditure.
+    old_routing = RoutingPolicy.from_dict(base.get('routing')).as_dict()
+    routing = RoutingPolicy.from_dict({'policy_version': 3}).as_dict()
+    for key in routing.keys() - {'policy_version', 'tiers', 'model_limits', 'catalog'}:
+        routing[key] = copy.deepcopy(old_routing[key])
+    for target, limit in old_routing['model_limits'].items():
+        if target in routing['model_limits']:
+            routing['model_limits'][target] = limit
+        elif limit is not None:
+            raise ValueError('A retired model limit requires an explicit owner mapping')
+    candidate['routing'] = RoutingPolicy.from_dict(routing).as_dict()
     gemini = providers['gemini']
     # This is a separate proposal, not an update/release of the installed hold.
     gemini.pop('integration_hold', None)

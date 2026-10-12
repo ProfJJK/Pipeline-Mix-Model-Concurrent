@@ -41,6 +41,15 @@ $script:python='C:\\protected\\python.exe';$script:uv='C:\\protected\\uv.exe'
     assert 'copy' in data['install']
 
 
+def test_copy_helper_import_uses_explicit_directory_after_ast_import():
+    directory=str(SCRIPT.parent).replace("'","''")
+    result=run_ps(f"""
+$definitions=@(Import-R6CopyFunctions '{directory}')
+@{{count=$definitions.Count;has_copy=[bool]($definitions -match 'function Copy-VerifiedPayload')}}|ConvertTo-Json -Compress
+""")
+    assert result==dict(count=9,has_copy=True)
+
+
 @pytest.mark.parametrize('relative', ['../escape', 'source/../../escape', 'wheels/CON.whl',
     'source/name:stream', 'C:/outside', 'source/a.', 'other/file.py', 'wheels/a\\..\\b'])
 def test_installer_refuses_unsafe_or_unexpected_payload_paths(relative):

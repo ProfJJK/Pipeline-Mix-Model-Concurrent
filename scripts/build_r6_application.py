@@ -10,7 +10,6 @@ import hashlib
 import json
 import os
 from pathlib import Path, PurePosixPath
-import shutil
 import subprocess
 import zipfile
 
@@ -24,6 +23,8 @@ def verify_wheel(path, source):
     source = Path(source)
     expected = {p.relative_to(source / 'src').as_posix(): p.read_bytes()
         for p in (source / 'src').rglob('*') if p.is_file() and '__pycache__' not in p.parts
+        and p.relative_to(source / 'src').parts[0].startswith('cochem')
+        and len(p.relative_to(source / 'src').parts) > 1
         and p.suffix in {'.py', '.md', '.json', '.xml', '.typed'}}
     actual = {}
     with zipfile.ZipFile(path) as wheel:

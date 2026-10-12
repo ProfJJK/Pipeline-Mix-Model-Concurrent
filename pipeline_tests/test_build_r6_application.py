@@ -15,6 +15,7 @@ def test_wheel_must_exactly_preserve_application_source_and_assets(tmp_path, mut
     source.mkdir(parents=True)
     (source / '__init__.py').write_bytes(b'# fixture')
     (source / 'policy.json').write_bytes(b'{}')
+    (tmp_path / 'src/x.py').write_bytes(b'# outside setuptools cochem* package selection')
     wheel = tmp_path / 'cochem.whl'
     with zipfile.ZipFile(wheel, 'w') as output:
         output.writestr('cochem_pipeline/__init__.py', b'changed' if mutation == 'changed' else b'# fixture')
