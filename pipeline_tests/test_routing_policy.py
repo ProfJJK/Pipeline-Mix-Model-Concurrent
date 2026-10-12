@@ -147,7 +147,7 @@ def test_shared_subscription_pool_and_exact_model_caps_are_explicit():
 
 
 @pytest.mark.parametrize("config", [
-    [], "default", {"unexpected": 1}, {"policy_version": True}, {"policy_version": 3},
+    [], "default", {"unexpected": 1}, {"policy_version": True}, {"policy_version": 4},
     {"tiers": {}}, {"tiers": []}, {"model_limits": {"unknown": 1}},
     {"model_limits": {"codex:gpt-6-luna": True}}, {"model_limits": {"codex:gpt-6-luna": 0}},
     {"model_limits": {"codex:gpt-6-luna": 1000001}}, {"provider_limits": {"other": {}}},

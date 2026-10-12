@@ -20,6 +20,7 @@ import json
 import math
 import re
 from typing import Any
+from .routing_catalog import EFFORTS, TIER_SIZES, default_catalog, validate_catalog
 
 
 POLICY_VERSION = 2
@@ -145,7 +146,7 @@ def _number(value: Any, label: str, low: float, high: float) -> float:
     return float(value)
 
 
-def _route_pair(value: Any) -> dict:
+def _route_pair(value: Any, version: int = 2) -> dict:
     if not isinstance(value, Mapping) or set(value) - {"provider", "model", "reasoning_effort"}:
         raise ValueError("Each routing entry must specify provider, model and optional reasoning_effort")
     provider, model, effort = value.get("provider"), value.get("model"), value.get("reasoning_effort")
@@ -154,6 +155,8 @@ def _route_pair(value: Any) -> dict:
     if not isinstance(model, str) or not _MODEL.fullmatch(model):
         raise ValueError("Routing requires an explicit native model identifier without command text")
     efforts = {"codex": {"low", "medium", "high", "ultra"}, "claude": {"extended"}, "gemini": {"extended", "high"}}
+    if version == 3:
+        efforts = EFFORTS
     if effort is not None and (not isinstance(effort, str) or effort not in efforts[provider]):
         raise ValueError("Explicit routing reasoning_effort must match the provider's approved selector; no remapping is allowed")
     return {"provider": provider, "model": model, "reasoning_effort": effort}
@@ -165,30 +168,37 @@ def _normalize(raw: Mapping[str, Any] | None) -> dict:
     if not isinstance(raw, Mapping):
         raise ValueError("Routing policy must be an object containing only documented policy fields")
     version = raw.get("policy_version", POLICY_VERSION)
-    if type(version) is not int or version not in (1, POLICY_VERSION):
+    if type(version) is not int or version not in (1, 2, 3):
         raise ValueError("Unsupported routing policy_version")
     defaults = _defaults(version)
+    if version == 3:
+        # Captures carry their own catalog so an upgrade cannot rewrite old jobs.
+        catalog = validate_catalog(raw['catalog']) if 'catalog' in raw else default_catalog()
+        defaults.update(catalog=catalog, tiers=catalog['tiers'])
     if set(raw) - set(defaults):
         raise ValueError("Routing policy must be an object containing only documented policy fields")
     data = {**defaults, **raw}
     tiers = data["tiers"]
-    if not isinstance(tiers, Mapping) or set(tiers) != set(_TIER_SIZES):
-        raise ValueError("Routing tiers must be exactly 1-3, 4-6, 7-9 and 10")
+    tier_sizes = TIER_SIZES if version == 3 else _TIER_SIZES
+    if not isinstance(tiers, Mapping) or set(tiers) != set(tier_sizes):
+        raise ValueError("Routing tiers must exactly match the captured policy version")
     normalized_tiers = {}
     keys = set()
-    for tier, count in _TIER_SIZES.items():
+    for tier, count in tier_sizes.items():
         values = tiers[tier]
         if not isinstance(values, (list, tuple)) or len(values) != count:
             raise ValueError(f"Tier {tier} requires exactly {count} ordered candidates")
-        pairs = [_route_pair(value) for value in values]
+        pairs = [_route_pair(value, version) for value in values]
         identities = [_target_key(value["provider"], value["model"], value["reasoning_effort"]) for value in pairs]
         if len(set(identities)) != count:
             raise ValueError(f"Tier {tier} must contain distinct provider/model/effort identities")
-        if pairs != [_route_pair(value) for value in defaults['tiers'][tier]]:
+        if pairs != [_route_pair(value, version) for value in defaults['tiers'][tier]]:
             raise ValueError(f'Tier {tier} must preserve the canonical Chapter 06 model order and reasoning effort')
         normalized_tiers[tier] = pairs
         keys.update(identities)
     data["tiers"] = normalized_tiers
+    if version == 3:
+        data['catalog'] = catalog
     limits = data["model_limits"]
     if not isinstance(limits, Mapping) or set(limits) - keys:
         raise ValueError("model_limits must refer only to configured routing target keys")
@@ -304,7 +314,7 @@ class RoutingPolicy:
         return self.as_dict()["max_dispatches"]
 
     def candidates(self, score: int, kind: str = "CHAPTER_DRAFT") -> tuple[ModelTarget, ...]:
-        tier = tier_for_score(score)
+        tier = self.tier_for_score(score)
         if not isinstance(kind, str) or kind not in _KINDS:
             raise ValueError("Unsupported pipeline task kind")
         data = self.as_dict()
@@ -318,6 +328,10 @@ class RoutingPolicy:
                                       quota_pool=data["provider_limits"][pair["provider"]]["quota_pool"]))
         return tuple(result)
 
+    def tier_for_score(self, score: int) -> str:
+        legacy_tier = tier_for_score(score)
+        return str(score) if self.as_dict()['policy_version'] == 3 else legacy_tier
+
     def is_enabled(self, target: ModelTarget | Mapping[str, Any]) -> bool:
         """Check current catalogue identity without changing a captured route's order.
 
@@ -330,9 +344,8 @@ class RoutingPolicy:
             return False
         identity = (value.get("provider"), value.get("model"), value.get("reasoning_effort"))
         return any(identity == (candidate.provider, candidate.model, candidate.reasoning_effort)
-                   for score, kind in ((1, "CHAPTER_DRAFT"), (4, "CHAPTER_DRAFT"), (7, "CHAPTER_DRAFT"),
-                                       (10, "CHAPTER_DRAFT"), (1, "SYNTHESIS"))
-                   for candidate in self.candidates(score, kind))
+                   for score in range(1, 11)
+                   for candidate in self.candidates(score))
 
     def backoff_delay(self, cycle: int, seed: str) -> float:
         """Deterministic per-task/cycle jitter, capped after jitter at the maximum."""
@@ -430,7 +443,7 @@ def validate_selected_route(policy: RoutingPolicy, route: Mapping[str, Any], *, 
         raise ValueError("Selected route requires the actual pipeline task kind")
     if "kind" in route and route["kind"] != actual_kind:
         raise ValueError("Selected route kind contradicts the actual task")
-    tier = tier_for_score(route.get("score"))
+    tier = policy.tier_for_score(route.get("score"))
     if route.get("tier") != tier or route.get("policy_digest") != policy.digest:
         raise ValueError("Selected route tier/policy digest does not match captured task authority")
     candidates = policy.candidates(route["score"], actual_kind)
