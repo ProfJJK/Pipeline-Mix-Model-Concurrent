@@ -8,8 +8,10 @@ param([ValidateSet('auth','knowledge','agent','native','preview')][string]$Phase
     [string]$Attempt,[string]$AuthRecoverySha256,[switch]$Apply)
 
 function Import-R6PhaseInstaller {
-    param([string]$Hash)
-    $path=Join-Path $PSScriptRoot 'install_r6_runtime.ps1'
+    param([string]$Hash,[string]$Directory=$PSScriptRoot)
+    # AST-imported functions have no script filename. Their caller must supply
+    # the reviewed package directory rather than inherit an empty PSScriptRoot.
+    $path=Join-Path $Directory 'install_r6_runtime.ps1'
     $stream=[IO.File]::Open($path,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::Read)
     try{
         $sha=[Security.Cryptography.SHA256]::Create()

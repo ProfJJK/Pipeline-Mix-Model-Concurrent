@@ -35,9 +35,9 @@ function Assert-R6AuthRecoveryRows {
 }
 
 function Invoke-R6AuthRecoveryVerification {
-    param([string]$InstallerHash,[string]$PhaseHash)
+    param([string]$InstallerHash,[string]$PhaseHash,[string]$Directory=$PSScriptRoot)
     foreach($hash in @($InstallerHash,$PhaseHash)){if($hash -cnotmatch '^[a-f0-9]{64}$'){throw 'Recovery helper pins are required.'}}
-    $phase=Join-Path $PSScriptRoot 'run_r6_system_phase.ps1'
+    $phase=Join-Path $Directory 'run_r6_system_phase.ps1'
     $handle=[IO.File]::Open($phase,'Open','Read','Read')
     try{
         $sha=[Security.Cryptography.SHA256]::Create()
@@ -50,10 +50,15 @@ function Invoke-R6AuthRecoveryVerification {
         if($errors.Count){throw 'Recovery phase helper does not parse.'}
         foreach($node in $ast.FindAll({param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst]},$false)){
             . ([scriptblock]::Create($node.Extent.Text))}
-        foreach($definition in @(Import-R6PhaseInstaller $InstallerHash)){. ([scriptblock]::Create($definition))}
+        foreach($definition in @(Import-R6PhaseInstaller $InstallerHash $Directory)){. ([scriptblock]::Create($definition))}
         Set-R6Constants
-        foreach($definition in @(Import-R6CopyFunctions $PSScriptRoot)){. ([scriptblock]::Create($definition))}
+        foreach($definition in @(Import-R6CopyFunctions $Directory)){. ([scriptblock]::Create($definition))}
         Initialize-FileIdentity
+        Assert-R6AuthRecoveryEvidence
+    }finally{$handle.Dispose()}
+}
+
+function Assert-R6AuthRecoveryEvidence {
         $manifestHash='bffcf617620320109a3ff1bcbdcc2e1d4918f9571721dc4642efeed4d0b7a2c4'
         $candidateHash='a8b9b2052402f30860188721f986686c5a2f6785e563045edf295adae250f288'
         $manifest=Read-R6RecoveryJson (Join-Path $script:targetRoot 'install-manifest.json') $manifestHash
@@ -82,7 +87,6 @@ function Invoke-R6AuthRecoveryVerification {
         $null=Assert-R6Tree;Assert-R6Interpreter
         @{status='EXISTING_R6_AUTH_RECOVERY_PREREQUISITES_VERIFIED';installation_repeated=$false;state_modified=$false;
             original_auth_sha256=(Get-FileHash -LiteralPath (Join-Path $oldRoot 'result.json') -Algorithm SHA256).Hash.ToLowerInvariant()}
-    }finally{$handle.Dispose()}
 }
 
 $ErrorActionPreference='Stop';Set-StrictMode -Version Latest
