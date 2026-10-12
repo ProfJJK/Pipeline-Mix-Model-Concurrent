@@ -247,12 +247,16 @@ def reconcile_chapter_wbs(payload: Any, output: Any) -> tuple[Any, dict | None]:
 
 class JobStore(CodingStoreMixin):
     def __init__(self, path: str | Path, max_attempts: int = 3, *, routing_policy=None,
-                 cleanup_boot_id: int | None = None, governing_requirements: dict | None = None):
+                 cleanup_boot_id: int | None = None, governing_requirements: dict | None = None,
+                 catalog_enabled: bool = False):
         if type(max_attempts) is not int or not 1 <= max_attempts <= 100:
             raise ValueError("max_attempts must be an integer from 1 to 100")
         self.max_attempts = max_attempts
         self.transition_telemetry = None
         self.routing_policy = routes.policy_dict(routing_policy if routing_policy is not None else {})
+        if type(catalog_enabled) is not bool:
+            raise ValueError('catalog_enabled must be a boolean')
+        self._catalog_enabled = catalog_enabled
         if governing_requirements is not None and not isinstance(governing_requirements, dict):
             raise ValueError('governing_requirements must be a controller-captured object')
         self.governing_requirements = json.loads(canonical_json(governing_requirements or {
@@ -264,12 +268,23 @@ class JobStore(CodingStoreMixin):
         if str(path) == ":memory:":
             raise ValueError("A durable on-disk SQLite path is required")
         self.path = Path(path).expanduser().resolve()
+        if self._catalog_enabled and not self.path.is_file():
+            raise ValueError('Catalog authority must be explicitly initialized before opening this store')
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._writer_lock = threading.Lock()
         self._writer_pid = os.getpid()
         self._writer_connection = None
         self._writer_finalizer = None
         with self._connection() as conn:
+            # Read the existing authority before any schema migration. Enabling
+            # this source-only integration never initializes a catalog itself.
+            conn.execute('BEGIN')
+            try:
+                self._validate_catalog_mode(conn)
+                conn.commit()
+            except BaseException:
+                conn.rollback()
+                raise
             conn.execute("PRAGMA journal_mode=WAL")
             self._migrate_coding_schema(conn)
             conn.executescript(SCHEMA)
@@ -305,7 +320,7 @@ class JobStore(CodingStoreMixin):
                 # live legacy attempt. Pending jobs adopt it only when claimed.
                 if self.routing_policy is not None:
                     for root in conn.execute("SELECT job_id FROM pipeline_jobs WHERE kind IN ('MACRO_PLANNING_REQUEST','CODE_REQUEST') AND status='IN_PROGRESS'").fetchall():
-                        routes.capture_workflow(conn, root['job_id'], self.routing_policy)
+                        routes.capture_workflow(conn, root['job_id'], self._current_routing_policy(conn))
                     for row in conn.execute('''SELECT j.job_id FROM pipeline_jobs j LEFT JOIN pipeline_route_reservations r
                         ON r.job_id=j.job_id AND r.attempt_id=j.attempt_id WHERE j.status='IN_PROGRESS'
                         AND j.kind NOT IN ('MACRO_PLANNING_REQUEST','CODE_REQUEST','CODE_TEST','CODE_INTEGRATE') AND r.reservation_id IS NULL''').fetchall():
@@ -356,12 +371,42 @@ class JobStore(CodingStoreMixin):
             lambda: canonical_json(owner().transition_telemetry if owner() is not None else None))
         try:
             conn.execute("PRAGMA busy_timeout=5000")
-            conn.execute("PRAGMA synchronous=NORMAL")
+            conn.execute('PRAGMA synchronous=FULL' if self._catalog_enabled else 'PRAGMA synchronous=NORMAL')
             conn.execute("PRAGMA foreign_keys=ON")
         except BaseException:
             conn.close()
             raise
         return conn
+
+    def _validate_catalog_mode(self, conn):
+        tables={row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'pipeline_catalog_%'")}
+        required={'pipeline_catalog_generations','pipeline_catalog_active'}
+        if not self._catalog_enabled:
+            if tables:
+                raise ValueError('Persisted catalog authority requires a catalog-enabled runtime')
+            return
+        if not required <= tables:
+            raise ValueError('Catalog authority must be explicitly initialized before opening this store')
+        from .routing import load_routing_policy
+        baseline=load_routing_policy(self.routing_policy)
+        if baseline.as_dict()['policy_version'] != 3 or conn.execute(
+                'SELECT 1 FROM pipeline_catalog_generations WHERE policy_digest=?', (baseline.digest,)).fetchone() is None:
+            raise ValueError('Installed baseline is absent from catalog history')
+        self._current_routing_policy(conn)
+
+    def _current_routing_policy(self, conn):
+        """Capture authority within the same transaction as submission/dispatch.
+
+        Never cache the durable pointer on a JobStore instance: another writer
+        may have published since its construction. Historical captures stay in
+        their immutable workflow/job rows and are not changed by this read.
+        """
+        if not conn.in_transaction:
+            raise ValueError('Catalog policy selection requires the caller transaction')
+        if not self._catalog_enabled:
+            return self.routing_policy
+        from .catalog_journal import active_policy
+        return active_policy(conn).as_dict()
 
     @contextmanager
     def _connection(self) -> Iterator[sqlite3.Connection]:
@@ -478,11 +523,11 @@ class JobStore(CodingStoreMixin):
         if max_dispatches is not None and (type(max_dispatches) is not int or not 1 <= max_dispatches <= 1000000):
             raise ValueError('max_dispatches must be an integer from 1 to 1000000')
         # New submissions always capture Chapter 06 routing authority.
-        requested_policy = self.routing_policy
         from .document_governance import capture_authority
         governing = capture_authority(self.governing_requirements, 'document_plan')
         payload = {"objective": objective, "requirements": requirements, "chapter_count": chapter_count}
         with self._write() as conn:
+            requested_policy = self._current_routing_policy(conn)
             existing = conn.execute("SELECT job_id FROM pipeline_jobs WHERE job_id=?", (workflow_id,)).fetchone()
             if existing:
                 root = self._get(conn, workflow_id)
@@ -518,7 +563,7 @@ class JobStore(CodingStoreMixin):
             else:
                 self._insert(conn, workflow_id, workflow_id, None, 'MACRO_PLANNING_REQUEST',
                              'IN_PROGRESS', payload, max_attempts=1)
-                bounded_policy = dict(self.routing_policy)
+                bounded_policy = dict(self._current_routing_policy(conn))
                 bounded_policy['max_routing_seconds'] = min(bounded_policy.get('max_routing_seconds') or 300, 300)
                 dispatch_limit = min(bounded_policy.get('max_dispatches') or 3, 3)
                 routes.capture_workflow(conn, workflow_id, bounded_policy, max_dispatches=dispatch_limit)
@@ -659,7 +704,7 @@ class JobStore(CodingStoreMixin):
                 if candidate['status'] not in ('PENDING','PENDING_RETRY') or self._get(conn,candidate['workflow_id'])['status']!='IN_PROGRESS':
                     continue
                 choice, routed = ((None, False) if candidate['kind'] in CONTROLLER_KINDS
-                                  else routes.select(conn, candidate, self.routing_policy))
+                                  else routes.select(conn, candidate, self._current_routing_policy(conn)))
                 if routed and choice is None:
                     continue
                 if routed and choice.get('exhausted'):
@@ -1026,7 +1071,7 @@ class JobStore(CodingStoreMixin):
                 return True
             if (job['kind'] in ('CODE_EDIT','CODE_TEST_AUTHOR','CODE_REVIEW') and retry
                     and category=='code'):
-                routes.failed(conn,job,category,retry_after_seconds,hold_scope,self.routing_policy)
+                routes.failed(conn,job,category,retry_after_seconds,hold_scope,self._current_routing_policy(conn))
                 conn.execute("UPDATE pipeline_jobs SET status='FAILED',lease_owner=NULL,lease_expires_at=NULL,error=?,updated_at=? WHERE job_id=?",
                              (error,time.time(),job_id))
                 state = self._coding_state(conn,job['workflow_id'])
@@ -1042,7 +1087,7 @@ class JobStore(CodingStoreMixin):
                 self._coding_retry(conn,root,state,error)
                 self._save_coding(conn,job['workflow_id'],state)
                 return True
-            state = routes.failed(conn, job, category, retry_after_seconds, hold_scope,self.routing_policy)
+            state = routes.failed(conn, job, category, retry_after_seconds, hold_scope,self._current_routing_policy(conn))
             exhausted = ((state['failure_count']>=job['max_attempts'] or
                           (state['max_dispatches'] is not None and state['dispatches']>=state['max_dispatches']))
                          if state is not None else job["attempts"] >= job["max_attempts"])

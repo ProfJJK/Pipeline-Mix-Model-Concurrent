@@ -1,6 +1,7 @@
 """R7 durable generation publication primitives; caller owns the job-board transaction.
 
-Not installed by JobStore yet. No model execution, migration of old captures or
+JobStore's opt-in catalog mode reads an explicitly initialized journal; it does
+not initialize or publish one. No model execution, migration of old captures or
 filesystem authority lives here. Production integration must obtain retained
 SYSTEM authority and real shared-slot probe receipts before calling publish.
 """

@@ -335,7 +335,7 @@ class CodingStoreMixin:
                     raise ValueError('workflow_id belongs to a different request')
             else:
                 self._insert(conn, identifier, identifier, None, 'CODE_REQUEST', 'IN_PROGRESS', payload)
-                routes.capture_workflow(conn, identifier, self.routing_policy or {})
+                routes.capture_workflow(conn, identifier, self._current_routing_policy(conn) or {})
                 sha = self._snapshot(conn, snapshot.files)
                 state = {'project': project.as_dict(), 'docker': docker_policy.as_dict(),
                          'planning_evidence':planning_evidence,'planning_history':[],'planning_revision':0,
