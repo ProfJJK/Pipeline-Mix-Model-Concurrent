@@ -13,8 +13,10 @@ def run_ps(monkeypatch):
     return ps_fixture.run_ps
 
 
-@pytest.mark.parametrize('mutation', ['', 'stderr', 'helper', 'phase', 'cleanup', 'cutover', 'restored', 'task_state', 'task_instances', 'task_result'])
+@pytest.mark.parametrize('mutation', ['', 'stderr', 'helper', 'phase', 'cleanup', 'cutover', 'restored',
+    'task_state', 'task_instances', 'task_result', 'task_arguments', 'task_duration', 'task_acl'])
 def test_reviewed_prefix_failure_requires_exact_evidence_and_terminal_task(run_ps, mutation):
+    phase=str(Path(__file__).parents[1]/'scripts/run_r6_system_phase.ps1').replace("'", "''")
     result = run_ps(r'''
 $script:base='C:\fixture';$script:targetRoot='C:\fixture\r6'
 $root=Join-Path $script:base 'R6Acceptance4.2.7-windows-20261012-v1-auth-226ce1d64f29486c838fca043f6bf904'
@@ -38,25 +40,37 @@ function Read-R6RecoveryJson {param($Path,$Hash)
     recovery=@{ok=$true;restored=('MUTATION' -ne 'restored');kind='base'}}}
   if($Path -like '*start-receipt.json'){
     if($Hash -cne '3e32dc204f9003c709a758f9025610204b4596cfaa67ac31be379bd7a94a067b'){throw 'unbound restore'}
-    return @{status='WARDEN_R4_RESTARTED_HEALTH_VERIFIED';target='r4';attempt='v3';enabled_after=$true;started=$true}}
+    return @{schema='cochem-warden-start/3';status='WARDEN_R4_RESTARTED_HEALTH_VERIFIED';target='r4';attempt='v3';
+      task_name='CoChem-4.2.7-Warden';enabled_after=$true;task_state=4;running_instances=1;health_samples=2;
+      health=@{samples_stable=$true};exactly_one_start_requested=$true;automatic_retry_allowed=$false}}
   throw 'unexpected read'
 }
 function Get-R6ReviewedAuthTask {
-  [pscustomobject]@{State=$(if('MUTATION' -eq 'task_state'){4}else{3});LastTaskResult=$(if('MUTATION' -eq 'task_result'){1}else{0});LastRunTime=[DateTime]'2026-10-12'}|
-    Add-Member -MemberType ScriptMethod -Name GetInstances -Value {param($Flags) @{Count=$(if('MUTATION' -eq 'task_instances'){1}else{0})}} -PassThru
+  $settings=[pscustomobject]@{MultipleInstances=2;RestartCount=0;AllowDemandStart=$true;ExecutionTimeLimit='PT15M';Enabled=$true}
+  $arguments='-I -B "'+(Join-Path $root 'r6_auth_recovery.py')+'" --output "'+$root+'" --manifest-hash bffcf617620320109a3ff1bcbdcc2e1d4918f9571721dc4642efeed4d0b7a2c4 --candidate-hash a8b9b2052402f30860188721f986686c5a2f6785e563045edf295adae250f288'
+  $action=[pscustomobject]@{Type=0;Path=(Join-Path $script:targetRoot '.venv\Scripts\python.exe');Arguments=$arguments;WorkingDirectory=$script:targetRoot}
+  $actions=[pscustomobject]@{Count=1;Action=$action};$actions|Add-Member ScriptMethod Item {param($Number) $this.Action}
+  $definition=[pscustomobject]@{Settings=$settings;Principal=[pscustomobject]@{UserId='SYSTEM';LogonType=5;RunLevel=1};Actions=$actions;Triggers=[pscustomobject]@{Count=0}}
+  if('MUTATION' -eq 'task_arguments'){$action.Arguments='changed'}
+  if('MUTATION' -eq 'task_duration'){$settings.ExecutionTimeLimit='PT1M'}
+  $task=[pscustomobject]@{Definition=$definition;Enabled=$true;Acl='O:BAG:BAD:P(A;;FA;;;SY)(A;;FA;;;BA)';
+    State=$(if('MUTATION' -eq 'task_state'){4}else{3});LastTaskResult=$(if('MUTATION' -eq 'task_result'){1}else{0});LastRunTime=[DateTime]'2026-10-12'}
+  if('MUTATION' -eq 'task_acl'){$task.Acl='O:BAG:BAD:P(A;;FA;;;SY)(A;;FA;;;BU)'}
+  $task|Add-Member ScriptMethod GetInstances {param($Flags) @{Count=$(if('MUTATION' -eq 'task_instances'){1}else{0})}}
+  $task|Add-Member ScriptMethod GetSecurityDescriptor {param($Mask) $this.Acl}
+  $script:events.Add('task_lookup');$task
 }
-function Assert-R6PhaseTask {param($Task,$Executable,$Arguments,$Directory,$Seconds,$Enabled)
-  if($Seconds -ne 900 -or -not $Enabled -or $Directory -cne $script:targetRoot -or
-    $Arguments -notlike '*--output "*226ce1d64f29486c838fca043f6bf904"*'){throw 'wrong task binding'}
-  $script:events.Add('task_definition')
-}
+$tokens=$null;$errors=$null
+$ast=[Management.Automation.Language.Parser]::ParseFile('PHASE_PATH',[ref]$tokens,[ref]$errors)
+$definition=@($ast.FindAll({param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -ceq 'Assert-R6PhaseTask'},$false))[0]
+. ([scriptblock]::Create($definition.Extent.Text))
 $held=$false
 try{Assert-R6ReviewedPrefixFailure $root}catch{$held=$true}
 @{held=$held;events=@($script:events)}|ConvertTo-Json -Compress
-'''.replace('MUTATION', mutation))
+'''.replace('MUTATION', mutation).replace('PHASE_PATH', phase))
     assert result['held'] is bool(mutation)
     if not mutation:
-        assert result['events'] == ['task_definition']
+        assert result['events'] == ['task_lookup']
 
 
 @pytest.mark.parametrize('mutation', ['', 'duplicate','success_changed','agy_changed','cleanup','count'])
@@ -111,6 +125,65 @@ foreach($definition in @(Import-R6CopyFunctions $directory)){. ([scriptblock]::C
   file=[bool](Get-Command Open-VerifiedFile);acl=[bool](Get-Command Assert-ProtectedPath)}|ConvertTo-Json -Compress
 '''.replace('DIRECTORY',directory).replace('INSTALLER_PIN',pin))
     assert result==dict(tree=True,interpreter=True,file=True,acl=True)
+
+
+def test_reviewed_restore_accepts_actual_receipt_writer_without_invented_started_field(run_ps):
+    """Run only the production writer's pure receipt expressions, never StartOnce."""
+    core = str(Path(__file__).parents[1] / 'docs/deployment/windows-deployment-next/r6_retarget_core.ps1').replace("'", "''")
+    result = run_ps(r'''
+$tokens=$null;$errors=$null
+$ast=[Management.Automation.Language.Parser]::ParseFile('CORE',[ref]$tokens,[ref]$errors)
+if($errors.Count){throw 'Receipt writer parse error'}
+foreach($name in @('New-ReceiptHead','Add-OrderedFields')){
+  $node=@($ast.FindAll({param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq $name},$false))[0]
+  . ([scriptblock]::Create($node.Extent.Text))}
+$start=@($ast.FindAll({param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq 'Invoke-StartOnce'},$false))[0]
+$head=@($start.FindAll({param($n) $n -is [Management.Automation.Language.AssignmentStatementAst] -and $n.Extent.Text -like '$receipt=New-ReceiptHead *'},$true))[0]
+$fields=@($start.FindAll({param($n) $n -is [Management.Automation.Language.CommandAst] -and $n.GetCommandName() -ceq 'Add-OrderedFields'},$true))[0]
+$script:Attempt='v3';$script:taskName='CoChem-4.2.7-Warden'
+$Context=@{target='r4';started_status='WARDEN_R4_RESTARTED_HEALTH_VERIFIED';runtime_root='fixture';config_path='fixture';
+  config_sha256=('a'*64);install_after_path='fixture';install_after_sha256=('a'*64);config_mode='runtime';
+  deployment_revision_sha256=('a'*64);admission_field=$null;
+  action=@{execute='fixture';arguments='fixture';working_directory='fixture'};triggers=@()}
+$Binding=@{source=@{source_state='r4';source_attempt='v2';stop_attempt='v3'};receipt_sha256=('a'*64)}
+$state=@{enabled=$false};$final=@{state=4;instances=1;enabled=$true}
+$facts=@{instance_guid='fixture'};$enabledByStart=$true;$twoPhase=$false;$after=@{}
+$intentHash='b'*64;$startedXml='c'*64;$evaluations=2;$proof=@{}
+$second=[pscustomobject]@{pid=1;instance_id='fixture';process_started_at=1;source_root='fixture';quarantined_slots=[pscustomobject]@{}}
+$routingHolds=@{valid=$true;items=@()}
+function Get-JsonMember {param($Object,$Name) if($Name -ceq 'quarantined_slots'){$Object.quarantined_slots}else{$null}}
+function Get-JsonListField {param($Object,$Name) @{valid=$true;items=@()}}
+function Get-LiveTriggerEnabled {param($State,$Target) $true}
+. ([scriptblock]::Create($head.Extent.Text))
+. ([scriptblock]::Create($fields.Extent.Text))
+$script:written=$receipt|ConvertTo-Json -Depth 10|ConvertFrom-Json
+$message='';$held=$false
+try{Assert-R6ReviewedRestore $script:written}catch{$held=$true;$message=$_.Exception.Message}
+@{held=$held;message=$message;schema=$script:written.schema;has_started=($null -ne $script:written.PSObject.Properties['started'])}|ConvertTo-Json -Compress
+'''.replace('CORE', core))
+    assert result['schema'] == 'cochem-warden-start/3'
+    assert result['has_started'] is False
+    assert result['held'] is False, result['message']
+
+
+@pytest.mark.parametrize('field,value', [
+    ('schema', 'wrong'), ('status', 'wrong'), ('target', 'r6'), ('attempt', 'v4'),
+    ('task_name', 'wrong'), ('enabled_after', False), ('task_state', 3),
+    ('running_instances', 0), ('health_samples', 1), ('health', {'samples_stable': False}),
+    ('exactly_one_start_requested', False), ('automatic_retry_allowed', True),
+])
+def test_reviewed_restore_refuses_changed_persisted_evidence(run_ps, field, value):
+    receipt=dict(schema='cochem-warden-start/3', status='WARDEN_R4_RESTARTED_HEALTH_VERIFIED',
+        target='r4', attempt='v3', task_name='CoChem-4.2.7-Warden', enabled_after=True,
+        task_state=4, running_instances=1, health_samples=2, health={'samples_stable': True},
+        exactly_one_start_requested=True, automatic_retry_allowed=False)
+    receipt[field]=value
+    result=run_ps("$receipt='"+json.dumps(receipt)+"'|ConvertFrom-Json\n"+r'''
+$held=$false
+try{Assert-R6ReviewedRestore $receipt}catch{$held=$true}
+@{held=$held}|ConvertTo-Json -Compress
+''')
+    assert result['held'] is True
 
 
 @pytest.mark.parametrize('mutation',['','install_held','wrong_install','wrong_phase','restore_failed','knowledge_exists','later_phase','recovery_exists','reviewed_recovery','reviewed_recovery_failed'])

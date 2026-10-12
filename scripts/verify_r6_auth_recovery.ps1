@@ -39,6 +39,19 @@ function Get-R6ReviewedAuthTask {
     $scheduler.GetFolder('\').GetTask('CoChem-4.2.7-R6Acceptance-auth-226ce1d64f29486c838fca043f6bf904')
 }
 
+function Assert-R6ReviewedRestore {
+    param($Receipt)
+    # This is the hash-bound persisted start receipt, not a launch-series
+    # result. The production writer does not put a "started" flag in it.
+    if($Receipt.schema -cne 'cochem-warden-start/3' -or
+        $Receipt.status -cne 'WARDEN_R4_RESTARTED_HEALTH_VERIFIED' -or $Receipt.target -cne 'r4' -or
+        $Receipt.attempt -cne 'v3' -or $Receipt.task_name -cne 'CoChem-4.2.7-Warden' -or
+        $Receipt.enabled_after -ne $true -or $Receipt.task_state -ne 4 -or $Receipt.running_instances -ne 1 -or
+        $Receipt.health_samples -ne 2 -or $Receipt.health.samples_stable -ne $true -or
+        $Receipt.exactly_one_start_requested -ne $true -or $Receipt.automatic_retry_allowed -ne $false){
+        throw 'Reviewed R4 restoration differs.'}
+}
+
 function Assert-R6ReviewedPrefixFailure {
     param([string]$Root)
     # Explicitly reviewed owner attempt, never a general retry exemption.
@@ -59,8 +72,7 @@ function Assert-R6ReviewedPrefixFailure {
         $held.recovery.ok -ne $true -or $held.recovery.restored -ne $true -or $held.recovery.kind -cne 'base'){
         throw 'The reviewed attempt did not restore its pre-cutover controller.'}
     $restore=Read-R6RecoveryJson (Join-Path $script:base 'WardenRetarget4.2.7-windows-20261011-r4-v3\start-receipt.json') '3e32dc204f9003c709a758f9025610204b4596cfaa67ac31be379bd7a94a067b'
-    if($restore.status -cne 'WARDEN_R4_RESTARTED_HEALTH_VERIFIED' -or $restore.target -cne 'r4' -or
-        $restore.attempt -cne 'v3' -or $restore.enabled_after -ne $true -or $restore.started -ne $true){throw 'Reviewed R4 restoration differs.'}
+    Assert-R6ReviewedRestore $restore
     $task=Get-R6ReviewedAuthTask
     $executable=Join-Path $script:targetRoot '.venv\Scripts\python.exe'
     $arguments='-I -B "'+(Join-Path $Root 'r6_auth_recovery.py')+'" --output "'+$Root+'" --manifest-hash bffcf617620320109a3ff1bcbdcc2e1d4918f9571721dc4642efeed4d0b7a2c4 --candidate-hash a8b9b2052402f30860188721f986686c5a2f6785e563045edf295adae250f288'
