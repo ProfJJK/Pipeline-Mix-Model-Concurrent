@@ -1,0 +1,35 @@
+R7 — ONE OWNER COMMAND, WITH PENDING R6 RECOVERY INCLUDED
+Prepared 2026-10-12. Source 70af569. Reviewed offline package; not deployed yet.
+
+1. Open Windows PowerShell as Administrator under AETHERDESK\ansac and accept UAC.
+2. Paste the SINGLE command below and press Enter once.
+3. If the reviewed R6 recovery requests a browser sign-in, complete it at the start.
+   Existing verified sessions are reused. The input window closes 20 minutes after
+   this command starts. Unknown authentication fails without guessing a logout.
+
+C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -File "C:\Users\ansac\CoChem427\r7-bundle-70af569\run_r7_launch.ps1" -LaunchManifest "C:\Users\ansac\CoChem427\r7-bundle-70af569\launch-manifest.json" -LaunchManifestSha256 91ed05ee223f1ab2f867b492095a07d135248098bc5ce07a9727ac7acee5f435 -Apply
+
+When the green message says "You can walk away", leave the window open and go
+about your other work. Remaining installation, tests and cutovers are unattended.
+They can take much longer than 20 minutes. There are no planned late questions,
+restarts or continuation commands. A temporary awake request lets the display
+sleep while keeping this sitting running; it ends when the command exits.
+
+This command reuses completed R6, or performs the reviewed pending R6 recovery
+first. It then installs the fresh offline R7 runtime, waits for idle R6, keeps a
+full job-database backup, migrates catalog tables, stages protected authority and
+checks R7 health plus native control-probe publication. The approved matrix,
+four shared slots, Chapter 06, R:, sign-ins and existing repair budgets are kept.
+
+Do not run the older R5/R6 sitting commands separately for this sitting.
+If it reports HELD or an error, leave its files/tasks/running state in place.
+Do not repeat the command. It saves sanitized status and failure metadata and
+restores the prior controller only where the reviewed rollback is safe.
+
+Success ends with R7_RUNNING_CATALOG_PUBLICATION_VERIFIED. This confirms this
+deployment transaction and catalog control probe, not full 4.2.7 SRS acceptance.
+
+Engineering verification: 330 full regression tests passed, 1 SYSTEM-only metric
+test skipped, 2 real-process cleanup tests excluded; 16 final owner-package tests
+passed, including 2 additional fake-native awake-request cases. All three final
+packaged read-only plans passed. No engineering Apply or host acceptance was run.
