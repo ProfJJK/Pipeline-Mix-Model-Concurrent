@@ -210,7 +210,10 @@ function Invoke-R6LaunchSequence {
     $script:R6CutoverRequested=$true
     $activated=Invoke-R6LaunchChild 'activate_r6_runtime.ps1' $arguments
     if($activated.status -cne 'WARDEN_R6_RUNNING_HEALTH_VERIFIED'){throw 'R6 activation was not verified.'}
-    $activated
+    # Return through script state. Capturing this sequence's success stream
+    # makes PowerShell redirect nested native children, including attended
+    # login. Their console handles must remain inherited and interactive.
+    $script:R6LaunchResult=$activated
 }
 
 function Initialize-R6ReleasedState {
@@ -251,7 +254,10 @@ function Invoke-R6LaunchMain {
         Initialize-R6ReleasedState
         $script:SittingRoot=Join-Path $script:Base ('R6Sitting4.2.7-windows-20261012-'+[Guid]::NewGuid().ToString('N'))
         $started=$true
-        $result=Invoke-R6LaunchSequence $manifest
+        $script:R6LaunchResult=$null
+        Invoke-R6LaunchSequence $manifest
+        $result=$script:R6LaunchResult
+        if($null -eq $result){throw 'R6 sequence did not record its completion result.'}
         $script:R6Phase='complete'
         $null=Write-R5RecordText (Join-Path $script:SittingRoot 'r6-complete.json') ($result|ConvertTo-Json -Depth 12)
         Write-R6PublicStatus 'COMPLETE' $result

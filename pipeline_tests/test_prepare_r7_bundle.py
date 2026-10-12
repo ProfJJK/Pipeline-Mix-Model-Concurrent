@@ -57,3 +57,5 @@ def test_fresh_recovery_repins_only_two_reviewed_helpers_and_deadline(tmp_path):
     assert set(changed)=={'run_r6_launch.ps1','r6_auth_recovery.py','verify_r6_auth_recovery.ps1'}
     assert result['reviewed_prefix_recovery']
     assert builder.sha(builder.RECOVERY.joinpath('launch-manifest.json').read_bytes())==builder.RECOVERY_PIN
+    assert destination.joinpath('run_r6_launch.ps1').read_bytes()==builder.derive_recovery_entry(
+        SCRIPTS.joinpath('run_r6_launch.ps1').read_bytes())

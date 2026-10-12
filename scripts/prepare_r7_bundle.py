@@ -39,7 +39,9 @@ def prepare_recovery(destination, repository):
         relative(row['name'])
         if '/' in row['name']:raise ValueError('Unexpected recovery input path')
         payload=read_pinned(RECOVERY/row['name'],row['sha256'],row['length'])
-        if row['name']=='run_r6_launch.ps1':payload=derive_recovery_entry(payload)
+        if row['name']=='run_r6_launch.ps1':
+            from prepare_r6_launch_package import read_regular
+            payload=derive_recovery_entry(read_regular(Path(repository)/'scripts'/row['name']))
         elif row['name'] in ('r6_auth_recovery.py','verify_r6_auth_recovery.ps1'):
             # Replace only reviewed recovery helpers in this fresh copy. Earlier
             # delivered packages and all remaining R5/R6 inputs stay untouched.

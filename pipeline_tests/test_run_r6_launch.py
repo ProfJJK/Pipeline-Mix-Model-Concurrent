@@ -11,6 +11,19 @@ def run_ps(monkeypatch):
     return ps_fixture.run_ps
 
 
+def test_attended_sequence_call_does_not_capture_native_console_output(run_ps):
+    source=str(Path(__file__).parents[1]/'scripts/run_r6_launch.ps1').replace("'", "''")
+    result=run_ps(r'''
+$tokens=$null;$errors=$null
+$ast=[Management.Automation.Language.Parser]::ParseFile('SOURCE',[ref]$tokens,[ref]$errors)
+$main=@($ast.FindAll({param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -ceq 'Invoke-R6LaunchMain'},$false))[0]
+$calls=@($main.FindAll({param($n) $n -is [Management.Automation.Language.CommandAst] -and $n.GetCommandName() -ceq 'Invoke-R6LaunchSequence'},$true))
+$captured=$calls.Count -ne 1 -or $calls[0].Parent.Parent -is [Management.Automation.Language.AssignmentStatementAst]
+@{captured=$captured}|ConvertTo-Json -Compress
+'''.replace('SOURCE',source))
+    assert result['captured'] is False
+
+
 @pytest.mark.parametrize('failure', ['', 'offline_install','agent_staging','knowledge','agent','native','preview','activation'])
 def test_sequence_stops_at_first_failure_and_never_calls_old_r5_cutover_or_fixture(run_ps, failure):
     result=run_ps(r"""
@@ -44,13 +57,18 @@ function Write-R6PublicStatus {param($Status,$Result)}
 function Save-R6AuthSummary {param($Result)}
 $failed=$false
 try{$null=Invoke-R6LaunchSequence $manifest}catch{$failed=$true}
-@{failed=$failed;events=@($script:events);cutover=$script:R6CutoverRequested}|ConvertTo-Json -Compress
+@{failed=$failed;events=@($script:events);cutover=$script:R6CutoverRequested;
+  result=$(if(Get-Variable R6LaunchResult -Scope Script -ErrorAction SilentlyContinue){$script:R6LaunchResult}else{$null})}|ConvertTo-Json -Compress
 """.replace('FAILURE',failure))
     expected=['inspection','quiescence','offline_install','auth','agent_staging','knowledge','agent','native','preview','index','activation']
     if failure: expected=expected[:expected.index(failure)+1]
     assert result['events']==expected
     assert result['failed'] is bool(failure)
     assert result['cutover'] is (failure in ('','activation'))
+    if not failure:
+        assert result['result']['status']=='WARDEN_R6_RUNNING_HEALTH_VERIFIED'
+    else:
+        assert result['result'] is None
 
 
 def test_launch_refuses_unpinned_manifest_before_open(run_ps):

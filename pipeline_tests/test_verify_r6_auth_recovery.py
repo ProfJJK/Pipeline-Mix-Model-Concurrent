@@ -186,7 +186,59 @@ try{Assert-R6ReviewedRestore $receipt}catch{$held=$true}
     assert result['held'] is True
 
 
-@pytest.mark.parametrize('mutation',['','install_held','wrong_install','wrong_phase','restore_failed','knowledge_exists','later_phase','recovery_exists','reviewed_recovery','reviewed_recovery_failed'])
+@pytest.mark.parametrize('mutation', ['', 'helper', 'status', 'cleanup', 'stream', 'phase',
+    'cutover', 'recovery', 'restore', 'task', 'session_root', 'session_task'])
+def test_console_hold_requires_exact_signed_out_inventory_restore_and_no_login_session(run_ps, mutation):
+    rows=[dict(worker=f'slot{i}',provider=p,authenticated=p!='gemini',cleanup_verified=True,
+        status='ATTENDED_LOGIN_REQUIRED' if p=='gemini' else 'REUSE_VERIFIED_SESSION',
+        exit_code=1 if p=='gemini' else 0) for i in range(1,7) for p in ('codex','claude','gemini')]
+    for row in rows:
+        if row['provider']=='gemini':
+            row.update(reason='AGY_MODELS_EXPLICIT_SIGN_OUT',stdout_bytes=0,stderr_bytes=122,
+                stdout_sha256='e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+                stderr_sha256='148fc48c6aeaf4d5f5780d0e38fc39215de098c1537c57e09410d4dad9718a1d')
+    if mutation=='status':rows[2]['status']='STATUS_UNVERIFIED'
+    if mutation=='cleanup':rows[0]['cleanup_verified']=False
+    if mutation=='stream':rows[2]['stderr_sha256']='a'*64
+    evidence=dict(phase='auth',status='PHASE_COMPLETED',
+        manifest_sha256='bffcf617620320109a3ff1bcbdcc2e1d4918f9571721dc4642efeed4d0b7a2c4',
+        candidate_sha256='a8b9b2052402f30860188721f986686c5a2f6785e563045edf295adae250f288',
+        result=dict(schema='cochem-r6-authentication/1',status='ATTENDED_AUTH_REVIEW_REQUIRED',
+            status_helper_sha256='a'*64 if mutation=='helper' else '79b7029cd998f25c0a01300924bb3972f830f7783618ce3c99260b089510aaec',
+            native_model_jobs_executed=0,credentials_copied=False,checks=rows))
+    result=run_ps("$script:evidence='"+json.dumps(evidence)+"'|ConvertFrom-Json\n"+r'''
+$script:base='C:\fixture';$script:targetRoot='C:\fixture\r6';$script:events=[Collections.Generic.List[string]]::new()
+$root=Join-Path $script:base 'R6Acceptance4.2.7-windows-20261012-v1-auth-56126335ff314eb497cd409fd58e6b1e'
+function Read-R6RecoveryJson {param($Path,$Hash)
+  if($Path -like '*result.json'){return $script:evidence}
+  if($Path -like '*r6-held.json'){return @{status='HELD_PRESERVE_EVIDENCE';
+    phase=$(if('MUTATION' -eq 'phase'){'auth'}else{'attended_gemini_slot1'});cutover_requested=('MUTATION' -eq 'cutover');
+    recovery=@{ok=$true;restored=('MUTATION' -ne 'recovery');kind='base'}}}
+  if($Path -like '*start-receipt.json'){
+    if($Hash -cne '4b20035cdcb90d9547dbe95a1302ba7574424877dedfa7ae0db1da4d5e849852'){throw 'unbound restoration'}
+    return @{schema='cochem-warden-start/3';status='WARDEN_R4_RESTARTED_HEALTH_VERIFIED';target='r4';attempt='v4';
+      task_name='CoChem-4.2.7-Warden';enabled_after=$true;task_state=4;running_instances=1;
+      health_samples=$(if('MUTATION' -eq 'restore'){1}else{2});health=@{samples_stable=$true};
+      exactly_one_start_requested=$true;automatic_retry_allowed=$false}}
+  throw 'unexpected evidence read'
+}
+function Assert-R6ReviewedAuthTask {param($Root,$Name)
+  if($Name -cne 'CoChem-4.2.7-R6Acceptance-auth-56126335ff314eb497cd409fd58e6b1e' -or
+    $Root -notlike '*auth-56126335ff314eb497cd409fd58e6b1e'){throw 'wrong prior task'}
+  if('MUTATION' -eq 'task'){throw 'task changed'};$script:events.Add('task')}
+function Get-ChildItem {param($LiteralPath,[switch]$Directory,$Filter)
+  if($LiteralPath -cne $script:base -or $Filter -cne 'InteractiveAgy427-r4-slot1-*'){throw 'wrong session census'}
+  if('MUTATION' -eq 'session_root'){[pscustomobject]@{Name='preserved-session'}}}
+function Get-R6Slot1InteractiveTasks {if('MUTATION' -eq 'session_task'){[pscustomobject]@{Name='preserved-task'}}}
+$held=$false
+try{Assert-R6ReviewedConsoleHold $root}catch{$held=$true}
+@{held=$held;events=@($script:events)}|ConvertTo-Json -Compress
+'''.replace('MUTATION',mutation))
+    assert result['held'] is bool(mutation)
+    if not mutation:assert result['events']==['task']
+
+
+@pytest.mark.parametrize('mutation',['','install_held','wrong_install','wrong_phase','restore_failed','knowledge_exists','later_phase','recovery_exists','reviewed_recovery','reviewed_recovery_failed','reviewed_console','reviewed_console_failed'])
 def test_complete_preflight_with_inert_host_boundaries(run_ps,mutation):
     result=run_ps(r'''
 $script:base='C:\fixture';$script:targetRoot='C:\fixture\r6';$script:events=[Collections.Generic.List[string]]::new()
@@ -213,15 +265,20 @@ function Read-R6RecoveryJson {param($Path,$Hash)
 function Test-Path {param($LiteralPath)
   return (('MUTATION' -eq 'install_held' -and $LiteralPath -like '*install-held.json') -or
     ('MUTATION' -eq 'knowledge_exists' -and $LiteralPath -eq 'C:\fixture\knowledge') -or
-    ('MUTATION' -in @('recovery_exists','reviewed_recovery','reviewed_recovery_failed') -and $LiteralPath -like '*r6_auth_recovery.py'))}
+    ('MUTATION' -in @('recovery_exists','reviewed_recovery','reviewed_recovery_failed','reviewed_console','reviewed_console_failed') -and $LiteralPath -like '*r6_auth_recovery.py'))}
 function Get-ChildItem {param($LiteralPath,[switch]$Directory)
   if('MUTATION' -eq 'later_phase'){[pscustomobject]@{Name='R6Acceptance4.2.7-windows-20261012-v1-native-fixture';FullName='C:\fixture\native'}}
   if('MUTATION' -eq 'recovery_exists'){[pscustomobject]@{Name='R6Acceptance4.2.7-windows-20261012-v1-auth-fixture';FullName='C:\fixture\auth'}}
-  if('MUTATION' -in @('reviewed_recovery','reviewed_recovery_failed')){[pscustomobject]@{Name='R6Acceptance4.2.7-windows-20261012-v1-auth-226ce1d64f29486c838fca043f6bf904';FullName='C:\fixture\reviewed'}}}
+  if('MUTATION' -in @('reviewed_recovery','reviewed_recovery_failed')){[pscustomobject]@{Name='R6Acceptance4.2.7-windows-20261012-v1-auth-226ce1d64f29486c838fca043f6bf904';FullName='C:\fixture\reviewed'}}
+  if('MUTATION' -in @('reviewed_console','reviewed_console_failed')){[pscustomobject]@{Name='R6Acceptance4.2.7-windows-20261012-v1-auth-56126335ff314eb497cd409fd58e6b1e';FullName='C:\fixture\console'}}}
 function Assert-R6ReviewedPrefixFailure {param($Root)
   if('MUTATION' -eq 'reviewed_recovery_failed'){throw 'reviewed evidence differs'}
   if($Root -cne 'C:\fixture\reviewed'){throw 'wrong reviewed root'}
   $script:events.Add('reviewed_attempt')}
+function Assert-R6ReviewedConsoleHold {param($Root)
+  if('MUTATION' -eq 'reviewed_console_failed'){throw 'console evidence differs'}
+  if($Root -cne 'C:\fixture\console'){throw 'wrong console root'}
+  $script:events.Add('console_attempt')}
 function Assert-R6NotReferenced {$script:events.Add('task_reference')}
 function Assert-R6Tree {$script:events.Add('tree');100}
 function Assert-R6Interpreter {$script:events.Add('interpreter')}
@@ -230,9 +287,10 @@ $held=$false;$status=$null
 try{$status=(Assert-R6AuthRecoveryEvidence).status}catch{$held=$true}
 @{held=$held;status=$status;events=@($script:events)}|ConvertTo-Json -Compress
 '''.replace('MUTATION',mutation))
-    success = mutation in ('', 'reviewed_recovery')
+    success = mutation in ('', 'reviewed_recovery', 'reviewed_console')
     assert result['held'] is not success
     if success:
         assert result['status']=='EXISTING_R6_AUTH_RECOVERY_PREREQUISITES_VERIFIED'
-        assert result['events']==(['reviewed_attempt'] if mutation else [])+['task_reference','tree','interpreter']
+        expected = {'reviewed_recovery':['reviewed_attempt'], 'reviewed_console':['console_attempt']}.get(mutation, [])
+        assert result['events']==expected+['task_reference','tree','interpreter']
     else: assert result['events']==[]

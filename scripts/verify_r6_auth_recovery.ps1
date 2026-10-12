@@ -17,7 +17,7 @@ function Read-R6RecoveryJson {
 }
 
 function Assert-R6AuthRecoveryRows {
-    param($Value)
+    param($Value,[ValidateSet('STATUS_UNVERIFIED','ATTENDED_LOGIN_REQUIRED')][string]$AgyStatus='STATUS_UNVERIFIED')
     if($Value.schema -cne 'cochem-r6-authentication/1' -or $Value.status -cne 'ATTENDED_AUTH_REVIEW_REQUIRED' -or
         $Value.native_model_jobs_executed -ne 0 -or $Value.credentials_copied -ne $false -or @($Value.checks).Count -ne 18){
         throw 'The original authentication result differs from the owner-reviewed failure.'}
@@ -28,28 +28,72 @@ function Assert-R6AuthRecoveryRows {
             $seen.ContainsKey($key) -or $row.cleanup_verified -ne $true){throw 'Original authentication inventory differs.'}
         $seen[$key]=$true
         if($row.provider -ceq 'gemini'){
-            if($row.authenticated -ne $false -or $row.status -cne 'STATUS_UNVERIFIED' -or $row.exit_code -ne 1){throw 'Original Agy failure differs.'}
+            if($row.authenticated -ne $false -or $row.status -cne $AgyStatus -or $row.exit_code -ne 1){throw 'Original Agy failure differs.'}
         }elseif($row.authenticated -ne $true -or $row.status -cne 'REUSE_VERIFIED_SESSION' -or $row.exit_code -ne 0){
             throw 'Original successful sessions differ.'}
     }
 }
 
 function Get-R6ReviewedAuthTask {
+    param([ValidateSet('CoChem-4.2.7-R6Acceptance-auth-226ce1d64f29486c838fca043f6bf904','CoChem-4.2.7-R6Acceptance-auth-56126335ff314eb497cd409fd58e6b1e')]
+        [string]$Name='CoChem-4.2.7-R6Acceptance-auth-226ce1d64f29486c838fca043f6bf904')
     $scheduler=New-Object -ComObject 'Schedule.Service';$scheduler.Connect()
-    $scheduler.GetFolder('\').GetTask('CoChem-4.2.7-R6Acceptance-auth-226ce1d64f29486c838fca043f6bf904')
+    $scheduler.GetFolder('\').GetTask($Name)
 }
 
 function Assert-R6ReviewedRestore {
-    param($Receipt)
+    param($Receipt,[ValidateSet('v3','v4')][string]$Attempt='v3')
     # This is the hash-bound persisted start receipt, not a launch-series
     # result. The production writer does not put a "started" flag in it.
     if($Receipt.schema -cne 'cochem-warden-start/3' -or
         $Receipt.status -cne 'WARDEN_R4_RESTARTED_HEALTH_VERIFIED' -or $Receipt.target -cne 'r4' -or
-        $Receipt.attempt -cne 'v3' -or $Receipt.task_name -cne 'CoChem-4.2.7-Warden' -or
+        $Receipt.attempt -cne $Attempt -or $Receipt.task_name -cne 'CoChem-4.2.7-Warden' -or
         $Receipt.enabled_after -ne $true -or $Receipt.task_state -ne 4 -or $Receipt.running_instances -ne 1 -or
         $Receipt.health_samples -ne 2 -or $Receipt.health.samples_stable -ne $true -or
         $Receipt.exactly_one_start_requested -ne $true -or $Receipt.automatic_retry_allowed -ne $false){
         throw 'Reviewed R4 restoration differs.'}
+}
+
+function Get-R6Slot1InteractiveTasks {
+    $scheduler=New-Object -ComObject 'Schedule.Service';$scheduler.Connect()
+    @($scheduler.GetFolder('\').GetTasks(1)|Where-Object {[string]$_.Name -clike 'CoChem-4.2.7-InteractiveAgy-r4-slot1-*'})
+}
+
+function Assert-R6ReviewedAuthTask {
+    param([string]$Root,[string]$Name)
+    $task=Get-R6ReviewedAuthTask $Name
+    $executable=Join-Path $script:targetRoot '.venv\Scripts\python.exe'
+    $arguments='-I -B "'+(Join-Path $Root 'r6_auth_recovery.py')+'" --output "'+$Root+'" --manifest-hash bffcf617620320109a3ff1bcbdcc2e1d4918f9571721dc4642efeed4d0b7a2c4 --candidate-hash a8b9b2052402f30860188721f986686c5a2f6785e563045edf295adae250f288'
+    Assert-R6PhaseTask $task $executable $arguments $script:targetRoot 900 $true
+    if($task.State -notin @(1,3) -or $task.GetInstances(0).Count -ne 0 -or [int]$task.LastTaskResult -ne 0 -or
+        $task.LastRunTime -lt [DateTime]'2026-10-12'){throw 'Reviewed authentication task is not terminal and successful.'}
+}
+
+function Assert-R6ReviewedConsoleHold {
+    param([string]$Root)
+    $result=Read-R6RecoveryJson (Join-Path $Root 'result.json')
+    if($result.phase -cne 'auth' -or $result.status -cne 'PHASE_COMPLETED' -or
+        $result.manifest_sha256 -cne 'bffcf617620320109a3ff1bcbdcc2e1d4918f9571721dc4642efeed4d0b7a2c4' -or
+        $result.candidate_sha256 -cne 'a8b9b2052402f30860188721f986686c5a2f6785e563045edf295adae250f288' -or
+        $result.result.status_helper_sha256 -cne '79b7029cd998f25c0a01300924bb3972f830f7783618ce3c99260b089510aaec'){
+        throw 'Reviewed console-hold authentication binding differs.'}
+    Assert-R6AuthRecoveryRows $result.result 'ATTENDED_LOGIN_REQUIRED'
+    foreach($row in @($result.result.checks|Where-Object {$_.provider -ceq 'gemini'})){
+        if($row.reason -cne 'AGY_MODELS_EXPLICIT_SIGN_OUT' -or $row.stdout_bytes -ne 0 -or $row.stderr_bytes -ne 122 -or
+            $row.stdout_sha256 -cne 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855' -or
+            $row.stderr_sha256 -cne '148fc48c6aeaf4d5f5780d0e38fc39215de098c1537c57e09410d4dad9718a1d'){
+            throw 'Reviewed console-hold sign-out evidence differs.'}}
+    $held=Read-R6RecoveryJson (Join-Path $script:base 'R6Sitting4.2.7-windows-20261012-04883067accd48e48ca6b097296f2d93\r6-held.json')
+    if($held.status -cne 'HELD_PRESERVE_EVIDENCE' -or $held.phase -cne 'attended_gemini_slot1' -or
+        $held.cutover_requested -ne $false -or $held.recovery.ok -ne $true -or $held.recovery.restored -ne $true -or
+        $held.recovery.kind -cne 'base'){throw 'Reviewed console hold/restoration differs.'}
+    $restore=Read-R6RecoveryJson (Join-Path $script:base 'WardenRetarget4.2.7-windows-20261011-r4-v4\start-receipt.json') '4b20035cdcb90d9547dbe95a1302ba7574424877dedfa7ae0db1da4d5e849852'
+    Assert-R6ReviewedRestore $restore 'v4'
+    Assert-R6ReviewedAuthTask $Root 'CoChem-4.2.7-R6Acceptance-auth-56126335ff314eb497cd409fd58e6b1e'
+    # The reviewed wrapper creates its preserved root before registering or
+    # starting anything. A session root or task invalidates this pre-login hold.
+    if(@(Get-ChildItem -LiteralPath $script:base -Directory -Filter 'InteractiveAgy427-r4-slot1-*').Count -ne 0 -or
+        @(Get-R6Slot1InteractiveTasks).Count -ne 0){throw 'A slot1 interactive login session exists; preserve and review it.'}
 }
 
 function Assert-R6ReviewedPrefixFailure {
@@ -73,12 +117,7 @@ function Assert-R6ReviewedPrefixFailure {
         throw 'The reviewed attempt did not restore its pre-cutover controller.'}
     $restore=Read-R6RecoveryJson (Join-Path $script:base 'WardenRetarget4.2.7-windows-20261011-r4-v3\start-receipt.json') '3e32dc204f9003c709a758f9025610204b4596cfaa67ac31be379bd7a94a067b'
     Assert-R6ReviewedRestore $restore
-    $task=Get-R6ReviewedAuthTask
-    $executable=Join-Path $script:targetRoot '.venv\Scripts\python.exe'
-    $arguments='-I -B "'+(Join-Path $Root 'r6_auth_recovery.py')+'" --output "'+$Root+'" --manifest-hash bffcf617620320109a3ff1bcbdcc2e1d4918f9571721dc4642efeed4d0b7a2c4 --candidate-hash a8b9b2052402f30860188721f986686c5a2f6785e563045edf295adae250f288'
-    Assert-R6PhaseTask $task $executable $arguments $script:targetRoot 900 $true
-    if($task.State -notin @(1,3) -or $task.GetInstances(0).Count -ne 0 -or [int]$task.LastTaskResult -ne 0 -or
-        $task.LastRunTime -lt [DateTime]'2026-10-12'){throw 'Reviewed authentication task is not terminal and successful.'}
+    Assert-R6ReviewedAuthTask $Root 'CoChem-4.2.7-R6Acceptance-auth-226ce1d64f29486c838fca043f6bf904'
 }
 
 function Invoke-R6AuthRecoveryVerification {
@@ -129,9 +168,11 @@ function Assert-R6AuthRecoveryEvidence {
                 throw 'A later acceptance phase already exists; preserve it.'}
             if($folder.Name -clike 'R6Acceptance4.2.7-windows-20261012-v1-auth-*' -and
                 (Test-Path -LiteralPath (Join-Path $folder.FullName 'r6_auth_recovery.py'))){
-                if($folder.Name -cne 'R6Acceptance4.2.7-windows-20261012-v1-auth-226ce1d64f29486c838fca043f6bf904'){
-                    throw 'An unreviewed recovery authentication attempt exists; preserve it and do not repeat.'}
-                Assert-R6ReviewedPrefixFailure $folder.FullName}}
+                switch -CaseSensitive ($folder.Name){
+                    'R6Acceptance4.2.7-windows-20261012-v1-auth-226ce1d64f29486c838fca043f6bf904'{Assert-R6ReviewedPrefixFailure $folder.FullName}
+                    'R6Acceptance4.2.7-windows-20261012-v1-auth-56126335ff314eb497cd409fd58e6b1e'{Assert-R6ReviewedConsoleHold $folder.FullName}
+                    default {throw 'An unreviewed recovery authentication attempt exists; preserve it and do not repeat.'}
+                }}}
         Assert-R6NotReferenced
         $null=Assert-R6Tree;Assert-R6Interpreter
         @{status='EXISTING_R6_AUTH_RECOVERY_PREREQUISITES_VERIFIED';installation_repeated=$false;state_modified=$false;
