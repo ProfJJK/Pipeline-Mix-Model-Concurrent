@@ -231,14 +231,14 @@ function Get-ChildItem {param($LiteralPath,[switch]$Directory,$Filter)
   if('MUTATION' -eq 'session_root'){[pscustomobject]@{Name='preserved-session'}}}
 function Get-R6Slot1InteractiveTasks {if('MUTATION' -eq 'session_task'){[pscustomobject]@{Name='preserved-task'}}}
 $held=$false
-try{Assert-R6ReviewedConsoleHold $root}catch{$held=$true}
+try{Assert-R6ReviewedConsoleHold $root;Assert-R6ReviewedInteractiveCensus $false}catch{$held=$true}
 @{held=$held;events=@($script:events)}|ConvertTo-Json -Compress
 '''.replace('MUTATION',mutation))
     assert result['held'] is bool(mutation)
     if not mutation:assert result['events']==['task']
 
 
-@pytest.mark.parametrize('mutation',['','install_held','wrong_install','wrong_phase','restore_failed','knowledge_exists','later_phase','recovery_exists','reviewed_recovery','reviewed_recovery_failed','reviewed_console','reviewed_console_failed'])
+@pytest.mark.parametrize('mutation',['','install_held','wrong_install','wrong_phase','restore_failed','knowledge_exists','later_phase','recovery_exists','reviewed_recovery','reviewed_recovery_failed','reviewed_console','reviewed_console_failed','reviewed_native','reviewed_native_failed','census_failed'])
 def test_complete_preflight_with_inert_host_boundaries(run_ps,mutation):
     result=run_ps(r'''
 $script:base='C:\fixture';$script:targetRoot='C:\fixture\r6';$script:events=[Collections.Generic.List[string]]::new()
@@ -265,12 +265,13 @@ function Read-R6RecoveryJson {param($Path,$Hash)
 function Test-Path {param($LiteralPath)
   return (('MUTATION' -eq 'install_held' -and $LiteralPath -like '*install-held.json') -or
     ('MUTATION' -eq 'knowledge_exists' -and $LiteralPath -eq 'C:\fixture\knowledge') -or
-    ('MUTATION' -in @('recovery_exists','reviewed_recovery','reviewed_recovery_failed','reviewed_console','reviewed_console_failed') -and $LiteralPath -like '*r6_auth_recovery.py'))}
+    ('MUTATION' -in @('recovery_exists','reviewed_recovery','reviewed_recovery_failed','reviewed_console','reviewed_console_failed','reviewed_native','reviewed_native_failed') -and $LiteralPath -like '*r6_auth_recovery.py'))}
 function Get-ChildItem {param($LiteralPath,[switch]$Directory)
   if('MUTATION' -eq 'later_phase'){[pscustomobject]@{Name='R6Acceptance4.2.7-windows-20261012-v1-native-fixture';FullName='C:\fixture\native'}}
   if('MUTATION' -eq 'recovery_exists'){[pscustomobject]@{Name='R6Acceptance4.2.7-windows-20261012-v1-auth-fixture';FullName='C:\fixture\auth'}}
   if('MUTATION' -in @('reviewed_recovery','reviewed_recovery_failed')){[pscustomobject]@{Name='R6Acceptance4.2.7-windows-20261012-v1-auth-226ce1d64f29486c838fca043f6bf904';FullName='C:\fixture\reviewed'}}
-  if('MUTATION' -in @('reviewed_console','reviewed_console_failed')){[pscustomobject]@{Name='R6Acceptance4.2.7-windows-20261012-v1-auth-56126335ff314eb497cd409fd58e6b1e';FullName='C:\fixture\console'}}}
+  if('MUTATION' -in @('reviewed_console','reviewed_console_failed')){[pscustomobject]@{Name='R6Acceptance4.2.7-windows-20261012-v1-auth-56126335ff314eb497cd409fd58e6b1e';FullName='C:\fixture\console'}}
+  if('MUTATION' -in @('reviewed_native','reviewed_native_failed')){[pscustomobject]@{Name='R6Acceptance4.2.7-windows-20261012-v1-auth-f1b5e414c1b44a5fb3c7d7686dbc9ff8';FullName='C:\fixture\native_login'}}}
 function Assert-R6ReviewedPrefixFailure {param($Root)
   if('MUTATION' -eq 'reviewed_recovery_failed'){throw 'reviewed evidence differs'}
   if($Root -cne 'C:\fixture\reviewed'){throw 'wrong reviewed root'}
@@ -279,6 +280,14 @@ function Assert-R6ReviewedConsoleHold {param($Root)
   if('MUTATION' -eq 'reviewed_console_failed'){throw 'console evidence differs'}
   if($Root -cne 'C:\fixture\console'){throw 'wrong console root'}
   $script:events.Add('console_attempt')}
+function Assert-R6ReviewedNativeLoginFailure {param($Root)
+  if('MUTATION' -eq 'reviewed_native_failed'){throw 'native evidence differs'}
+  if($Root -cne 'C:\fixture\native_login'){throw 'wrong native-login root'}
+  $script:events.Add('native_attempt')}
+function Assert-R6ReviewedInteractiveCensus {param($ReviewedNativeFailure)
+  if('MUTATION' -eq 'census_failed'){throw 'unreviewed session'}
+  if($ReviewedNativeFailure -ne ('MUTATION' -eq 'reviewed_native')){throw 'wrong reviewed session decision'}
+  $script:events.Add('census')}
 function Assert-R6NotReferenced {$script:events.Add('task_reference')}
 function Assert-R6Tree {$script:events.Add('tree');100}
 function Assert-R6Interpreter {$script:events.Add('interpreter')}
@@ -287,10 +296,10 @@ $held=$false;$status=$null
 try{$status=(Assert-R6AuthRecoveryEvidence).status}catch{$held=$true}
 @{held=$held;status=$status;events=@($script:events)}|ConvertTo-Json -Compress
 '''.replace('MUTATION',mutation))
-    success = mutation in ('', 'reviewed_recovery', 'reviewed_console')
+    success = mutation in ('', 'reviewed_recovery', 'reviewed_console', 'reviewed_native')
     assert result['held'] is not success
     if success:
         assert result['status']=='EXISTING_R6_AUTH_RECOVERY_PREREQUISITES_VERIFIED'
-        expected = {'reviewed_recovery':['reviewed_attempt'], 'reviewed_console':['console_attempt']}.get(mutation, [])
-        assert result['events']==expected+['task_reference','tree','interpreter']
+        expected = {'reviewed_recovery':['reviewed_attempt'], 'reviewed_console':['console_attempt'], 'reviewed_native':['native_attempt']}.get(mutation, [])
+        assert result['events']==expected+['census','task_reference','tree','interpreter']
     else: assert result['events']==[]

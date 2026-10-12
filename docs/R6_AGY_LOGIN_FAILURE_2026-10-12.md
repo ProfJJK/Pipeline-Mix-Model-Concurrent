@@ -27,7 +27,56 @@ R4 v5 start receipt SHA256 is
 All earlier packages, tasks and receipts remain preserved. Do not repeat the
 failed deployment command as an automatic recovery.
 
-## Remaining evidence boundary
+## Returned diagnostic and source repair
+
+The owner returned the sanitized diagnostic at 23:05:50 UTC. It verifies one
+submitted line, closed/deleted input, terminal native/task failure and cleanup.
+Neither reviewed token-storage location contained a credential after this
+attempt; token contents were not read. The native process ran for **62.08 seconds**.
+The owner confirms that Google returned an authorization code and that this was
+the value entered into the masked prompt.
+
+Read-only inspection of the compiled Go function
+`google3/third_party/jetski/cli/printmode/printmode.waitForAuth` found a
+`time.Now().Add(60 seconds)` deadline in both the protected Agy executable and
+the newer executable in the owner's ordinary installation. The protected file
+SHA256 is `38f30c7dd1ed808f5cf98fe2014de3d30903035a4f0df02d3eb72a9ff8993741`;
+the ordinary file SHA256 is
+`fbbfb3f15c7628252c5e12765683c688ba05ee122b853cadeb0bbfd4e13ca25b`.
+Neither executable was run. No version label is inferred from these files.
+
+This makes the print-mode deadline a strong suspect, rather than proving the
+precise provider failure. The generic authentication-failure marker is not an
+explicit timeout marker. Updating the executable alone retains this deadline.
+
+`r6_attended_agy.ps1` now selects the existing bridge's `tui` login mode for
+browser authorization. This uses its reviewed no-argument Agy launch and CRLF
+input protocol. It retains the absolute initial 20-minute input cutoff, owned
+process cleanup and status-first checks. Only a fresh successful native status
+check establishes authentication; pasted input and token presence do not.
+Actual SYSTEM/worker authorization through this mode still requires owner-run
+host acceptance.
+
+The recovery verifier admits only the exact hash-bound failed session above,
+its terminal SYSTEM task, pinned helper bytes, absent input packet and verified
+R4 v5 restoration. It does not execute or modify the old session. Unknown roots,
+extra tasks, running instances, changed receipts and later acceptance phases
+continue to hold. A separate final inventory check reconciles the older
+pre-login console hold with this one reviewed later session.
+
+The fresh R7 package builder explicitly overlays the repaired attended helper
+into its R6 prerequisite copy. Earlier delivered packages remain unchanged.
+
+Final ordinary Windows/Python 3.12 verification passed **461 distinct tests**:
+408 Agy bridge/history/status, diagnostic, recovery and bundle fixtures in
+105.84 seconds, followed by 53 launch, migration and authentication fixtures in
+11.20 seconds. Both selections ran through the serialized source-test harness.
+The earlier restricted-sandbox file/handle failures passed with ordinary account
+filesystem access; no production boundary was weakened. These tests use inert
+host/provider boundaries and temporary files/databases. They do not execute
+SYSTEM tasks, providers, OAuth, deployment or machine lifecycle operations.
+
+## Private-evidence boundary
 
 Windows denied the ordinary engineering process access to `session-held.json`.
 Readable `status-*.json` records omit the native marker phases and timing.
@@ -54,8 +103,9 @@ They verify allowlisting, exclusion of synthetic secrets/provider text, rejectio
 of malformed values/schema, and hashing on the same read handle. They do not
 execute OAuth, native providers, deployment or host lifecycle actions.
 
-The returned sanitized report and the owner's description of what the browser
-returned are required before choosing a specific authentication repair and
-reviewing the new preserved session for any owner-controlled continuation.
-The delivered R7 package remains immutable; no replacement deployment is claimed
-ready at this checkpoint.
+The diagnostic contains no authorization code, raw after-input provider text or
+credential values. That discarded text cannot be reconstructed. The returned
+diagnostic and owner's description now support the bounded repair above; they
+do not prove successful OAuth or R6/R7 deployment. The failed delivered R7 package
+remains immutable. Replacement package identity and verification are recorded
+separately in the launch-ready handoff.

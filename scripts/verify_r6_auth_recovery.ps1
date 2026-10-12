@@ -35,14 +35,14 @@ function Assert-R6AuthRecoveryRows {
 }
 
 function Get-R6ReviewedAuthTask {
-    param([ValidateSet('CoChem-4.2.7-R6Acceptance-auth-226ce1d64f29486c838fca043f6bf904','CoChem-4.2.7-R6Acceptance-auth-56126335ff314eb497cd409fd58e6b1e')]
+    param([ValidateSet('CoChem-4.2.7-R6Acceptance-auth-226ce1d64f29486c838fca043f6bf904','CoChem-4.2.7-R6Acceptance-auth-56126335ff314eb497cd409fd58e6b1e','CoChem-4.2.7-R6Acceptance-auth-f1b5e414c1b44a5fb3c7d7686dbc9ff8')]
         [string]$Name='CoChem-4.2.7-R6Acceptance-auth-226ce1d64f29486c838fca043f6bf904')
     $scheduler=New-Object -ComObject 'Schedule.Service';$scheduler.Connect()
     $scheduler.GetFolder('\').GetTask($Name)
 }
 
 function Assert-R6ReviewedRestore {
-    param($Receipt,[ValidateSet('v3','v4')][string]$Attempt='v3')
+    param($Receipt,[ValidateSet('v3','v4','v5')][string]$Attempt='v3')
     # This is the hash-bound persisted start receipt, not a launch-series
     # result. The production writer does not put a "started" flag in it.
     if($Receipt.schema -cne 'cochem-warden-start/3' -or
@@ -90,10 +90,98 @@ function Assert-R6ReviewedConsoleHold {
     $restore=Read-R6RecoveryJson (Join-Path $script:base 'WardenRetarget4.2.7-windows-20261011-r4-v4\start-receipt.json') '4b20035cdcb90d9547dbe95a1302ba7574424877dedfa7ae0db1da4d5e849852'
     Assert-R6ReviewedRestore $restore 'v4'
     Assert-R6ReviewedAuthTask $Root 'CoChem-4.2.7-R6Acceptance-auth-56126335ff314eb497cd409fd58e6b1e'
-    # The reviewed wrapper creates its preserved root before registering or
-    # starting anything. A session root or task invalidates this pre-login hold.
-    if(@(Get-ChildItem -LiteralPath $script:base -Directory -Filter 'InteractiveAgy427-r4-slot1-*').Count -ne 0 -or
-        @(Get-R6Slot1InteractiveTasks).Count -ne 0){throw 'A slot1 interactive login session exists; preserve and review it.'}
+    # The session census is evaluated once after all reviewed authentication
+    # attempts. Only the separately hash-bound native failure below can admit
+    # its one preserved terminal session; every other root/task remains a hold.
+}
+
+function Assert-R6ReviewedInteractiveCensus {
+    param([bool]$ReviewedNativeFailure=$false)
+    $roots=@(Get-ChildItem -LiteralPath $script:base -Directory -Filter 'InteractiveAgy427-r4-slot1-*')
+    $tasks=@(Get-R6Slot1InteractiveTasks)
+    if(-not $ReviewedNativeFailure){
+        if($roots.Count -ne 0 -or $tasks.Count -ne 0){throw 'A slot1 interactive login session exists; preserve and review it.'}
+        return
+    }
+    $rootName='InteractiveAgy427-r4-slot1-67d70b0983cc48e2abf7c561aca29f86'
+    $taskName='CoChem-4.2.7-InteractiveAgy-r4-slot1-67d70b0983cc48e2abf7c561aca29f86'
+    if($roots.Count -ne 1 -or $tasks.Count -ne 1 -or $roots[0].Name -cne $rootName -or
+        $roots[0].FullName -cne (Join-Path $script:base $rootName) -or $tasks[0].Name -cne $taskName){
+        throw 'Interactive login inventory differs from the one reviewed terminal failure.'}
+}
+
+function Assert-R6ReviewedNativeLoginFailure {
+    param([string]$Root)
+    $result=Read-R6RecoveryJson (Join-Path $Root 'result.json') 'dc0af0b999e6e4a0cd72fed5b80fc05cfd30a85edf76d1ce659cc3b5b69aa5e0'
+    if($result.phase -cne 'auth' -or $result.status -cne 'PHASE_COMPLETED' -or
+        $result.manifest_sha256 -cne 'bffcf617620320109a3ff1bcbdcc2e1d4918f9571721dc4642efeed4d0b7a2c4' -or
+        $result.candidate_sha256 -cne 'a8b9b2052402f30860188721f986686c5a2f6785e563045edf295adae250f288' -or
+        $result.result.status_helper_sha256 -cne '79b7029cd998f25c0a01300924bb3972f830f7783618ce3c99260b089510aaec'){
+        throw 'Reviewed native-login authentication binding differs.'}
+    Assert-R6AuthRecoveryRows $result.result 'ATTENDED_LOGIN_REQUIRED'
+    foreach($row in @($result.result.checks|Where-Object {$_.provider -ceq 'gemini'})){
+        if($row.reason -cne 'AGY_MODELS_EXPLICIT_SIGN_OUT' -or $row.stdout_bytes -ne 0 -or $row.stderr_bytes -ne 122 -or
+            $row.stdout_sha256 -cne 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855' -or
+            $row.stderr_sha256 -cne '148fc48c6aeaf4d5f5780d0e38fc39215de098c1537c57e09410d4dad9718a1d'){
+            throw 'Reviewed native-login sign-out evidence differs.'}}
+    Assert-R6ReviewedAuthTask $Root 'CoChem-4.2.7-R6Acceptance-auth-f1b5e414c1b44a5fb3c7d7686dbc9ff8'
+    $held=Read-R6RecoveryJson (Join-Path $script:base 'R6Sitting4.2.7-windows-20261012-87bf2f05e1254ea6b5e7de51018b830c\r6-held.json')
+    if($held.status -cne 'HELD_PRESERVE_EVIDENCE' -or $held.phase -cne 'attended_gemini_slot1' -or
+        $held.cutover_requested -ne $false -or $held.recovery.ok -ne $true -or $held.recovery.restored -ne $true -or
+        $held.recovery.kind -cne 'base'){throw 'Reviewed native-login hold/restoration differs.'}
+    $restore=Read-R6RecoveryJson (Join-Path $script:base 'WardenRetarget4.2.7-windows-20261011-r4-v5\start-receipt.json') '978bad6cf2773df7151c21cca988e4ebd9a4549f9639976f920a9567d803528c'
+    Assert-R6ReviewedRestore $restore 'v5'
+    Assert-R6ReviewedAgySession
+}
+
+function Get-R6ReviewedAgyTask {
+    $scheduler=New-Object -ComObject 'Schedule.Service';$scheduler.Connect()
+    $scheduler.GetFolder('\').GetTask('CoChem-4.2.7-InteractiveAgy-r4-slot1-67d70b0983cc48e2abf7c561aca29f86')
+}
+
+function Assert-R6ReviewedAgySession {
+    # This admits only the exact terminal session inspected by the owner. It
+    # never authorizes sign-in; the launch series must obtain fresh status.
+    $nonce='67d70b0983cc48e2abf7c561aca29f86'
+    $root=Join-Path $script:base ('InteractiveAgy427-r4-slot1-'+$nonce)
+    $receiptHash='882326a4f4b30ca527cf22faaf5c15f528a9eb40421bc5aa052a12bfd77e9ec0'
+    $receipt=Read-R6RecoveryJson (Join-Path $root 'receipt.json') $receiptHash
+    $held=Read-R6RecoveryJson (Join-Path $root 'session-held.json') '52c9911858aa5b68b885e2c7f2c55402f52c91d810b2b4bd3529394f75fb24a8'
+    if($receipt.schema -cne 'cochem-interactive-agy-login/1' -or $receipt.slot -cne 'slot1' -or
+        $receipt.nonce -cne $nonce -or $receipt.login_mode -cne 'print' -or $receipt.status -cne 'LOGIN_COMMAND_FAILED' -or
+        $receipt.cleanup_verified -ne $true -or $receipt.one_line_submitted -ne $true -or $receipt.input_file_deleted -ne $true -or
+        $receipt.operator_cancelled -ne $false -or $receipt.terminated_after_input -ne $false -or
+        $receipt.input_closed_marker_written -ne $true -or $receipt.native_exit_code -ne 1 -or
+        $receipt.login_commands_executed -ne 1 -or $receipt.model_jobs_executed -ne 0 -or
+        $receipt.authentication_verified -ne $false -or $receipt.activation_ready -ne $false -or
+        $receipt.secret_published -ne $false -or $receipt.native_output_after_input_published -ne $false -or
+        $receipt.pause_marker_seen -ne $false -or $receipt.native_markers.after_input.authentication_failed_present -ne $true -or
+        $receipt.helper_sha256 -cne '4074878f100ae59b804c95bd97b3280ccaa09f919ffaa365a3e2c6985045b8d9' -or
+        $receipt.support_sha256 -cne '45681477194d97b144e8ee4505d4364d73d58aaef19c8428c846df642c834839' -or
+        $receipt.native_executable_sha256 -cne '38f30c7dd1ed808f5cf98fe2014de3d30903035a4f0df02d3eb72a9ff8993741' -or
+        $receipt.native_executable_sha256_after -cne $receipt.native_executable_sha256){
+        throw 'Reviewed native-login receipt differs; preserve its state.'}
+    if($held.phase -cne 'DECISION' -or $held.login_mode -cne 'print' -or $held.receipt_sha256 -cne $receiptHash -or
+        $held.task_registered -ne $true -or $held.run_requested -ne $true -or $held.receipt_present -ne $true -or
+        $held.raw_provider_output_recorded -ne $false -or $held.code_recorded -ne $false -or $held.login_authorized -ne $false -or
+        $held.automatic_retry_allowed -ne $false -or $held.requires_owner_review -ne $true -or
+        $held.task_after.state -ne 3 -or $held.task_after.instances -ne 0 -or $held.task_after.last_task_result -ne 2 -or
+        $held.input_cleanup.input_present -ne $false){throw 'Reviewed native-login wrapper evidence differs.'}
+    $task=Get-R6ReviewedAgyTask
+    $python='C:\Program Files\CoChem\Pipeline4.2.7-windows-20261009-r4\.venv\Scripts\python.exe'
+    $arguments='-I -B "'+(Join-Path $root 'worker_agy_login_bridge_r4_v1.py')+'" --slot slot1 --nonce '+$nonce+' --login-mode print'
+    Assert-R6PhaseTask $task $python $arguments $root 900 $true
+    if($task.Name -cne ('CoChem-4.2.7-InteractiveAgy-r4-slot1-'+$nonce) -or $task.State -ne 3 -or
+        $task.GetInstances(0).Count -ne 0 -or [int]$task.LastTaskResult -ne 2 -or $task.LastRunTime -lt [DateTime]'2026-10-12'){
+        throw 'Reviewed native-login task is not the exact terminal task.'}
+    if(Test-Path -LiteralPath (Join-Path $root 'input.once')){throw 'Native-login input remains; preserve it.'}
+    foreach($payload in @([pscustomobject]@{name='worker_agy_login_bridge_r4_v1.py';hash=$receipt.helper_sha256},
+        [pscustomobject]@{name='worker_native_status_support.py';hash=$receipt.support_sha256})){
+        $path=Join-Path $root $payload.name;Assert-ProtectedPath $path
+        $length=(Get-Item -LiteralPath $path).Length
+        if($length -gt 1048576){throw 'Reviewed native-login helper exceeds its bound.'}
+        $handle=Open-VerifiedFile $path $payload.hash $length;try{}finally{$handle.Dispose()}
+    }
 }
 
 function Assert-R6ReviewedPrefixFailure {
@@ -163,6 +251,7 @@ function Assert-R6AuthRecoveryEvidence {
         if($held.status -cne 'HELD_PRESERVE_EVIDENCE' -or $held.phase -cne 'auth' -or $held.cutover_requested -ne $false -or
             $held.recovery.ok -ne $true -or $held.recovery.restored -ne $true){throw 'Original hold/recovery binding differs.'}
         if(Test-Path -LiteralPath $candidate.knowledge.state_root){throw 'A later knowledge phase already exists; preserve it.'}
+        $reviewedNativeFailure=$false
         foreach($folder in Get-ChildItem -LiteralPath $script:base -Directory){
             if($folder.Name -cmatch '^R6Acceptance4\.2\.7-windows-20261012-v1-(knowledge|agent|native|preview)-'){
                 throw 'A later acceptance phase already exists; preserve it.'}
@@ -171,8 +260,10 @@ function Assert-R6AuthRecoveryEvidence {
                 switch -CaseSensitive ($folder.Name){
                     'R6Acceptance4.2.7-windows-20261012-v1-auth-226ce1d64f29486c838fca043f6bf904'{Assert-R6ReviewedPrefixFailure $folder.FullName}
                     'R6Acceptance4.2.7-windows-20261012-v1-auth-56126335ff314eb497cd409fd58e6b1e'{Assert-R6ReviewedConsoleHold $folder.FullName}
+                    'R6Acceptance4.2.7-windows-20261012-v1-auth-f1b5e414c1b44a5fb3c7d7686dbc9ff8'{Assert-R6ReviewedNativeLoginFailure $folder.FullName;$reviewedNativeFailure=$true}
                     default {throw 'An unreviewed recovery authentication attempt exists; preserve it and do not repeat.'}
                 }}}
+        Assert-R6ReviewedInteractiveCensus $reviewedNativeFailure
         Assert-R6NotReferenced
         $null=Assert-R6Tree;Assert-R6Interpreter
         @{status='EXISTING_R6_AUTH_RECOVERY_PREREQUISITES_VERIFIED';installation_repeated=$false;state_modified=$false;

@@ -29,7 +29,11 @@ function Invoke-R6AttendedAgy {
             $bounded=if($deadline -lt $DeadlineUtc){$deadline}else{$DeadlineUtc}
             & $originalLoop $Instance $Root $Nonce $bounded
         }
-        Resolve-AgyLoginExitCode @(Invoke-AgyLoginMain -Slot $Slot -LoginMode 'print' -CaptureAttempt '' -ApplyRequested $ApplyRequested -InteractiveRequested $true -ScriptRoot $Directory)
+        # Print mode has an independent 60-second waitForAuth deadline in both
+        # installed binaries. Use the bridge's existing interactive login mode
+        # for browser consent. A fresh native status check still decides whether
+        # the worker authenticated; a pasted line or token file is not proof.
+        Resolve-AgyLoginExitCode @(Invoke-AgyLoginMain -Slot $Slot -LoginMode 'tui' -CaptureAttempt '' -ApplyRequested $ApplyRequested -InteractiveRequested $true -ScriptRoot $Directory)
     }finally{$stream.Dispose()}
 }
 

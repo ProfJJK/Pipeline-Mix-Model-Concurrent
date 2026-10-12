@@ -56,7 +56,8 @@ def test_fresh_recovery_pins_reviewed_console_auth_and_retirement_helpers(tmp_pa
         payload=destination.joinpath(new['name']).read_bytes()
         assert builder.sha(payload)==new['sha256'] and len(payload)==new['length']
         if old!=new:changed.append(old['name'])
-    assert set(changed)=={'run_r6_launch.ps1','r6_auth_recovery.py','verify_r6_auth_recovery.ps1','run_r6_system_phase.ps1','activate_r6_runtime.ps1'}
+    assert set(changed)=={'run_r6_launch.ps1','r6_auth_recovery.py','verify_r6_auth_recovery.ps1','run_r6_system_phase.ps1','activate_r6_runtime.ps1','r6_attended_agy.ps1'}
+    assert destination.joinpath('r6_attended_agy.ps1').read_bytes()==SCRIPTS.joinpath('r6_attended_agy.ps1').read_bytes()
     added=after['scripts'][-1]
     assert added['name']=='r6_native_retirement.py'
     assert builder.sha(destination.joinpath(added['name']).read_bytes())==added['sha256']

@@ -43,7 +43,7 @@ def prepare_recovery(destination, repository):
         payload=read_pinned(RECOVERY/row['name'],row['sha256'],row['length'])
         if row['name']=='run_r6_launch.ps1':
             payload=derive_recovery_entry(read_regular(Path(repository)/'scripts'/row['name']))
-        elif row['name'] in ('r6_auth_recovery.py','verify_r6_auth_recovery.ps1','run_r6_system_phase.ps1','activate_r6_runtime.ps1'):
+        elif row['name'] in ('r6_auth_recovery.py','verify_r6_auth_recovery.ps1','run_r6_system_phase.ps1','activate_r6_runtime.ps1','r6_attended_agy.ps1'):
             # Replace only reviewed recovery helpers in this fresh copy. Earlier
             # delivered packages and all remaining R5/R6 inputs stay untouched.
             payload=read_regular(Path(repository)/'scripts'/row['name'])

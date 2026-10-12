@@ -19,6 +19,7 @@ def test_attended_adapter_clamps_console_input_to_owner_deadline(run_ps,tmp_path
 function Invoke-AgyLoginConsoleLoop {param($Instance,$Root,$Nonce,[DateTime]$DeadlineUtc)
  $script:observedDeadline=$DeadlineUtc;return 0}
 function Invoke-AgyLoginMain {param($Slot,$LoginMode,$CaptureAttempt,$ApplyRequested,$InteractiveRequested,$ScriptRoot)
+ $script:observedMode=$LoginMode;$script:observedSlot=$Slot;$script:observedApply=$ApplyRequested
  $null=Invoke-AgyLoginConsoleLoop $null 'fixture' 'nonce' ([DateTime]::UtcNow.AddMinutes(14));return 0}
 function Resolve-AgyLoginExitCode {param($Values) return [int]$Values[0]}
 """,encoding='utf-8')
@@ -26,9 +27,9 @@ function Resolve-AgyLoginExitCode {param($Values) return [int]$Values[0]}
     result=run_ps(f"""
 $expected=[DateTime]::UtcNow.AddMinutes(2)
 $code=Invoke-R6AttendedAgy 'slot1' $expected.ToString('o') '{pin}' $false '{str(tmp_path).replace("'","''")}'
-@{{code=$code;same=($script:observedDeadline -eq $expected)}}|ConvertTo-Json -Compress
+@{{code=$code;same=($script:observedDeadline -eq $expected);mode=$script:observedMode;slot=$script:observedSlot;apply=$script:observedApply}}|ConvertTo-Json -Compress
 """)
-    assert result==dict(code=0,same=True)
+    assert result==dict(code=0,same=True,mode='tui',slot='slot1',apply=False)
 
 
 @pytest.mark.parametrize('minutes',[-1,21])
