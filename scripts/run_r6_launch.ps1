@@ -90,9 +90,23 @@ function Invoke-R6AcceptancePhase {
     $script:R6Phase=$Phase
     Write-R6PublicStatus 'RUNNING'
     Write-Host ('R6 phase: '+$Phase)
-    Invoke-R6LaunchChild 'run_r6_system_phase.ps1' @('-Phase',$Phase,'-ManifestSha256',$Manifest.manifest_sha256,
+    $arguments=@('-Phase',$Phase,'-ManifestSha256',$Manifest.manifest_sha256,
         '-CandidateSha256',$Manifest.candidate_sha256,'-InstallerSha256',$script:R6Pins['install_r6_runtime.ps1'],
         '-Attempt',[Guid]::NewGuid().ToString('N'),'-Apply')
+    if($Phase -ceq 'auth' -and (Test-R6AuthRecovery $Manifest)){
+        $arguments+=@('-AuthRecoverySha256',$script:R6Pins['r6_auth_recovery.py'])}
+    Invoke-R6LaunchChild 'run_r6_system_phase.ps1' $arguments
+}
+
+function Test-R6AuthRecovery {
+    param($Manifest)
+    $property=$Manifest.PSObject.Properties['auth_recovery']
+    if($null -eq $property){return $false}
+    if($property.Value -cne '20261012-first-auth-hold' -or
+        $Manifest.manifest_sha256 -cne 'bffcf617620320109a3ff1bcbdcc2e1d4918f9571721dc4642efeed4d0b7a2c4' -or
+        $Manifest.candidate_sha256 -cne 'a8b9b2052402f30860188721f986686c5a2f6785e563045edf295adae250f288'){
+        throw 'Recovery must bind the specific installed R6 release.'}
+    return $true
 }
 
 function Write-R6PublicStatus {
@@ -105,6 +119,8 @@ function Write-R6PublicStatus {
         foreach($key in @('status','receipt_path','receipt_sha256','phase','error_type','cutover_requested')){
             if($Result -is [Collections.IDictionary]){if($Result.Contains($key)){$safe[$key]=$Result[$key]}}
             elseif($null -ne $Result.PSObject.Properties[$key]){$safe[$key]=$Result.PSObject.Properties[$key].Value}}}
+    if($null -ne (Get-Variable -Name R6AuthSummary -Scope Script -ErrorAction SilentlyContinue)){
+        $safe.authentication=$script:R6AuthSummary}
     $name='status-'+[DateTime]::UtcNow.ToString('yyyyMMddTHHmmssfffffff')+'-'+[Guid]::NewGuid().ToString('N')+'.json'
     $acl=[Security.AccessControl.FileSecurity]::new();$acl.SetAccessRuleProtection($true,$false)
     $acl.SetOwner([Security.Principal.SecurityIdentifier]::new('S-1-5-32-544'))
@@ -114,16 +130,50 @@ function Write-R6PublicStatus {
     try{$data=[Text.UTF8Encoding]::new($false).GetBytes(($safe|ConvertTo-Json -Depth 5));$stream.Write($data,0,$data.Length);$stream.Flush($true)}finally{$stream.Dispose()}
 }
 
+function Save-R6AuthSummary {
+    param($Result)
+    $rows=@()
+    foreach($row in @($Result.checks)){
+        if($row.worker -cnotmatch '^slot[1-6]$' -or $row.provider -cnotin @('codex','claude','gemini') -or
+            $row.status -cnotin @('REUSE_VERIFIED_SESSION','ATTENDED_LOGIN_REQUIRED','STATUS_UNVERIFIED') -or
+            ($row.exit_code -isnot [int] -and $row.exit_code -isnot [long])){throw 'Authentication summary is outside its allowlist.'}
+        $item=[ordered]@{worker=$row.worker;provider=$row.provider;status=$row.status;exit_code=$row.exit_code}
+        $allowed=@{reason=@('AGY_MODELS_CATALOG_VERIFIED','AGY_MODELS_EXPLICIT_SIGN_OUT','TYPED_AUTH_FAILURE','AGY_STATUS_UNRESOLVED');
+            failure_category=@('auth','quota','busy','context','provider','timeout','protocol','code','configuration','compatibility','resource');
+            diagnostic_hint=@('Subscription authentication failed','Provider quota or rate limit reached','Provider service unavailable',
+                'Unknown native CLI argument or output protocol','Host resources exhausted: out of memory or disk full',
+                'Native CLI permission denied','Unclassified native CLI failure; protected logs require diagnosis')}
+        foreach($key in @('reason','failure_category','diagnostic_hint')){
+            $property=$row.PSObject.Properties[$key]
+            if($null -ne $property -and $null -ne $property.Value -and $property.Value -cin $allowed[$key]){$item[$key]=$property.Value}}
+        $rows+= $item
+    }
+    if($rows.Count -ne 18){throw 'Authentication summary inventory differs.'}
+    $script:R6AuthSummary=$rows
+    Write-R6PublicStatus 'AUTHENTICATION_CHECKED'
+}
+
 function Invoke-R6LaunchSequence {
     param($Manifest)
     $script:R6Phase='inspection';Invoke-R5Stage0
     Write-Host ('Sanitized status reports: '+$script:SittingRoot+'\status-*.json')
     Write-R6PublicStatus 'RUNNING'
+    $resume=Test-R6AuthRecovery $Manifest
+    if($resume){
+        $script:R6Phase='verify_existing_installation'
+        $verified=Invoke-R6LaunchChild 'verify_r6_auth_recovery.ps1' @('-InstallerSha256',$script:R6Pins['install_r6_runtime.ps1'],
+            '-PhaseWrapperSha256',$script:R6Pins['run_r6_system_phase.ps1'])
+        if($verified.status -cne 'EXISTING_R6_AUTH_RECOVERY_PREREQUISITES_VERIFIED'){throw 'Existing R6 recovery prerequisites differ.'}}
     $script:R6Phase='quiescence';Invoke-R5Stage2
-    $script:R6Phase='offline_install'
-    $installed=Invoke-R6LaunchChild 'install_r6_runtime.ps1' @('-Manifest',$Manifest.install_manifest,'-ManifestSha256',$Manifest.manifest_sha256,'-Apply')
-    if($installed.status -cne 'STOPPED_RUNTIME_INSTALLED'){throw 'Stopped R6 installation was not verified.'}
+    if(-not $resume){
+        $script:R6Phase='offline_install'
+        $installed=Invoke-R6LaunchChild 'install_r6_runtime.ps1' @('-Manifest',$Manifest.install_manifest,'-ManifestSha256',$Manifest.manifest_sha256,'-Apply')
+        if($installed.status -cne 'STOPPED_RUNTIME_INSTALLED'){throw 'Stopped R6 installation was not verified.'}}
     $auth=Invoke-R6AcceptancePhase 'auth' $Manifest
+    Save-R6AuthSummary $auth.result
+    # This result contains only fixed status metadata. Print it now so a hold
+    # never requires the owner to extract another private provider report.
+    Write-Host ($auth.result|ConvertTo-Json -Depth 8)
     if($auth.result.status -cne 'ALL_SESSIONS_VERIFIED'){
         $missing=@($auth.result.checks|Where-Object {$_.authenticated -ne $true})
         # Existing Claude/Codex sign-ins are never copied or reset. An unclear
@@ -137,6 +187,7 @@ function Invoke-R6LaunchSequence {
                 '-WrapperSha256',$script:R6Pins['login_pipeline_worker_interactive_agy_r4_v1.ps1'],'-Apply') -Attended
         }
         $auth=Invoke-R6AcceptancePhase 'auth' $Manifest
+        Save-R6AuthSummary $auth.result
         if($auth.result.status -cne 'ALL_SESSIONS_VERIFIED'){throw 'Authentication remained unverified after the attended window.'}
     }
     Write-Host 'Authentication verified. You can walk away now. No further input or restart is planned.' -ForegroundColor Green
@@ -180,6 +231,9 @@ function Invoke-R6LaunchMain {
     $script:R6CutoverRequested=$false;$script:R6Phase='package';$script:R5=$null
     try{
         $script:R6Pins=Open-R6LaunchPins $manifest $script:R6Directory $handles
+        if(Test-R6AuthRecovery $manifest){
+            foreach($name in @('r6_auth_recovery.py','verify_r6_auth_recovery.ps1')){
+                if(-not $script:R6Pins.ContainsKey($name)){throw 'Recovery helper is not pinned.'}}}
         if(-not $ApplyRequested){@{status='R6_LAUNCH_PLAN';model_targets=27;maximum_shared_slots=4;input_window_minutes=20;
             later_prompts=$false;installation_and_host_acceptance_executed=$false}|ConvertTo-Json;return}
         $identity=[Security.Principal.WindowsIdentity]::GetCurrent()

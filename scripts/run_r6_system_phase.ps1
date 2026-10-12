@@ -5,7 +5,7 @@
 [CmdletBinding()]
 param([ValidateSet('auth','knowledge','agent','native','preview')][string]$Phase,
     [string]$ManifestSha256,[string]$CandidateSha256,[string]$InstallerSha256,
-    [string]$Attempt,[switch]$Apply)
+    [string]$Attempt,[string]$AuthRecoverySha256,[switch]$Apply)
 
 function Import-R6PhaseInstaller {
     param([string]$Hash)
@@ -87,6 +87,13 @@ function Invoke-R6PhaseTask {
     $seconds=if($Phase -ceq 'native'){3900}elseif($Phase -ceq 'auth'){900}else{600}
     $executable=Join-Path $script:targetRoot '.venv\Scripts\python.exe'
     $arguments='-I -B -m cochem_pipeline.r6_host_acceptance --phase '+$Phase+' --output "'+$Root+'" --manifest-hash '+$ManifestHash+' --candidate-hash '+$CandidateHash
+    if($Phase -ceq 'auth' -and $script:AuthRecoverySha256){
+        $helper=Join-Path $Root 'r6_auth_recovery.py'
+        $source=Join-Path $PSScriptRoot 'r6_auth_recovery.py'
+        Copy-R6Payload ([pscustomobject]@{source=$source;destination=$helper;relative='source/knowledge/control';
+            sha256=$script:AuthRecoverySha256;length=(Get-Item -LiteralPath $source).Length})
+        $arguments='-I -B "'+$helper+'" --output "'+$Root+'" --manifest-hash '+$ManifestHash+' --candidate-hash '+$CandidateHash
+    }
     $definition=$Scheduler.NewTask(0)
     $definition.RegistrationInfo.Description='One reviewed R6 '+$Phase+' acceptance; no daemon launch, triggers, retries or automatic cleanup.'
     $definition.Principal.UserId='SYSTEM';$definition.Principal.LogonType=5;$definition.Principal.RunLevel=1
@@ -130,6 +137,8 @@ function Invoke-R6PhaseTask {
 function Invoke-R6PhaseMain {
     param([string]$Phase,[string]$ManifestHash,[string]$CandidateHash,[string]$InstallerHash,[string]$Attempt,[bool]$ApplyRequested)
     foreach($value in @($ManifestHash,$CandidateHash,$InstallerHash)){if($value -cnotmatch '^[a-f0-9]{64}$'){throw 'Exact reviewed hashes are required.'}}
+    if($script:AuthRecoverySha256 -and ($Phase -cne 'auth' -or $script:AuthRecoverySha256 -cnotmatch '^[a-f0-9]{64}$')){
+        throw 'The reviewed recovery helper is restricted to authentication.'}
     if($Phase -notin @('auth','knowledge','agent','native','preview') -or $Attempt -cnotmatch '^[a-f0-9]{32}$'){throw 'A reviewed phase and fresh attempt are required.'}
     if($PSVersionTable.PSEdition -cne 'Desktop' -or -not [Environment]::Is64BitProcess -or $env:COMPUTERNAME -cne 'AETHERDESK'){throw 'Use 64-bit Windows PowerShell 5.1 on AETHERDESK.'}
     if($ApplyRequested){

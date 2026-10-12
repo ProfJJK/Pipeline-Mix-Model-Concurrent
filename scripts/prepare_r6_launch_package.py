@@ -28,7 +28,7 @@ def read_regular(path, maximum=16777216):
     return data
 
 
-def prepare(repository, bundle, destination):
+def prepare(repository, bundle, destination, auth_recovery=False):
     repository,bundle,destination=map(Path,(repository,bundle,destination))
     if destination.exists() or not destination.is_absolute() or re.search(r'(?i)[\\/](gdrive|google drive)[\\/]',str(destination)):
         raise ValueError('Use a fresh ordinary launch folder outside Google Drive')
@@ -39,9 +39,15 @@ def prepare(repository, bundle, destination):
         or receipt.get('manifest_sha256')!=digest(manifest_bytes)
         or receipt.get('candidate_sha256')!=digest(read_regular(bundle/'pipeline.json'))):
         raise ValueError('Stopped installation inputs are not bound')
+    if auth_recovery and (receipt['manifest_sha256'] != 'bffcf617620320109a3ff1bcbdcc2e1d4918f9571721dc4642efeed4d0b7a2c4'
+            or receipt['candidate_sha256'] != 'a8b9b2052402f30860188721f986686c5a2f6785e563045edf295adae250f288'):
+        raise ValueError('Recovery is bound to the already installed R6 release')
     mirror=repository/'docs/deployment/windows-deployment-next'
     inputs={p.name:read_regular(p) for p in sorted(mirror.iterdir()) if p.is_file()}
     for name in NEW_SCRIPTS: inputs[name]=read_regular(repository/'scripts'/name)
+    if auth_recovery:
+        for name in ('r6_auth_recovery.py', 'verify_r6_auth_recovery.ps1'):
+            inputs[name]=read_regular(repository/'scripts'/name)
     if not 10 <= len(inputs) <= 1024 or sum(map(len,inputs.values()))>128*1024**2:
         raise ValueError('Launch input inventory exceeds bounds')
     for name in inputs:
@@ -63,6 +69,8 @@ def prepare(repository, bundle, destination):
         install_manifest=str((bundle/'install-manifest.json').absolute()),manifest_sha256=receipt['manifest_sha256'],
         candidate_sha256=receipt['candidate_sha256'],scripts=rows,
         user_input_window_minutes=20,late_prompts=False,installation_and_host_acceptance_executed=False)
+    if auth_recovery:
+        launch['auth_recovery']='20261012-first-auth-hold'
     data=(json.dumps(launch,indent=2)+'\n').encode()
     with (destination/'launch-manifest.json').open('xb') as out:out.write(data)
     launch_hash=digest(data)
@@ -81,4 +89,5 @@ def prepare(repository, bundle, destination):
 if __name__=='__main__':
     parser=argparse.ArgumentParser(description=__doc__)
     for name in ('repository','bundle','destination'):parser.add_argument('--'+name,required=True)
+    parser.add_argument('--auth-recovery', action='store_true')
     print(json.dumps(prepare(**vars(parser.parse_args())),indent=2))
