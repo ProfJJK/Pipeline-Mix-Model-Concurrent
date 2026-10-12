@@ -1,8 +1,8 @@
 {
   "schema": "cochem-requirements/4.2.7",
-  "revision": "model-routing-2026-10-07",
+  "revision": "owner-routing-v3-2026-10-12",
   "specification_id": "COCHEM-4.2.7",
-  "specification_sha256": "93fc9da6e975bc47a209b95a9d6ac345cba66ae65be7fa3a97b455abaf4ebc90",
+  "specification_sha256": "190eef6c7bffc92b2b4e0ff8a0c8255c2277ad575bf551c32ba03467f2c3d44c",
   "requirements": [
     {
       "id": "S427-GOV-001",
@@ -1059,7 +1059,7 @@
     {
       "id": "S427-ROUTE-001",
       "chapter": "06: Complexity routing and spillover",
-      "requirement": "The controller calculates and stores score/rationale from task content; submitted model, score, tier or identity fields confer no authority. Current deterministic scoring starts at one, adds two for non-chapter task kinds, one per estimated-token threshold crossed (512/2,048/8,192), requirements threshold (4/12), dependency threshold (1/4), work breadth threshold (3/8) and distinct risk-group threshold (1/3), then caps at ten. Estimates are scheduling heuristics, not measured intelligence or tokenizer output. Version/hash the captured policy. New submissions use model catalogue version 2 and unchanged score algorithm version 1; captured version-1 policies remain decodable and immutable.",
+      "requirement": "The controller calculates and stores score/rationale from task content; submitted model, score, tier or identity fields confer no authority. Scoring version 2 starts at one, retains token (512/2,048/8,192), requirements (4/12), dependency (1/4), breadth (3/8) and risk-group (1/3) increments, and caps at ten. The legacy non-chapter +2 does not apply to CODE_EDIT, CODE_TEST_AUTHOR or CODE_REVIEW, allowing small coding tasks to reach tiers 1 and 2. Estimates are scheduling heuristics, not measured intelligence or tokenizer output. R6 commissioning explicitly selects routing policy 3/scoring version 2 and captures the complete catalog generation. Previously captured policies 1/2 and scoring version 1 remain decodable and immutable; upgrading never rewrites their route or evidence.",
       "mandatory": true,
       "code": [
         "src/cochem_pipeline/routing.py",
@@ -1096,7 +1096,7 @@
     {
       "id": "S427-ROUTE-002",
       "chapter": "06: Complexity routing and spillover",
-      "requirement": "Attempt the exact tier order above for every model job, without exceptions. Busy reservation, unavailable provider, quota, auth, backlog or capability incompatibility advances to the next eligible candidate; record the actual reason. If every candidate is unavailable, persist exponential backoff (default 30 seconds, cap 600, ±20% deterministic jitter), then restart at the preferred model. No invented complexity-10 third route, paid API fallback, silent model alias, fixed-model override or tight resubmission loop.",
+      "requirement": "Attempt the captured tier order for every model job. Policy 3 has three distinct underlying models at each of ten tiers; policy 1/2 captures retain their original rows, including two routes at tier 10. Busy reservation, unavailable provider, quota, auth, backlog or capability incompatibility advances to the next eligible candidate; record the actual reason. If all candidates are unavailable, persist exponential backoff (default 30 seconds, cap 600, ±20% deterministic jitter), then restart at the preferred model. No paid API fallback, silent alias, fixed-model override or tight resubmission loop. A controller-approved quality pivot raises the same leaf's minimum tier and excludes its actual previous producing model. At tier 10 retain the ceiling and exclude tried producing models; exhausted distinct choices produce a research hold. Availability retries do not trigger this escalation. Preserve ten total quality cycles per leaf, at most three methodological pivots, and separate repair ledgers.",
       "mandatory": true,
       "code": [
         "src/cochem_pipeline/routing.py",

@@ -99,8 +99,9 @@ def test_actual_committed_versioned_catalog_resolves_current_bytes_without_rewri
         for name in ('4.2.7_SRS.md', 'SRS_ADDENDUM_4.2.7.md')}
     result = corpus.authority.status()
     assert result['ready'] and result['authority_matches_capture'] is True
-    assert result['authority_source'] == '.sources/4.2.7_SRS.model-routing-2026-10-07.md'
-    assert result['owner_amendments'][0]['resolved_source'] == '.sources/SRS_ADDENDUM_4.2.7.model-routing-2026-10-07.md'
+    revision = canonical_authority()['specification_revision']
+    assert result['authority_source'] == f'.sources/4.2.7_SRS.{revision}.md'
+    assert result['owner_amendments'][0]['resolved_source'] == f'.sources/SRS_ADDENDUM_4.2.7.{revision}.md'
     assert corpus.service.read('.sources/4.2.7_SRS.md')['authority'] == 'historical_source'
     assert corpus.manifest.read_bytes() == manifest
     assert (corpus.service.state / 'sources.json').read_bytes() == pins
@@ -230,7 +231,8 @@ def test_resolver_refuses_stale_generation_before_reading_source(registered, mon
 def test_versioned_captured_source_tamper_remains_closed(registered):
     corpus = registered(committed=True)
     assert corpus.authority.status()['ready']
-    path = corpus.root / '.sources/4.2.7_SRS.model-routing-2026-10-07.md'
+    revision = canonical_authority()['specification_revision']
+    path = corpus.root / f'.sources/4.2.7_SRS.{revision}.md'
     path.write_bytes(path.read_bytes() + b'\nUnratified source replacement.\n')
     result = corpus.authority.status(force=True)
     assert not result['ready'] and result['authority_matches_capture'] is None

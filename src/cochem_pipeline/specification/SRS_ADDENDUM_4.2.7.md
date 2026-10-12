@@ -1,5 +1,34 @@
 # 4.2.7 owner-approved SRS addendum
 
+## Current R6 owner amendment — 12 October 2026
+
+This section supersedes earlier routing text below. The owner-approved exact
+ten-tier matrix is catalog `owner-2026-10-11`, policy version 3, in Chapter 06
+of the canonical SRS and `docs/routing/4.2.7-routing-v3.owner-candidate.json`.
+Retain Gemini Pro High at tiers 5 and 6. Use native Claude for Claude models,
+Codex for GPT models and Agy for Gemini. Exact effort contracts require native
+evidence; unsupported combinations hold and spill over without relabeling.
+
+Scoring version 2 makes low-complexity coding tiers reachable. Approved quality
+pivots increase the same leaf's minimum tier and change its actual producing
+model. Tier 10 remains the ceiling. Keep ten total cycles per leaf and at most
+three pivots, separate from provider-availability backoff and paid-repair limits.
+Keep existing job captures immutable; new source/catalog generations do not
+retroactively certify old results or replace an active job's evidence.
+
+The approved Warden memory budget is 200 MiB, CPU remains 5%, and shared capacity
+remains four. Preserve R:, credentials, databases and repair budgets. Pipeline
+maintenance uses direct local repository work; only jobs explicitly submitted
+through the pipeline are governed by its MCP execution workflow.
+
+The administrator package must collect all planned user interaction within the
+first 20 minutes. Its unattended runtime may be longer; later failures preserve
+evidence and report a hold without requesting another interactive continuation.
+This amendment authorizes implementation, not a claim of Windows deployment
+acceptance. No future Gemini release identifier or date is assumed.
+
+## Historical decisions retained from 6–7 October
+
 Effective October 6, 2026, amended October 7, 2026. This addendum records the owner's
 explicit decisions. It supersedes conflicting conclusions in the 4.2.6 audit;
 the historical measurements and test results are preserved.

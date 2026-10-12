@@ -1,0 +1,375 @@
+{
+  "schema": "cochem-owner-routing-candidate/1",
+  "status": "OWNER_APPROVED_PENDING_IMPLEMENTATION",
+  "policy_id": "4.2.7-routing-v3-owner-2026-10-11",
+  "source_revision": "e5597063e0b58df666b04cc823fa96009b200c10",
+  "production_parser_compatible": false,
+  "runtime_modified": false,
+  "owner_matrix_preserved": true,
+  "tiers": [
+    {
+      "tier": 1,
+      "task_complexity": "Mechanical edits, extraction, formatting",
+      "ordered_candidates": [
+        {
+          "provider": "gemini",
+          "channel": "agy",
+          "model": "gemini-3.8-flash",
+          "canonical_model_id": "gemini-3.8-flash",
+          "reasoning_effort": "low",
+          "model_selector": "gemini-3.8-flash-low"
+        },
+        {
+          "provider": "claude",
+          "channel": "claude",
+          "model": "claude-haiku-5-5",
+          "canonical_model_id": "claude-haiku-5-5",
+          "reasoning_effort": "medium",
+          "model_selector": "claude-haiku-5-5"
+        },
+        {
+          "provider": "codex",
+          "channel": "codex",
+          "model": "gpt-6-luna",
+          "canonical_model_id": "gpt-6-luna",
+          "reasoning_effort": "medium",
+          "model_selector": "gpt-6-luna"
+        }
+      ]
+    },
+    {
+      "tier": 2,
+      "task_complexity": "Small tasks with several clear requirements",
+      "ordered_candidates": [
+        {
+          "provider": "gemini",
+          "channel": "agy",
+          "model": "gemini-3.8-flash",
+          "canonical_model_id": "gemini-3.8-flash",
+          "reasoning_effort": "medium",
+          "model_selector": "gemini-3.8-flash-medium"
+        },
+        {
+          "provider": "claude",
+          "channel": "claude",
+          "model": "claude-haiku-5-5",
+          "canonical_model_id": "claude-haiku-5-5",
+          "reasoning_effort": "high",
+          "model_selector": "claude-haiku-5-5"
+        },
+        {
+          "provider": "codex",
+          "channel": "codex",
+          "model": "gpt-6-luna",
+          "canonical_model_id": "gpt-6-luna",
+          "reasoning_effort": "high",
+          "model_selector": "gpt-6-luna"
+        }
+      ]
+    },
+    {
+      "tier": 3,
+      "task_complexity": "Multistep local changes, branches, edge cases",
+      "ordered_candidates": [
+        {
+          "provider": "gemini",
+          "channel": "agy",
+          "model": "gemini-3.8-flash",
+          "canonical_model_id": "gemini-3.8-flash",
+          "reasoning_effort": "high",
+          "model_selector": "gemini-3.8-flash-high"
+        },
+        {
+          "provider": "claude",
+          "channel": "claude",
+          "model": "claude-haiku-5-5",
+          "canonical_model_id": "claude-haiku-5-5",
+          "reasoning_effort": "xhigh",
+          "model_selector": "claude-haiku-5-5"
+        },
+        {
+          "provider": "codex",
+          "channel": "codex",
+          "model": "gpt-6-luna",
+          "canonical_model_id": "gpt-6-luna",
+          "reasoning_effort": "max",
+          "model_selector": "gpt-6-luna"
+        }
+      ]
+    },
+    {
+      "tier": 4,
+      "task_complexity": "Bounded component implementation",
+      "ordered_candidates": [
+        {
+          "provider": "codex",
+          "channel": "codex",
+          "model": "gpt-6.1-sol",
+          "canonical_model_id": "gpt-6.1-sol",
+          "reasoning_effort": "low",
+          "model_selector": "gpt-6.1-sol"
+        },
+        {
+          "provider": "claude",
+          "channel": "claude",
+          "model": "claude-sonnet-5-5",
+          "canonical_model_id": "claude-sonnet-5-5",
+          "reasoning_effort": "medium",
+          "model_selector": "claude-sonnet-5-5"
+        },
+        {
+          "provider": "gemini",
+          "channel": "agy",
+          "model": "gemini-3.8-flash",
+          "canonical_model_id": "gemini-3.8-flash",
+          "reasoning_effort": "high",
+          "model_selector": "gemini-3.8-flash-high"
+        }
+      ]
+    },
+    {
+      "tier": 5,
+      "task_complexity": "Bounded changes across components and interfaces",
+      "ordered_candidates": [
+        {
+          "provider": "codex",
+          "channel": "codex",
+          "model": "gpt-6.1-sol",
+          "canonical_model_id": "gpt-6.1-sol",
+          "reasoning_effort": "medium",
+          "model_selector": "gpt-6.1-sol"
+        },
+        {
+          "provider": "claude",
+          "channel": "claude",
+          "model": "claude-sonnet-5-5",
+          "canonical_model_id": "claude-sonnet-5-5",
+          "reasoning_effort": "high",
+          "model_selector": "claude-sonnet-5-5"
+        },
+        {
+          "provider": "gemini",
+          "channel": "agy",
+          "model": "gemini-3.1-pro",
+          "canonical_model_id": "gemini-3.1-pro",
+          "reasoning_effort": "high",
+          "model_selector": "gemini-3.1-pro-high"
+        }
+      ]
+    },
+    {
+      "tier": 6,
+      "task_complexity": "Difficult diagnosis and substantial repairs",
+      "ordered_candidates": [
+        {
+          "provider": "claude",
+          "channel": "claude",
+          "model": "claude-sonnet-5-5",
+          "canonical_model_id": "claude-sonnet-5-5",
+          "reasoning_effort": "xhigh",
+          "model_selector": "claude-sonnet-5-5"
+        },
+        {
+          "provider": "codex",
+          "channel": "codex",
+          "model": "gpt-6.1-sol",
+          "canonical_model_id": "gpt-6.1-sol",
+          "reasoning_effort": "high",
+          "model_selector": "gpt-6.1-sol"
+        },
+        {
+          "provider": "gemini",
+          "channel": "agy",
+          "model": "gemini-3.1-pro",
+          "canonical_model_id": "gemini-3.1-pro",
+          "reasoning_effort": "high",
+          "model_selector": "gemini-3.1-pro-high"
+        }
+      ]
+    },
+    {
+      "tier": 7,
+      "task_complexity": "Architecture and difficult system tradeoffs",
+      "ordered_candidates": [
+        {
+          "provider": "claude",
+          "channel": "claude",
+          "model": "claude-opus-5-5",
+          "canonical_model_id": "claude-opus-5-5",
+          "reasoning_effort": "high",
+          "model_selector": "claude-opus-5-5"
+        },
+        {
+          "provider": "codex",
+          "channel": "codex",
+          "model": "gpt-6.1-sol",
+          "canonical_model_id": "gpt-6.1-sol",
+          "reasoning_effort": "xhigh",
+          "model_selector": "gpt-6.1-sol"
+        },
+        {
+          "provider": "claude",
+          "channel": "claude",
+          "model": "claude-sonnet-5-5",
+          "canonical_model_id": "claude-sonnet-5-5",
+          "reasoning_effort": "max",
+          "model_selector": "claude-sonnet-5-5"
+        }
+      ]
+    },
+    {
+      "tier": 8,
+      "task_complexity": "Difficult concurrency, isolation and recovery",
+      "ordered_candidates": [
+        {
+          "provider": "claude",
+          "channel": "claude",
+          "model": "claude-opus-5-5",
+          "canonical_model_id": "claude-opus-5-5",
+          "reasoning_effort": "xhigh",
+          "model_selector": "claude-opus-5-5"
+        },
+        {
+          "provider": "codex",
+          "channel": "codex",
+          "model": "gpt-6-astra",
+          "canonical_model_id": "gpt-6-astra",
+          "reasoning_effort": "high",
+          "model_selector": "gpt-6-astra"
+        },
+        {
+          "provider": "codex",
+          "channel": "codex",
+          "model": "gpt-6.1-sol",
+          "canonical_model_id": "gpt-6.1-sol",
+          "reasoning_effort": "max",
+          "model_selector": "gpt-6.1-sol"
+        }
+      ]
+    },
+    {
+      "tier": 9,
+      "task_complexity": "Long-horizon work with substantial uncertainty",
+      "ordered_candidates": [
+        {
+          "provider": "claude",
+          "channel": "claude",
+          "model": "claude-opus-5-5",
+          "canonical_model_id": "claude-opus-5-5",
+          "reasoning_effort": "max",
+          "model_selector": "claude-opus-5-5"
+        },
+        {
+          "provider": "codex",
+          "channel": "codex",
+          "model": "gpt-6-astra",
+          "canonical_model_id": "gpt-6-astra",
+          "reasoning_effort": "xhigh",
+          "model_selector": "gpt-6-astra"
+        },
+        {
+          "provider": "claude",
+          "channel": "claude",
+          "model": "claude-fable-5-1",
+          "canonical_model_id": "claude-fable-5-1",
+          "reasoning_effort": "high",
+          "model_selector": "claude-fable-5-1"
+        }
+      ]
+    },
+    {
+      "tier": 10,
+      "task_complexity": "Exceptional problems requiring maximum reasoning",
+      "ordered_candidates": [
+        {
+          "provider": "claude",
+          "channel": "claude",
+          "model": "claude-fable-5-1",
+          "canonical_model_id": "claude-fable-5-1",
+          "reasoning_effort": "max",
+          "model_selector": "claude-fable-5-1"
+        },
+        {
+          "provider": "codex",
+          "channel": "codex",
+          "model": "gpt-6-astra",
+          "canonical_model_id": "gpt-6-astra",
+          "reasoning_effort": "max",
+          "model_selector": "gpt-6-astra"
+        },
+        {
+          "provider": "claude",
+          "channel": "claude",
+          "model": "claude-opus-5-5",
+          "canonical_model_id": "claude-opus-5-5",
+          "reasoning_effort": "max",
+          "model_selector": "claude-opus-5-5"
+        }
+      ]
+    }
+  ],
+  "review": {
+    "all_rows_have_three_distinct_underlying_models": true,
+    "one_candidate_per_provider_required": false,
+    "documented_effort_vocabulary_confirmed": true,
+    "windows_native_binding_verified": false,
+    "recommendations": [
+      {
+        "id": "R1",
+        "tier": 6,
+        "position": 3,
+        "owner_candidate": {
+          "provider": "gemini",
+          "model": "gemini-3.1-pro",
+          "reasoning_effort": "high"
+        },
+        "recommended_candidate": {
+          "provider": "claude",
+          "model": "claude-opus-5-5",
+          "reasoning_effort": "medium"
+        },
+        "reason": "Pro suitability for the uncertain-diagnosis floor is not established by available agentic evidence; native Opus Medium is the conservative capability-floor choice.",
+        "classification": "MATERIAL_ALLOCATION_RECOMMENDATION_NOT_PROOF_OF_PRO_INCAPABILITY",
+        "accepted": false,
+        "resolution": "OWNER_DECLINED_REPLACEMENT; RETAIN_PRO_HIGH",
+        "decision_pending": false
+      }
+    ]
+  },
+  "implementation_contract": {
+    "policy_version": 3,
+    "ten_exact_integer_tiers": true,
+    "three_candidates_per_tier": true,
+    "old_policy_snapshots_preserved": true,
+    "shared_account_quota_holds_apply_to_all_affected_models": true,
+    "underlying_model_distinctness_separate_from_provider_independence": true,
+    "existing_stricter_reconciliation_provider_separation_preserved": true,
+    "elevated_tier_persists_for_coding_leaf": true,
+    "quality_pivot_excludes_previous_actual_producer_model": true,
+    "tier10_candidate_list": "CAPTURED_THREE_MODEL_ROW_NOT_HARDCODED_FABLE_ASTRA_PAIR",
+    "tier10_switch_allowance": "PRESERVE_BOUNDED_EXECUTION_POLICY; MATRIX_ALONE_DOES_NOT_INCREASE_PIVOTS",
+    "existing_ten_total_cycle_and_paid_repair_budgets_unchanged": true,
+    "max_shared_execution_slots": 4,
+    "routing_chapter": 6,
+    "model_catalog_upgrades": "VERSIONED_VALIDATED_DATA_UPDATES_WITH_IMMUTABLE_RUNNING_JOB_CAPTURES"
+  },
+  "implementation_path_observation": {
+    "pipeline_projects_result": [
+      "windows-acceptance"
+    ],
+    "pipeline_code_submitted": false,
+    "repository_project_id_verified": false,
+    "note": "Do not submit repository changes to a fixture project; resolve authorized repository engineering path before implementation."
+  },
+  "owner_decision": {
+    "date": "2026-10-11",
+    "matrix": "APPROVED_EXACTLY_AS_SUBMITTED",
+    "tier6_final_fallback": "RETAIN_AGY_GEMINI_3_1_PRO_HIGH",
+    "reason": "Maintain a medium-tier route when native Claude and Codex subscription allowances are exhausted.",
+    "future_catalog_update": "Support later model upgrades; no Gemini 4 release date, selector or capability is assumed.",
+    "administrator_initial_active_input_max_seconds": 1200,
+    "administrator_total_elapsed_seconds_limited": false,
+    "administrator_interaction_order": "ALL_REQUIRED_INPUT_AT_START_THEN_UNATTENDED; NO_PLANNED_LATE_PROMPTS",
+    "all_authorized_nonadministrator_revision_work": true
+  }
+}
