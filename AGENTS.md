@@ -61,6 +61,8 @@ behavioural tests live in the pipeline repository (`pipeline_tests/test_cochem_h
   (`!analyze -v`).
 
 ## Current handoff
+2026-10-12: the Claude Code session has released all locks to the takeover agent; see
+`docs/AGENT_RELEASE_NOTICE_2026-10-12.md`.
 Start with `docs/WINDOWS_AGENT_HANDOFF_4.2.7_2026-10-11.md` (branch `feature/r5-gemini-and-runtime-fixes`):
 the Warden is down, r5 is installed but not activated, and the owner's sitting rerun is the next step.
 The routing-tier redesign is left open for the next agent. A mirror of the deployment workspace is in

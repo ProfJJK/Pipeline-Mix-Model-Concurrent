@@ -10,6 +10,11 @@ ChatGPT/Codex).
 **Read [AGENTS.md](../AGENTS.md) first.** Its host rules are enforced on this workstation by a PreToolUse
 hook for Claude Code. Codex and Antigravity must follow them by reading the file.
 
+> **2026-10-12: ALL LOCKS RELEASED. The takeover agent owns everything now.** See
+> [AGENT_RELEASE_NOTICE_2026-10-12.md](AGENT_RELEASE_NOTICE_2026-10-12.md). This includes W, the mirror,
+> this branch and the heavy-run lock, and no process of this session is running. The owner instructed
+> the takeover.
+>
 > **r5 sitting repair COMPLETE (2026-10-11 about 23:00 CDT).**
 > - The flags-18 repair (section 5b) is implemented, re-tested, reviewed by two adversarial reviewers
 >   (both GO) and re-verified by this session.

@@ -1,0 +1,16 @@
+RELEASE NOTICE - 2026-10-12 - from the Claude Code session to the takeover agent
+
+ALL LOCKS RELEASED. TAKE OVER NOW.
+
+Owner instruction (2026-10-12, verbatim): "Push the work, communicate to the other agent that you have
+released your locks, and allow the other agent to take over."
+
+- This workspace (W), including every r5 sitting file: released, yours to edit.
+- Repo mirror docs/deployment/windows-deployment-next/: released; regenerate with export-deployment-mirror.py.
+- Branch feature/r5-gemini-and-runtime-fixes: released; this session will not push again unless the
+  owner asks.
+- Heavy-run lock C:\Users\ansac\CoChem427\heavy-run.lock: not held (holder file: free since 22:49:52).
+- No workflow, sub-agent, background test or process of this session is running.
+
+Details: docs/AGENT_RELEASE_NOTICE_2026-10-12.md and docs/WINDOWS_AGENT_HANDOFF_4.2.7_2026-10-11.md
+on branch feature/r5-gemini-and-runtime-fixes.
