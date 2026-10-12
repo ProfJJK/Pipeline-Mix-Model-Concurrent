@@ -1,0 +1,649 @@
+﻿**********************
+Windows PowerShell transcript start
+Start time: 20261011202738
+Username: AETHERDESK\ansac
+RunAs User: AETHERDESK\ansac
+Configuration Name: 
+Machine: AETHERDESK (Microsoft Windows NT 10.0.26300.0)
+Host Application: C:\WINDOWS\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\RUN_427_R5_SITTING.ps1 -Apply -Attempt v2
+Process ID: 42432
+PSVersion: 5.1.26100.9444
+PSEdition: Desktop
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1.26100.9444
+BuildVersion: 10.0.26100.9444
+CLRVersion: 4.0.30319.42000
+WSManStackVersion: 3.0
+PSRemotingProtocolVersion: 2.3
+SerializationVersion: 1.1.0.1
+**********************
+[20:27:38] S0: preconditions (nothing is changed by this stage)
+[20:27:38] pins: 33 reviewed files verified
+[20:27:38] Docker engine and execution image: ok
+PS>TerminatingError(Get-NetTCPConnection): "The running command stopped because the preference variable "ErrorActionPreference" or common parameter is set to Stop: No matching MSFT_NetTCPConnection objects found by CIM query for instances of the ROOT/StandardCimv2/MSFT_NetTCPConnection class on the  CIM server: SELECT * FROM MSFT_NetTCPConnection  WHERE ((LocalPort = 47824)) AND ((State = 2)). Verify query parameters and retry."
+[20:27:39] Warden task: source r4-v1, enabled True, instances 0, port 47824 listeners 0
+[20:27:39] runtime processes: 16 MCP client(s) recognised (Claude Desktop, Codex, Antigravity, Claude Code may stay open), 0 observer recorder(s), 0 controller process(es); none unclassified
+[20:27:39] Gemini: attempt; effort-null slug gemini-3.8-flash-low
+[20:27:39] S1: install the r5 runtime beside r4 (stopped; about 4 minutes, downloads the locked wheels; the Warden is not touched)
+[20:27:39] r5 is already installed and its install-after.json verifies; the installer is not run again
+[20:27:39] S2: stop-warden-r4 (the task is idle but enabled: disable only, no End)
+[20:27:39] --- stop-warden-r4.ps1 -Apply -Attempt v1
+{
+    "schema":  "cochem-warden-stop-result/1",
+    "status":  "WARDEN_ALREADY_STOPPED_AND_DISABLED",
+    "mode":  "ALREADY_STOPPED",
+    "attempt":  "v1",
+    "receipt_path":  "C:\\Program Files\\CoChem\\WardenStop4.2.7-windows-20261010-r4-v1\\stop-receipt.json",
+    "receipt_sha256":  "1ab5eb64dec65d0fe66f0ae3d5fbc7230be9a123a144d1a06aad8535e06ccdf7",
+    "task_xml_after_sha256":  "a8a8679eb06c19d803164b4909de2391ad11e8a1c6af557ce023a706d164d7f2",
+    "enabled":  false,
+    "running_instances":  0,
+    "last_task_result":  0,
+    "end_requested":  false,
+    "disable_requested":  true
+}
+[20:28:56] Warden stopped and disabled: WARDEN_ALREADY_STOPPED_AND_DISABLED
+[20:28:56] S3: Claude and Codex session health on the six worker slots (12 one-shot checks, strictly one at a time; about 6 min)
+[20:28:56] --- session status claude slot1
+The status check is held at task registration: Registered task ownership/private DACL differs. The task may exist but 
+was never run. Preserve C:\Program 
+Files\CoChem\NativeAuthStatusSix4.2.7-windows-20261010-r4-v1-ea8225f6253040d3b41a9337df83b8a0-slot1-claude-before and 
+the task CoChem-4.2.7-NativeAuthStatusSix-20261010-r4-v1-ea8225f6253040d3b41a9337df83b8a0-slot1-claude-before; review 
+status-held.json. No browser login or automatic retry is authorized.
+At C:\Users\ansac\Documents\Codex\2026-10-06\the-github-repository-is-located-at\windows-deployment-next\check-worker-n
+ative-auth-status-six-r4-v1.ps1:393 char:9
++         throw ((Get-AuthStatusHeldMessage $phase $failure)+$heldNote)
++         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : OperationStopped: (The status chec... is authorized.:String) [], RuntimeException
+    + FullyQualifiedErrorId : The status check is held at task registration: Registered task ownership/private DACL di 
+   ffers. The task may exist but was never run. Preserve C:\Program Files\CoChem\NativeAuthStatusSix4.2.7-windows-202  
+  61010-r4-v1-ea8225f6253040d3b41a9337df83b8a0-slot1-claude-before and the task CoChem-4.2.7-NativeAuthStatusSix-202   
+ 61010-r4-v1-ea8225f6253040d3b41a9337df83b8a0-slot1-claude-before; review status-held.json. No browser login or aut    
+omatic retry is authorized.
+[20:29:20] --- session status claude slot2
+The status check is held at task registration: Registered task ownership/private DACL differs. The task may exist but 
+was never run. Preserve C:\Program 
+Files\CoChem\NativeAuthStatusSix4.2.7-windows-20261010-r4-v1-ea8225f6253040d3b41a9337df83b8a0-slot2-claude-before and 
+the task CoChem-4.2.7-NativeAuthStatusSix-20261010-r4-v1-ea8225f6253040d3b41a9337df83b8a0-slot2-claude-before; review 
+status-held.json. No browser login or automatic retry is authorized.
+At C:\Users\ansac\Documents\Codex\2026-10-06\the-github-repository-is-located-at\windows-deployment-next\check-worker-n
+ative-auth-status-six-r4-v1.ps1:393 char:9
++         throw ((Get-AuthStatusHeldMessage $phase $failure)+$heldNote)
++         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : OperationStopped: (The status chec... is authorized.:String) [], RuntimeException
+    + FullyQualifiedErrorId : The status check is held at task registration: Registered task ownership/private DACL di 
+   ffers. The task may exist but was never run. Preserve C:\Program Files\CoChem\NativeAuthStatusSix4.2.7-windows-202  
+  61010-r4-v1-ea8225f6253040d3b41a9337df83b8a0-slot2-claude-before and the task CoChem-4.2.7-NativeAuthStatusSix-202   
+ 61010-r4-v1-ea8225f6253040d3b41a9337df83b8a0-slot2-claude-before; review status-held.json. No browser login or aut    
+omatic retry is authorized.
+[20:29:32] --- session status claude slot3
+The status check is held at task registration: Registered task ownership/private DACL differs. The task may exist but 
+was never run. Preserve C:\Program 
+Files\CoChem\NativeAuthStatusSix4.2.7-windows-20261010-r4-v1-ea8225f6253040d3b41a9337df83b8a0-slot3-claude-before and 
+the task CoChem-4.2.7-NativeAuthStatusSix-20261010-r4-v1-ea8225f6253040d3b41a9337df83b8a0-slot3-claude-before; review 
+status-held.json. No browser login or automatic retry is authorized.
+At C:\Users\ansac\Documents\Codex\2026-10-06\the-github-repository-is-located-at\windows-deployment-next\check-worker-n
+ative-auth-status-six-r4-v1.ps1:393 char:9
++         throw ((Get-AuthStatusHeldMessage $phase $failure)+$heldNote)
++         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : OperationStopped: (The status chec... is authorized.:String) [], RuntimeException
+    + FullyQualifiedErrorId : The status check is held at task registration: Registered task ownership/private DACL di 
+   ffers. The task may exist but was never run. Preserve C:\Program Files\CoChem\NativeAuthStatusSix4.2.7-windows-202  
+  61010-r4-v1-ea8225f6253040d3b41a9337df83b8a0-slot3-claude-before and the task CoChem-4.2.7-NativeAuthStatusSix-202   
+ 61010-r4-v1-ea8225f6253040d3b41a9337df83b8a0-slot3-claude-before; review status-held.json. No browser login or aut    
+omatic retry is authorized.
+[20:29:43] --- session status claude slot4
+The status check is held at task registration: Registered task ownership/private DACL differs. The task may exist but 
+was never run. Preserve C:\Program 
+Files\CoChem\NativeAuthStatusSix4.2.7-windows-20261010-r4-v1-ea8225f6253040d3b41a9337df83b8a0-slot4-claude-before and 
+the task CoChem-4.2.7-NativeAuthStatusSix-20261010-r4-v1-ea8225f6253040d3b41a9337df83b8a0-slot4-claude-before; review 
+status-held.json. No browser login or automatic retry is authorized.
+At C:\Users\ansac\Documents\Codex\2026-10-06\the-github-repository-is-located-at\windows-deployment-next\check-worker-n
+ative-auth-status-six-r4-v1.ps1:393 char:9
++         throw ((Get-AuthStatusHeldMessage $phase $failure)+$heldNote)
++         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : OperationStopped: (The status chec... is authorized.:String) [], RuntimeException
+    + FullyQualifiedErrorId : The status check is held at task registration: Registered task ownership/private DACL di 
+   ffers. The task may exist but was never run. Preserve C:\Program Files\CoChem\NativeAuthStatusSix4.2.7-windows-202  
+  61010-r4-v1-ea8225f6253040d3b41a9337df83b8a0-slot4-claude-before and the task CoChem-4.2.7-NativeAuthStatusSix-202   
+ 61010-r4-v1-ea8225f6253040d3b41a9337df83b8a0-slot4-claude-before; review status-held.json. No browser login or aut    
+omatic retry is authorized.
+[20:29:54] --- session status claude slot5
+The status check is held at task registration: Registered task ownership/private DACL differs. The task may exist but 
+was never run. Preserve C:\Program 
+Files\CoChem\NativeAuthStatusSix4.2.7-windows-20261010-r4-v1-ea8225f6253040d3b41a9337df83b8a0-slot5-claude-before and 
+the task CoChem-4.2.7-NativeAuthStatusSix-20261010-r4-v1-ea8225f6253040d3b41a9337df83b8a0-slot5-claude-before; review 
+status-held.json. No browser login or automatic retry is authorized.
+At C:\Users\ansac\Documents\Codex\2026-10-06\the-github-repository-is-located-at\windows-deployment-next\check-worker-n
+ative-auth-status-six-r4-v1.ps1:393 char:9
++         throw ((Get-AuthStatusHeldMessage $phase $failure)+$heldNote)
++         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : OperationStopped: (The status chec... is authorized.:String) [], RuntimeException
+    + FullyQualifiedErrorId : The status check is held at task registration: Registered task ownership/private DACL di 
+   ffers. The task may exist but was never run. Preserve C:\Program Files\CoChem\NativeAuthStatusSix4.2.7-windows-202  
+  61010-r4-v1-ea8225f6253040d3b41a9337df83b8a0-slot5-claude-before and the task CoChem-4.2.7-NativeAuthStatusSix-202   
+ 61010-r4-v1-ea8225f6253040d3b41a9337df83b8a0-slot5-claude-before; review status-held.json. No browser login or aut    
+omatic retry is authorized.
+[20:30:05] --- session status claude slot6
+The status check is held at task registration: Registered task ownership/private DACL differs. The task may exist but 
+was never run. Preserve C:\Program 
+Files\CoChem\NativeAuthStatusSix4.2.7-windows-20261010-r4-v1-ea8225f6253040d3b41a9337df83b8a0-slot6-claude-before and 
+the task CoChem-4.2.7-NativeAuthStatusSix-20261010-r4-v1-ea8225f6253040d3b41a9337df83b8a0-slot6-claude-before; review 
+status-held.json. No browser login or automatic retry is authorized.
+At C:\Users\ansac\Documents\Codex\2026-10-06\the-github-repository-is-located-at\windows-deployment-next\check-worker-n
+ative-auth-status-six-r4-v1.ps1:393 char:9
++         throw ((Get-AuthStatusHeldMessage $phase $failure)+$heldNote)
++         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : OperationStopped: (The status chec... is authorized.:String) [], RuntimeException
+    + FullyQualifiedErrorId : The status check is held at task registration: Registered task ownership/private DACL di 
+   ffers. The task may exist but was never run. Preserve C:\Program Files\CoChem\NativeAuthStatusSix4.2.7-windows-202  
+  61010-r4-v1-ea8225f6253040d3b41a9337df83b8a0-slot6-claude-before and the task CoChem-4.2.7-NativeAuthStatusSix-202   
+ 61010-r4-v1-ea8225f6253040d3b41a9337df83b8a0-slot6-claude-before; review status-held.json. No browser login or aut    
+omatic retry is authorized.
+[20:30:16] --- session status codex slot1
+The status check is held at task registration: Registered task ownership/private DACL differs. The task may exist but 
+was never run. Preserve C:\Program 
+Files\CoChem\NativeAuthStatusSix4.2.7-windows-20261010-r4-v1-ea8225f6253040d3b41a9337df83b8a0-slot1-codex-before and 
+the task CoChem-4.2.7-NativeAuthStatusSix-20261010-r4-v1-ea8225f6253040d3b41a9337df83b8a0-slot1-codex-before; review 
+status-held.json. No browser login or automatic retry is authorized.
+At C:\Users\ansac\Documents\Codex\2026-10-06\the-github-repository-is-located-at\windows-deployment-next\check-worker-n
+ative-auth-status-six-r4-v1.ps1:393 char:9
++         throw ((Get-AuthStatusHeldMessage $phase $failure)+$heldNote)
++         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : OperationStopped: (The status chec... is authorized.:String) [], RuntimeException
+    + FullyQualifiedErrorId : The status check is held at task registration: Registered task ownership/private DACL di 
+   ffers. The task may exist but was never run. Preserve C:\Program Files\CoChem\NativeAuthStatusSix4.2.7-windows-202  
+  61010-r4-v1-ea8225f6253040d3b41a9337df83b8a0-slot1-codex-before and the task CoChem-4.2.7-NativeAuthStatusSix-2026   
+ 1010-r4-v1-ea8225f6253040d3b41a9337df83b8a0-slot1-codex-before; review status-held.json. No browser login or autom    
+atic retry is authorized.
+[20:30:28] --- session status codex slot2
+The status check is held at task registration: Registered task ownership/private DACL differs. The task may exist but 
+was never run. Preserve C:\Program 
+Files\CoChem\NativeAuthStatusSix4.2.7-windows-20261010-r4-v1-ea8225f6253040d3b41a9337df83b8a0-slot2-codex-before and 
+the task CoChem-4.2.7-NativeAuthStatusSix-20261010-r4-v1-ea8225f6253040d3b41a9337df83b8a0-slot2-codex-before; review 
+status-held.json. No browser login or automatic retry is authorized.
+At C:\Users\ansac\Documents\Codex\2026-10-06\the-github-repository-is-located-at\windows-deployment-next\check-worker-n
+ative-auth-status-six-r4-v1.ps1:393 char:9
++         throw ((Get-AuthStatusHeldMessage $phase $failure)+$heldNote)
++         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : OperationStopped: (The status chec... is authorized.:String) [], RuntimeException
+    + FullyQualifiedErrorId : The status check is held at task registration: Registered task ownership/private DACL di 
+   ffers. The task may exist but was never run. Preserve C:\Program Files\CoChem\NativeAuthStatusSix4.2.7-windows-202  
+  61010-r4-v1-ea8225f6253040d3b41a9337df83b8a0-slot2-codex-before and the task CoChem-4.2.7-NativeAuthStatusSix-2026   
+ 1010-r4-v1-ea8225f6253040d3b41a9337df83b8a0-slot2-codex-before; review status-held.json. No browser login or autom    
+atic retry is authorized.
+[20:30:41] --- session status codex slot3
+The status check is held at task registration: Registered task ownership/private DACL differs. The task may exist but 
+was never run. Preserve C:\Program 
+Files\CoChem\NativeAuthStatusSix4.2.7-windows-20261010-r4-v1-ea8225f6253040d3b41a9337df83b8a0-slot3-codex-before and 
+the task CoChem-4.2.7-NativeAuthStatusSix-20261010-r4-v1-ea8225f6253040d3b41a9337df83b8a0-slot3-codex-before; review 
+status-held.json. No browser login or automatic retry is authorized.
+At C:\Users\ansac\Documents\Codex\2026-10-06\the-github-repository-is-located-at\windows-deployment-next\check-worker-n
+ative-auth-status-six-r4-v1.ps1:393 char:9
++         throw ((Get-AuthStatusHeldMessage $phase $failure)+$heldNote)
++         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : OperationStopped: (The status chec... is authorized.:String) [], RuntimeException
+    + FullyQualifiedErrorId : The status check is held at task registration: Registered task ownership/private DACL di 
+   ffers. The task may exist but was never run. Preserve C:\Program Files\CoChem\NativeAuthStatusSix4.2.7-windows-202  
+  61010-r4-v1-ea8225f6253040d3b41a9337df83b8a0-slot3-codex-before and the task CoChem-4.2.7-NativeAuthStatusSix-2026   
+ 1010-r4-v1-ea8225f6253040d3b41a9337df83b8a0-slot3-codex-before; review status-held.json. No browser login or autom    
+atic retry is authorized.
+[20:30:49] --- session status codex slot4
+The status check is held at task registration: Registered task ownership/private DACL differs. The task may exist but 
+was never run. Preserve C:\Program 
+Files\CoChem\NativeAuthStatusSix4.2.7-windows-20261010-r4-v1-ea8225f6253040d3b41a9337df83b8a0-slot4-codex-before and 
+the task CoChem-4.2.7-NativeAuthStatusSix-20261010-r4-v1-ea8225f6253040d3b41a9337df83b8a0-slot4-codex-before; review 
+status-held.json. No browser login or automatic retry is authorized.
+At C:\Users\ansac\Documents\Codex\2026-10-06\the-github-repository-is-located-at\windows-deployment-next\check-worker-n
+ative-auth-status-six-r4-v1.ps1:393 char:9
++         throw ((Get-AuthStatusHeldMessage $phase $failure)+$heldNote)
++         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : OperationStopped: (The status chec... is authorized.:String) [], RuntimeException
+    + FullyQualifiedErrorId : The status check is held at task registration: Registered task ownership/private DACL di 
+   ffers. The task may exist but was never run. Preserve C:\Program Files\CoChem\NativeAuthStatusSix4.2.7-windows-202  
+  61010-r4-v1-ea8225f6253040d3b41a9337df83b8a0-slot4-codex-before and the task CoChem-4.2.7-NativeAuthStatusSix-2026   
+ 1010-r4-v1-ea8225f6253040d3b41a9337df83b8a0-slot4-codex-before; review status-held.json. No browser login or autom    
+atic retry is authorized.
+[20:30:58] --- session status codex slot5
+The status check is held at task registration: Registered task ownership/private DACL differs. The task may exist but 
+was never run. Preserve C:\Program 
+Files\CoChem\NativeAuthStatusSix4.2.7-windows-20261010-r4-v1-ea8225f6253040d3b41a9337df83b8a0-slot5-codex-before and 
+the task CoChem-4.2.7-NativeAuthStatusSix-20261010-r4-v1-ea8225f6253040d3b41a9337df83b8a0-slot5-codex-before; review 
+status-held.json. No browser login or automatic retry is authorized.
+At C:\Users\ansac\Documents\Codex\2026-10-06\the-github-repository-is-located-at\windows-deployment-next\check-worker-n
+ative-auth-status-six-r4-v1.ps1:393 char:9
++         throw ((Get-AuthStatusHeldMessage $phase $failure)+$heldNote)
++         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : OperationStopped: (The status chec... is authorized.:String) [], RuntimeException
+    + FullyQualifiedErrorId : The status check is held at task registration: Registered task ownership/private DACL di 
+   ffers. The task may exist but was never run. Preserve C:\Program Files\CoChem\NativeAuthStatusSix4.2.7-windows-202  
+  61010-r4-v1-ea8225f6253040d3b41a9337df83b8a0-slot5-codex-before and the task CoChem-4.2.7-NativeAuthStatusSix-2026   
+ 1010-r4-v1-ea8225f6253040d3b41a9337df83b8a0-slot5-codex-before; review status-held.json. No browser login or autom    
+atic retry is authorized.
+[20:31:05] --- session status codex slot6
+The status check is held at task registration: Registered task ownership/private DACL differs. The task may exist but 
+was never run. Preserve C:\Program 
+Files\CoChem\NativeAuthStatusSix4.2.7-windows-20261010-r4-v1-ea8225f6253040d3b41a9337df83b8a0-slot6-codex-before and 
+the task CoChem-4.2.7-NativeAuthStatusSix-20261010-r4-v1-ea8225f6253040d3b41a9337df83b8a0-slot6-codex-before; review 
+status-held.json. No browser login or automatic retry is authorized.
+At C:\Users\ansac\Documents\Codex\2026-10-06\the-github-repository-is-located-at\windows-deployment-next\check-worker-n
+ative-auth-status-six-r4-v1.ps1:393 char:9
++         throw ((Get-AuthStatusHeldMessage $phase $failure)+$heldNote)
++         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : OperationStopped: (The status chec... is authorized.:String) [], RuntimeException
+    + FullyQualifiedErrorId : The status check is held at task registration: Registered task ownership/private DACL di 
+   ffers. The task may exist but was never run. Preserve C:\Program Files\CoChem\NativeAuthStatusSix4.2.7-windows-202  
+  61010-r4-v1-ea8225f6253040d3b41a9337df83b8a0-slot6-codex-before and the task CoChem-4.2.7-NativeAuthStatusSix-2026   
+ 1010-r4-v1-ea8225f6253040d3b41a9337df83b8a0-slot6-codex-before; review status-held.json. No browser login or autom    
+atic retry is authorized.
+[20:31:11] claude: 0/6 sessions verified; unclear (held): slot1, slot2, slot3, slot4, slot5, slot6; re-login NOT_NEEDED
+[20:31:11] codex: 0/6 sessions verified; unclear (held): slot1, slot2, slot3, slot4, slot5, slot6; re-login NOT_NEEDED
+[20:31:11] S4: not used (addendum A5: NF-1 dropped)
+[20:31:11] S5: Gemini signed-out capture on slot1 (about 3 min; two OAuth URLs are minted and abandoned by design)
+[20:31:11] --- agy-status-capture-r4-v1.ps1 signed-out
+The agy status capture is held at task registration: Registered task ownership/private DACL differs.. No Run was 
+requested; preserve the root and the task (if registered) and review capture-held.json.
+At C:\Users\ansac\Documents\Codex\2026-10-06\the-github-repository-is-located-at\windows-deployment-next\agy-status-cap
+ture-r4-v1.ps1:462 char:9
++         throw ($message+$heldNote)
++         ~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : OperationStopped: (The agy status ...ture-held.json.:String) [], RuntimeException
+    + FullyQualifiedErrorId : The agy status capture is held at task registration: Registered task ownership/private D 
+   ACL differs.. No Run was requested; preserve the root and the task (if registered) and review capture-held.json.
+[20:31:16] Gemini HELD (S5): the signed-out capture did not establish a sign-in path (exit 1, login mode unknown). The sitting continues; Claude and Codex are not affected.
+[20:31:16] S6: skipped (Gemini held)
+[20:31:16] S7: skipped (Gemini held)
+[20:31:16] S8: skipped (Gemini held)
+[20:31:16] S9: gated r5 configuration build and staging (about 2 min)
+[20:31:16] --- build-pipeline-config-r5-candidate.py --mode held --out-dir C:\Program Files\CoChem\R5Sitting4.2.7-windows-20261011-v2\S09-build-20261011-202738-a
+{"candidate_sha256": "135cd9eccf9efcdbc910679bde83b571913e731a4041ece62f60e42442f1709c", "decision_sha256": "32da1fd5208f187d889e91c273d74fbd4fd4bfd1b3482468e1b172281e1d2be7", "exit_code": 0, "mode": "held", "out_dir": "C:\\Program Files\\CoChem\\R5Sitting4.2.7-windows-20261011-v2\\S09-build-20261011-202738-a", "outcome": "GEMINI_HELD_COMMISSIONED_BYTES", "schema": "cochem-r5-config-decision-result/1", "status": "DECISION_WRITTEN"}
+[20:31:16] --- stage-pipeline-config-r5-v1.ps1 plan -Attempt v1
+{
+    "schema":  "cochem-config-only-staging-plan/2",
+    "mode":  "READ_ONLY_PLAN",
+    "build_directory":  "C:\\Program Files\\CoChem\\R5Sitting4.2.7-windows-20261011-v2\\S09-build-20261011-202738-a",
+    "attempt":  "v1",
+    "decision":  {
+                     "path":  "C:\\Program Files\\CoChem\\R5Sitting4.2.7-windows-20261011-v2\\S09-build-20261011-202738-a\\decision.json",
+                     "sha256":  "32da1fd5208f187d889e91c273d74fbd4fd4bfd1b3482468e1b172281e1d2be7",
+                     "schema":  "cochem-r5-config-decision/1",
+                     "mode":  "held",
+                     "outcome":  "GEMINI_HELD_COMMISSIONED_BYTES",
+                     "gates":  {
+                                   "G1":  {
+                                              "pass":  false,
+                                              "reason":  "not evaluated: held mode requested"
+                                          },
+                                   "G2":  {
+                                              "pass":  false,
+                                              "reason":  "not evaluated: held mode requested"
+                                          },
+                                   "G3":  {
+                                              "pass":  false,
+                                              "reason":  "not evaluated: held mode requested"
+                                          },
+                                   "G4":  {
+                                              "pass":  false,
+                                              "reason":  "not evaluated: held mode requested"
+                                          },
+                                   "G5":  {
+                                              "pass":  false,
+                                              "reason":  "not evaluated: held mode requested"
+                                          },
+                                   "G6":  {
+                                              "pass":  false,
+                                              "reason":  "not evaluated: held mode requested"
+                                          }
+                               },
+                     "gates_passed":  0,
+                     "chosen_bindings_count":  0,
+                     "error":  null,
+                     "builder_python":  "C:\\Program Files\\CoChem\\Pipeline4.2.7-windows-20261011-r5\\.venv\\Scripts\\python.exe",
+                     "builder_script_sha256":  "ab01d82486ec54ee8eefa17542d6b58d9811cb94a96a5ceef1f439f0599a19e8"
+                 },
+    "candidate":  {
+                      "path":  "C:\\Program Files\\CoChem\\R5Sitting4.2.7-windows-20261011-v2\\S09-build-20261011-202738-a\\pipeline.json",
+                      "sha256":  "135cd9eccf9efcdbc910679bde83b571913e731a4041ece62f60e42442f1709c",
+                      "length":  9533
+                  },
+    "commissioned":  {
+                         "path":  "C:\\Program Files\\CoChem\\Pipeline4.2.7-windows-20261009-r4\\pipeline.json",
+                         "sha256":  "135cd9eccf9efcdbc910679bde83b571913e731a4041ece62f60e42442f1709c",
+                         "decision_path":  "C:\\Program Files\\CoChem\\Pipeline4.2.7-windows-20261009-r4\\pipeline.json"
+                     },
+    "diff":  {
+                 "outcome_by_content":  "GEMINI_HELD_COMMISSIONED_BYTES",
+                 "only_policy_change":  "none: the commissioned bytes, Gemini held by integration_hold"
+             },
+    "parser":  {
+                   "parser_valid":  true,
+                   "worker_identities":  6,
+                   "max_shared_slots":  4,
+                   "knowledge_enabled":  true
+               },
+    "r5_runtime":  {
+                       "root":  "C:\\Program Files\\CoChem\\Pipeline4.2.7-windows-20261011-r5",
+                       "python":  "C:\\Program Files\\CoChem\\Pipeline4.2.7-windows-20261011-r5\\.venv\\Scripts\\python.exe",
+                       "python_sha256":  "560b9ef7d856608ab8da02ded2dc8a1951ad1f424c382c0ec6a698874165a18e",
+                       "install_after_path":  "C:\\Program Files\\CoChem\\Pipeline4.2.7-windows-20261011-r5\\install-after.json",
+                       "install_after_sha256":  "91c756094e0d78f42cddf5b72aa3e9de382a710efc7db1d16feff846a172d429"
+                   },
+    "target":  {
+                   "root":  "C:\\Program Files\\CoChem\\WardenConfig4.2.7-windows-20261011-r5-v1",
+                   "path":  "C:\\Program Files\\CoChem\\WardenConfig4.2.7-windows-20261011-r5-v1\\pipeline.json",
+                   "state":  "ABSENT",
+                   "existing_receipts":  [
+
+                                         ]
+               },
+    "staging_sddl":  "O:BAG:BAD:P(A;;FA;;;SY)(A;;FA;;;BA)",
+    "administrator":  true,
+    "operator":  "AETHERDESK\\ansac",
+    "script_sha256":  "1066f6c3d9fb5be6143075ddf72206af56f64a8240b7e49fc8f0625d32e3c993",
+    "apply_would":  "create the protected directory, write pipeline.json CreateNew from the verified bytes, write one receipt",
+    "files_written":  0,
+    "tasks_changed":  0
+}
+{"status":"PLAN_OK","staged_path":"C:\\Program Files\\CoChem\\WardenConfig4.2.7-windows-20261011-r5-v1\\pipeline.json","staged_sha256":"135cd9eccf9efcdbc910679bde83b571913e731a4041ece62f60e42442f1709c","outcome":"GEMINI_HELD_COMMISSIONED_BYTES","mode":"held","receipt_path":null,"target_state":"ABSENT","exit_code":0,"reason":null}
+PS>TerminatingError(ConvertFrom-Json): "Invalid JSON primitive: "status":"PLAN_OK","staged_path":"C:\\Program Files\\CoChem\\WardenConfig4.2.7-windows-20261011-r5-v1\\pipeline.json","staged_sha256":"135cd9eccf9efcdbc910679bde83b571913e731a4041ece62f60e42442f1709c","outcome":"GEMINI_HELD_COMMISSIONED_BYTES","mode":"held","receipt_path":null,"target_state":"ABSENT","exit_code":0,"reason":null}."
+[20:31:17] --- stage-pipeline-config-r5-v1.ps1 -Apply -Attempt v1
+{
+    "schema":  "cochem-config-only-staging-result/2",
+    "status":  "STAGED",
+    "receipt_path":  "C:\\Program Files\\CoChem\\WardenConfig4.2.7-windows-20261011-r5-v1\\staging-receipt-20261012T013118Z-a7e95ba103df430daaf28288c195f3a6.json",
+    "receipt_sha256":  "06e0c47dfe7316c9f3d089a988d782d723fd7530b6b848ec633228020e73aef5",
+    "staged_path":  "C:\\Program Files\\CoChem\\WardenConfig4.2.7-windows-20261011-r5-v1\\pipeline.json",
+    "staged_sha256":  "135cd9eccf9efcdbc910679bde83b571913e731a4041ece62f60e42442f1709c",
+    "retarget_config_argument":  "C:\\Program Files\\CoChem\\WardenConfig4.2.7-windows-20261011-r5-v1\\pipeline.json",
+    "receipt":  {
+                    "schema":  "cochem-config-only-staging/2",
+                    "status":  "STAGED",
+                    "staged_path":  "C:\\Program Files\\CoChem\\WardenConfig4.2.7-windows-20261011-r5-v1\\pipeline.json",
+                    "staged_sha256":  "135cd9eccf9efcdbc910679bde83b571913e731a4041ece62f60e42442f1709c",
+                    "staged_length":  9533,
+                    "target_root":  "C:\\Program Files\\CoChem\\WardenConfig4.2.7-windows-20261011-r5-v1",
+                    "mode":  "held",
+                    "outcome":  "GEMINI_HELD_COMMISSIONED_BYTES",
+                    "only_policy_change":  "none: the commissioned bytes, Gemini held by integration_hold",
+                    "decision_path":  "C:\\Program Files\\CoChem\\R5Sitting4.2.7-windows-20261011-v2\\S09-build-20261011-202738-a\\decision.json",
+                    "decision_sha256":  "32da1fd5208f187d889e91c273d74fbd4fd4bfd1b3482468e1b172281e1d2be7",
+                    "decision_schema":  "cochem-r5-config-decision/1",
+                    "builder":  {
+                                    "python":  "C:\\Program Files\\CoChem\\Pipeline4.2.7-windows-20261011-r5\\.venv\\Scripts\\python.exe",
+                                    "script_sha256":  "ab01d82486ec54ee8eefa17542d6b58d9811cb94a96a5ceef1f439f0599a19e8",
+                                    "isolated_mode":  true,
+                                    "interpreter_is_bound_r5":  true
+                                },
+                    "candidate_path":  "C:\\Program Files\\CoChem\\R5Sitting4.2.7-windows-20261011-v2\\S09-build-20261011-202738-a\\pipeline.json",
+                    "candidate_sha256":  "135cd9eccf9efcdbc910679bde83b571913e731a4041ece62f60e42442f1709c",
+                    "candidate_length":  9533,
+                    "commissioned_path":  "C:\\Program Files\\CoChem\\Pipeline4.2.7-windows-20261009-r4\\pipeline.json",
+                    "commissioned_sha256":  "135cd9eccf9efcdbc910679bde83b571913e731a4041ece62f60e42442f1709c",
+                    "decision_commissioned_path":  "C:\\Program Files\\CoChem\\Pipeline4.2.7-windows-20261009-r4\\pipeline.json",
+                    "gates":  {
+                                  "G1":  {
+                                             "pass":  false,
+                                             "reason":  "not evaluated: held mode requested"
+                                         },
+                                  "G2":  {
+                                             "pass":  false,
+                                             "reason":  "not evaluated: held mode requested"
+                                         },
+                                  "G3":  {
+                                             "pass":  false,
+                                             "reason":  "not evaluated: held mode requested"
+                                         },
+                                  "G4":  {
+                                             "pass":  false,
+                                             "reason":  "not evaluated: held mode requested"
+                                         },
+                                  "G5":  {
+                                             "pass":  false,
+                                             "reason":  "not evaluated: held mode requested"
+                                         },
+                                  "G6":  {
+                                             "pass":  false,
+                                             "reason":  "not evaluated: held mode requested"
+                                         }
+                              },
+                    "gates_passed":  0,
+                    "chosen_bindings":  null,
+                    "effort_contracts":  null,
+                    "decision_error":  null,
+                    "parser":  {
+                                   "parser_valid":  true,
+                                   "worker_identities":  6,
+                                   "max_shared_slots":  4,
+                                   "knowledge_enabled":  true
+                               },
+                    "r5_runtime":  {
+                                       "root":  "C:\\Program Files\\CoChem\\Pipeline4.2.7-windows-20261011-r5",
+                                       "python":  "C:\\Program Files\\CoChem\\Pipeline4.2.7-windows-20261011-r5\\.venv\\Scripts\\python.exe",
+                                       "python_sha256":  "560b9ef7d856608ab8da02ded2dc8a1951ad1f424c382c0ec6a698874165a18e",
+                                       "install_after_path":  "C:\\Program Files\\CoChem\\Pipeline4.2.7-windows-20261011-r5\\install-after.json",
+                                       "install_after_sha256":  "91c756094e0d78f42cddf5b72aa3e9de382a710efc7db1d16feff846a172d429"
+                                   },
+                    "previous_receipts":  [
+
+                                          ],
+                    "staging_sddl":  "O:BAG:BAD:P(A;;FA;;;SY)(A;;FA;;;BA)",
+                    "acl_verified":  true,
+                    "script_path":  "C:\\Users\\ansac\\Documents\\Codex\\2026-10-06\\the-github-repository-is-located-at\\windows-deployment-next\\stage-pipeline-config-r5-v1.ps1",
+                    "script_sha256":  "1066f6c3d9fb5be6143075ddf72206af56f64a8240b7e49fc8f0625d32e3c993",
+                    "operator":  "AETHERDESK\\ansac",
+                    "administrator":  true,
+                    "staged_utc":  "2026-10-12T01:31:18.6292260Z",
+                    "retarget_config_argument":  "C:\\Program Files\\CoChem\\WardenConfig4.2.7-windows-20261011-r5-v1\\pipeline.json",
+                    "commissioned_file_modified":  false,
+                    "tasks_changed":  0,
+                    "started":  false,
+                    "credentials_modified":  false,
+                    "databases_modified":  false,
+                    "automatic_retry_allowed":  false
+                }
+}
+{"status":"STAGED","staged_path":"C:\\Program Files\\CoChem\\WardenConfig4.2.7-windows-20261011-r5-v1\\pipeline.json","staged_sha256":"135cd9eccf9efcdbc910679bde83b571913e731a4041ece62f60e42442f1709c","outcome":"GEMINI_HELD_COMMISSIONED_BYTES","mode":"held","receipt_path":"C:\\Program Files\\CoChem\\WardenConfig4.2.7-windows-20261011-r5-v1\\staging-receipt-20261012T013118Z-a7e95ba103df430daaf28288c195f3a6.json","target_state":"ABSENT","exit_code":0,"reason":null}
+PS>TerminatingError(ConvertFrom-Json): "Invalid JSON primitive: "status":"STAGED","staged_path":"C:\\Program Files\\CoChem\\WardenConfig4.2.7-windows-20261011-r5-v1\\pipeline.json","staged_sha256":"135cd9eccf9efcdbc910679bde83b571913e731a4041ece62f60e42442f1709c","outcome":"GEMINI_HELD_COMMISSIONED_BYTES","mode":"held","receipt_path":"C:\\Program Files\\CoChem\\WardenConfig4.2.7-windows-20261011-r5-v1\\staging-receipt-20261012T013118Z-a7e95ba103df430daaf28288c195f3a6.json","target_state":"ABSENT","exit_code":0,"reason":null}."
+[20:31:18] configuration staged (GEMINI_HELD_COMMISSIONED_BYTES): C:\Program Files\CoChem\WardenConfig4.2.7-windows-20261011-r5-v1\pipeline.json
+[20:31:18] S10: upgrade preview of r5 against the staged configuration (one-shot SYSTEM task; about 2 min)
+[20:31:18] --- run-upgrade-preview-r5-v1.ps1 read-only plan
+{
+    "schema":  "cochem-upgrade-preview-r5-plan/1",
+    "mode":  "READ_ONLY_PLAN",
+    "attempt":  "116bb5fd1bf045c88c1ba36dde4e6404",
+    "owner":  "AETHERDESK\\ansac",
+    "administrator":  true,
+    "install_root_requested":  "",
+    "r5_runtime_verified":  true,
+    "r5_binding":  {
+                       "root":  "C:\\Program Files\\CoChem\\Pipeline4.2.7-windows-20261011-r5",
+                       "python":  "C:\\Program Files\\CoChem\\Pipeline4.2.7-windows-20261011-r5\\.venv\\Scripts\\python.exe",
+                       "install_after_path":  "C:\\Program Files\\CoChem\\Pipeline4.2.7-windows-20261011-r5\\install-after.json",
+                       "install_after_sha256":  "91c756094e0d78f42cddf5b72aa3e9de382a710efc7db1d16feff846a172d429",
+                       "venv_python_sha256":  "560b9ef7d856608ab8da02ded2dc8a1951ad1f424c382c0ec6a698874165a18e",
+                       "source_manifest_sha256":  "5d8d337baebbc1e4ac29439d418333ab41c0999eb8c0ef8b02acee66850a3045",
+                       "revision_sha256":  "a085dd816a54f79cc81026c325ae789854336d7c4370c8d7e1c5ebe2c706e14e",
+                       "reviewed_repairs":  [
+                                                "src/cochem_pipeline/__main__.py",
+                                                "src/cochem_pipeline/agy_protocol.py",
+                                                "src/cochem_pipeline/coding.py",
+                                                "src/cochem_pipeline/config.py",
+                                                "src/cochem_pipeline/controller_guard.py",
+                                                "src/cochem_pipeline/failures.py",
+                                                "src/cochem_pipeline/knowledge.py",
+                                                "src/cochem_pipeline/operator_views.py",
+                                                "src/cochem_pipeline/runtime.py",
+                                                "src/cochem_pipeline/service.py",
+                                                "src/cochem_pipeline/store.py",
+                                                "src/cochem_pipeline/worker.py",
+                                                "src/cochem_supervisor/runner.py"
+                                            ]
+                   },
+    "current":  {
+                    "path":  "C:\\Program Files\\CoChem\\WardenCommissioning4.2.7-windows-20261007-r3-v1\\pipeline.json",
+                    "sha256":  "135cd9eccf9efcdbc910679bde83b571913e731a4041ece62f60e42442f1709c",
+                    "length":  9533
+                },
+    "candidate":  {
+                      "path":  "C:\\Program Files\\CoChem\\WardenConfig4.2.7-windows-20261011-r5-v1\\pipeline.json",
+                      "sha256":  "135cd9eccf9efcdbc910679bde83b571913e731a4041ece62f60e42442f1709c",
+                      "mode":  "GEMINI_HELD_COMMISSIONED_BYTES",
+                      "expected_sha256":  "135cd9eccf9efcdbc910679bde83b571913e731a4041ece62f60e42442f1709c"
+                  },
+    "runner_mode":  "held",
+    "helper_source":  "C:\\Users\\ansac\\Documents\\Codex\\2026-10-06\\the-github-repository-is-located-at\\windows-deployment-next\\run_upgrade_preview_r5_v1.py",
+    "helper_sha256":  "71e0383272057ab7be59f339a9dcb0c57e74ac5329f46d575cc49cde62816051",
+    "helper_verified":  true,
+    "task_name":  "CoChem-4.2.7-UpgradePreview-20261011-r5-v1-116bb5fd1bf045c88c1ba36dde4e6404",
+    "task_presence":  "ABSENT",
+    "target_root":  "C:\\Program Files\\CoChem\\UpgradePreview4.2.7-windows-20261011-r5-v1-116bb5fd1bf045c88c1ba36dde4e6404",
+    "target_root_access":  "SYSTEM and BUILTIN\\Administrators only",
+    "task_execution_time_limit":  "PT3M",
+    "task_sddl":  "O:BAG:BAD:P(A;;FA;;;SY)(A;;FA;;;BA)",
+    "task_action":  {
+                        "path":  "C:\\Program Files\\CoChem\\Pipeline4.2.7-windows-20261011-r5\\.venv\\Scripts\\python.exe",
+                        "arguments":  "-I -B \"C:\\Program Files\\CoChem\\UpgradePreview4.2.7-windows-20261011-r5-v1-116bb5fd1bf045c88c1ba36dde4e6404\\run_upgrade_preview_r5_v1.py\" --attempt 116bb5fd1bf045c88c1ba36dde4e6404 --nonce \u003cnonce\u003e --install-root \"C:\\Program Files\\CoChem\\Pipeline4.2.7-windows-20261011-r5\" --install-after-sha256 91c756094e0d78f42cddf5b72aa3e9de382a710efc7db1d16feff846a172d429 --venv-python-sha256 560b9ef7d856608ab8da02ded2dc8a1951ad1f424c382c0ec6a698874165a18e --current \"C:\\Program Files\\CoChem\\WardenCommissioning4.2.7-windows-20261007-r3-v1\\pipeline.json\" --current-sha256 135cd9eccf9efcdbc910679bde83b571913e731a4041ece62f60e42442f1709c --proposed \"C:\\Program Files\\CoChem\\WardenConfig4.2.7-windows-20261011-r5-v1\\pipeline.json\" --proposed-sha256 135cd9eccf9efcdbc910679bde83b571913e731a4041ece62f60e42442f1709c --mode held --output \"C:\\Program Files\\CoChem\\UpgradePreview4.2.7-windows-20261011-r5-v1-116bb5fd1bf045c88c1ba36dde4e6404\\upgrade-preview.json\"",
+                        "working_directory":  "C:\\Program Files\\CoChem\\UpgradePreview4.2.7-windows-20261011-r5-v1-116bb5fd1bf045c88c1ba36dde4e6404"
+                    },
+    "receipt_path":  "C:\\Program Files\\CoChem\\UpgradePreview4.2.7-windows-20261011-r5-v1-116bb5fd1bf045c88c1ba36dde4e6404\\upgrade-preview-receipt.json",
+    "runner_held_record":  "C:\\Program Files\\CoChem\\UpgradePreview4.2.7-windows-20261011-r5-v1-116bb5fd1bf045c88c1ba36dde4e6404\\upgrade-preview-held.json",
+    "wrapper_held_record":  "C:\\Program Files\\CoChem\\UpgradePreview4.2.7-windows-20261011-r5-v1-116bb5fd1bf045c88c1ba36dde4e6404\\preview-held.json",
+    "summary_path":  "C:\\Program Files\\CoChem\\UpgradePreview4.2.7-windows-20261011-r5-v1-116bb5fd1bf045c88c1ba36dde4e6404\\preview-summary.json",
+    "gate":  [
+                 "read_only true",
+                 "native_models_executed false",
+                 "identities unchanged",
+                 "protected_paths unchanged except the configuration path swap",
+                 "database.exists true",
+                 "database.schema_changes []",
+                 "configuration_changes keys within [providers] ([] in held mode)",
+                 "enabled mode: only providers.gemini differs between the bound files"
+             ],
+    "daemon_tasks":  [
+                         {
+                             "name":  "CoChem-4.2.7-Warden",
+                             "state":  "PRESENT",
+                             "enabled":  false,
+                             "task_state":  1,
+                             "instances":  0
+                         },
+                         {
+                             "name":  "CoChem-4.2.7-Supervisor",
+                             "state":  "ABSENT",
+                             "enabled":  null,
+                             "task_state":  null,
+                             "instances":  null
+                         },
+                         {
+                             "name":  "CoChem-4.2.2-Warden",
+                             "state":  "ABSENT",
+                             "enabled":  null,
+                             "task_state":  null,
+                             "instances":  null
+                         },
+                         {
+                             "name":  "CoChem-4.2.3-Supervisor",
+                             "state":  "ABSENT",
+                             "enabled":  null,
+                             "task_state":  null,
+                             "instances":  null
+                         }
+                     ],
+    "holds":  [
+
+              ],
+    "tasks_changed":  0,
+    "native_models_executed":  false,
+    "job_board_opened":  false,
+    "automatic_retry_allowed":  false
+}
+[20:31:20] --- run-upgrade-preview-r5-v1.ps1 -Apply
+The upgrade preview is held at task registration: Registered task ownership/private DACL differs.. No Run was 
+requested; preserve the root and the task (if registered) and review preview-held.json.
+At C:\Users\ansac\Documents\Codex\2026-10-06\the-github-repository-is-located-at\windows-deployment-next\run-upgrade-pr
+eview-r5-v1.ps1:539 char:9
++         throw ($message+$heldNote)
++         ~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : OperationStopped: (The upgrade pre...view-held.json.:String) [], RuntimeException
+    + FullyQualifiedErrorId : The upgrade preview is held at task registration: Registered task ownership/private DACL 
+    differs.. No Run was requested; preserve the root and the task (if registered) and review preview-held.json.
+PS>TerminatingError(): "SERIES-STOP: S10: the upgrade preview gate did not pass (exit 1, decision ): differs.. No Run was requested; preserve the root and the task (if registered) and review preview-held.json."
+>> TerminatingError(): "SERIES-STOP: S10: the upgrade preview gate did not pass (exit 1, decision ): differs.. No Run was requested; preserve the root and the task (if registered) and review preview-held.json."
+>> TerminatingError(): "SERIES-STOP: S10: the upgrade preview gate did not pass (exit 1, decision ): differs.. No Run was requested; preserve the root and the task (if registered) and review preview-held.json."
+[20:32:21] R4-RESTORE: state base (Warden task on its r4-v1 action)
+[20:32:22] --- retarget-warden-r5.ps1 -Target r4 -Attempt v1 -Apply -Start (waits up to 240 s for health)
+{
+    "schema":  "cochem-warden-retarget-result/3",
+    "status":  "WARDEN_R4_RESTARTED_HEALTH_VERIFIED",
+    "mode":  "RETARGET_AND_START",
+    "target":  "r4",
+    "attempt":  "v1",
+    "receipt_path":  "C:\\Program Files\\CoChem\\WardenRetarget4.2.7-windows-20261011-r4-v1\\start-receipt.json",
+    "receipt_sha256":  "2ddf02b66c0222d40b1d07c470f56754d662308f270fc050f59b37f3058ab749",
+    "retarget_receipt_path":  "C:\\Program Files\\CoChem\\WardenRetarget4.2.7-windows-20261011-r4-v1\\retarget-receipt.json",
+    "retarget_receipt_sha256":  "5e66280b069b3d45078bd378bcb08c3aa4f3bfe8ded711735151086c6b935fe5",
+    "task_name":  "CoChem-4.2.7-Warden",
+    "runtime_root":  "C:\\Program Files\\CoChem\\Pipeline4.2.7-windows-20261009-r4",
+    "source_state":  "r4-v1",
+    "started":  true,
+    "enabled_before":  false,
+    "enabled_after":  true,
+    "start":  {
+                  "schema":  "cochem-warden-start-result/3",
+                  "status":  "WARDEN_R4_RESTARTED_HEALTH_VERIFIED",
+                  "target":  "r4",
+                  "attempt":  "v1",
+                  "receipt_path":  "C:\\Program Files\\CoChem\\WardenRetarget4.2.7-windows-20261011-r4-v1\\start-receipt.json",
+                  "receipt_sha256":  "2ddf02b66c0222d40b1d07c470f56754d662308f270fc050f59b37f3058ab749",
+                  "enabled_by_start":  true,
+                  "enabled_after":  true,
+                  "trigger_enabled_after":  null,
+                  "controller":  {
+                                     "pid":  37840,
+                                     "instance_id":  "35fa1e4e907a4031b1cf6d9ece2d4f9b",
+                                     "process_started_at":  1791768781.5917537,
+                                     "source_root":  "C:\\Program Files\\CoChem\\Pipeline4.2.7-windows-20261009-r4\\.venv\\Lib",
+                                     "version":  "4.2.7",
+                                     "admission_capacity":  0,
+                                     "warden_controller_ready":  true,
+                                     "warden_controller_admission_ready":  null,
+                                     "knowledge_ready":  true,
+                                     "knowledge_authority_matches_capture":  true,
+                                     "trip_errors":  {
+
+                                                     }
+                                 },
+                  "process_proof":  {
+                                        "pid":  37840,
+                                        "image":  "C:\\Program Files\\CoChem\\Toolchain4.2.7-windows-20261006\\Python312\\python.exe",
+                                        "creation_utc":  "2026-10-12T01:32:52.3998830Z",
+                                        "parent_pid":  2692,
+                                        "parent_image":  "C:\\Program Files\\CoChem\\Pipeline4.2.7-windows-20261009-r4\\.venv\\Scripts\\python.exe",
+                                        "parent_creation_utc":  "2026-10-12T01:32:52.3795970Z",
+                                        "owner":  "SYSTEM",
+                                        "port_owner_verified":  true,
+                                        "listeners":  1
+                                    }
+              },
+    "retarget_status":  "WARDEN_RETARGETED_TO_R4_NOT_STARTED",
+    "retarget_enabled_after":  false,
+    "enabled_by_start":  true
+}
+
+STOP at S10: S10: the upgrade preview gate did not pass (exit 1, decision ): differs.. No Run was requested; preserve the root and the task (if registered) and review preview-held.json.
+R4-RESTORE: r4 restarted and health verified (WardenRetarget r4 v1)
+
+OUTCOME (stopped)
+  Claude  : 0/6 worker sessions verified; status unclear: slot1, slot2, slot3, slot4, slot5, slot6
+  Codex   : 0/6 worker sessions verified; status unclear: slot1, slot2, slot3, slot4, slot5, slot6
+  Gemini  : HELD - S5: the signed-out capture did not establish a sign-in path (exit 1, login mode unknown) (the pipeline routes around Gemini)
+  Warden  : r4 RESTORED and running (r5 not deployed)
+  Reboot  : NOT reboot-safe (r4 has no logon trigger)
+  Held    : C:\Program Files\CoChem\NativeAuthStatusSix4.2.7-windows-20261010-r4-v1-ea8225f6253040d3b41a9337df83b8a0-slot1-claude-before\status-held.json; C:\Program Files\CoChem\NativeAuthStatusSix4.2.7-windows-20261010-r4-v1-ea8225f6253040d3b41a9337df83b8a0-slot2-claude-before\status-held.json; C:\Program Files\CoChem\NativeAuthStatusSix4.2.7-windows-20261010-r4-v1-ea8225f6253040d3b41a9337df83b8a0-slot3-claude-before\status-held.json; C:\Program Files\CoChem\NativeAuthStatusSix4.2.7-windows-20261010-r4-v1-ea8225f6253040d3b41a9337df83b8a0-slot4-claude-before\status-held.json; C:\Program Files\CoChem\NativeAuthStatusSix4.2.7-windows-20261010-r4-v1-ea8225f6253040d3b41a9337df83b8a0-slot5-claude-before\status-held.json; C:\Program Files\CoChem\NativeAuthStatusSix4.2.7-windows-20261010-r4-v1-ea8225f6253040d3b41a9337df83b8a0-slot6-claude-before\status-held.json; C:\Program Files\CoChem\NativeAuthStatusSix4.2.7-windows-20261010-r4-v1-ea8225f6253040d3b41a9337df83b8a0-slot1-codex-before\status-held.json; C:\Program Files\CoChem\NativeAuthStatusSix4.2.7-windows-20261010-r4-v1-ea8225f6253040d3b41a9337df83b8a0-slot2-codex-before\status-held.json; C:\Program Files\CoChem\NativeAuthStatusSix4.2.7-windows-20261010-r4-v1-ea8225f6253040d3b41a9337df83b8a0-slot3-codex-before\status-held.json; C:\Program Files\CoChem\NativeAuthStatusSix4.2.7-windows-20261010-r4-v1-ea8225f6253040d3b41a9337df83b8a0-slot4-codex-before\status-held.json; C:\Program Files\CoChem\NativeAuthStatusSix4.2.7-windows-20261010-r4-v1-ea8225f6253040d3b41a9337df83b8a0-slot5-codex-before\status-held.json; C:\Program Files\CoChem\NativeAuthStatusSix4.2.7-windows-20261010-r4-v1-ea8225f6253040d3b41a9337df83b8a0-slot6-codex-before\status-held.json; C:\Program Files\CoChem\AgyCapture4.2.7-windows-20261010-r4-v1-57fbb476c49c4a3ba7be21b3065e53f4-slot1-signed-out\capture-held.json; C:\Program Files\CoChem\UpgradePreview4.2.7-windows-20261011-r5-v1-116bb5fd1bf045c88c1ba36dde4e6404\preview-held.json
+  Log     : C:\Users\ansac\Documents\Codex\2026-10-06\the-github-repository-is-located-at\windows-deployment-next\r5-sitting-20261011-202738.log
+  Sitting root: C:\Program Files\CoChem\R5Sitting4.2.7-windows-20261011-v2
+Log: C:\Users\ansac\Documents\Codex\2026-10-06\the-github-repository-is-located-at\windows-deployment-next\r5-sitting-20261011-202738.log
+Send the log to the agent; do not start, stop or retarget anything by hand.
+**********************
+Windows PowerShell transcript end
+End time: 20261011203311
+**********************
