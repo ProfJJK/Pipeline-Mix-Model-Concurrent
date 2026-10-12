@@ -100,8 +100,10 @@ def create_server(client:ControlClient):
         return await asyncio.to_thread(client.call,'/preflight',{'workflow_id':workflow_id})
 
     @server.tool(annotations=ToolAnnotations(readOnlyHint=True,idempotentHint=True,openWorldHint=False))
-    async def pipeline_operator_view(workflow_id:str|None=None,job_id:str|None=None,after_event_id:int|None=None)->dict[str,Any]:
-        """Inspect governing captures, blocking prerequisites, queue, resource plots, deployment drift and SRS acceptance evidence."""
+    async def pipeline_operator_view(workflow_id:str|None=None,job_id:str|None=None,after_event_id:int|None=None,view:str='summary')->dict[str,Any]:
+        """Inspect captures, blockers, resources and acceptance counts. Use view='full' for per-requirement evidence and the release checklist."""
+        if view not in ('summary','full'):
+            raise ValueError('Operator view must be full or summary')
         if workflow_id is not None and job_id is not None:
             raise ValueError('Select a workflow or a job, not both')
         for identifier in (workflow_id,job_id):
@@ -111,8 +113,9 @@ def create_server(client:ControlClient):
         if after_event_id is not None and (type(after_event_id) is not int or after_event_id<0):
             raise ValueError('Event cursor must be a nonnegative integer')
         operation='/operator/job/'+job_id if job_id else '/operator/workflow/'+workflow_id if workflow_id else '/operator'
+        operation+='?view='+view
         if after_event_id is not None:
-            operation+='?after_event_id='+str(after_event_id)
+            operation+='&after_event_id='+str(after_event_id)
         return await asyncio.to_thread(client.call,operation)
 
     @server.tool()

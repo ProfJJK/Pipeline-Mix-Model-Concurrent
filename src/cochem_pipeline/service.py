@@ -174,12 +174,12 @@ class Handler(BaseHTTPRequestHandler):
         from .operator_views import operator_snapshot
         workflow_id=path[len('/operator/workflow/'):] if path.startswith('/operator/workflow/') else None
         job_id=path[len('/operator/job/'):] if path.startswith('/operator/job/') else None
-        query=parse_qs(urlsplit(self.path).query,keep_blank_values=True,max_num_fields=1)
-        if set(query)-{'after_event_id'}:
-            raise ValueError('Operator view accepts only the after_event_id cursor')
+        query=parse_qs(urlsplit(self.path).query,keep_blank_values=True,max_num_fields=2)
+        if set(query)-{'after_event_id','view'} or any(len(values)!=1 for values in query.values()):
+            raise ValueError('Operator view accepts one after_event_id cursor and one view')
         cursor=int(query['after_event_id'][0]) if 'after_event_id' in query else None
         return redact(operator_snapshot(runtime,workflow_id,job_id=job_id,after_event_id=cursor,
-                                        history=self.server.operator_history))
+                                        history=self.server.operator_history,view=query.get('view',['full'])[0]))
 
     def dispatch(self):
         started=time.monotonic()

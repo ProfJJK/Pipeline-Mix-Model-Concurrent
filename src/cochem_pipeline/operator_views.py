@@ -583,8 +583,10 @@ def deployment_view(runtime, jobs, health):
             'receipt_window_complete': False, 'unobserved_is_healthy': False}
 
 
-def operator_snapshot(runtime, workflow_id=None, *, job_id=None, after_event_id=None, source_root=None, history=None):
+def operator_snapshot(runtime, workflow_id=None, *, job_id=None, after_event_id=None, source_root=None, history=None, view='full'):
     """Build a bounded projection under existing HTTP bearer authentication."""
+    if view not in ('full', 'summary'):
+        raise ValueError('Operator view must be full or summary')
     for identifier in (workflow_id, job_id):
         if identifier is not None and (not isinstance(identifier, str) or not re.fullmatch(r'[A-Za-z0-9_.-]{1,128}', identifier)):
             raise ValueError('Invalid workflow or job ID')
@@ -695,6 +697,12 @@ def operator_snapshot(runtime, workflow_id=None, *, job_id=None, after_event_id=
                   if job['kind'] not in {'MACRO_PLANNING_REQUEST', 'CODE_REQUEST'}],
         'resources': resource_plot(samples), 'deployment': deployment_view(runtime, jobs, health),
         'acceptance': dashboard}
+    if view == 'summary':
+        # Preserve the exact computed disposition; omitted evidence is available
+        # through view=full, never treated as passing or rewritten in the cache.
+        result['acceptance'] = {key: value for key, value in dashboard.items()
+                                if key not in ('requirements', 'release_checklist', 'source_freshness')}
+        result['acceptance'].update(details_omitted=True, details_query='view=full')
     for row in result['queue']:
         preview = route_previews[row['job_id']]
         preview['host_admission_capacity'] = hardware.get('capacity')
