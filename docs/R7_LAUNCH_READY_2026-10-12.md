@@ -1,6 +1,71 @@
 # R7 owner deployment package
 
-## Current replacement: persisted R4 receipt repair
+## Current replacement: attended console repair and owner Pro retirement
+
+Use the updated `docs/deployment/windows-deployment-next/RETURN_SETUP_R7.txt`.
+It names fresh source `e32949a24302622d528538afa5d57cd9107cef5a` and immutable
+bundle `C:\Users\ansac\CoChem427\r7-bundle-e32949a`. The owner has not run it.
+Earlier packages, failed attempts and installed R6 remain unchanged.
+
+The last `2d63521` attempt held before any Agy prompt because the sequence caller
+captured native console output. That was reproduced and repaired; the owner did
+not miss a sign-in. R4 restore v4 verified SYSTEM/native health. Twelve existing
+Codex/Claude sessions were reused, six Agy profiles explicitly reported signed
+out, and no R6 activation or R7 install/cutover was attempted. See
+[console evidence and repair](R6_CONSOLE_RECOVERY_2026-10-12.md).
+
+The owner then withdrew Gemini Pro and approved existing Claude/Codex choices
+plus backoff at tiers 5 and 6. This package includes the separately reviewed
+[retirement amendment](R6_PRO_RETIREMENT_2026-10-12.md) and
+[readable matrix](routing/4.2.7-routing-v4.owner-matrix.md). The R6 one-shot native
+check probes 26 remaining targets and explicitly records Pro unprobed. R7
+publishes `owner-2026-10-12-pro-retired`; old captures and the installed R6
+configuration are not rewritten. R6 is temporarily its original runtime until
+R7 publication; a pre-cutover hold does not pretend retirement was activated.
+
+| Fresh artifact | Binding |
+| --- | --- |
+| Source freeze | `r7-source-e32949a`, 198 files, 6,718,490 bytes |
+| Source manifest SHA256 | `6ef293902b607e7c7584d3d7e3fa32b219d6d9e71bc715fc20210c3e012d3e5b` |
+| Verified application wheel | `r7-build-e32949a`, 1,103,364 bytes, 178 files |
+| Wheel SHA256 | `0cdc264effedc76b9cd9838c1a64da25b7bc44ff2492e6455335b5052111e528` |
+| Owner bundle | `r7-bundle-e32949a`, 307 installer inputs |
+| Launch manifest SHA256 | `c74e7fc163c9637c033bc26891af0a995f7338979b78afa9daeeab46517cb72f` |
+| Copied R6 prerequisite | 481 pinned inputs; manifest `918f47ca273d51bbbd36c0378efb73ef5903c1321359ae2095d9604c11f4bf95` |
+| R7 install manifest SHA256 | `269069c6f4c60fac33143e2a15dc115b3033cc723ba25086f16502cb8e57d327` |
+
+Compared with the failed `2d63521` prerequisite, 476 of its 480 inputs remain
+byte-identical and verified. Four reviewed scripts change; the one pinned
+retirement helper is added. The 106 locked Windows/Python 3.12 runtime wheels
+are reused after input binding checks. This new wheel contains the two-choice
+catalog parser/routing change and is deliberately different from the old wheel.
+
+The final retirement/routing/catalog selection passed **365 source/inert tests**,
+with two real-process tests deselected, in 26.75 seconds. The final launch,
+authentication, runner, migration and controller fixture selection passed
+**143 tests** in 31.05 seconds. The selections overlap and are not a distinct-test
+total. All three actual packaged **read-only** plans passed. One nested installer
+plan first failed to autoload Windows' security module in the test environment;
+the direct ordinary-account module import and actual installer plan passed.
+No production package change or elevation was needed for that diagnosis.
+
+The final packaged production call site passed the pseudo-console regression:
+`inherited_console_output_redirected=False`, child exit 0. Its child reads only
+console metadata and imports no deployment/provider functions. The preserved
+failed call site returned exit 97. Sanitized source/package evidence is saved in
+`docs/deployment/windows-deployment-next/R7_E32949A_PACKAGE_EVIDENCE.json`.
+
+All planned active input remains in the first 20 minutes. Existing sessions are
+reused, any requested six Agy logins occur at the beginning, and the green
+walk-away message precedes native acceptance and installation. No timing promise
+for provider authorizations follows from fixtures. Later failures hold and
+preserve evidence without asking for input. No Apply, SYSTEM/native deployment
+acceptance or full SRS acceptance was run by engineering.
+
+The sections below are historical; their commands and previous claims about
+Gemini Pro retention or byte-identical application wheels are superseded.
+
+## Historical replacement: persisted R4 receipt repair
 
 The owner ran `r7-bundle-c3080c9`. Its R6 verification failed on an invented
 `started` field before stopping R4 or running providers. The error is confirmed

@@ -1,49 +1,58 @@
-R6 RECEIPT REPAIR + R7 — ONE REPLACEMENT OWNER COMMAND
-Prepared 2026-10-12. Source 2d63521. Supersedes the c3080c9 owner command.
-Earlier packages, failed attempts, sign-ins and the installed R6 are preserved.
+R6 CONSOLE RECOVERY + OWNER PRO RETIREMENT + R7 — ONE OWNER COMMAND
+Prepared 2026-10-12. Source e32949a. Supersedes the 2d63521 owner command.
+Earlier packages, failed attempts, sign-ins and installed R6 are preserved.
 
-Why the latest run stopped: my recovery check expected a "started" field that
-the real R4 start receipt does not contain. Your private log confirmed it. The
-check now validates the actual persisted receipt fields. This failure occurred
-before R4 was stopped, before sign-in and before any R7 installation. The earlier
-Agy prefix repair remains included; Codex/Claude sessions are reused.
+Why the latest run stopped: the R6 caller captured output and redirected its
+attended child, which refused before any Agy URL or login prompt. You did not
+miss a prompt. The exact call-site error was reproduced and fixed; the final
+packaged console probe now passes. The prior failure and R4 v4 restoration are
+verified before another stop. Existing six Codex and six Claude sign-ins are reused.
+
+Gemini Pro retirement: per your approval, tiers 5 and 6 retain only their existing
+Claude/Codex choices, then back off if both are exhausted. Flash is not substituted.
+The original installed R6 config stays intact. Its pinned one-shot native check
+omits exactly Pro High, explicitly records it unprobed, and checks 26 remaining
+targets. R7 publishes the versioned retirement catalog while retaining old captures.
 
 1. Open Windows PowerShell as Administrator under AETHERDESK\ansac; accept UAC.
 2. Paste the SINGLE command below and press Enter once.
-3. Complete the Agy browser sign-in for each requested worker profile at the start.
-   Open the URL printed by the CLI if no browser opens automatically. Follow its
-   native instructions and paste the requested completion value into that same
-   PowerShell window. Do not paste codes into this chat. Codex/Claude are reused.
+3. Complete each requested Agy worker sign-in at the start. Open the URL printed
+   by the native CLI if a browser does not open. Follow that CLI's instructions
+   and enter any completion value into the same PowerShell window, not this chat.
+   Credentials are never copied from your regular account. Codex/Claude are reused.
 
-C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -File "C:\Users\ansac\CoChem427\r7-bundle-2d63521\run_r7_launch.ps1" -LaunchManifest "C:\Users\ansac\CoChem427\r7-bundle-2d63521\launch-manifest.json" -LaunchManifestSha256 196d4e71658b427d3c832f4d4a929209ba35075277acaf7087da87497c6367ee -Apply
+C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -File "C:\Users\ansac\CoChem427\r7-bundle-e32949a\run_r7_launch.ps1" -LaunchManifest "C:\Users\ansac\CoChem427\r7-bundle-e32949a\launch-manifest.json" -LaunchManifestSha256 c74e7fc163c9637c033bc26891af0a995f7338979b78afa9daeeab46517cb72f -Apply
 
 All login input is limited to the first 20 minutes after this command starts.
-The command verifies the reviewed earlier failure and completed R4 restoration,
-reuses installed R6 without reinstalling, and requests login only for an explicit
-signed-out Agy profile. Unknown errors hold with private diagnostic evidence.
+Native provider authorization timing cannot be guaranteed from source tests;
+an expired window holds with evidence instead of asking for late input.
 
 When the green message says "You can walk away", leave the window open. You can
-use other apps. Remaining native acceptance, installation and cutovers are
-unattended and can take substantially longer than 20 minutes. No late questions,
-restart or manual continuation is planned. A temporary awake request allows the
-display to sleep and is released when the command exits; no power plan is changed.
+use other apps. Remaining native acceptance, offline installation and cutovers
+are unattended and can take substantially longer than 20 minutes. No planned
+late prompt, restart or manual continuation. A temporary awake request ends on
+command exit; no power plan is changed and the display can sleep normally.
 
-After R6 acceptance and activation, this same command installs fresh R7 offline,
-waits for idle R6, preserves a full job-database backup, migrates catalog tables,
-stages protected catalog authority, and verifies R7 health/control publication.
-The exact owner matrix, Gemini Pro High at tier 6, four shared slots, Chapter 06,
-R:, credentials, original captures/databases and repair budgets are preserved.
+After R6 acceptance and activation, the same command installs fresh R7 stopped,
+waits for idle R6 and verified cleanup, keeps a full job-database backup, migrates
+catalog tables, stages protected authority, and verifies R7 health/publication.
+Until R7 publishes, temporary R6 retains its original matrix; a held pre-cutover
+attempt does not pretend the retirement catalog was activated. Four shared slots,
+Chapter 06, R:, credentials, original rows/captures and repair budgets are preserved.
 
-Do not run earlier R5/R6/R7 commands separately for this sitting. If it reports
-HELD or an error, leave every task, file and running process in place and return
-the printed output. Do not repeat it. Sanitized status records are saved, and
-the prior controller is restored only where the reviewed rollback is safe.
+Do not run older commands separately. If HELD or an error appears, preserve every
+task, root and running process and return the printed output. Do not repeat it.
+Sanitized status records are saved. Recovery restores the proven prior controller
+only when the transaction permits safe rollback; uncertain state stays held.
 
-Success ends with R7_RUNNING_CATALOG_PUBLICATION_VERIFIED. This confirms this
-deployment transaction and control probe, not full 4.2.7 SRS acceptance.
+Success ends with R7_RUNNING_CATALOG_PUBLICATION_VERIFIED. That verifies the
+deployment transaction and native control probe, not full 4.2.7 SRS acceptance.
 
-Engineering evidence: 109 focused serialized Windows source/inert PowerShell
-tests passed, including production receipt construction and changed receipt/task
-refusals. All three final packaged read-only plans passed. R7's application wheel
-is identical to the earlier tested wheel; prior runtime verification was 330
-source tests. Actual repaired SYSTEM/provider acceptance is still owner-run work.
+Engineering evidence: 365 retirement/routing/catalog source/inert tests passed,
+with two real-process tests excluded; 143 launch/authentication/runner/migration
+fixtures passed (selections overlap). All three actual packaged read-only plans
+passed. Final packaged console regression: output unredirected, child exit 0.
+No Apply, real provider/model acceptance or SYSTEM deployment was run by engineering.
+The fresh package has 307 installer inputs and 481 pinned prerequisite inputs.
+Of the prior 480 prerequisite inputs, 476 are identical, four reviewed scripts
+change, and the one retirement helper is added. All old packages remain unchanged.

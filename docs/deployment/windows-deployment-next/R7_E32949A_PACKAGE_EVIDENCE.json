@@ -1,0 +1,74 @@
+{
+  "schema": "cochem-r7-source-package-verification/1",
+  "status": "PACKAGED_READ_ONLY_PLANS_VERIFIED",
+  "source_commit": "e32949a24302622d528538afa5d57cd9107cef5a",
+  "launch_manifest_sha256": "c74e7fc163c9637c033bc26891af0a995f7338979b78afa9daeeab46517cb72f",
+  "source_manifest_sha256": "6ef293902b607e7c7584d3d7e3fa32b219d6d9e71bc715fc20210c3e012d3e5b",
+  "application_wheel_sha256": "0cdc264effedc76b9cd9838c1a64da25b7bc44ff2492e6455335b5052111e528",
+  "r6_recovery_manifest_sha256": "918f47ca273d51bbbd36c0378efb73ef5903c1321359ae2095d9604c11f4bf95",
+  "r7_install_manifest_sha256": "269069c6f4c60fac33143e2a15dc115b3033cc723ba25086f16502cb8e57d327",
+  "prior_package": "r7-bundle-2d63521",
+  "preserved_prior_prerequisite_inputs": 476,
+  "changed_prior_prerequisite_inputs": [
+    "run_r6_launch.ps1",
+    "verify_r6_auth_recovery.ps1",
+    "run_r6_system_phase.ps1",
+    "activate_r6_runtime.ps1"
+  ],
+  "added_helper": "r6_native_retirement.py",
+  "prerequisite_input_count": 481,
+  "plans": [
+    {
+      "phase": "r7",
+      "exit_code": 0,
+      "status": "R7_LAUNCH_READ_ONLY_PLAN",
+      "payload_files": 307,
+      "maximum_shared_slots": 4,
+      "host_executed": false,
+      "input_window_minutes": 20,
+      "late_prompts": false
+    },
+    {
+      "phase": "r6_prerequisite",
+      "exit_code": 0,
+      "status": "R6_LAUNCH_PLAN",
+      "model_targets": 26,
+      "retired_model_targets": 1,
+      "maximum_shared_slots": 4,
+      "input_window_minutes": 20,
+      "later_prompts": false,
+      "installation_and_host_acceptance_executed": false
+    },
+    {
+      "phase": "stopped_installer_direct_ordinary_account",
+      "exit_code": 0,
+      "status": "READ_ONLY_PLAN",
+      "files": 307,
+      "activation_ready": false
+    }
+  ],
+  "console_regression": {
+    "final_packaged_call_site": true,
+    "pseudo_console": true,
+    "inherited_console_output_redirected": false,
+    "production_call_site_probe_exit": 0,
+    "imports_deployment_functions": false,
+    "executes_providers_or_tasks": false
+  },
+  "environment_diagnostic": {
+    "nested_installer_plan_initially_held": true,
+    "reason": "Microsoft.PowerShell.Security could not autoload in the nested test environment",
+    "direct_builtin_module_import_passed": true,
+    "direct_actual_installer_plan_passed": true,
+    "production_package_changed_for_diagnostic": false
+  },
+  "source_selections": [
+    {"passed": 365, "deselected_real_process_cleanup": 2, "seconds": 26.75},
+    {"passed": 143, "seconds": 31.05}
+  ],
+  "source_selections_overlap": true,
+  "apply_invoked": false,
+  "native_model_jobs_executed": 0,
+  "system_deployment_acceptance_executed": false,
+  "full_srs_acceptance": false
+}
