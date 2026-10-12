@@ -130,24 +130,50 @@ def _models(provider_models: dict) -> dict[str, str]:
     return models
 
 
-def _target_identity(target: dict) -> tuple[str, str, str | None]:
+def _target_identity(target: dict, version: int = 2) -> tuple[str, str, str | None]:
     _require(isinstance(target, dict), "Routing target must be an object")
     provider, model, effort = (target.get(key) for key in ("provider", "model", "reasoning_effort"))
     _require(isinstance(provider, str) and provider in {"codex", "claude", "gemini"}
              and isinstance(model, str) and bool(re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._/-]{0,199}", model)),
              "Routing target has an invalid provider or model")
     efforts = {"codex": {"low", "medium", "high", "ultra"}, "claude": {"extended"}, "gemini": {"extended", "high"}}
+    if version == 3:
+        efforts = {'codex': {'low', 'medium', 'high', 'xhigh', 'max'},
+                   'claude': {'low', 'medium', 'high', 'xhigh', 'max'},
+                   'gemini': {'low', 'medium', 'high'}}
+        _require(effort is not None, 'Version 3 requires explicit effort')
     _require(effort is None or (isinstance(effort,str) and effort in efforts[provider]),
              "Routing target has an invalid reasoning effort")
     return provider, model, effort
+
+
+def _catalog_tiers(raw):
+    """Validate captured v3 catalog independently of candidate pipeline code."""
+    _require(isinstance(raw, dict) and set(raw) == {'schema', 'generation', 'tiers'}, 'Invalid captured catalog')
+    _require(raw['schema'] == 'cochem-routing-catalog/1', 'Unsupported catalog schema')
+    _require(isinstance(raw['generation'], str) and bool(re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.-]{0,127}', raw['generation'])),
+             'Invalid catalog generation')
+    tiers = raw['tiers']
+    _require(isinstance(tiers, dict) and set(tiers) == {str(i) for i in range(1, 11)}, 'Catalog requires ten tiers')
+    result = {}
+    for tier, entries in tiers.items():
+        _require(isinstance(entries, list) and len(entries) == 3, 'Catalog requires three candidates per tier')
+        _require(all(isinstance(e, dict) and set(e) == {'provider', 'model', 'reasoning_effort'} for e in entries),
+                 'Invalid catalog entry fields')
+        identities = [_target_identity(entry, 3) for entry in entries]
+        _require(len({(p, m) for p, m, e in identities}) == 3, 'Catalog requires distinct underlying models')
+        result[tier] = identities
+    return result
 
 
 def configured_tiers(routing_policy: dict | None = None) -> dict:
     """Read the configured model order without importing pipeline code."""
     _require(routing_policy is None or isinstance(routing_policy, dict), "Routing policy must be an object")
     version = (routing_policy or {}).get("policy_version", POLICY_VERSION)
-    _require(type(version) is int and version in (1, POLICY_VERSION), "Routing policy version is unsupported")
+    _require(type(version) is int and version in (1, 2, 3), "Routing policy version is unsupported")
     defaults = _LEGACY_TIERS if version == 1 else _DEFAULT_TIERS
+    if version == 3:
+        defaults = _catalog_tiers(routing_policy.get('catalog'))
     tiers = (routing_policy or {}).get("tiers")
     if tiers is None:
         _require(routing_policy is None or "tiers" not in routing_policy, "Routing policy score bands cannot be null")
@@ -157,7 +183,7 @@ def configured_tiers(routing_policy: dict | None = None) -> dict:
     for tier, targets in tiers.items():
         _require(isinstance(targets, list) and len(targets) == len(defaults[tier]),
                  "Routing policy has an invalid candidate count")
-        result[tier] = [_target_identity(target) for target in targets]
+        result[tier] = [_target_identity(target, version) for target in targets]
         _require(len(set(result[tier])) == len(result[tier]), "Routing policy contains duplicate targets")
         _require(result[tier] == defaults[tier], "Routing policy must preserve the ratified Chapter 06 model order")
     return result
@@ -175,8 +201,11 @@ def configured_routing_policy(raw: dict | None = None) -> dict:
         "model_limits":{},"provider_limits":{},"quota_pool_limits":{},"backlog_threshold":8,
         "failure_cooldowns":cooldowns,"backoff_base_seconds":30.,"backoff_max_seconds":600.,
         "backoff_jitter_fraction":.2,"max_routing_cycles":0,"max_routing_seconds":0.,"max_dispatches":0}
+    if result['policy_version'] == 3:
+        result['catalog'] = {'schema': 'cochem-routing-catalog/1', 'generation': raw['catalog']['generation'],
+                             'tiers': json.loads(json.dumps(result['tiers']))}
     _require(not set(raw)-set(result), "Routing policy contains undocumented fields")
-    _require(type(raw.get("policy_version",POLICY_VERSION)) is int and raw.get("policy_version",POLICY_VERSION) in (1,POLICY_VERSION),
+    _require(type(raw.get("policy_version",POLICY_VERSION)) is int and raw.get("policy_version",POLICY_VERSION) in (1,2,3),
              "Routing policy version is unsupported")
     for targets in (raw.get("tiers") or {}).values():
         _require(all(not set(target)-{"provider","model","reasoning_effort"} for target in targets),
@@ -231,9 +260,12 @@ def configured_current_routing_policy(raw: dict | None = None) -> dict:
     return policy
 
 
-def score_routing_task(kind: str, payload: dict) -> dict:
+def score_routing_task(kind: str, payload: dict, *, scoring_version: int = SCORING_VERSION) -> dict:
     """Frozen version-1 scoring contract, independent of the candidate release."""
-    _require(isinstance(kind,str) and kind in _KINDS and isinstance(payload,dict),
+    _require(type(scoring_version) is int and scoring_version in (1, 2), 'Unsupported scoring version')
+    kinds = _KINDS | {'CODE_REQUEST', 'CODE_PLAN', 'CODE_PLAN_REVIEW', 'CODE_TEST_AUTHOR',
+                      'CODE_EDIT', 'CODE_REVIEW', 'CODE_RESEARCH'} if scoring_version == 2 else _KINDS
+    _require(isinstance(kind,str) and kind in kinds and isinstance(payload,dict),
              "Routing scoring requires a task kind and structured payload")
     def canonical(value):
         return json.dumps(value,sort_keys=True,separators=(",",":"),ensure_ascii=False,allow_nan=False)
@@ -268,9 +300,11 @@ def score_routing_task(kind: str, payload: dict) -> dict:
             "dependencies":sum(dependency_count>=limit for limit in (1,4)),
             "work_breadth":sum(breadth>=limit for limit in (3,8)),
             "risk_groups":sum(len(risks)>=limit for limit in (1,3))}
+    if scoring_version == 2 and kind in ('CODE_EDIT', 'CODE_TEST_AUTHOR', 'CODE_REVIEW'):
+        points['task_kind'] = 0
     score=min(10,sum(points.values()))
-    return {"score":score,"tier":"1-3" if score<=3 else "4-6" if score<=6 else "7-9" if score<=9 else "10",
-            "policy_version":SCORING_VERSION,"rationale":[{"criterion":key,"points":value} for key,value in points.items()],
+    return {"score":score,"tier":str(score) if scoring_version == 2 else "1-3" if score<=3 else "4-6" if score<=6 else "7-9" if score<=9 else "10",
+            "policy_version":scoring_version,"rationale":[{"criterion":key,"points":value} for key,value in points.items()],
             "metrics":{"kind":kind,"utf8_bytes":byte_count,"estimated_tokens":tokens,
                        "requirement_count":requirement_count,"dependency_count":dependency_count,
                        "work_breadth":breadth,"risk_groups":risks,"uncapped_score":sum(points.values())}}
@@ -292,15 +326,18 @@ def verify_routing_assignment(job: dict, routing_policy: dict | None = None) -> 
              "Routing policy digest is inconsistent")
     _require(isinstance(score_details, dict) and type(score_details.get("score")) is int
              and 1 <= score_details["score"] <= 10, "Routing complexity score is invalid")
-    recomputed = score_routing_task(job.get("kind"),job.get("payload"))
+    version = policy['policy_version']
+    recomputed = score_routing_task(job.get("kind"),job.get("payload"), scoring_version=2 if version == 3 else 1)
     _require(_digest(score_details) == _digest(recomputed), "Recorded routing score or rationale differs from task content")
     score = score_details["score"]
     tier = "1-3" if score <= 3 else "4-6" if score <= 6 else "7-9" if score <= 9 else "10"
+    if version == 3:
+        tier = str(score)
     _require(score_details.get("tier") == tier and type(route.get("score")) is int
              and route.get("score") == score and route.get("tier") == tier,
              "Routing complexity score and tier disagree")
     expected = expected_tiers[tier]
-    _require(isinstance(candidates, list) and [_target_identity(target) for target in candidates] == expected,
+    _require(isinstance(candidates, list) and [_target_identity(target, version) for target in candidates] == expected,
              "Persisted routing candidates differ from configured score band")
     for target, (provider,model,effort) in zip(candidates,expected):
         key = provider+":"+model+(":"+effort if effort else "")
@@ -310,7 +347,7 @@ def verify_routing_assignment(job: dict, routing_policy: dict | None = None) -> 
                  "Persisted routing target limits differ from configured policy")
     index = route.get("candidate_index")
     _require(type(index) is int and 0 <= index < len(candidates), "Routing candidate index is invalid")
-    provider, model, effort = _target_identity(route)
+    provider, model, effort = _target_identity(route, version)
     _require((provider, model, effort) == expected[index], "Selected routing target differs from recorded priority candidate")
     _require(all(type(route.get(key)) is type(candidates[index].get(key)) and route.get(key) == candidates[index].get(key)
                  for key in ("key","quota_pool","max_concurrency")),

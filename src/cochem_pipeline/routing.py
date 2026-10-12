@@ -391,8 +391,10 @@ def _content_strings(value: Any):
                 yield from _content_strings(value[key])
 
 
-def score_task(kind: str, payload: Mapping[str, Any]) -> dict:
+def score_task(kind: str, payload: Mapping[str, Any], *, scoring_version: int = SCORING_VERSION) -> dict:
     """Return persisted reproducible metrics/rationale, never a requested score."""
+    if type(scoring_version) is not int or scoring_version not in (1, 2):
+        raise ValueError('Unsupported scoring version')
     if not isinstance(kind, str) or kind not in _KINDS or not isinstance(payload, Mapping):
         raise ValueError("Scoring requires a supported task kind and structured task payload")
     try:
@@ -422,8 +424,10 @@ def score_task(kind: str, payload: Mapping[str, Any]) -> dict:
               "dependencies": sum(dependency_count >= limit for limit in (1, 4)),
               "work_breadth": sum(breadth >= limit for limit in (3, 8)),
               "risk_groups": sum(len(risks) >= limit for limit in (1, 3))}
+    if scoring_version == 2 and kind in ('CODE_EDIT', 'CODE_TEST_AUTHOR', 'CODE_REVIEW'):
+        points['task_kind'] = 0
     score = min(10, sum(points.values()))
-    return {"score": score, "tier": tier_for_score(score), "policy_version": SCORING_VERSION,
+    return {"score": score, "tier": str(score) if scoring_version == 2 else tier_for_score(score), "policy_version": scoring_version,
             "rationale": [{"criterion": criterion, "points": value} for criterion, value in points.items()],
             "metrics": {"kind": kind, "utf8_bytes": byte_count, "estimated_tokens": estimated_tokens,
                         "requirement_count": requirement_count, "dependency_count": dependency_count,

@@ -3,7 +3,7 @@ import copy
 
 import pytest
 
-from cochem_pipeline.routing import load_routing_policy, validate_selected_route
+from cochem_pipeline.routing import load_routing_policy, validate_selected_route, score_task
 
 
 EXPECTED = [
@@ -57,6 +57,36 @@ def test_old_capture_never_reads_a_new_default_catalog(monkeypatch):
         raise AssertionError('A captured policy must not reload the catalog')
     monkeypatch.setattr('cochem_pipeline.routing.default_catalog', unavailable)
     assert load_routing_policy(policy.as_dict()).digest == policy.digest
+
+
+def test_supervisor_independently_decodes_complete_v3_capture():
+    from cochem_supervisor.probes import configured_routing_policy, configured_tiers
+    policy = load_routing_policy({'policy_version': 3})
+    assert configured_routing_policy(policy.as_dict()) == policy.as_dict()
+    assert configured_tiers(policy.as_dict()) == {str(i): row for i, row in enumerate(EXPECTED, 1)}
+
+
+@pytest.mark.parametrize('kind', ['CODE_EDIT', 'CODE_TEST_AUTHOR', 'CODE_REVIEW'])
+def test_v2_scoring_reaches_small_coding_tiers_without_changing_old_scores(kind):
+    from cochem_supervisor.probes import score_routing_task
+    for expected, payload in [(1, {'objective': 'Format a heading'}),
+                              (2, {'objective': 'Format headings', 'requirements': ['A', 'B', 'C', 'D']})]:
+        score = score_task(kind, payload, scoring_version=2)
+        assert score['score'] == expected and score['tier'] == str(expected)
+        assert score == score_routing_task(kind, payload, scoring_version=2)
+        assert score_task(kind, payload)['score'] == expected + 2
+
+
+def test_v3_store_captures_exact_tier_and_survives_reload(tmp_path):
+    from cochem_pipeline.store import JobStore
+    policy = load_routing_policy({'policy_version': 3})
+    store = JobStore(tmp_path / 'test.db', routing_policy=policy)
+    store.submit('Write a small note', ['REQ-1'], 1)
+    job = store.claim('fixture', worker_slot='slot1')
+    assert job['route']['tier'] == str(job['route']['score'])
+    assert job['routing']['score_details']['policy_version'] == 2
+    validate_selected_route(policy, job['route'], kind=job['kind'])
+    assert JobStore(store.path, routing_policy=policy).get(job['job_id'])['route'] == job['route']
 
 
 @pytest.mark.parametrize('mutation', ['effort', 'duplicate', 'missing', 'order'])

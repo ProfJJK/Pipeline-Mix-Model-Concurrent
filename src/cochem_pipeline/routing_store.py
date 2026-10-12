@@ -194,7 +194,8 @@ def ensure_job(conn, job_id):
                   preserved_failure_count=existing['failure_count'], preserved_cycle=existing['cycle'])
         return
     policy = load_routing_policy(json.loads(row['policy_json']))
-    score = score_task(row['kind'], json.loads(row['payload_json']))
+    score = score_task(row['kind'], json.loads(row['payload_json']),
+                       scoring_version=2 if policy.as_dict()['policy_version'] == 3 else 1)
     candidates = [target.as_dict() for target in policy.candidates(score['score'], row['kind'])]
     if not candidates:
         raise ValueError('Routing policy must provide at least one target')
