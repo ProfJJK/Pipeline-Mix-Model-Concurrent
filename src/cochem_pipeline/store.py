@@ -684,7 +684,10 @@ class JobStore(CodingStoreMixin):
             if routes.cleanup_barriers(conn):
                 return None
             active = conn.execute("SELECT count(*) FROM pipeline_jobs WHERE status='IN_PROGRESS' AND kind NOT IN ('MACRO_PLANNING_REQUEST','CODE_REQUEST')").fetchone()[0]
-            if active >= max_workers:
+            from .catalog_slots import occupancy as catalog_occupancy
+            probe_slots = catalog_occupancy(conn)
+            if (active + probe_slots >= max_workers
+                    or (worker_slot is not None and catalog_occupancy(conn, worker_slot))):
                 return None
             if self.routing_policy is not None and conn.execute('''SELECT 1 FROM pipeline_jobs j
                 LEFT JOIN pipeline_route_reservations r ON r.job_id=j.job_id AND r.attempt_id=j.attempt_id
