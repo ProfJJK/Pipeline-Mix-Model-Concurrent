@@ -60,10 +60,15 @@ def create_knowledge_server(client:ControlClient):
 
 def create_server(client:ControlClient):
     server=FastMCP(f'CoChem Pipeline {__version__}',lifespan=client_lifespan(client),instructions=(
-        'For code changes, list configured projects with pipeline_projects and submit once with pipeline_code. '
-        'The controller owns staged edits, independent tests, review and configured Git integration. '
-        'Poll pipeline_code_status; only its verified terminal result establishes completion. '
-        'For planning documents, submit one objective with pipeline_submit. The Warden automatically generates a manifest, '
+        'Only for work explicitly submitted through this pipeline, list configured projects with pipeline_projects '
+        'and submit coding work once with pipeline_code. For those jobs, the controller owns staged edits, '
+        'independent tests, review and configured Git integration. Poll pipeline_code_status; '
+        'only its verified terminal result establishes completion of that submitted job. '
+        'Direct local maintenance of the pipeline itself does not require these tools or project registration. '
+        'This connector does not govern unrelated local coding or documentation work. '
+        'Continue to follow the repository and host safety rules during direct maintenance. '
+        'For planning work explicitly submitted through this pipeline, submit one objective with pipeline_submit. '
+        'The Warden automatically generates a manifest, '
         'runs isolated chapter workers within hardware limits, and routes synthesis only after '
         'all chapter outputs are accepted. Complexity determines the configured model priority; '
         'busy or quota-limited targets can cause a recorded fallback or timed wait. '
