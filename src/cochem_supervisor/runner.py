@@ -302,7 +302,17 @@ def native_process_error(provider: str, stdout: str, stderr: str, exit_code: int
                         evidence.append(json.dumps(record[key], ensure_ascii=False)[:2048])
     evidence.append(stderr[:2048])
     observed = "\n".join(part for part in evidence if part)[:8192]
-    classification = classify_error(observed.replace("_", " "))
+    from cochem_pipeline.failures import agy_error_records, parse_native_failure
+    if provider == "gemini" and agy_error_records(stderr):
+        # Typed provider quota/availability is not a host resource fault. An
+        # ambiguous Agy envelope must not become a paid compatibility repair
+        # merely because its untrusted message mentions an argument or flag.
+        failure = parse_native_failure(provider, stdout, stderr, exit_code)
+        category = failure.category if failure is not None else "configuration"
+        category = {"busy": "provider", "timeout": "provider"}.get(category, category)
+        classification = {"category": category}
+    else:
+        classification = classify_error(observed.replace("_", " "))
     classes = {"auth": NativeRepairAuthError, "quota": NativeRepairQuotaError,
                "provider": NativeRepairProviderError, "resource": NativeRepairResourceError,
                "compatibility": NativeRepairProtocolError}
