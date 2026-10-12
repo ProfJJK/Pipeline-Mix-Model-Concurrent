@@ -22,6 +22,7 @@ from pathlib import Path
 import re
 import secrets
 import subprocess
+import sys
 import threading
 import tempfile
 import time
@@ -795,11 +796,12 @@ class WindowsProcess:
     """Native child plus owned Job Object, profile and logon token handles."""
 
     def __init__(self, process, job, token, profile, pid: int, argv: list[str], slot_lock=None,
-                 resource_limits_evidence=None, creation_time_filetime=None):
+                 resource_limits_evidence=None, creation_time_filetime=None, agent_guard=None):
         self._process, self._job, self._token, self._profile = process, job, token, profile
         self.pid, self.args, self.returncode = pid, argv, None
         self._lock = threading.RLock()
         self._slot_lock = slot_lock
+        self._agent_guard = agent_guard
         self.resource_limits_evidence = resource_limits_evidence
         # Capture from the owned process handle, not a later PID lookup that
         # can race process exit/reuse. Keep exact 100 ns ticks in the receipt.
@@ -867,6 +869,9 @@ class WindowsProcess:
                     _close(self._job)
                     _close(self._process)
                     self._job = self._process = None
+                if self._agent_guard is not None:
+                    self._agent_guard.close()
+                    self._agent_guard = None
                 if self._profile:
                     _check(_api()["userenv"].UnloadUserProfile(self._token, self._profile), "Unload worker profile")
                     self._profile = None
@@ -941,7 +946,7 @@ def _cleanup_failed_launch(process, job, token, profile, slot_lock) -> None:
 def launch_worker(identity: WorkerIdentity, argv: list[str], cwd: str | Path,
                   stdin_file: BinaryIO | TextIO | Path, stdout_file: BinaryIO | TextIO | Path,
                   stderr_file: BinaryIO | TextIO | Path, env_overrides: Mapping[str, str] | None = None,
-                  *, limits=None, ramdisk_workspace=None) -> WindowsProcess:
+                  *, limits=None, ramdisk_workspace=None, agent_definition=None) -> WindowsProcess:
     """Create suspended under a separate logon; assign to kill-on-close job before resume.
 
     Streams are open file objects or paths. Path outputs use exclusive creation.
@@ -980,8 +985,12 @@ def launch_worker(identity: WorkerIdentity, argv: list[str], cwd: str | Path,
         raise
     profile = _PROFILEINFOW(dwSize=C.sizeof(_PROFILEINFOW), dwFlags=1, lpUserName=identity.name)
     job, process = None, _PROCESS_INFORMATION()
+    agent_guard = None
     try:
         _check(api["userenv"].LoadUserProfileW(token, C.byref(profile)), "Load native worker profile")
+        if agent_definition is not None:
+            from .agy_agent_guard import lock_worker_profile
+            agent_guard = lock_worker_profile(sys.modules[__name__], token, sid, agent_definition)
         environment = _worker_environment(token, env_overrides, ramdisk_workspace=ramdisk_workspace, limits=limits)
         job = _check(api["kernel32"].CreateJobObjectW(None, None), "Create worker Job Object")
         resource_evidence = None
@@ -1034,10 +1043,12 @@ def launch_worker(identity: WorkerIdentity, argv: list[str], cwd: str | Path,
                 raise WindowsIsolationError("Could not resume supervised worker")
         _close(process.hThread)
         return WindowsProcess(process.hProcess, job, token, profile.hProfile, process.dwProcessId, list(argv), slot_lock,
-                              resource_evidence, creation_time_filetime)
+                              resource_evidence, creation_time_filetime, agent_guard)
     except BaseException as launch_error:
         try:
             _cleanup_failed_launch(process, job, token, profile, slot_lock)
+            if agent_guard is not None:
+                agent_guard.close()
         except WindowsCleanupError as cleanup_error:
             raise cleanup_error from launch_error
         except BaseException as cleanup_error:

@@ -373,7 +373,10 @@ def agy_effort_contract():
 
 def agy_spec(bindings=None, effort=None):
     """An unheld synthetic 3B repair contract; not native capability evidence."""
+    from cochem_pipeline.agy_agent_guard import RELATIVES
     value = {"provider": "gemini", "model": FLASH, "reasoning_effort": effort,
+             "agent_definition": {"name": "cochem-inference-only", "sha256": "a" * 64,
+                                  "bytes": 478, "relative_paths": list(RELATIVES)},
              "executable": str(Path(sys.executable).resolve()), "protocol": "agy-stream-json",
              "identity_policy": IDENTITY_POLICY, "arguments": list(AGY_ARGV),
              "model_bindings": {FLASH: LOW} if bindings is None else bindings,
@@ -569,7 +572,8 @@ def agy_launches(monkeypatch):
     monkeypatch.setattr(job_board, "RepairJobBoard", Board)
 
     def run_process(self, identity, argv, cwd, log_dir, stdin_text="", timeout_seconds=1800,
-                    heartbeat=None, env_overrides=None):
+                    heartbeat=None, env_overrides=None, agent_definition=None):
+        assert agent_definition == agy_spec()['agent_definition']
         logs = Path(log_dir)
         state["launches"].append({"label": logs.name, "argv": list(argv), "stdin": stdin_text})
         if logs.name == "inference":

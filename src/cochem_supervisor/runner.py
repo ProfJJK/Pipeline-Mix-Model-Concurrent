@@ -507,7 +507,7 @@ class RepairRunner:
     def run_process(self, identity: Mapping[str, str], argv: list[str], cwd: Path, log_dir: Path,
                     stdin_text: str = '', timeout_seconds: float = 1800,
                     heartbeat: Callable[[], bool] | None = None,
-                    env_overrides: Mapping[str, str] | None = None) -> dict:
+                    env_overrides: Mapping[str, str] | None = None, agent_definition=None) -> dict:
         """Run a controller-owned argv, such as the fixed acceptance test command.
 
         The caller must choose argv from its immutable acceptance policy; do not
@@ -543,7 +543,8 @@ class RepairRunner:
             resource_readiness = verify_repair_execution_limits(self._boundary_config)
             docker_boundary = verify_repair_docker_boundary(self._boundary_config, identity)
             process = launch_worker(account, command, workspace, prompt, stdout, stderr,
-                                    env_overrides=env_overrides,limits=self.execution_limits)
+                                    env_overrides=env_overrides,limits=self.execution_limits,
+                                    **({'agent_definition': agent_definition} if agent_definition is not None else {}))
             with self._lock:
                 self._active[key] = process
             try:
@@ -602,6 +603,10 @@ class RepairRunner:
         try:
             validate_provider_spec(spec)
             provider, model, effort = spec['provider'], spec['model'], spec.get('reasoning_effort')
+            native_options = {}
+            if provider == 'gemini':
+                from cochem_pipeline.agy_agent_guard import require_agent_contract
+                native_options['agent_definition'] = require_agent_contract(spec)
             binding = effort_contract(provider, model, effort, spec)
             # Reject absent/unreviewed capabilities before creating logs or
             # launching even an offline worker process.
@@ -618,7 +623,7 @@ class RepairRunner:
 
             def probe(arguments, label):
                 receipt = self.run_process(identity, arguments, workspace, logs / label,
-                    timeout_seconds=30, heartbeat=heartbeat)
+                    timeout_seconds=30, heartbeat=heartbeat,**native_options)
                 raw_bytes = Path(receipt['stdout_path']).read_bytes()
                 if receipt['exit_code'] != 0 or len(raw_bytes) > 262144:
                     raise NativeRepairProtocolError('Native pre-budget capability probe failed')
@@ -700,6 +705,10 @@ class RepairRunner:
         logs = self._private_logs(Path(log_dir))
         deadline = time.monotonic() + timeout
         provider = provider_spec["provider"]
+        native_options = {}
+        if provider == 'gemini':
+            from cochem_pipeline.agy_agent_guard import require_agent_contract
+            native_options['agent_definition'] = require_agent_contract(provider_spec)
         from cochem_pipeline.worker import (codex_policy_probe_command, gemini_binary_digest, validate_gemini_version)
         from cochem_pipeline.inference_policy import (parse_codex_mcp_names, validate_codex_features,
             claude_inference_arguments, validate_claude_help)
@@ -707,7 +716,7 @@ class RepairRunner:
         policy_evidence={"mode":"inference-only","provider":provider}
         def probe(argv,label):
             result=self.run_process(identity,argv,workspace,logs/label,
-                timeout_seconds=min(30,max(.001,deadline-time.monotonic())),heartbeat=heartbeat)
+                timeout_seconds=min(30,max(.001,deadline-time.monotonic())),heartbeat=heartbeat,**native_options)
             raw=Path(result["stdout_path"]).read_text(encoding="utf-8",errors="strict")
             if result['exit_code']!=0:
                 raise NativeRepairProtocolError('Native inference-only capability probe failed')
@@ -746,7 +755,7 @@ class RepairRunner:
             policy_evidence.update(validate_gemini_version(provider_spec,version,binary_digest))
             auth_argv=[*prefix,*provider_spec['subscription_probe']['arguments']]
         auth = self.run_process(identity, auth_argv, workspace, logs / "auth",
-                                timeout_seconds=min(timeout, self.auth_timeout_seconds), heartbeat=heartbeat)
+                                timeout_seconds=min(timeout, self.auth_timeout_seconds), heartbeat=heartbeat,**native_options)
         stdout = Path(auth["stdout_path"]).read_text(encoding="utf-8", errors="replace")
         stderr = Path(auth["stderr_path"]).read_text(encoding="utf-8", errors="replace")
         from cochem_pipeline.worker import subscription_probe_status
@@ -768,7 +777,7 @@ class RepairRunner:
         from cochem_pipeline.worker import native_prompt_text
         prompt = native_prompt_text(provider, provider_spec, prompt)
         process = self.run_process(identity, argv, workspace, logs / "inference", stdin_text=prompt,
-                                   timeout_seconds=remaining, heartbeat=heartbeat)
+                                   timeout_seconds=remaining, heartbeat=heartbeat,**native_options)
         raw = Path(process["stdout_path"]).read_text(encoding="utf-8", errors="replace")
         stderr = Path(process["stderr_path"]).read_text(encoding="utf-8", errors="replace")
         if process["exit_code"] != 0:

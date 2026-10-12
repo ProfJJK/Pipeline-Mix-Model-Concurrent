@@ -758,6 +758,7 @@ class NativeRunner:
                 process.terminate()
 
     def _launch_worker(self, identity, *args, worker_slot, **kwargs):
+        from .agy_agent_guard import AgentGuardError
         from .windows import launch_worker, WindowsCleanupError, WindowsIsolationError
         from .ramdisk import RamdiskError
         from .resource_limits import ResourcePolicyError
@@ -779,6 +780,8 @@ class NativeRunner:
             process = launch_worker(identity, *args, **kwargs)
             process.docker_denial_evidence = boundary
             return process
+        except AgentGuardError as exc:
+            raise ProviderFailure('compatibility') from exc
         except WindowsCleanupError as exc:
             raise WorkerCleanupError('Native launch failed and process/profile cleanup remains unverified') from exc
         except RamdiskError as exc:
@@ -906,6 +909,12 @@ class NativeRunner:
         prepared_workspace = workspace is not None
         workspace = workspace if prepared_workspace else self.config.slot_roots[slot]
         launch_options = {'worker_slot': slot}
+        if provider == 'gemini':
+            from .agy_agent_guard import require_agent_contract
+            try:
+                launch_options['agent_definition'] = require_agent_contract(spec)
+            except ValueError as exc:
+                raise ProviderFailure('compatibility') from exc
         if hasattr(self.config, "execution_limits"):
             launch_options["limits"] = self.config.execution_limits
         if ramdisk_workspace is not None:
