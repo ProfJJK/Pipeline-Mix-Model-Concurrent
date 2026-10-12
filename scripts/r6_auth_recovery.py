@@ -2,13 +2,15 @@
 
 The owner wrapper copies this file to a fresh protected phase folder. It uses
 the installed binding, identity, resource, RAM and cleanup implementations;
-it neither patches the installed package nor runs inference. Raw status text
-never leaves private temporary handles. Only fixed classifications are saved.
+it neither patches the installed package nor runs inference. Unknown Agy status
+output is retained only in the protected phase root. Public results contain
+fixed classifications and hashes, never arbitrary provider output.
 """
 from __future__ import annotations
 
 import argparse
 import hashlib
+import os
 from pathlib import Path
 import tempfile
 
@@ -17,6 +19,7 @@ from cochem_pipeline.worker import strict_json
 
 SIGN_OUT = frozenset({
     'Please sign in to view available models. Launch the CLI without arguments to sign in.',
+    'Error: Please sign in to view available models. Launch the CLI without arguments to sign in.',
     'You are not logged into Antigravity.',
 })
 FETCHING = 'Fetching available models...'
@@ -52,10 +55,23 @@ def classify_agy_status(stdout, stderr, code):
         reason='AGY_MODELS_CATALOG_VERIFIED' if success else
             'AGY_MODELS_EXPLICIT_SIGN_OUT' if explicit else 'TYPED_AUTH_FAILURE' if typed_auth else 'AGY_STATUS_UNRESOLVED',
         failure_category=failure.category if failure is not None else None,
-        diagnostic_hint=None if success else native_failure_summary(stderr),
+        diagnostic_hint=None if success else 'Subscription authentication failed' if logout else native_failure_summary(stderr),
         stdout_bytes=len(stdout.encode('utf-8')), stderr_bytes=len(stderr.encode('utf-8')),
         stdout_sha256=hashlib.sha256(stdout.encode('utf-8')).hexdigest(),
         stderr_sha256=hashlib.sha256(stderr.encode('utf-8')).hexdigest())
+
+
+def preserve_unknown_status(root, slot, stdout, stderr):
+    """Create-only private evidence; never publish text or overwrite a probe."""
+    from cochem_pipeline.windows import validate_private_directory
+    validate_private_directory(root)
+    if slot not in {f'slot{i}' for i in range(1, 7)} or len(stdout) + len(stderr) > 65536:
+        raise ValueError('Invalid bounded status evidence')
+    for name, raw in (('stdout', stdout), ('stderr', stderr)):
+        with (Path(root)/f'agy-{slot}-unknown.{name}').open('xb') as stream:
+            stream.write(raw)
+            stream.flush()
+            os.fsync(stream.fileno())
 
 
 def auth_checks(config, ram, root):
@@ -87,6 +103,8 @@ def auth_checks(config, ram, root):
                 texts = (stdout.decode('utf-8', 'replace'), stderr.decode('utf-8', 'replace'))
                 if provider == 'gemini':
                     row = classify_agy_status(*texts, code)
+                    if row['status'] == 'STATUS_UNVERIFIED':
+                        preserve_unknown_status(root, slot, stdout, stderr)
                 else:
                     verified = subscription_status(provider, *texts, code)
                     failure = None if verified else parse_native_failure(provider, *texts, code)

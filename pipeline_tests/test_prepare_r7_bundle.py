@@ -40,3 +40,20 @@ def test_prerequisite_recovery_is_unchanged_except_explicit_inherited_input_dead
     assert b"The owner-input window is already closed" in result
     assert builder.sha(builder.RECOVERY.joinpath('launch-manifest.json').read_bytes())==builder.RECOVERY_PIN
     with pytest.raises(ValueError):builder.derive_recovery_entry(raw+b'$script:R6InputDeadline=[DateTime]::UtcNow.AddMinutes(20)')
+
+
+def test_fresh_recovery_repins_only_two_reviewed_helpers_and_deadline(tmp_path):
+    import json
+    destination = tmp_path/'recovery'
+    result = builder.prepare_recovery(destination, Path(__file__).parents[1])
+    before=json.loads(builder.RECOVERY.joinpath('launch-manifest.json').read_text())
+    after=json.loads(destination.joinpath('launch-manifest.json').read_text())
+    changed=[]
+    for old,new in zip(before['scripts'],after['scripts'],strict=True):
+        assert old['name']==new['name']
+        payload=destination.joinpath(new['name']).read_bytes()
+        assert builder.sha(payload)==new['sha256'] and len(payload)==new['length']
+        if old!=new:changed.append(old['name'])
+    assert set(changed)=={'run_r6_launch.ps1','r6_auth_recovery.py','verify_r6_auth_recovery.ps1'}
+    assert result['reviewed_prefix_recovery']
+    assert builder.sha(builder.RECOVERY.joinpath('launch-manifest.json').read_bytes())==builder.RECOVERY_PIN

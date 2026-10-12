@@ -31,7 +31,7 @@ def derive_recovery_entry(raw):
             if([DateTime]::UtcNow -ge $script:R6InputDeadline){throw 'The owner-input window is already closed.'}
         }''')
 
-def prepare_recovery(destination):
+def prepare_recovery(destination, repository):
     raw=RECOVERY.joinpath('launch-manifest.json').read_bytes()
     if sha(raw)!=RECOVERY_PIN:raise ValueError('Reviewed R6 prerequisite recovery changed')
     manifest=json.loads(raw);destination.mkdir()
@@ -40,12 +40,18 @@ def prepare_recovery(destination):
         if '/' in row['name']:raise ValueError('Unexpected recovery input path')
         payload=read_pinned(RECOVERY/row['name'],row['sha256'],row['length'])
         if row['name']=='run_r6_launch.ps1':payload=derive_recovery_entry(payload)
+        elif row['name'] in ('r6_auth_recovery.py','verify_r6_auth_recovery.ps1'):
+            # Replace only reviewed recovery helpers in this fresh copy. Earlier
+            # delivered packages and all remaining R5/R6 inputs stay untouched.
+            from prepare_r6_launch_package import read_regular
+            payload=read_regular(Path(repository)/'scripts'/row['name'])
         with (destination/row['name']).open('xb') as out:out.write(payload)
         row.update(sha256=sha(payload),length=len(payload))
     raw=(json.dumps(manifest,indent=2)+'\n').encode()
     with destination.joinpath('launch-manifest.json').open('xb') as out:out.write(raw)
     return dict(directory=str(destination),manifest_sha256=sha(raw),original_manifest_sha256=RECOVERY_PIN,
-        entry_sha256=sha(destination.joinpath('run_r6_launch.ps1').read_bytes()),input_deadline_inherited=True)
+        entry_sha256=sha(destination.joinpath('run_r6_launch.ps1').read_bytes()),input_deadline_inherited=True,
+        reviewed_prefix_recovery=True)
 
 def candidate_from_previous(data):
     if sha(data)!=PREVIOUS_PIN:raise ValueError('Previously installed R6 configuration differs')
@@ -102,7 +108,7 @@ def prepare(freeze,wheelhouse,application,destination,repository):
     requirements.append('cochem==4.2.7 --hash=sha256:'+app['sha256'])
     installer=derive_installer((repository/'scripts/install_r6_runtime.ps1').read_bytes())
     destination.mkdir()
-    recovery=prepare_recovery(destination/'r6-prerequisite')
+    recovery=prepare_recovery(destination/'r6-prerequisite',repository)
     raw=write('pipeline.json',candidate);load_config(destination/'pipeline.json')
     add('pipeline.json',destination/'pipeline.json',sha(raw),len(raw))
     raw=write('runtime-requirements.txt',('\n'.join(requirements)+'\n').encode())

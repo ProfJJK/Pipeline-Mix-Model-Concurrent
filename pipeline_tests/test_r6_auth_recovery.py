@@ -1,5 +1,6 @@
 import importlib.util
 import json
+import hashlib
 from pathlib import Path
 
 import pytest
@@ -14,6 +15,37 @@ def test_captured_agy_signed_out_line_is_status_only_logout():
     result = module.classify_agy_status('', line, 1)
     assert result['status'] == 'ATTENDED_LOGIN_REQUIRED'
     assert result['reason'] == 'AGY_MODELS_EXPLICIT_SIGN_OUT'
+
+
+def test_owner_reported_122_byte_error_is_exact_signed_out_protocol():
+    raw = (b'Fetching available models...\n'
+        b'Error: Please sign in to view available models. Launch the CLI without arguments to sign in.\n')
+    assert len(raw) == 122
+    assert hashlib.sha256(raw).hexdigest() == '148fc48c6aeaf4d5f5780d0e38fc39215de098c1537c57e09410d4dad9718a1d'
+    result = module.classify_agy_status('', raw.decode(), 1)
+    assert result['status'] == 'ATTENDED_LOGIN_REQUIRED'
+    assert result['diagnostic_hint'] == 'Subscription authentication failed'
+
+
+@pytest.mark.parametrize('suffix', [' secret', '\nPermission denied', '\nAGY_ERROR: {"code":"rate_limit_exceeded"}'])
+def test_prefixed_signout_with_extra_failure_stays_unverified(suffix):
+    text = 'Error: Please sign in to view available models. Launch the CLI without arguments to sign in.' + suffix
+    assert module.classify_agy_status('', text, 1)['status'] == 'STATUS_UNVERIFIED'
+
+
+def test_unknown_status_evidence_is_private_bounded_and_never_overwritten(tmp_path, monkeypatch):
+    import cochem_pipeline.windows as win
+    checks = []
+    monkeypatch.setattr(win, 'validate_private_directory', lambda root: checks.append(root))
+    module.preserve_unknown_status(tmp_path, 'slot1', b'', b'private diagnostic')
+    assert (tmp_path/'agy-slot1-unknown.stderr').read_bytes() == b'private diagnostic'
+    with pytest.raises(FileExistsError):
+        module.preserve_unknown_status(tmp_path, 'slot1', b'', b'changed')
+    with pytest.raises(ValueError):
+        module.preserve_unknown_status(tmp_path, '../bad', b'', b'')
+    with pytest.raises(ValueError):
+        module.preserve_unknown_status(tmp_path, 'slot2', b'x'*65537, b'')
+    assert checks == [tmp_path]*4
 
 
 @pytest.mark.parametrize('text', ['', 'network failed', 'Please sign in to view available models secret-extra',
