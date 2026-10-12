@@ -4,6 +4,31 @@ Use [RETURN_SETUP_R6_AUTH_RECOVERY.txt](deployment/windows-deployment-next/RETUR
 Do not rerun the original fresh-install command. Its completed installation and
 all original source/build/bundle/launch artifacts remain unchanged.
 
+## Corrected recovery package — supersedes the first recovery command
+
+The owner ran the first recovery at 09:13 local time. It failed before the
+controlled stop in `verify_existing_installation`: an AST-imported PowerShell
+helper had an empty `$PSScriptRoot`, producing
+`ParameterArgumentValidationErrorEmptyStringNotAllowed`. Preconditions had
+confirmed R4 restore v2 running; this attempt did not reach authentication or
+R6 cutover. The original package and evidence remain preserved.
+
+Corrected source: `eb982cb`. Package:
+`C:\Users\ansac\CoChem427\r6-auth-recovery-eb982cb`, with 480 pinned inputs.
+Launch manifest SHA256:
+`bc1cb7b2c1ac4eac872cfde38b57f382cdef24388a9902f9899020bd10dfbf58`.
+
+The repair passes the package directory explicitly across the AST-import boundary.
+86 focused source/fixture tests passed in 36.55 seconds, including a reproduction
+of the empty-path error, the actual helper import chain, and complete verification
+with inert filesystem/task boundaries. Negative fixtures reject partial installs,
+wrong bindings, failed restoration and unexpected later acceptance/recovery state.
+The actual packaged read-only launch plan passed in 7.18 seconds. These tests do
+not attest SYSTEM deployment or provider acceptance. The updated owner sheet above
+contains the replacement command; do not repeat the `3a15ff4` command.
+
+The following sections record the original recovery design and evidence.
+
 ## Actual Windows evidence supplied by the owner
 
 The first R6 sitting installed source `359ca92e57b2d74eb407b258cf53123d80ef1467`,

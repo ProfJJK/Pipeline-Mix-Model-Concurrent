@@ -1,4 +1,4 @@
-R6 AUTHENTICATION RECOVERY — 12 October 2026
+R6 AUTHENTICATION RECOVERY — corrected import path, 12 October 2026
 
 Run this NEW command once in 64-bit Administrator Windows PowerShell as ansac.
 Do not rerun RETURN_SETUP_R6.txt or the original fresh installer.
@@ -14,7 +14,7 @@ follow Agy instructions only if shown. Once it says you can walk away, the
 remaining acceptance and activation run unattended and may take much longer.
 Keep Windows running. No restart or later manual continuation is planned.
 
-C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -File "C:\Users\ansac\CoChem427\r6-auth-recovery-3a15ff4\run_r6_launch.ps1" -LaunchManifest "C:\Users\ansac\CoChem427\r6-auth-recovery-3a15ff4\launch-manifest.json" -LaunchManifestSha256 cb9b000950e78b2e1bea364c3af3e3511ac2c93e89c0035afced01b1dce7faa2 -Apply
+C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -File "C:\Users\ansac\CoChem427\r6-auth-recovery-eb982cb\run_r6_launch.ps1" -LaunchManifest "C:\Users\ansac\CoChem427\r6-auth-recovery-eb982cb\launch-manifest.json" -LaunchManifestSha256 bc1cb7b2c1ac4eac872cfde38b57f382cdef24388a9902f9899020bd10dfbf58 -Apply
 
 If it holds, preserve its files/tasks and return the final output. Do not
 repeat this command. Sanitized status files are readable by the engineering
@@ -23,6 +23,9 @@ session; provider credentials and raw output are excluded.
 Before R6 cutover is requested, failures use the reviewed R4 restoration.
 After cutover is requested, potentially running state is preserved for review.
 
-Reviewed recovery source: 3a15ff4. Existing runtime source: 359ca92.
-227 source/fixture tests passed; packaged read-only launch plan passed.
+Reviewed recovery source: eb982cb. Existing runtime source: 359ca92.
+The previous recovery stopped on an empty helper path before stopping R4.
+Keep that package and its evidence; this new package fixes the import scope.
+86 focused tests passed, including the reproduced error, actual helper import
+chain and full inert verification paths. Packaged read-only launch plan passed.
 Actual recovery, native model acceptance and R6 deployment are NOT attested yet.
