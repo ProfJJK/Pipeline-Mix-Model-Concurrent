@@ -1,5 +1,9 @@
 # R6 owner launch package — 12 October 2026
 
+**Update: the owner ran this package. Installation completed; authentication
+held and R4 was restored. Do not rerun the fresh-install command below. Use
+[the separate authentication recovery](R6_AUTH_RECOVERY_2026-10-12.md).**
+
 The owner command is in [RETURN_SETUP_R6.txt](deployment/windows-deployment-next/RETURN_SETUP_R6.txt).
 It installs R6 with the released R5 repairs; it does not require a separate R5 sitting.
 Source commit: `359ca92e57b2d74eb407b258cf53123d80ef1467`.
