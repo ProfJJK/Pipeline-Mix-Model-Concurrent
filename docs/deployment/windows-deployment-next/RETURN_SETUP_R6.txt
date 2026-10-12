@@ -1,0 +1,49 @@
+R6 DEPLOYMENT - ONE OWNER COMMAND
+Prepared 12 October 2026 from source 359ca92e57b2d74eb407b258cf53123d80ef1467.
+This includes the released R5 repairs. Do not run the old R5 sitting first.
+
+1. Keep Windows signed in and awake, with Docker Desktop showing Engine running.
+   Do not submit new pipeline jobs during the upgrade.
+2. Open Windows PowerShell as Administrator under your ansac account.
+3. Paste the single command below once. Keep that window open.
+
+C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -File "C:\Users\ansac\CoChem427\r6-launch-359ca92\run_r6_launch.ps1" -LaunchManifest "C:\Users\ansac\CoChem427\r6-launch-359ca92\launch-manifest.json" -LaunchManifestSha256 155481b2c980c210517d46b4fb0eb73079563bc2b410cecbf9d98758d2d61283 -Apply
+
+During the first 20 minutes:
+- Existing sign-ins are checked and reused. If Agy explicitly reports a logged-out
+  worker, follow the displayed provider link/instructions for that worker.
+- A browser window is not guaranteed to open automatically: use the displayed link.
+- After "Authentication verified. You can walk away now", all remaining work is
+  unattended. You may also leave at 20 minutes: the script refuses late input and
+  records a hold if required authentication could not finish in that window.
+- Ambiguous authentication or expired Codex/Claude sessions cause an early hold;
+  this package does not copy credentials or open unbounded replacement logins.
+
+Afterward:
+- Keep the computer awake, signed in, and the PowerShell window open. Do not shut
+  down or restart it. Total installation/acceptance time may exceed 20 minutes;
+  successful end-to-end elapsed time has not yet been measured on this host.
+- There are no planned late prompts, restart requests or continuation commands.
+- Sanitized progress is written beneath C:\Program Files\CoChem\R6Sitting4.2.7-
+  windows-20261012-<attempt>\status-*.json. The agent can read those reports.
+- Success is WARDEN_R6_RUNNING_HEALTH_VERIFIED. A hold preserves evidence; do not
+  rerun, delete partial folders, clear quarantine or repeat sign-ins blindly.
+
+What it does:
+Checks the known R4 predecessor; stops it through the released idle/source proof;
+installs the offline R6 package; checks six worker profiles; stages the protected
+Agy agent; tests retained path handles; creates a separate knowledge index; runs
+27 small routed model/effort probes; previews existing database compatibility;
+backs up databases; retargets to R6; verifies health before enabling its logon task.
+Before R6 cutover, verified R4 recovery is attempted on a preparation failure.
+After a possible R6 start, it preserves running state instead of guessing rollback.
+
+Preserved: four shared slots, Chapter 06 routing, Gemini Pro High at tier 6,
+existing sign-ins, R: and its startup task, original databases, old job captures
+and repair budgets. Native probes may consume existing subscription quota.
+Quota-exhausted alternatives remain unverified; Gemini Pro High must pass.
+
+Verified before delivery: 413 source/fixture tests; exact packaged read-only
+entry point; all 301 install payloads; offline application build and wheel hashes.
+Not yet verified: elevated/SYSTEM tests, native model acceptance, live deployment
+or full SRS acceptance. R7 hot catalog activation is a separate pending revision.
