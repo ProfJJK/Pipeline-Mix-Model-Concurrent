@@ -351,20 +351,21 @@ def _reviewed_effort_contract(provider: str, model: str, effort: str, spec: dict
                      and not any(ord(char) < 32 for char in arg) for arg in args),
              "Reasoning profile arguments must be a bounded thinking-only selector")
     if provider == "claude":
-        _require(effort == "extended" and args[0] == "--effort"
+        _require(effort in ('low', 'medium', 'high', 'xhigh', 'max', 'extended') and args[0] == "--effort"
                  and args[1] in ("low", "medium", "high", "xhigh", "max")
+                 and (effort == 'extended' or args[1] == effort)
                  and contract["thinking_enabled"] is True,
                  "Claude reasoning profile requires reviewed native effort and enabled thinking")
     else:
-        _require(provider == "gemini" and effort in ("extended", "high")
+        _require(provider == "gemini" and effort in ("extended", "low", "medium", "high")
                  and ((args[0] == "--thinking-level" and args[1] in
                        ("minimal", "low", "medium", "high", "MINIMAL", "LOW", "MEDIUM", "HIGH"))
                       or (args[0] == "--effort" and args[1] in ("low", "medium", "high", "xhigh", "max"))
                       or (args[0] == "--thinking-budget" and bool(re.fullmatch("[0-9]{1,6}", args[1]))
                           and 1 <= int(args[1]) <= 131072)),
                  "Agy reasoning profile requires a reviewed thinking-only selector")
-        _require(effort != "high" or args in (["--thinking-level", "high"], ["--thinking-level", "HIGH"], ["--effort", "high"]),
-                 "Agy High reasoning profile must select the native high thinking level")
+        _require(effort == "extended" or args in (["--thinking-level", effort], ["--thinking-level", effort.upper()], ["--effort", effort]),
+                 "Agy explicit reasoning profile must select the exact native thinking level")
         inference = spec.get("inference_only")
         _require(isinstance(inference, dict) and set(inference) == {
             "arguments", "version_arguments", "executable_sha256", "version", "capability_reference",
@@ -401,10 +402,10 @@ def _reviewed_effort_contract(provider: str, model: str, effort: str, spec: dict
     value = metadata["value"]
     _require(type(value) in (str, bool, int) and (not isinstance(value, str) or 0 < len(value) <= 128),
              "Reasoning profile native metadata must be a bounded scalar")
-    if provider == "gemini" and effort == "high":
-        _require(isinstance(value, str) and value in ("high", "HIGH")
+    if effort != 'extended':
+        _require(isinstance(value, str) and value in (effort, effort.upper())
                  and path[-1] in {"reasoning_effort", "model_reasoning_effort", "thinking_level", "effort"},
-                 "Agy High reasoning profile requires explicit native high-level metadata")
+                 "Explicit reasoning profile requires matching native effort metadata")
     return contract
 
 

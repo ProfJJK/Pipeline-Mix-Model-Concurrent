@@ -45,11 +45,11 @@ def effort_contract(provider, model, effort, spec):
     if effort is None:
         return None
     if provider == 'codex':
-        if effort not in ('low', 'medium', 'high', 'ultra'):
+        if effort not in ('low', 'medium', 'high', 'xhigh', 'max', 'ultra'):
             raise ValueError('Native Codex reasoning effort is outside the routed contract')
         return None
-    if ((provider == 'claude' and effort != 'extended')
-            or (provider == 'gemini' and effort not in ('extended', 'high'))
+    if ((provider == 'claude' and effort not in ('low', 'medium', 'high', 'xhigh', 'max', 'extended'))
+            or (provider == 'gemini' and effort not in ('low', 'medium', 'high', 'extended'))
             or provider not in ('claude', 'gemini')):
         raise ValueError('Unsupported provider reasoning effort profile')
     contracts = spec.get('effort_contracts', {}) if isinstance(spec, dict) else {}
@@ -76,6 +76,8 @@ def effort_contract(provider, model, effort, spec):
                 or args[1] not in ('low', 'medium', 'high', 'xhigh', 'max')
                 or contract['thinking_enabled'] is not True):
             raise ValueError('Claude Extended requires reviewed native effort and enabled thinking')
+        if effort != 'extended' and args[1] != effort:
+            raise ValueError('Explicit Claude effort must match the native selector exactly')
     else:
         # These are the only eligible thinking-only selector shapes. They are
         # not assumed Agy capabilities: an exact reviewed binary contract is
@@ -88,8 +90,8 @@ def effort_contract(provider, model, effort, spec):
                 or (args[0] == '--thinking-budget' and re.fullmatch('[0-9]{1,6}', args[1])
                     and 1 <= int(args[1]) <= 131072))):
             raise ValueError('Agy reasoning effort requires a bounded reviewed thinking-only selector')
-        if effort == 'high' and args not in (['--thinking-level', 'high'], ['--thinking-level', 'HIGH'], ['--effort', 'high']):
-            raise ValueError('Agy High must select native high; a reviewed contract cannot lower or alias it')
+        if effort != 'extended' and args not in (['--thinking-level', effort], ['--thinking-level', effort.upper()], ['--effort', effort]):
+            raise ValueError('Agy explicit effort must select the same native level; no alias is allowed')
         inference = spec.get('inference_only', {})
         if contract['thinking_enabled'] is not None or any(
                 contract[field] != inference.get(field)
@@ -114,10 +116,10 @@ def effort_contract(provider, model, effort, spec):
             isinstance(metadata['value'], str) and not 0 < len(metadata['value']) <= 128) or (
             type(metadata['value']) is int and not -(2 ** 63) <= metadata['value'] < 2 ** 63):
         raise ValueError('Native reasoning effort metadata value must be a bounded native scalar')
-    if provider == 'gemini' and effort == 'high' and (
+    if effort != 'extended' and (
             path[-1] not in {'reasoning_effort', 'model_reasoning_effort', 'thinking_level', 'effort'}
-            or metadata['value'] not in ('high', 'HIGH')):
-        raise ValueError('Agy High metadata must attest the native high effort level')
+            or metadata['value'] not in (effort, effort.upper())):
+        raise ValueError(f'Explicit effort metadata must attest the native {effort} effort level')
     return contract
 
 

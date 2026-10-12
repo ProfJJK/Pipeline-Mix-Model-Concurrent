@@ -30,7 +30,7 @@ from cochem_pipeline.worker import strict_json, subscription_status
 
 
 _REPAIR_MODELS = {"codex": {"gpt-6-astra", "gpt-6-sol", "gpt-6.1-sol", "gpt-6-luna"},
-                  "claude": {"claude-fable-5-1", "claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-4-5"},
+                  "claude": {"claude-fable-5-1", "claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-4-5", "claude-haiku-5-5"},
                   "gemini": {"gemini-3.1-pro", "gemini-3.1-pro-preview", "gemini-3.8-flash"}}
 _PROTECTED_COMPONENTS = {".git", ".venv", "venv", "node_modules", "tests", "supervisor_tests",
                          "pipeline_tests", "mcp_tests", "cochem_supervisor"}
@@ -130,8 +130,9 @@ def validate_provider_spec(spec: Mapping[str, Any]) -> None:
     if not isinstance(spec.get("model"), str) or spec["model"] not in _REPAIR_MODELS[provider]:
         raise ValueError(f"Repair {provider} requires an exact Chapter 06 model")
     effort = spec.get("reasoning_effort")
-    supported_efforts = {'codex': ('low', 'medium', 'high', 'ultra'),
-                         'claude': ('extended',), 'gemini': ('extended', 'high')}
+    supported_efforts = {'codex': ('low', 'medium', 'high', 'xhigh', 'max', 'ultra'),
+                         'claude': ('low', 'medium', 'high', 'xhigh', 'max', 'extended'),
+                         'gemini': ('low', 'medium', 'high', 'extended')}
     if effort is not None and effort not in supported_efforts[provider]:
         raise ValueError("Repair reasoning effort must match the exact routed model")
     if 'integration_hold' in spec:

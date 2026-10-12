@@ -20,7 +20,7 @@ PROTOCOL = 'agy-stream-json'
 IDENTITY_POLICY = 'reported-model-equality'
 
 _SLUG = re.compile(r'^[a-z0-9][a-z0-9.-]{0,127}$')
-_BINDING_KEY = re.compile(r'^[A-Za-z0-9][A-Za-z0-9._/-]{0,199}(:(extended|high))?$')
+_BINDING_KEY = re.compile(r'^[A-Za-z0-9][A-Za-z0-9._/-]{0,199}(:(extended|low|medium|high))?$')
 _MAX_BINDINGS = 32
 _SLUG_EFFORT = re.compile(r'-(low|medium|high)$')
 # Member names are compared casefolded with separators removed, so that
@@ -96,7 +96,7 @@ def validate_model_bindings(spec):
     for key, value in table.items():
         if not isinstance(key, str) or not _BINDING_KEY.fullmatch(key):
             raise ValueError('Agy model binding key must be a routed model '
-                             'with an optional :extended or :high profile')
+                             'with an optional :extended, :low, :medium or :high profile')
         if isinstance(value, str):
             argv = reports = value
         elif isinstance(value, dict) and set(value) == {'argv', 'reports'}:

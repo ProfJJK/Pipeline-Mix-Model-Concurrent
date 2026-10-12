@@ -486,7 +486,7 @@ def codex_policy_probe_command(prefix, operation, *, mcp_names=(), reasoning_eff
     from .inference_policy import codex_policy_overrides
     commands = {'mcp': ['mcp', 'list', '--json'], 'features': ['features', 'list'],
                 'auth': ['login', 'status']}
-    if operation not in commands or reasoning_effort not in (None, 'low', 'medium', 'high', 'ultra'):
+    if operation not in commands or reasoning_effort not in (None, 'low', 'medium', 'high', 'xhigh', 'max', 'ultra'):
         raise ValueError('Unsupported native inference policy probe')
     args = [*prefix, '-a', 'never', '--sandbox', 'read-only',
             '-c', 'model_provider="openai"', '-c', 'forced_login_method="chatgpt"',
