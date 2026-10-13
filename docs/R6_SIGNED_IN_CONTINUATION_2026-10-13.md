@@ -1,5 +1,12 @@
 # R6 continuation after successful six-profile sign-in
 
+**Superseded after the 07:33 run:** `c7a9241` is now spent as well. All 18
+sessions verified; knowledge completed; agent acceptance held with a bare
+ValueError. R4 v8 was restored. Do not repeat this launch, sign in again or
+rebuild knowledge. Current evidence and the focused owner diagnostic are in
+[R6_AGENT_DIAGNOSTIC_2026-10-13.md](R6_AGENT_DIAGNOSTIC_2026-10-13.md).
+The remaining text records the historical prepared continuation.
+
 **07:14 attempt held before the R4 stop.** The `2571003` command is spent;
 preserve it and use the replacement owner sheet linked below. The
 receipt-projection defect and repair are recorded in
