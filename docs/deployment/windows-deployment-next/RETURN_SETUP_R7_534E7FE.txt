@@ -1,0 +1,49 @@
+R6 RECOVERY + R7 DEPLOYMENT — ONE OWNER COMMAND
+Source 534e7febf9d1beeb649711b6d24eb3cd3c974366; terminal replacement after restored R4 v6.
+
+At an idle Administrator PowerShell prompt, run the command below ONCE.
+This is the replacement command. Earlier deployment/recovery commands are spent.
+
+C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -File "C:\Users\ansac\CoChem427\r7-bundle-534e7fe\run_r7_launch.ps1" -LaunchManifest "C:\Users\ansac\CoChem427\r7-bundle-534e7fe\launch-manifest.json" -LaunchManifestSha256 4dcea58abec296d14d7b9f8418ed83427d100089c2c10b3e7a94063c35a2e164 -Apply
+
+INITIAL INPUT
+Existing Codex and Claude sign-ins are checked and reused. An explicitly
+logged-out Gemini worker can request a fresh Google sign-in, for up to six
+isolated profiles. Use only the NEW URL printed for that worker. Complete
+Google consent, paste its authorization code into the MASKED field and press
+Enter once. Do not paste an old URL/code or the full callback URL.
+Keys are ignored until the fresh native URL and code prompt appear.
+Escape cancels and waits for owned cleanup; do not close another process.
+
+All requested input is limited to the first 20 minutes from command start.
+No later sign-in, restart or manual continuation is planned. Provider timing
+cannot be guaranteed: if this initial window closes, the sitting holds.
+After the green walk-away message, leave this PowerShell window open and use
+the workstation normally. Installation and native acceptance may take longer.
+The sitting makes a temporary awake request, without changing a power plan.
+
+WHAT THIS DOES
+It verifies the exact ended TUI attempt and successful R4 v6 restoration,
+reuses the installed R6, obtains fresh authentication status, runs its remaining
+acceptance and switches to R6 only when verified. It then installs R7 offline,
+backs up/migrates the board, publishes the protected catalog and verifies R7.
+Four shared slots, Chapter 06, R:, existing credentials, original database
+records, captures and repair budgets are preserved. Tiers 5/6 retain the
+approved Claude/Codex choices plus backoff after Gemini Pro retirement.
+
+IF IT HOLDS
+Do not rerun, delete roots/tasks or sign in using an earlier URL. Preserve the
+window output and every artifact, and return the final status/error here.
+Fresh status files include sanitized terminal reasons; private provider output
+and codes are excluded. The script requests no unattended input or automatic
+retry. Uncertain cleanup or possibly running state is preserved for review.
+
+VERIFIED BEFORE DELIVERY
+501 serialized ordinary Windows source/inert tests passed; four protected-host
+checks were skipped. All 308 installer inputs and 484 prerequisite inputs were
+verified. All four exact packaged read-only plans and the console metadata
+probe passed. These checks do not prove SYSTEM/native OAuth or deployment.
+The latest actual host evidence is R4 v6 health recovery, with zero admission.
+
+Package evidence: R7_534E7FE_PACKAGE_EVIDENCE.json beside this sheet.
+Do not change the immutable r7-source/build/bundle-534e7fe folders.

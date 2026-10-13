@@ -1,20 +1,68 @@
 # R7 owner deployment package
 
-## Current hold: TUI authentication produced no output
+## Current replacement: native terminal recovery and one owner sitting
 
-The owner has now run `b274974`. Its TUI login emitted no URL or prompt and
-timed out after ten minutes. The exact terminal bridge receipt verifies cleanup
-and no submitted line, but the outer wrapper has no completion record. The
-owner's 00:31:06 UTC diagnostic confirms R4 is disabled and restore v6 absent.
-R6 activation and R7 installation/cutover have not been verified. **Do not
-rerun this package.** Its immutable files and earlier packages are preserved.
+The new owner command is in
+`docs/deployment/windows-deployment-next/RETURN_SETUP_R7.txt` and the deployment
+workspace's identically named sheet. It points to source
+`534e7febf9d1beeb649711b6d24eb3cd3c974366` and immutable bundle
+`C:\Users\ansac\CoChem427\r7-bundle-534e7fe`. Engineering has not invoked Apply.
 
-A separate reviewed owner-only R4 recovery has now succeeded as v6, with
-SYSTEM process identity and health verified. It reports zero admission
-capacity. Its command is spent; no new deployment command is ready. See
-[the exact Windows evidence and recovery](R6_AGY_LOGIN_FAILURE_2026-10-12.md).
-Source and fixture results below remain valid for their tested boundaries;
-they did not establish working native TUI authorization on this workstation.
+The owner already restored R4 as v6, with SYSTEM identity and health verified,
+but zero admission capacity. The separate recovery and b274974 deployment
+commands are spent. R6 activation and R7 installation/cutover remain unverified.
+The replacement verifies that exact history before stopping anything and reuses
+the installed R6. See [actual host evidence](R6_AGY_LOGIN_FAILURE_2026-10-12.md).
+
+The repaired attended path gives the isolated Agy child an owned pseudoconsole
+and selects its native manual Google flow. It accepts one masked code only
+after a fresh native URL and prompt, keeps input open for the exchange, and
+requires both worker/console cleanup plus fresh status. Unknown screens and
+missing startup output hold quickly with readable sanitized reasons. The full
+privacy/custody review and limits are in
+[the terminal repair](R6_AGY_TERMINAL_RECOVERY_2026-10-13.md).
+
+| Fresh artifact | Binding |
+| --- | --- |
+| Source freeze | `r7-source-534e7fe`, 199 files, 6,736,739 bytes |
+| Source manifest SHA256 | `a0d0bddaad26b6ebee1e17762d6bf7c09396caf9cb2a0d69acc2d452f5406386` |
+| Verified application wheel | `r7-build-534e7fe`, 1,109,909 bytes, 179 files |
+| Wheel SHA256 | `0c7a7e16330667abe31217ac3a811ed45a1d229e193ae2c53f1c4dadcf37b9de` |
+| Owner bundle | `r7-bundle-534e7fe`, 308 installer inputs |
+| Launch manifest SHA256 | `4dcea58abec296d14d7b9f8418ed83427d100089c2c10b3e7a94063c35a2e164` |
+| Copied R6 prerequisite | 484 inputs; manifest `a0c4f6a6a69643542b726061ca84854e90e5363efe366507c90a5da0b43c08bc` |
+| R7 install manifest SHA256 | `724287d718162452f31a633795c54ff5850b1d3e3a9e8c20163a7e4a2b4b2aa3` |
+
+Compared with b274974, **478 of its 481 prerequisite inputs remain
+byte-identical**. Only the R6 launch, attended adapter and exact-history verifier
+change; three terminal helpers are added. The original 33-file R5 review and all
+106 locked dependency wheels are retained and hash/size verified. The new wheel
+adds the terminal support module. The catalog remains the approved
+`owner-2026-10-12-pro-retired`: tiers 5/6 retain Claude/Codex plus backoff.
+Four slots, Chapter 06, credentials, original database records/captures, repair
+budgets and R: remain within the existing preservation boundaries.
+
+Two disjoint serialized Windows/Python 3.12 selections passed **501 source/inert
+tests**, with four protected-host skips. All final payload/prerequisite pins and
+the preserved previous package were verified. The four exact packaged read-only
+plans passed in **2.969 seconds**: R7 launch, copied R6 prerequisite, stopped R7
+installer and terminal wrapper. The packaged production call site also passed
+the metadata-only pseudo-console probe (`inherited_console_output_redirected=False`,
+child exit 0). Evidence is in
+`docs/deployment/windows-deployment-next/R7_534E7FE_PACKAGE_EVIDENCE.json`.
+These results do not attest native OAuth, SYSTEM/model deployment or full SRS
+acceptance. No engineering provider execution, protected write, elevation or
+host lifecycle action occurred.
+
+One owner command front-loads requested sign-ins inside the original 20-minute
+input deadline. Existing twelve Codex/Claude sessions are reused when verified.
+The green walk-away message precedes longer unattended acceptance/deployment.
+No late prompt, restart or manual continuation is planned; provider timing is
+not guaranteed. Failures preserve evidence and do not automatically repeat.
+The temporary awake request does not change a power plan.
+
+Everything below is historical. Its owner commands and then-current host
+states are superseded by this section and the current owner sheet.
 
 ## Historical replacement: interactive Agy authorization and reviewed failed session
 

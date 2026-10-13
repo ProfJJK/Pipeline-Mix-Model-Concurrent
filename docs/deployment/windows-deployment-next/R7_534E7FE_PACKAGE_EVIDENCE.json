@@ -1,0 +1,108 @@
+{
+  "schema": "cochem-r7-source-package-evidence/1",
+  "source_commit": "534e7febf9d1beeb649711b6d24eb3cd3c974366",
+  "launch_manifest_sha256": "4dcea58abec296d14d7b9f8418ed83427d100089c2c10b3e7a94063c35a2e164",
+  "source_manifest_sha256": "a0d0bddaad26b6ebee1e17762d6bf7c09396caf9cb2a0d69acc2d452f5406386",
+  "install_manifest_sha256": "724287d718162452f31a633795c54ff5850b1d3e3a9e8c20163a7e4a2b4b2aa3",
+  "prerequisite_manifest_sha256": "a0c4f6a6a69643542b726061ca84854e90e5363efe366507c90a5da0b43c08bc",
+  "application_wheel_sha256": "0c7a7e16330667abe31217ac3a811ed45a1d229e193ae2c53f1c4dadcf37b9de",
+  "application_wheel_bytes": 1109909,
+  "source_files": 199,
+  "source_bytes": 6736739,
+  "installer_inputs": 308,
+  "prerequisite_inputs": 484,
+  "unchanged_previous_prerequisite_inputs": 478,
+  "changed_prerequisite_inputs": [
+    "r6_attended_agy.ps1",
+    "run_r6_launch.ps1",
+    "verify_r6_auth_recovery.ps1"
+  ],
+  "added_prerequisite_inputs": [
+    "attended_agy_terminal.py",
+    "login_pipeline_worker_agy_terminal.ps1",
+    "worker_agy_terminal_bridge.py"
+  ],
+  "previous_package_verified_unchanged": true,
+  "runtime_dependency_wheels": 106,
+  "plans": [
+    {
+      "name": "r7_launch",
+      "exit_code": 0,
+      "seconds": 0.906,
+      "projection": {
+        "completes_pending_R6_first": true,
+        "payload_files": 308,
+        "maximum_shared_slots": 4,
+        "host_executed": false,
+        "input_window_minutes": 20,
+        "late_prompts": false,
+        "status": "R7_LAUNCH_READ_ONLY_PLAN"
+      }
+    },
+    {
+      "name": "r6_prerequisite",
+      "exit_code": 0,
+      "seconds": 0.735,
+      "projection": {
+        "maximum_shared_slots": 4,
+        "later_prompts": false,
+        "input_window_minutes": 20,
+        "retired_model_targets": 1,
+        "model_targets": 26,
+        "status": "R6_LAUNCH_PLAN",
+        "installation_and_host_acceptance_executed": false
+      }
+    },
+    {
+      "name": "r7_installer",
+      "exit_code": 0,
+      "seconds": 1.109,
+      "projection": {
+        "activation_ready": false,
+        "status": "READ_ONLY_PLAN",
+        "target_root": "C:\\Program Files\\CoChem\\Pipeline4.2.7-windows-20261012-r7-v1",
+        "schema": "cochem-r6-offline-install/1",
+        "files": 308
+      }
+    },
+    {
+      "name": "attended_terminal",
+      "exit_code": 0,
+      "seconds": 0.219,
+      "projection": {
+        "schema": "cochem-agy-terminal-plan/1",
+        "slot": "slot1",
+        "transport": "CONPTY_MANUAL_GOOGLE",
+        "tasks_changed": 0,
+        "provider_commands_executed": 0,
+        "model_jobs_executed": 0,
+        "activation_ready": false,
+        "startup_output_seconds": 30,
+        "fresh_prompt_seconds": 60,
+        "maximum_input_lines": 1,
+        "late_prompts": false
+      }
+    }
+  ],
+  "source_tests": {
+    "distinct_passed": 501,
+    "transport_recovery_package_passed": 246,
+    "routing_runtime_migration_passed": 255,
+    "protected_host_skipped": 4,
+    "real_process_cleanup_executed": false,
+    "source_tests_are_host_acceptance": false
+  },
+  "apply_executed": false,
+  "native_provider_execution": false,
+  "system_deployment_accepted": false,
+  "actual_host_state": "OWNER_RESTORED_R4_V6_HEALTH_VERIFIED_ZERO_ADMISSION",
+  "packaged_console_call_site": {
+    "fixture_sha256": "8bd26eea79953ae896347306d775c105afaa80c0c36bbc979a3f500d23eac2b1",
+    "source": "C:\\Users\\ansac\\CoChem427\\r7-bundle-534e7fe\\r6-prerequisite\\run_r6_launch.ps1",
+    "inherited_console_output_redirected": false,
+    "production_call_site_probe_exit": 0,
+    "metadata_only": true,
+    "deployment_functions_imported": false,
+    "provider_execution": false
+  }
+}

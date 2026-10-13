@@ -74,6 +74,9 @@ acceptance fixtures. No real-process cleanup tests were executed. The fixtures
 inject native APIs and temporary stores; they do not create a pseudoconsole,
 run Agy, elevate, edit protected state or start/stop a task.
 
-The final immutable package's file bindings and exact read-only plans must be
-recorded separately at delivery. Those plans are not SYSTEM, native OAuth,
+The final immutable package is `r7-bundle-534e7fe`. Its 308 installer inputs and
+484 prerequisite inputs passed hash/size verification. Four packaged read-only
+plans passed in 2.969 seconds, and the actual packaged call site passed its
+metadata-only console probe. Bindings and delivery evidence are recorded in
+`R7_LAUNCH_READY_2026-10-12.md`. Those plans are not SYSTEM, native OAuth,
 model or full SRS acceptance. R4 v6 recovery is the latest actual host evidence.
