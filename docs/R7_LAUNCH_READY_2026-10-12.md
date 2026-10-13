@@ -1,6 +1,68 @@
 # R7 owner deployment package
 
-## Current replacement: attended console repair and owner Pro retirement
+## Current replacement: interactive Agy authorization and reviewed failed session
+
+The owner command is in `docs/deployment/windows-deployment-next/RETURN_SETUP_R7.txt`.
+Fresh source is `b274974bf533f69b61d2aa5cf0bce3a815fbd9de`; immutable bundle is
+`C:\Users\ansac\CoChem427\r7-bundle-b274974`. The owner has not run it.
+The failed `e32949a` package, all prior sessions and the installed R6 remain intact.
+
+The returned diagnostic proves that the prior Agy bridge fed the owner's code,
+then native authentication failed after 62.08 seconds with cleanup verified.
+Static inspection found the print-mode 60-second wait in both installed Agy
+binaries. This is a strong suspect, not a proven provider cause. The repaired
+attended adapter selects the existing interactive bridge path and keeps the
+original cancellation, cleanup and initial 20-minute input cutoff. A fresh
+successful native status check is still required. Actual SYSTEM authorization
+through this mode has not been accepted by source tests.
+
+The recovery guard verifies the exact failed session/task, two pinned receipts,
+the old helper bytes, absent input packet, reviewed auth result and R4 v5
+restoration. It admits no additional session or later acceptance phase and
+does not run or edit the preserved task. Twelve Codex/Claude sessions are reused;
+only explicitly logged-out Agy profiles can request browser authorization.
+
+| Fresh artifact | Binding |
+| --- | --- |
+| Source freeze | `r7-source-b274974`, 198 files, 6,718,490 bytes |
+| Source manifest SHA256 | `1935f29bd1c33d0a336922eb081c5b9ba0eef1e310229918600ba77711dd1861` |
+| Verified application wheel | `r7-build-b274974`, 1,103,364 bytes, 178 files |
+| Wheel SHA256 | `0cdc264effedc76b9cd9838c1a64da25b7bc44ff2492e6455335b5052111e528` |
+| Owner bundle | `r7-bundle-b274974`, 307 installer inputs |
+| Launch manifest SHA256 | `cbc6a7bf1b1bbf49076e50789a9d9bfe320b6a41aaa0bacd2c6a0f2c9d56149e` |
+| Copied R6 prerequisite | 481 pinned inputs; manifest `d5e37a6df5299de71f30b9b7d4051c376efac3bace9da5ccc8b6b27865a4c812` |
+| R7 install manifest SHA256 | `3eec2f9d3745f26340492233a3b937dcf9fa1be4b925255808828284ec7d82bd` |
+
+Compared with `e32949a`, **479 of 481 prerequisite inputs are byte-identical**.
+Only `r6_attended_agy.ps1` and `verify_r6_auth_recovery.ps1` change. The source
+runtime payload and application wheel are byte-identical; this repair is in the
+owner deployment helpers. All 106 locked dependency wheels are reused offline.
+The versioned owner retirement still keeps Claude/Codex plus backoff at tiers
+5/6; no Flash substitution or historical-capture rewrite is added.
+
+The final two serialized ordinary Windows/Python 3.12 test selections passed
+**461 distinct source/inert tests**: 408 recovery/bridge/history/package tests
+in 105.84 seconds and 53 launch/migration/authentication tests in 11.20 seconds.
+All three exact packaged read-only plans passed in 2.657 seconds: R7 launch,
+copied R6 prerequisite (26 native targets, one retired) and stopped R7 installer.
+The exact packaged production call site also passed the inert pseudo-console
+probe with `inherited_console_output_redirected=False` and child exit 0.
+Evidence is in `docs/deployment/windows-deployment-next/R7_B274974_PACKAGE_EVIDENCE.json`.
+These are source/package checks, not OAuth, native model or SYSTEM acceptance.
+
+All requested human input occurs at the beginning, with the outer 20-minute
+cutoff retained. Provider timing is not promised. The green walk-away message
+precedes unattended native acceptance, R6 activation and R7 installation/cutover.
+Later failures preserve evidence and hold without prompts or automatic retries.
+No engineering Apply, elevation, protected write or host lifecycle action occurred.
+
+Latest actual Windows evidence remains the failed `e32949a` sitting: R4 v5
+health restoration verified, no R6 activation and no R7 installation/cutover.
+See [the diagnostic and repair](R6_AGY_LOGIN_FAILURE_2026-10-12.md).
+All subsequent sections are historical delivery checkpoints; their owner
+commands are superseded by the current sheet above.
+
+## Historical replacement: attended console repair and owner Pro retirement
 
 Use the updated `docs/deployment/windows-deployment-next/RETURN_SETUP_R7.txt`.
 It names fresh source `e32949a24302622d528538afa5d57cd9107cef5a` and immutable

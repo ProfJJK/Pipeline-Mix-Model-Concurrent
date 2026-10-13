@@ -1,58 +1,58 @@
-R6 CONSOLE RECOVERY + OWNER PRO RETIREMENT + R7 — ONE OWNER COMMAND
-Prepared 2026-10-12. Source e32949a. Supersedes the 2d63521 owner command.
-Earlier packages, failed attempts, sign-ins and installed R6 are preserved.
+R6 AGY AUTHORIZATION REPAIR + R7 — ONE ADMINISTRATOR COMMAND
+Prepared 2026-10-12. Source b274974. Supersedes the failed e32949a command.
+All earlier packages, failed sessions, tasks and receipts remain preserved.
 
-Why the latest run stopped: the R6 caller captured output and redirected its
-attended child, which refused before any Agy URL or login prompt. You did not
-miss a prompt. The exact call-site error was reproduced and fixed; the final
-packaged console probe now passes. The prior failure and R4 v4 restoration are
-verified before another stop. Existing six Codex and six Claude sign-ins are reused.
-
-Gemini Pro retirement: per your approval, tiers 5 and 6 retain only their existing
-Claude/Codex choices, then back off if both are exhausted. Flash is not substituted.
-The original installed R6 config stays intact. Its pinned one-shot native check
-omits exactly Pro High, explicitly records it unprobed, and checks 26 remaining
-targets. R7 publishes the versioned retirement catalog while retaining old captures.
+The diagnostic confirms your code was fed to Agy. Its print-mode login ended
+after 62.08 seconds; both installed binaries contain a 60-second print-mode
+authorization deadline. This is a strong suspect, not a proven provider cause.
+This replacement uses the bridge's existing interactive login mode. A successful
+fresh native status check must still prove authentication. Existing Codex and
+Claude sign-ins are reused; credentials are not copied or reset.
 
 1. Open Windows PowerShell as Administrator under AETHERDESK\ansac; accept UAC.
 2. Paste the SINGLE command below and press Enter once.
-3. Complete each requested Agy worker sign-in at the start. Open the URL printed
-   by the native CLI if a browser does not open. Follow that CLI's instructions
-   and enter any completion value into the same PowerShell window, not this chat.
-   Credentials are never copied from your regular account. Codex/Claude are reused.
+3. Complete any requested Agy worker sign-ins at the start. Open the printed
+   Google URL in your browser. Paste the returned authorization code into the
+   masked Code prompt in this same PowerShell window, then press Enter. Do not
+   paste codes into this chat. Escape cancels; letters P and Q are ordinary input.
 
-C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -File "C:\Users\ansac\CoChem427\r7-bundle-e32949a\run_r7_launch.ps1" -LaunchManifest "C:\Users\ansac\CoChem427\r7-bundle-e32949a\launch-manifest.json" -LaunchManifestSha256 c74e7fc163c9637c033bc26891af0a995f7338979b78afa9daeeab46517cb72f -Apply
+C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -File "C:\Users\ansac\CoChem427\r7-bundle-b274974\run_r7_launch.ps1" -LaunchManifest "C:\Users\ansac\CoChem427\r7-bundle-b274974\launch-manifest.json" -LaunchManifestSha256 cbc6a7bf1b1bbf49076e50789a9d9bfe320b6a41aaa0bacd2c6a0f2c9d56149e -Apply
 
-All login input is limited to the first 20 minutes after this command starts.
-Native provider authorization timing cannot be guaranteed from source tests;
-an expired window holds with evidence instead of asking for late input.
+All requested input is confined to the first 20 minutes after this command
+starts. Six isolated Agy profiles may need authorization. Provider timing is
+not guaranteed; expiry preserves evidence and holds instead of requesting late
+input. The native interactive bridge can end a still-open Agy after its bounded
+post-input wait; the subsequent status check decides whether sign-in succeeded.
 
-When the green message says "You can walk away", leave the window open. You can
-use other apps. Remaining native acceptance, offline installation and cutovers
-are unattended and can take substantially longer than 20 minutes. No planned
-late prompt, restart or manual continuation. A temporary awake request ends on
-command exit; no power plan is changed and the display can sleep normally.
+When the green message says "Authentication verified. You can walk away now",
+leave the window open and the computer on. You can use other apps. Remaining
+native acceptance, installation and cutovers run unattended and may take much
+longer than 20 minutes. No planned late prompts, restart or continuation command.
+A temporary awake request ends when the script exits; no power plan is changed.
 
-After R6 acceptance and activation, the same command installs fresh R7 stopped,
-waits for idle R6 and verified cleanup, keeps a full job-database backup, migrates
-catalog tables, stages protected authority, and verifies R7 health/publication.
-Until R7 publishes, temporary R6 retains its original matrix; a held pre-cutover
-attempt does not pretend the retirement catalog was activated. Four shared slots,
-Chapter 06, R:, credentials, original rows/captures and repair budgets are preserved.
+The command verifies the exact earlier failure and R4 v5 restoration, reuses the
+installed R6 without reinstalling it, authenticates only explicitly logged-out
+profiles, completes R6 acceptance and activation, then installs R7 stopped. R7
+waits for idle work, backs up the full job database, migrates catalog authority
+and verifies native control-probe publication. Uncertain state holds for review;
+rollback occurs only where the preserved transaction proves it safe.
 
-Do not run older commands separately. If HELD or an error appears, preserve every
-task, root and running process and return the printed output. Do not repeat it.
-Sanitized status records are saved. Recovery restores the proven prior controller
-only when the transaction permits safe rollback; uncertain state stays held.
+Gemini Pro retirement follows your decision: tiers 5 and 6 use their existing
+Claude/Codex choices, then back off; Flash is not substituted. R6's pinned native
+amendment checks 26 remaining targets and records Pro as retired/unprobed. R7
+publishes the versioned retirement catalog. Four shared slots, Chapter 06, R:,
+its startup task, credentials, original databases/captures and repair budgets
+are preserved. Historical captures and installed R6 configuration are retained.
 
-Success ends with R7_RUNNING_CATALOG_PUBLICATION_VERIFIED. That verifies the
-deployment transaction and native control probe, not full 4.2.7 SRS acceptance.
+Sanitized status paths are printed during the run. Success ends with
+R7_RUNNING_CATALOG_PUBLICATION_VERIFIED. This verifies deployment/publication,
+not full 4.2.7 SRS acceptance. If HELD or an error appears, preserve the output,
+tasks and files; do not repeat this command or run an older command separately.
 
-Engineering evidence: 365 retirement/routing/catalog source/inert tests passed,
-with two real-process tests excluded; 143 launch/authentication/runner/migration
-fixtures passed (selections overlap). All three actual packaged read-only plans
-passed. Final packaged console regression: output unredirected, child exit 0.
-No Apply, real provider/model acceptance or SYSTEM deployment was run by engineering.
-The fresh package has 307 installer inputs and 481 pinned prerequisite inputs.
-Of the prior 480 prerequisite inputs, 476 are identical, four reviewed scripts
-change, and the one retirement helper is added. All old packages remain unchanged.
+Engineering verification: 461 distinct serialized Windows source/inert tests
+passed. All three exact packaged read-only plans passed in 2.657 seconds, and
+the packaged console probe verified unredirected output and child exit 0.
+The bundle has 307 installer inputs and 481 pinned R6 prerequisite inputs;
+479 prerequisite inputs are identical to e32949a. Only the attended Agy helper
+and exact failed-session verifier differ. No engineering Apply, OAuth/provider
+execution, SYSTEM deployment or protected-state mutation was performed.
