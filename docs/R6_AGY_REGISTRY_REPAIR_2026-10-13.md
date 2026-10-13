@@ -108,3 +108,24 @@ shape, actual frozen-source amendment, fake native dispatch and receipts,
 unknown bindings/tool use rejection, held-history pins, R4 v9 stop sequencing,
 startup acceptance binding, package integrity, retired routes, and sanitized
 failure reporting. Real provider/child-launch tests were excluded.
+
+## Delivered package
+
+Repair source: **d6d336eee46bbb0a7326401d4e0f765c55663494**.
+Fresh immutable ordinary package: `C:\Users\ansac\CoChem427\r6-launch-d6d336e`.
+It has **500 pinned inputs**; launch manifest SHA256:
+`1dbb422ba4d8aaa81baf2c3519b4fff6f0fa1b6447b22ab8a1eaae48b3ba06a9`.
+Supplemental custody/registry helper SHA256:
+`97e16726c021e7196a4fae9097dc78279e8e040774a62e1b3f3d92b7d5609c8f`.
+
+The actual frozen PowerShell entry point's read-only plan passed with exit 0 in
+**6.955 seconds**. It verified all package pins and reported the registry repair,
+interrupted R4 start continuation, reuse of sessions/knowledge, no restaging,
+26 model targets, four shared slots and no late prompts. No Apply was invoked.
+Its assembly receipt deliberately remains a preparation record, not evidence
+of host deployment. The installed source_commit still reads `359ca92` because
+installed source is immutable and the supplemental helpers are separately pinned.
+
+The command is in `docs/RETURN_SETUP_R6_2026-10-13.txt` and the deployment
+workspace's `RETURN_SETUP_R6.txt` / `RETURN_SETUP_R6_AUTH_RECOVERY.txt`.
+Only these mutable instruction sheets were updated; old packages were not changed.

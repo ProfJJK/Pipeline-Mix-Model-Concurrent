@@ -1,21 +1,34 @@
-R6 NEXT STEP: READ-ONLY DIAGNOSTIC — 2026-10-13
+R6 AGY REGISTRY REPAIR AND CONTINUATION - 2026-10-13
 
-The 09:34 run of r6-launch-7451831 is spent. Do not rerun it.
-All 18 sign-ins, knowledge verification and the agent phase passed.
-Native model acceptance held; R4 v9 restoration did not verify.
-R4 has since answered a read-only health request, but this does not establish
-successful restoration or admission readiness. Preserve all tasks and processes.
+Run this command ONCE in Administrator Windows PowerShell.
+No new sign-in is planned. You can walk away after starting it.
+Keep the computer awake while acceptance and startup finish.
 
-In Administrator Windows PowerShell, run this read-only export once:
+C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -File "C:\Users\ansac\CoChem427\r6-launch-d6d336e\run_r6_launch.ps1" -LaunchManifest "C:\Users\ansac\CoChem427\r6-launch-d6d336e\launch-manifest.json" -LaunchManifestSha256 1dbb422ba4d8aaa81baf2c3519b4fff6f0fa1b6447b22ab8a1eaae48b3ba06a9 -Apply
 
-C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -File "C:\Users\ansac\Documents\Codex\2026-10-06\the-github-repository-is-located-at\windows-deployment-next\inspect-r6-native-hold-20261013-v1.ps1"
+The Agy request succeeded with no tool calls. Our parser mistook its global
+CLI tool advertisement for this agent's permissions. The repair is bound to
+the exact protected executable and inference-only agent; actual tool calls,
+subagent activity and model substitution remain rejected.
 
-Return the printed report path. No model, sign-in or deployment command runs.
-Only a new sanitized report is written in the ordinary deployment workspace.
-Administrator access is needed to read the private failure/task metadata.
-Twenty Windows PowerShell fixture tests passed; this is not host acceptance.
-Script SHA256: eefc1a84d699caa3c267d2f7046b25145417c43d09a1dcbe66d2935a2f57b755
+This fresh package reuses installed R6 and the 18 verified sessions.
+It verifies existing knowledge without rebuilding or restaging profiles.
+It handles the specifically recorded interrupted R4 v9 start using the
+reviewed stop helper, then runs the remaining acceptance and R6 cutover.
+Administrator access is required for SYSTEM tests and the Warden transaction.
+There are no planned late prompts, reboot or manual continuation commands.
+A changed session or failed check holds without asking for input.
 
-The agent is diagnosing the failed Agy response and R4 state together.
-Do not use an earlier R6/R7 launch command or repeat sign-in.
-Details: repository docs/R6_NATIVE_HOLD_2026-10-13.md.
+456 serialized source/fixture tests passed. The actual frozen package's
+read-only plan passed in 6.955 seconds. These are not host acceptance:
+R6 startup and actual model support still require this owner-run command.
+The unattended checks can take longer than 20 minutes.
+
+On a hold, preserve everything and return the final status. Do not retry.
+Pre-cutover failure invokes reviewed R4 restoration after a completed stop;
+once cutover is requested, possible running state is preserved for review.
+The prior R4 v9 restore was not verified; the new script does not assume it was.
+All earlier packages, tasks, receipts, credentials and databases remain intact.
+Do not replay 7451831 or older R6/R7 commands.
+R7 remains separate and needs a package bound to the final R6 action.
+Details: repository docs/R6_AGY_REGISTRY_REPAIR_2026-10-13.md.
