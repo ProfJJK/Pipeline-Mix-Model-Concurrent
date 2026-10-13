@@ -138,6 +138,27 @@ def test_wrapper_embedded_pins_match_exact_source():
         assert hashlib.sha256((root/relative).read_bytes()).hexdigest() in text
 
 
+def test_registered_task_validator_receives_actual_sddl_not_com_object(run_ps):
+    registration = str(SCRIPT.parents[1]/'docs/deployment/windows-deployment-next/register-stopped-warden-r3.ps1')
+    result = run_ps(r'''
+$t=$null;$e=$null;$ast=[Management.Automation.Language.Parser]::ParseFile('REGISTRATION',[ref]$t,[ref]$e)
+$f=$ast.FindAll({param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -ceq 'Assert-RegisteredTaskAcl'},$false)[0]
+. ([scriptblock]::Create($f.Extent.Text))
+$script:cochemRoot='C:\fixture';$script:python='C:\fixture\python.exe'
+Set-AgyTerminalNames 'slot1' ('1'*32)
+$a=[pscustomobject]@{Type=0;Path=$script:python;Arguments=(Get-AgyTerminalArguments 'slot1' ('1'*32));WorkingDirectory=$script:sessionRoot}
+$actions=[pscustomobject]@{Count=1;Action=$a};$actions|Add-Member ScriptMethod Item {param($n) $this.Action}
+$task=[pscustomobject]@{Name=$script:taskName;Definition=[pscustomobject]@{
+ Principal=[pscustomobject]@{UserId='SYSTEM';LogonType=5;RunLevel=1};Triggers=[pscustomobject]@{Count=0};Actions=$actions;
+ Settings=[pscustomobject]@{MultipleInstances=2;RestartCount=0;ExecutionTimeLimit='PT15M';Enabled=$true;AllowDemandStart=$true}}}
+$script:descriptor_flags=$null
+$task|Add-Member ScriptMethod GetSecurityDescriptor {param($flags) $script:descriptor_flags=$flags; 'O:BAG:BAD:P(A;;FA;;;SY)(A;;FA;;;BA)'}
+Assert-AgyTerminalTask $task 'slot1' ('1'*32)
+@{flags=$script:descriptor_flags;verified=$true}|ConvertTo-Json -Compress
+'''.replace('REGISTRATION', registration.replace("'", "''")))
+    assert result == dict(flags=7, verified=True)
+
+
 def test_public_report_is_allowlisted_and_omits_provider_text_and_secrets(run_ps):
     result=run_ps(r'''
 $record=[pscustomobject]@{slot='slot1';nonce=('1'*32);phase='receipt';reason='NO_NATIVE_STARTUP_OUTPUT';

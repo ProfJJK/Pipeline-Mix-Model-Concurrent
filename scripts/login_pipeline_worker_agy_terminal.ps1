@@ -199,7 +199,7 @@ function Invoke-AgyTerminalConsoleLoop {
 
 function Assert-AgyTerminalTask {
     param($Task,[string]$Slot,[string]$Nonce)
-    Assert-RegisteredTaskAcl $Task
+    Assert-RegisteredTaskAcl ([string]$Task.GetSecurityDescriptor(7))
     $d=$Task.Definition;$a=$d.Actions.Item(1)
     if($Task.Name -cne $script:taskName -or $d.Principal.UserId -cnotin @('SYSTEM','S-1-5-18') -or
        $d.Principal.LogonType -ne 5 -or $d.Principal.RunLevel -ne 1 -or $d.Triggers.Count -ne 0 -or $d.Actions.Count -ne 1 -or
