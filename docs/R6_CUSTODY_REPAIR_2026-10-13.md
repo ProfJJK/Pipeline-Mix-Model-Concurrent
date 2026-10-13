@@ -169,3 +169,23 @@ No Apply was invoked. The owner command is in
 Do not replay this package, earlier launch packages or the spent diagnostic.
 Preserve all their files and receipts unchanged. Replacement package details
 are recorded below after the frozen read-only plan passes.
+
+## Replacement package after the 09:18 hold
+
+Source checkpoint **7451831** supplies both permission-boundary fixes. Fresh
+ordinary package: `C:\Users\ansac\CoChem427\r6-launch-7451831`, **499 pinned
+inputs**. Launch manifest SHA256:
+`dbfd6bdb36299c85d4c1f1af78724749ff45ef1b5b31157731802cae220c6435`.
+The frozen entry point's read-only plan passed with exit0 in **7.136 seconds**.
+It reports reuse of verified sessions and completed knowledge, no profile
+restaging, the directory-custody amendment, 26 retained model targets and four
+shared slots. It performs no privileged installation or host acceptance.
+
+The owner command is in `RETURN_SETUP_R6_2026-10-13.txt` and the ordinary
+deployment workspace's `RETURN_SETUP_R6.txt`. Start it once from Administrator
+PowerShell, then walk away while the computer remains awake. No new sign-in
+or later manual input is planned. Preserve and report any hold; do not replay
+older packages. The previous immutably installed R6 and all failed packages
+are preserved; this new supplemental helper is copied and hash-bound only
+during the owner-run continuation. The engineer has not run Apply or changed
+the Warden. R6 startup and actual SYSTEM/model acceptance remain unverified.

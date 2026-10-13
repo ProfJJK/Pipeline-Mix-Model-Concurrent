@@ -89,6 +89,13 @@ enforce delete sharing. Read `docs/R6_CUSTODY_REPAIR_2026-10-13.md` for the
 proved repair and explicit continuation reusing completed knowledge/sign-ins.
 Only the owner runs the fresh pinned continuation. Old R7 bundles must not
 be used against its amended R6 startup action.
+The 09:18 run of bf5b5f6 held before stopping R4: its owner preflight tried to
+inspect SYSTEM-private knowledge. Replacement source 7451831 keeps that check
+in SYSTEM and uses the installed private-state reader, not a code-path reader.
+300 source/fixture tests and the frozen read-only plan passed. The fresh owner
+package is `C:\Users\ansac\CoChem427\r6-launch-7451831`; see the custody repair
+document for its manifest pin. Do not rerun bf5b5f6 or assume the replacement
+has run. R4 v8 remains the last observed running source.
 Codex/Claude/Agy share the sign-in
 preference above. The following 12 October handoff is historical context.
 

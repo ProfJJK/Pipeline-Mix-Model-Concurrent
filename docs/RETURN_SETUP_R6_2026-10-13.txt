@@ -1,4 +1,4 @@
-R6 DIRECTORY-CUSTODY REPAIR AND CONTINUATION — 2026-10-13
+R6 PERMISSION-BOUNDARY REPAIR AND CONTINUATION — 2026-10-13
 
 Run the command below ONCE in Administrator Windows PowerShell.
 No new sign-in is planned. You can walk away after starting it.
@@ -6,20 +6,22 @@ Keep the computer awake while the remaining validation and startup run.
 
 This reuses the installed R6, all verified sign-ins and completed knowledge.
 It applies the same pinned directory-handle repair in acceptance and startup.
+Private knowledge checks now run in SYSTEM and use the private-state reader.
 There are no planned late prompts, reboot or manual continuation commands.
 Administrator access is required for SYSTEM acceptance and the Warden cutover.
 
-C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -File "C:\Users\ansac\CoChem427\r6-launch-bf5b5f6\run_r6_launch.ps1" -LaunchManifest "C:\Users\ansac\CoChem427\r6-launch-bf5b5f6\launch-manifest.json" -LaunchManifestSha256 621b520f38cc5454e12a0b33092ffe6959a05041b028efe79e95f523d866811f -Apply
+C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -File "C:\Users\ansac\CoChem427\r6-launch-7451831\run_r6_launch.ps1" -LaunchManifest "C:\Users\ansac\CoChem427\r6-launch-7451831\launch-manifest.json" -LaunchManifestSha256 dbfd6bdb36299c85d4c1f1af78724749ff45ef1b5b31157731802cae220c6435 -Apply
 
 On a hold, preserve everything and return the final status; do not rerun it.
 Pre-cutover failure invokes the reviewed R4 restoration. After cutover starts,
 possible running state is preserved for review. There is no automatic retry.
 
-297 serialized source/fixture tests passed, including real Win32 sharing on
-ordinary temporary directories. The frozen read-only plan passed in 8.476s.
+300 serialized source/fixture tests passed, including both permission regressions
+and Win32 sharing on temporary directories. The frozen read-only plan passed in 7.136s.
 These are NOT actual six-worker SYSTEM/model acceptance or completed deployment.
 Unattended runtime can be longer. No total completion-time guarantee is made.
 
+The 09:18 bf5b5f6 attempt stopped before changing R4. Do not rerun that package.
 Old R6/R7 launch commands and the diagnostic are spent; do not use them.
 R7 remains separate and needs a package bound to the amended R6 startup action.
 Details: repository docs/R6_CUSTODY_REPAIR_2026-10-13.md.
