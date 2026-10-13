@@ -1,5 +1,32 @@
 # Standalone Agy sign-in for the six pipeline profiles
 
+## Successful host run and owner preference
+
+The owner ran `agy-signin-c4d4a66` and explicitly asked to retain this interaction
+for future sign-ins, describing it as easy to use. The preferred
+flow is **Copy URL -> open manually -> paste authorization code into the standard
+masked Windows dialog with Ctrl+V -> Submit/Enter**. Process the six profiles in
+sequence, verify each, and reuse sessions that are already authenticated. Retain
+this user interface and implementation; do not return to browser auto-launch,
+native TUI navigation or raw console-key collection. Signing in remains separate
+from deployment. Future attempts obtain fresh native URLs and codes.
+
+Actual owner-run result: **ALL_SIX_AGY_PROFILES_VERIFIED**. All six profiles report
+`SIGNED_IN_AND_VERIFIED`, authenticated true, native post-login catalog decision
+`VERIFIED` with exit code 0, submitted input deleted, and worker/terminal cleanup
+verified. The native login sessions themselves ended with code 1; authentication
+is established by the subsequent fresh status checks, not by treating that login
+exit code as success. Setup before the profile sequence took **78.9 seconds**;
+the transcript does not establish total user-input or end-to-end elapsed time.
+
+The sanitized protected report was independently read without elevation:
+`C:\Program Files\CoChem\AgySignIn427-6f2553e0f3e04a1598e64ffaad1d7255\status.json`.
+SHA-256: `96e4d2a872ff64a265efde9f1d1dade42db73f9da85863befc93692ece7ccfff`.
+It records zero native model jobs, no daemon-task changes, no copied credentials
+and activation_ready false. This is real six-profile Agy authentication evidence;
+it does not establish R6/R7 deployment or model/effort acceptance. No new sign-in
+is required from the owner now. Preserve all successful and failed artifacts.
+
 ## Latest repair: native prompt wording and ordinary copy/paste
 
 The owner ran `agy-signin-b048393`. Agy 1.3.1 successfully produced a fresh

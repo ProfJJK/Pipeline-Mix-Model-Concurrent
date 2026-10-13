@@ -60,6 +60,18 @@ behavioural tests live in the pipeline repository (`pipeline_tests/test_cochem_h
 - If the machine crashes again, the owner can analyze `C:\WINDOWS\Minidump\*.dmp` with WinDbg
   (`!analyze -v`).
 
+## Owner-approved Agy sign-in experience
+2026-10-13: the owner explicitly approved the successful `agy-signin-c4d4a66`
+flow as the method to retain for any future Agy sign-in. Use the standard Windows
+dialog with a selectable fresh URL, **Copy URL**, a masked field supporting normal
+Ctrl+V, and **Submit**/Enter. The owner opens the URL manually. Handle profiles
+sequentially, verify authentication after each, and skip already verified sessions.
+Do not revert to automatic browser launching, native TUI navigation, raw console
+key capture, or deployment as a prerequisite for signing in. Preserve the existing
+isolation/cleanup checks. See `docs/AGY_SIGNIN_2026-10-13.md` for the successful
+six-profile host receipt and the reusable implementation. Fresh attempts always
+need their own URL/code; never reuse prior OAuth links or codes.
+
 ## Current handoff
 2026-10-12: the Claude Code session has released all locks to the takeover agent; see
 `docs/AGENT_RELEASE_NOTICE_2026-10-12.md`.

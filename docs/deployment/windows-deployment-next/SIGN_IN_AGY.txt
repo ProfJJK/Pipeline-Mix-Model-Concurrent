@@ -1,3 +1,14 @@
+COMPLETED: ALL SIX AGY PROFILES VERIFIED - 2026-10-13
+
+No repeat sign-in is needed now. The owner approved this Copy URL / manual
+browser / masked Windows dialog / Submit flow for any future Agy sign-in.
+The command below is preserved as a reference, not an instruction to rerun.
+Successful receipt: AgySignIn427-6f2553e0f3e04a1598e64ffaad1d7255/status.json
+SHA256: 96e4d2a872ff64a265efde9f1d1dade42db73f9da85863befc93692ece7ccfff
+R6/R7 deployment was not performed by this sign-in command.
+
+----- Historical instructions for the successful run -----
+
 AGY SIGN-IN ONLY - STANDARD COPY/PASTE, SIX PROFILES
 
 Run this replacement once in an idle Administrator PowerShell window:

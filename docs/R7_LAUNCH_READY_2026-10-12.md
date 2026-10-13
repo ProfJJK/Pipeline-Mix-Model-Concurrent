@@ -1,5 +1,11 @@
 # R7 owner deployment package
 
+**Authentication completed:** the owner ran `agy-signin-c4d4a66`; all six Agy
+profiles are verified with cleanup complete. The standard URL/masked-dialog
+interface is now the owner's recorded preference for future sign-ins. See
+`AGY_SIGNIN_2026-10-13.md` for the actual host receipt. R6/R7 were not deployed
+by this authentication command, and repeat sign-in is not currently required.
+
 The current standalone sign-in package is `agy-signin-c4d4a66`, repairing the
 actual native prompt wording and replacing the unusable TUI display with a
 standard Windows URL/code dialog. See [the owner command](AGY_SIGNIN_READY.txt).
