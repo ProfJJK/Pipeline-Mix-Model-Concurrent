@@ -1,5 +1,11 @@
 # Native terminal repair after the zero-output Agy attempt
 
+**Superseded owner command:** the owner ran 534e7fe and its wrapper failed in
+task permission validation before Agy started. R4 was restored as v7. Do not
+repeat that deployment command. See [standalone Agy sign-in](AGY_SIGNIN_2026-10-13.md)
+for the reproduced registration bug and the separate URL-only authentication
+sequence. The sections below preserve the earlier delivery evidence.
+
 The owner's exact R4 v6 recovery succeeded. The restored SYSTEM controller
 passed process identity and health checks, but reported zero admission capacity.
 R6 activation and R7 installation/cutover remain unverified. The b274974
