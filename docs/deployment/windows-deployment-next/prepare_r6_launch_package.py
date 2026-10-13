@@ -29,7 +29,7 @@ def read_regular(path, maximum=16777216):
     return data
 
 
-def prepare(repository, bundle, destination, auth_recovery=False, verified_continuation=False, custody_continuation=False):
+def prepare(repository, bundle, destination, auth_recovery=False, verified_continuation=False, custody_continuation=False, native_continuation=False):
     repository,bundle,destination=map(Path,(repository,bundle,destination))
     if destination.exists() or not destination.is_absolute() or re.search(r'(?i)[\\/](gdrive|google drive)[\\/]',str(destination)):
         raise ValueError('Use a fresh ordinary launch folder outside Google Drive')
@@ -59,6 +59,8 @@ def prepare(repository, bundle, destination, auth_recovery=False, verified_conti
         if not verified_continuation:
             raise ValueError('Custody continuation requires the signed-in, immutable R6')
         inputs['r6_custody_amendment.py']=read_regular(repository/'scripts/r6_custody_amendment.py')
+    if native_continuation and not custody_continuation:
+        raise ValueError('Native continuation requires the reviewed custody continuation')
     if not 10 <= len(inputs) <= 1024 or sum(map(len,inputs.values()))>128*1024**2:
         raise ValueError('Launch input inventory exceeds bounds')
     for name in inputs:
@@ -86,6 +88,8 @@ def prepare(repository, bundle, destination, auth_recovery=False, verified_conti
         launch['verified_signin_continuation']='20261013-six-agy-verified-r4-v7'
     if custody_continuation:
         launch['agent_custody_continuation']='20261013-reviewed-agent-hold-r4-v8'
+    if native_continuation:
+        launch['native_registry_continuation']='20261013-reviewed-codex-cwd-hold-r4-v10'
     data=(json.dumps(launch,indent=2)+'\n').encode()
     with (destination/'launch-manifest.json').open('xb') as out:out.write(data)
     launch_hash=digest(data)
@@ -107,4 +111,5 @@ if __name__=='__main__':
     parser.add_argument('--auth-recovery', action='store_true')
     parser.add_argument('--verified-continuation', action='store_true')
     parser.add_argument('--custody-continuation', action='store_true')
+    parser.add_argument('--native-continuation', action='store_true')
     print(json.dumps(prepare(**vars(parser.parse_args())),indent=2))

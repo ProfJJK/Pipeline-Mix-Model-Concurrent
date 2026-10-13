@@ -152,6 +152,7 @@ function Assert-R6RegistryAmendment {
         $Value.executable_sha256 -cne '38f30c7dd1ed808f5cf98fe2014de3d30903035a4f0df02d3eb72a9ff8993741' -or
         $Value.agent_sha256 -cne '5c0082d70d073263a56d748a46187008968c070d0efc7d5b7612c2fd61d11810' -or
         $Value.advertised_registry_scope -cne 'cli_builtin_runners' -or
+        $Value.codex_workspace_selection -cne 'validated_process_cwd' -or
         -not (Test-ExactBool $Value.agent_identity_required $true) -or
         -not (Test-ExactBool $Value.actual_tool_steps_rejected $true) -or
         -not (Test-ExactBool $Value.installed_files_modified $false)){

@@ -1,5 +1,12 @@
 # R6 native command exit — 13 October, 11:37 run
 
+**Update, 13 October:** the requested v2 report was received. Agy Flash Low
+and Claude Haiku Medium passed; Codex Luna Medium failed at startup with the
+exact fingerprint of Windows error 1. See
+[the RAM cwd repair](R6_CODEX_RAM_CWD_REPAIR_2026-10-13.md). The diagnostic below
+is complete; do not ask the owner to repeat it. The following text records the
+earlier evidence request.
+
 The owner ran `r6-launch-d6d336e`. It is spent; preserve its contents and all
 protected evidence. No new deployment or sign-in command is ready.
 

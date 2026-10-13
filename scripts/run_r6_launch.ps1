@@ -199,19 +199,19 @@ function Test-R6NativeContinuation {
     param($Manifest)
     $property=$Manifest.PSObject.Properties['native_registry_continuation']
     if($null -eq $property){return $false}
-    if($property.Value -cne '20261013-reviewed-native-hold-r4-v9' -or -not (Test-R6CustodyContinuation $Manifest)){
+    if($property.Value -cne '20261013-reviewed-codex-cwd-hold-r4-v10' -or -not (Test-R6CustodyContinuation $Manifest)){
         throw 'Unreviewed native registry continuation.'}
     return $true
 }
 
 function Invoke-R6NativeContinuationStop {
-    if($script:R5.base_source.kind -cne 'r4-restore' -or $script:R5.base_source.source_attempt -cne 'v9'){
-        throw 'Native continuation requires the reviewed R4 v9 task action.'}
+    if($script:R5.base_source.kind -cne 'r4-restore' -or $script:R5.base_source.source_attempt -cne 'v10'){
+        throw 'Native continuation requires the reviewed R4 v10 task action.'}
     $attempt=Get-R5FreeAttempt $script:NsStopR5
     $script:R5.s2_attempted=$true;$script:R5.s2_stop_attempt=$attempt
-    $result=Invoke-R5StopR5 $attempt 'r4' 'v9' -RecoverInterruptedStart
-    if(-not $result.ok -or $result.held){throw 'The reviewed interrupted-start stop held. Preserve the running/stopped state; no automatic retry.'}
-    $script:R5.base_source=[pscustomobject]@{kind='r4-restore';source_attempt='v9';stop_attempt=$attempt}
+    $result=Invoke-R5StopR5 $attempt 'r4' 'v10'
+    if(-not $result.ok -or $result.held){throw 'The reviewed R4 v10 stop held. Preserve the running/stopped state; no automatic retry.'}
+    $script:R5.base_source=[pscustomobject]@{kind='r4-restore';source_attempt='v10';stop_attempt=$attempt}
     $script:R5.s2=$result.status;$script:R5.s2_done=$true
     Write-R5Receipt 'S02' $result.status
 }
@@ -390,7 +390,8 @@ function Invoke-R6LaunchMain {
             @{status='R6_LAUNCH_PLAN';model_targets=$(if($retired){26}else{27});retired_model_targets=$(if($retired){1}else{0});
                 maximum_shared_slots=4;input_window_minutes=20;later_prompts=$false;reuse_verified_sessions=$signedIn;
                 runtime_retirement_guard=$signedIn;directory_custody_amendment=$custody;
-                agy_registry_amendment=$native;interrupted_r4_start_continuation=$native;
+                agy_registry_amendment=$native;codex_ram_cwd_amendment=$native;
+                verified_r4_v10_continuation=$native;interrupted_r4_start_continuation=$false;
                 reuse_completed_knowledge=$custody;profile_restaging=(-not $custody);
                 installation_and_host_acceptance_executed=$false}|ConvertTo-Json;return
         }

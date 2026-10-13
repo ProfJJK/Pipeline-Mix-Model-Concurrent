@@ -1,0 +1,314 @@
+{
+    "schema":  "cochem-r6-native-hold-diagnostic/2",
+    "observed_at_utc":  "2026-10-13T19:48:31.8338361Z",
+    "protected_state_modified":  false,
+    "provider_commands_executed":  0,
+    "task_mutations":  0,
+    "credentials_read":  false,
+    "raw_provider_output_read":  true,
+    "raw_provider_output_published":  false,
+    "records":  [
+                    {
+                        "projection":  {
+                                           "error_type":  "ProviderFailure",
+                                           "category":  "code",
+                                           "phase":  "native",
+                                           "schema":  "cochem-r6-system-phase/1",
+                                           "status":  "HELD_PRESERVE_PARTIAL",
+                                           "manifest_sha256":  "bffcf617620320109a3ff1bcbdcc2e1d4918f9571721dc4642efeed4d0b7a2c4",
+                                           "candidate_sha256":  "a8b9b2052402f30860188721f986686c5a2f6785e563045edf295adae250f288",
+                                           "automatic_retry":  false,
+                                           "late_prompt":  false,
+                                           "activation_ready":  false
+                                       },
+                        "sha256":  "ac380c29f4100048c81f2057acb7d1635ee76ecf2d47eb4a0347f45399157691",
+                        "relative":  "R6Acceptance4.2.7-windows-20261012-v1-native-c9ff4ce625824ebaafff6f4d216f271d\\held.json",
+                        "present":  true
+                    },
+                    {
+                        "projection":  {
+                                           "error_type":  "ProviderFailure",
+                                           "category":  "code",
+                                           "phase":  "target-02",
+                                           "schema":  "cochem-r6-native-acceptance/1",
+                                           "status":  "HELD_PRESERVE_PARTIAL",
+                                           "native_plan_sha256":  "8b20f15b86945386ae879617f1dd984957082164511621c295300bcf2bfd38bd",
+                                           "completed":  2,
+                                           "automatic_retry":  false,
+                                           "late_prompt":  false,
+                                           "activation_ready":  false
+                                       },
+                        "sha256":  "46e6a34d962c2fc0fdc9b1ae668bafefe50d49948829009da83a2c7fb1e829e8",
+                        "relative":  "R6Acceptance4.2.7-windows-20261012-v1-native-c9ff4ce625824ebaafff6f4d216f271d\\native\\native-held.json",
+                        "present":  true
+                    },
+                    {
+                        "projection":  {
+                                           "phase":  "auth",
+                                           "schema":  "cochem-r6-system-phase/1",
+                                           "status":  "PHASE_COMPLETED",
+                                           "manifest_sha256":  "bffcf617620320109a3ff1bcbdcc2e1d4918f9571721dc4642efeed4d0b7a2c4",
+                                           "candidate_sha256":  "a8b9b2052402f30860188721f986686c5a2f6785e563045edf295adae250f288",
+                                           "native_plan_sha256":  "6ce9f2afc804435a1b5e3f70c3056f97698c547b70554ba15b4332bb884622ee",
+                                           "activation_ready":  false,
+                                           "result_status":  "ALL_SESSIONS_VERIFIED"
+                                       },
+                        "sha256":  "6a02509b3735f1d6b9b8e3b81571e6387701f9c78bfba290b9234d4df0617adb",
+                        "relative":  "R6Acceptance4.2.7-windows-20261012-v1-auth-3f38a0d197444bc885366496eb549ac6\\result.json",
+                        "present":  true
+                    },
+                    {
+                        "projection":  {
+                                           "phase":  "knowledge",
+                                           "schema":  "cochem-r6-system-phase/1",
+                                           "status":  "PHASE_COMPLETED",
+                                           "manifest_sha256":  "bffcf617620320109a3ff1bcbdcc2e1d4918f9571721dc4642efeed4d0b7a2c4",
+                                           "candidate_sha256":  "a8b9b2052402f30860188721f986686c5a2f6785e563045edf295adae250f288",
+                                           "native_plan_sha256":  "6ce9f2afc804435a1b5e3f70c3056f97698c547b70554ba15b4332bb884622ee",
+                                           "activation_ready":  false,
+                                           "result_status":  "EXISTING_KNOWLEDGE_AUTHORITY_VERIFIED"
+                                       },
+                        "sha256":  "dd62adaa2986117a8392f8feb4f2d206359c36325cdc1b63007d8c56e191a121",
+                        "relative":  "R6Acceptance4.2.7-windows-20261012-v1-knowledge-bcc27b51c50d4bf7bd733cfecffcdec2\\result.json",
+                        "present":  true
+                    },
+                    {
+                        "projection":  {
+                                           "phase":  "agent",
+                                           "schema":  "cochem-r6-system-phase/1",
+                                           "status":  "PHASE_COMPLETED",
+                                           "manifest_sha256":  "bffcf617620320109a3ff1bcbdcc2e1d4918f9571721dc4642efeed4d0b7a2c4",
+                                           "candidate_sha256":  "a8b9b2052402f30860188721f986686c5a2f6785e563045edf295adae250f288",
+                                           "native_plan_sha256":  "6ce9f2afc804435a1b5e3f70c3056f97698c547b70554ba15b4332bb884622ee",
+                                           "activation_ready":  false,
+                                           "result_status":  "SIX_WORKER_AGENT_CUSTODY_VERIFIED"
+                                       },
+                        "sha256":  "a6ccc6b8af0d1879e5de13bf167430c0a3dc48b354d1ab8765d77217855ec922",
+                        "relative":  "R6Acceptance4.2.7-windows-20261012-v1-agent-6ca1c0225e8a4e6caac5c4fd0349558b\\result.json",
+                        "present":  true
+                    },
+                    {
+                        "projection":  {
+                                           "attempt":  "v10",
+                                           "target":  "r4",
+                                           "schema":  "cochem-warden-retarget/3",
+                                           "status":  "WARDEN_RETARGETED_TO_R4_NOT_STARTED",
+                                           "task_state":  1,
+                                           "running_instances":  0,
+                                           "enabled_before":  false,
+                                           "enabled_after":  false,
+                                           "started":  false
+                                       },
+                        "sha256":  "30b09e86c8e921cec5abdc46c00fcbc0ea86e93188cecc2d0e4651d6c878bbc9",
+                        "relative":  "WardenRetarget4.2.7-windows-20261011-r4-v10\\retarget-receipt.json",
+                        "present":  true
+                    },
+                    {
+                        "projection":  {
+                                           "attempt":  "v10",
+                                           "target":  "r4",
+                                           "schema":  "cochem-warden-start-intent/3",
+                                           "retarget_receipt_sha256":  "30b09e86c8e921cec5abdc46c00fcbc0ea86e93188cecc2d0e4651d6c878bbc9",
+                                           "enabled_before":  false,
+                                           "exactly_one_start":  true,
+                                           "enable_before_run":  true,
+                                           "retry":  false
+                                       },
+                        "sha256":  "3d0d7cc1bab4bca483a36853124dd272150a78e1d2550adb1362f05cccb07a40",
+                        "relative":  "WardenRetarget4.2.7-windows-20261011-r4-v10\\start-intent.json",
+                        "present":  true
+                    },
+                    {
+                        "projection":  {
+
+                                       },
+                        "sha256":  null,
+                        "relative":  "WardenRetarget4.2.7-windows-20261011-r4-v10\\start-held.json",
+                        "present":  false
+                    },
+                    {
+                        "projection":  {
+                                           "attempt":  "v10",
+                                           "target":  "r4",
+                                           "schema":  "cochem-warden-start/3",
+                                           "status":  "WARDEN_R4_RESTARTED_HEALTH_VERIFIED",
+                                           "retarget_receipt_sha256":  "30b09e86c8e921cec5abdc46c00fcbc0ea86e93188cecc2d0e4651d6c878bbc9",
+                                           "task_state":  4,
+                                           "running_instances":  1,
+                                           "health_samples":  2,
+                                           "automatic_retry_allowed":  false,
+                                           "enabled_before":  false,
+                                           "enabled_after":  true,
+                                           "exactly_one_start_requested":  true
+                                       },
+                        "sha256":  "fbfa6309cc0a8475ef8063342760750ad8208b91d8fa9f55733693e6dca97974",
+                        "relative":  "WardenRetarget4.2.7-windows-20261011-r4-v10\\start-receipt.json",
+                        "present":  true
+                    }
+                ],
+    "completed_targets":  [
+                              {
+                                  "effort":  "low",
+                                  "phase":  "target-00",
+                                  "status":  "NATIVE_SELECTOR_ACCEPTED",
+                                  "model":  "gemini-3.8-flash",
+                                  "worker":  "slot1",
+                                  "provider":  "gemini",
+                                  "sha256":  "c86c973058c64fceee4bd8ec47b125dfd65f8ca851edbda41fed41beff6890c7"
+                              },
+                              {
+                                  "effort":  "medium",
+                                  "phase":  "target-01",
+                                  "status":  "NATIVE_SELECTOR_ACCEPTED",
+                                  "model":  "claude-haiku-5-5",
+                                  "worker":  "slot2",
+                                  "provider":  "claude",
+                                  "sha256":  "731efdd0ebfe0cde0bed648c206a18c1e8a585680852f787f0e8eb3287d834db"
+                              }
+                          ],
+    "tasks":  {
+                  "warden":  {
+                                 "present":  true,
+                                 "state":  4,
+                                 "actions":  1,
+                                 "last_result":  267009,
+                                 "instances":  1,
+                                 "r4_working_directory":  true,
+                                 "r4_executable":  true,
+                                 "readable":  true,
+                                 "enabled":  true,
+                                 "system_principal":  true
+                             },
+                  "native":  {
+                                 "last_result":  1,
+                                 "readable":  true,
+                                 "instances":  0,
+                                 "present":  true,
+                                 "state":  3,
+                                 "enabled":  true
+                             }
+              },
+    "target":  {
+                   "effort":  "medium",
+                   "reservation_sha256":  "a3f6f94d7acc33abcf2ea1cc6c59642e2e676e7ba21d73d2ab886bdcbd04ad88",
+                   "phase":  "target-02",
+                   "model":  "gpt-6-luna",
+                   "worker":  "slot3",
+                   "provider":  "codex"
+               },
+    "native_failure":  {
+                           "sha256":  "50041af6fb99c259aa3f20cdd5eccbb7d49d8f6de332f4d55f7b0beb2d6d857b",
+                           "projection":  {
+                                              "envelope_kind":  "none",
+                                              "category":  "code",
+                                              "schema":  "cochem-native-failure-metadata/1",
+                                              "stdout_sha256":  "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                                              "stderr_sha256":  "bf3b7cabd780d9bb2724f0fb4ba1bc0e72f016a6d5cffb6896ba2fceed61433c",
+                                              "stdout_bytes":  0,
+                                              "stderr_bytes":  40,
+                                              "exit_code":  1
+                                          }
+                       },
+    "stdout_indicators":  {
+                              "flags":  [
+
+                                        ],
+                              "envelopes":  {
+                                                "json_lines":  0,
+                                                "non_json_lines":  0,
+                                                "error_records":  0,
+                                                "result_records":  0,
+                                                "is_error_records":  0,
+                                                "init_records":  0,
+                                                "success_records":  0,
+                                                "failure_records":  0,
+                                                "projection_truncated":  false
+                                            },
+                              "http_status":  [
+
+                                              ],
+                              "markers":  {
+                                              "unknown_flag":  false,
+                                              "invalid_argument":  false,
+                                              "unsupported_effort":  false,
+                                              "unsupported_model":  false,
+                                              "permission_denied":  false,
+                                              "authentication":  false,
+                                              "token_expired":  false,
+                                              "quota":  false,
+                                              "capacity":  false,
+                                              "internal_error":  false,
+                                              "unavailable":  false,
+                                              "timeout":  false,
+                                              "network":  false,
+                                              "tls":  false,
+                                              "cancelled":  false,
+                                              "missing_file":  false,
+                                              "panic":  false,
+                                              "memory":  false,
+                                              "stream_json":  false,
+                                              "schema":  false,
+                                              "agent":  false,
+                                              "tool":  false,
+                                              "turn_limit":  false,
+                                              "budget":  false,
+                                              "verbose_required":  false,
+                                              "stdin":  false,
+                                              "backend":  false
+                                          }
+                          },
+    "stderr_indicators":  {
+                              "flags":  [
+
+                                        ],
+                              "envelopes":  {
+                                                "json_lines":  0,
+                                                "non_json_lines":  1,
+                                                "error_records":  0,
+                                                "result_records":  0,
+                                                "is_error_records":  0,
+                                                "init_records":  0,
+                                                "success_records":  0,
+                                                "failure_records":  0,
+                                                "projection_truncated":  false
+                                            },
+                              "http_status":  [
+
+                                              ],
+                              "markers":  {
+                                              "unknown_flag":  false,
+                                              "invalid_argument":  false,
+                                              "unsupported_effort":  false,
+                                              "unsupported_model":  false,
+                                              "permission_denied":  false,
+                                              "authentication":  false,
+                                              "token_expired":  false,
+                                              "quota":  false,
+                                              "capacity":  false,
+                                              "internal_error":  false,
+                                              "unavailable":  false,
+                                              "timeout":  false,
+                                              "network":  false,
+                                              "tls":  false,
+                                              "cancelled":  false,
+                                              "missing_file":  false,
+                                              "panic":  false,
+                                              "memory":  false,
+                                              "stream_json":  false,
+                                              "schema":  false,
+                                              "agent":  false,
+                                              "tool":  false,
+                                              "turn_limit":  false,
+                                              "budget":  false,
+                                              "verbose_required":  false,
+                                              "stdin":  false,
+                                              "backend":  false
+                                          }
+                          },
+    "stream_hashes":  {
+                          "stderr":  "bf3b7cabd780d9bb2724f0fb4ba1bc0e72f016a6d5cffb6896ba2fceed61433c",
+                          "stdout":  "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+                      },
+    "stream_hashes_match_failure":  true,
+    "native_detail_status":  "PROJECTED_EXISTING_PROBE"
+}

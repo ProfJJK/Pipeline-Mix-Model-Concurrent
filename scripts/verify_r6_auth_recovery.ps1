@@ -410,7 +410,7 @@ function Get-R6VerificationFailure {
         hresult=[int]$Failure.Exception.HResult;frames=$frames;raw_error_published=$false}
 }
 
-function Assert-R6NativeContinuationEvidence {
+function Assert-R6EarlierNativeContinuationEvidence {
     # Bind the owner's exported 09:34 evidence. Do not retry an arbitrary hold.
     $prefix='R6Acceptance4.2.7-windows-20261012-v1-'
     $rows=@(
@@ -448,6 +448,54 @@ function Assert-R6NativeContinuationEvidence {
         if(Test-Path -LiteralPath (Join-Path $restoreRoot $name)){throw 'R4 v9 has later evidence; do not guess a continuation.'}}
     # The released stop helper validates the task/action/process and idle proof
     # again at the actual mutation boundary, using RecoverInterruptedStart.
+    foreach($entry in $rows){$prefix+$entry.phase+'-'+$entry.id}
+}
+
+function Assert-R6NativeContinuationEvidence {
+    # Preserve the previously reviewed 09:34 history as well as the new hold.
+    $earlier=@(Assert-R6EarlierNativeContinuationEvidence)
+    $prefix='R6Acceptance4.2.7-windows-20261012-v1-'
+    $rows=@(
+        @{phase='auth';id='3f38a0d197444bc885366496eb549ac6';file='result.json';hash='6a02509b3735f1d6b9b8e3b81571e6387701f9c78bfba290b9234d4df0617adb';status='PHASE_COMPLETED';result='ALL_SESSIONS_VERIFIED'},
+        @{phase='knowledge';id='bcc27b51c50d4bf7bd733cfecffcdec2';file='result.json';hash='dd62adaa2986117a8392f8feb4f2d206359c36325cdc1b63007d8c56e191a121';status='PHASE_COMPLETED';result='EXISTING_KNOWLEDGE_AUTHORITY_VERIFIED'},
+        @{phase='agent';id='6ca1c0225e8a4e6caac5c4fd0349558b';file='result.json';hash='a6ccc6b8af0d1879e5de13bf167430c0a3dc48b354d1ab8765d77217855ec922';status='PHASE_COMPLETED';result='SIX_WORKER_AGENT_CUSTODY_VERIFIED'},
+        @{phase='native';id='c9ff4ce625824ebaafff6f4d216f271d';file='held.json';hash='ac380c29f4100048c81f2057acb7d1635ee76ecf2d47eb4a0347f45399157691';status='HELD_PRESERVE_PARTIAL';result=$null})
+    foreach($entry in $rows){
+        $root=Join-Path $script:base ($prefix+$entry.phase+'-'+$entry.id)
+        $value=Read-R6RecoveryJson (Join-Path $root $entry.file) $entry.hash
+        if($value.schema -cne 'cochem-r6-system-phase/1' -or $value.phase -cne $entry.phase -or
+            $value.status -cne $entry.status -or $value.manifest_sha256 -cne 'bffcf617620320109a3ff1bcbdcc2e1d4918f9571721dc4642efeed4d0b7a2c4' -or
+            $value.candidate_sha256 -cne 'a8b9b2052402f30860188721f986686c5a2f6785e563045edf295adae250f288'){
+            throw 'Reviewed Codex continuation phase differs.'}
+        if($entry.result -and $value.result.status -cne $entry.result){throw 'Reviewed successful phase status differs.'}
+        if($entry.phase -ceq 'native'){
+            if($value.error_type -cne 'ProviderFailure' -or $value.category -cne 'code'){
+                throw 'Reviewed Codex failure category differs.'}
+            if(Test-Path -LiteralPath (Join-Path $root 'result.json')){throw 'The held native phase has later completion evidence.'}
+            $held=Read-R6RecoveryJson (Join-Path $root 'native\native-held.json') '46e6a34d962c2fc0fdc9b1ae668bafefe50d49948829009da83a2c7fb1e829e8'
+            if($held.schema -cne 'cochem-r6-native-acceptance/1' -or $held.phase -cne 'target-02' -or $held.completed -ne 2 -or
+                $held.native_plan_sha256 -cne '8b20f15b86945386ae879617f1dd984957082164511621c295300bcf2bfd38bd'){
+                throw 'Reviewed Codex native target differs.'}}
+    }
+    $restoreRoot=Join-Path $script:base 'WardenRetarget4.2.7-windows-20261011-r4-v10'
+    $retarget=Read-R6RecoveryJson (Join-Path $restoreRoot 'retarget-receipt.json') '30b09e86c8e921cec5abdc46c00fcbc0ea86e93188cecc2d0e4651d6c878bbc9'
+    $intent=Read-R6RecoveryJson (Join-Path $restoreRoot 'start-intent.json') '3d0d7cc1bab4bca483a36853124dd272150a78e1d2550adb1362f05cccb07a40'
+    $start=Read-R6RecoveryJson (Join-Path $restoreRoot 'start-receipt.json') 'fbfa6309cc0a8475ef8063342760750ad8208b91d8fa9f55733693e6dca97974'
+    if($retarget.schema -cne 'cochem-warden-retarget/3' -or $retarget.status -cne 'WARDEN_RETARGETED_TO_R4_NOT_STARTED' -or
+        $retarget.target -cne 'r4' -or $retarget.attempt -cne 'v10' -or $retarget.started -ne $false -or
+        $intent.schema -cne 'cochem-warden-start-intent/3' -or $intent.target -cne 'r4' -or $intent.attempt -cne 'v10' -or
+        $intent.retarget_receipt_sha256 -cne '30b09e86c8e921cec5abdc46c00fcbc0ea86e93188cecc2d0e4651d6c878bbc9' -or
+        $intent.exactly_one_start -ne $true -or $intent.enable_before_run -ne $true -or $intent.retry -ne $false -or
+        $start.schema -cne 'cochem-warden-start/3' -or $start.status -cne 'WARDEN_R4_RESTARTED_HEALTH_VERIFIED' -or
+        $start.target -cne 'r4' -or $start.attempt -cne 'v10' -or $start.enabled_after -ne $true -or
+        $start.retarget_receipt_sha256 -cne '30b09e86c8e921cec5abdc46c00fcbc0ea86e93188cecc2d0e4651d6c878bbc9' -or
+        $start.task_state -ne 4 -or $start.running_instances -ne 1 -or $start.health_samples -lt 2 -or
+        $start.exactly_one_start_requested -ne $true -or $start.automatic_retry_allowed -ne $false){
+        throw 'Reviewed R4 v10 successful restoration differs.'}
+    if(Test-Path -LiteralPath (Join-Path $restoreRoot 'start-held.json')){throw 'R4 v10 has conflicting hold evidence.'}
+    # The owner stop helper checks the current task/action/process and idle
+    # proof again. v10 has a successful receipt; no interrupted-start override.
+    $earlier
     foreach($entry in $rows){$prefix+$entry.phase+'-'+$entry.id}
 }
 
@@ -506,7 +554,7 @@ function Assert-R6CustodyContinuationEvidence {
             ($task.State -in @(2,4) -or $task.GetInstances(0).Count -ne 0)){throw 'A prior profile or acceptance task is active.'}}
     Assert-R6NotReferenced
     $null=Assert-R6Tree;Assert-R6Interpreter
-    @{status='EXISTING_R6_AUTH_RECOVERY_PREREQUISITES_VERIFIED';continuation=$(if($NativeContinuation){'AGY_REGISTRY_REPAIR'}else{'AGENT_CUSTODY_REPAIR'});
+    @{status='EXISTING_R6_AUTH_RECOVERY_PREREQUISITES_VERIFIED';continuation=$(if($NativeContinuation){'CODEX_RAM_CWD_REPAIR'}else{'AGENT_CUSTODY_REPAIR'});
         installation_repeated=$false;knowledge_rebuild_allowed=$false;state_modified=$false;
         knowledge_state_verified=$false;knowledge_state_verification='REQUIRED_IN_SYSTEM_KNOWLEDGE_PHASE'}
 }

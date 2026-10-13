@@ -89,7 +89,7 @@ def prepare(repository, bundle, destination, auth_recovery=False, verified_conti
     if custody_continuation:
         launch['agent_custody_continuation']='20261013-reviewed-agent-hold-r4-v8'
     if native_continuation:
-        launch['native_registry_continuation']='20261013-reviewed-native-hold-r4-v9'
+        launch['native_registry_continuation']='20261013-reviewed-codex-cwd-hold-r4-v10'
     data=(json.dumps(launch,indent=2)+'\n').encode()
     with (destination/'launch-manifest.json').open('xb') as out:out.write(data)
     launch_hash=digest(data)

@@ -200,7 +200,7 @@ def test_unratified_current_model_substitution_is_rejected_before_dispatch():
     assert runner.route(node)['model'] == 'gpt-6.1-sol'
 
 
-@pytest.mark.parametrize('effort',['low','medium','high','ultra'])
+@pytest.mark.parametrize('effort',['low','medium','high','xhigh','max','ultra'])
 def test_native_codex_command_preserves_exact_selected_reasoning_effort(effort):
     argv = provider_command('codex',['native-codex'],'gpt-6-astra','worker-slot',{},effort)
     assert ['-c','model_reasoning_effort='+json.dumps(effort)] == argv[-3:-1]
@@ -209,7 +209,7 @@ def test_native_codex_command_preserves_exact_selected_reasoning_effort(effort):
     assert '--ephemeral' in argv and '--skip-git-repo-check' in argv
 
 
-@pytest.mark.parametrize(('provider','effort'), [('codex','xhigh'),('codex','max'),('claude','ultra'),('gemini','low')])
+@pytest.mark.parametrize(('provider','effort'), [('codex','x-high'),('codex','maximum'),('claude','ultra'),('gemini','low')])
 def test_command_cannot_silently_alias_or_cross_provider_reasoning_effort(provider,effort):
     with pytest.raises(ValueError,match='reasoning effort'):
         provider_command(provider,['native-cli'],'model','worker-slot',{},effort)
@@ -313,8 +313,8 @@ def agy_policy_spec(bindings, contracts=None):
 
 def test_parse_gemini_signature_is_the_shared_runner_contract():
     parameters = inspect.signature(parse_gemini).parameters
-    assert list(parameters) == ['raw', 'protocol', 'requested_model', 'native', 'identity_policy', 'stderr']
-    for name in ('native', 'identity_policy', 'stderr'):
+    assert list(parameters) == ['raw', 'protocol', 'requested_model', 'native', 'identity_policy', 'stderr', 'inference_spec']
+    for name in ('native', 'identity_policy', 'stderr', 'inference_spec'):
         assert parameters[name].kind is inspect.Parameter.KEYWORD_ONLY
         assert parameters[name].default is None
 
@@ -333,7 +333,8 @@ def test_agy_policy_reports_the_routed_canonical_id_for_both_binding_forms(bindi
     assert parsed == {'content': '{"ready":true}', 'session_id': 'native-agy-session',
                       'reported_model': ROUTED, 'native_reported_model': reports,
                       'native_selected_model': argv, 'identity_policy': IDENTITY_POLICY,
-                      'usage': {'input_tokens': 5, 'output_tokens': 3}, 'terminal_success': True}
+                      'usage': {'input_tokens': 5, 'output_tokens': 3}, 'terminal_success': True,
+                      'tool_registry': None}
     assert parse_payload(parsed['content']) == {'ready': True}
 
 

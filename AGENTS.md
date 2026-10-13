@@ -77,6 +77,16 @@ This is the preferred interface, not a claim that all three adapters have been
 implemented or accepted on this host. Reuse verified sessions before asking for input.
 
 ## Current handoff
+2026-10-13 v2 diagnostic received: native target-02 was Codex Luna Medium,
+slot3. Agy Flash Low and Claude Haiku Medium passed. Its 40-byte stderr hash
+exactly matches Windows error 1, reproduced by the DOS final-path query on R:.
+Codex 0.160.0 strictly canonicalizes explicit --cd before inference; the repair
+uses the same validated process cwd without that redundant option. Read
+`docs/R6_CODEX_RAM_CWD_REPAIR_2026-10-13.md`. Source and immutable-runtime helper
+are repaired together; the fresh continuation binds verified R4 v10. Do not
+replay d6d336e, request new sign-ins, or rerun the completed diagnostic. Only the
+owner executes a delivered Apply command. The following notes are historical.
+
 2026-10-13 11:37 run: `r6-launch-d6d336e` is now spent. All 18 sessions,
 knowledge and agent checks passed again. Native acceptance held at frozen
 worker.py:1033 with ProviderFailure category `code`: an unclassified nonzero

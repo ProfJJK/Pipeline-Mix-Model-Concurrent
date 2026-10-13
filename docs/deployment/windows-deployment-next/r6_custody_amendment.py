@@ -1,8 +1,10 @@
-"""Hash-bound, in-memory repair for the immutable installed R6 directory guard.
+"""Exact-source, in-memory custody and Agy registry repairs for installed R6.
 
-Only FILE_LIST_DIRECTORY is added to directory desired access. Neither ACLs,
-share modes, acceptance decisions nor installed files are changed. The same
-helper is pinned in agent acceptance, native acceptance and the daemon action.
+Directory handles add FILE_LIST_DIRECTORY without changing ACLs or sharing.
+The optional registry repair binds Agy 1.3.1 and the selected protected agent;
+the CLI's global advertisement is not agent permission evidence. Actual tool
+steps remain forbidden. Acceptance and startup pin this same helper. Installed
+files are never changed.
 """
 from __future__ import annotations
 
@@ -14,6 +16,8 @@ import re
 import sys
 import traceback
 import types
+
+from cochem_pipeline.agy_agent_guard import require_agent_contract
 
 ORIGINAL = 'd86c90750dc2112ce8ff1bc9a4937898eb35cadbf4362050b04381e2138e6591'
 MANIFEST = 'bffcf617620320109a3ff1bcbdcc2e1d4918f9571721dc4642efeed4d0b7a2c4'
@@ -35,7 +39,7 @@ def repaired_module(raw):
     return module, hashlib.sha256(repaired).hexdigest()
 
 
-def install(expected_hash):
+def install(expected_hash, *, registry=False):
     from cochem_pipeline import windows as win, agy_agent_guard as guard
     from cochem_pipeline.r6_host_acceptance import read_bound
     win.require_system()
@@ -55,10 +59,147 @@ def install(expected_hash):
     # from the guard at each launch. Both must observe this identical repair.
     from cochem_pipeline import r6_agent_acceptance as acceptance
     acceptance.lock_worker_profile = guard.lock_worker_profile
-    return dict(schema='cochem-r6-directory-custody-amendment/1',
+    evidence = dict(schema='cochem-r6-directory-custody-amendment/1',
         helper_sha256=hashlib.sha256(own).hexdigest(), original_guard_sha256=ORIGINAL,
         repaired_guard_sha256=repaired_hash, directory_desired_access=0x20001,
         directory_share_mode=3, installed_files_modified=False, acl_modified=False)
+    if registry:
+        evidence['tool_registry_amendment'] = install_registry(win, read_bound)
+    return evidence
+
+
+# Separate, exact-source repair. The original installed files remain unchanged.
+REGISTRY_PROTOCOL = '2738b76b140e5bc25860c78a457dd91464b57681b607e44096d4d3bc30317ce2'
+REGISTRY_WORKER = 'cb528d87f75c9b05f653aea0d3c23370e5d0f0632869afaca4d37be4e68bf147'
+BINARY_SHA256 = '38f30c7dd1ed808f5cf98fe2014de3d30903035a4f0df02d3eb72a9ff8993741'
+AGENT_SHA256 = '5c0082d70d073263a56d748a46187008968c070d0efc7d5b7612c2fd61d11810'
+
+
+def codex_inherited_workspace_command(argv, workspace, descriptor, identity):
+    """Use the isolated process cwd; avoid Codex's strict --cd canonicalization.
+
+    ImDisk's DOS final-path query returns ERROR_INVALID_FUNCTION. The Windows
+    launcher already validates the RAM descriptor, owner, volume and no-reparse
+    ancestry before assigning this exact cwd to the suspended worker process.
+    No host path resolution or alternate workspace is introduced here.
+    """
+    directory = Path(workspace)
+    if (descriptor is None or descriptor.identity != identity or not directory.is_absolute()
+            or '..' in directory.parts
+            or not directory.is_relative_to(Path(descriptor.root))):
+        raise ValueError('Codex inherited cwd requires its assigned RAM workspace')
+    if (argv.count('--cd') != 1 or '-C' in argv
+            or any(arg.startswith(('--cd=', '-C=')) for arg in argv)):
+        raise ValueError('Codex explicit cwd argument differs')
+    index = argv.index('--cd')
+    if index + 1 >= len(argv) or argv[index + 1] != str(workspace):
+        raise ValueError('Codex explicit cwd differs from the launch directory')
+    return [*argv[:index], *argv[index + 2:]]
+
+
+def validate_registry(init, spec):
+    """Return metadata, never treat advertised tool names as granted powers."""
+    contract = require_agent_contract(spec)
+    native = spec['inference_only']
+    if (native['executable_sha256'] != BINARY_SHA256 or native['version'] != '1.3.1'
+            or contract['sha256'] != AGENT_SHA256 or contract['bytes'] != 478):
+        raise ValueError('CLI registry interpretation requires the exact reviewed Agy build and agent')
+    if init.get('agent') != contract['name']:
+        raise ValueError('Agy did not select the protected inference-only agent')
+    names = init.get('tools')
+    if (not isinstance(names, list) or len(names) > 256
+            or any(not isinstance(name, str) or not re.fullmatch(r'[A-Za-z0-9_./:-]{1,128}', name)
+                   for name in names)
+            or len(set(names)) != len(names)):
+        raise ValueError('Agy CLI registry is malformed or unbounded')
+    return dict(schema='cochem-agy-cli-registry/1', scope='cli_builtin_runners',
+                advertised_count=len(names), advertised_tools_are_agent_permissions=False,
+                agent=contract['name'], agent_sha256=contract['sha256'],
+                executable_sha256=BINARY_SHA256)
+
+
+def registry_modules(protocol_raw, worker_raw, spec, protocol, worker):
+    """Compile only known source bytes; publish no changed callbacks on error."""
+    import ast
+    if (hashlib.sha256(protocol_raw).hexdigest() != REGISTRY_PROTOCOL or
+            hashlib.sha256(worker_raw).hexdigest() != REGISTRY_WORKER):
+        raise ValueError('Registry amendment original source binding differs')
+    changes = (
+        ("    if init.get('tools') != []:\n        raise AgyToolRegistryError('Agy stream did not attest an empty native tool registry')",
+         "    try:\n        registry = _registry_validate(init, _registry_spec)\n    except (ValueError, TypeError, KeyError) as exc:\n        raise AgyToolRegistryError('Agy reviewed agent or CLI registry binding differs') from exc"),
+        ("            'terminal_success': True,", "            'terminal_success': True, 'tool_registry': registry,"))
+    text = protocol_raw.decode('utf-8')
+    for before, after in changes:
+        if text.count(before) != 1: raise ValueError('Registry protocol repair anchor differs')
+        text = text.replace(before, after)
+    clone = types.ModuleType('cochem_pipeline._r6_registry_protocol')
+    clone.__package__ = 'cochem_pipeline'
+    exec(compile(text, '<r6-reviewed-registry-protocol>', 'exec'), clone.__dict__)
+    clone.AgyIdentityError, clone.AgyToolRegistryError = protocol.AgyIdentityError, protocol.AgyToolRegistryError
+    clone._registry_validate, clone._registry_spec = validate_registry, spec
+    changes = (
+        ("                                    inference_only=inference_only,mcp_names=mcp_names)",
+         "                                    inference_only=inference_only,mcp_names=mcp_names)\n            if provider == 'codex':\n                argv = codex_inherited_workspace_command(argv, workspace, ramdisk_workspace, identity.name)\n                inference_evidence['workspace_selection'] = 'validated_process_cwd'"),
+        ("                'identity_policy': identity_policy,", "                'identity_policy': identity_policy, 'tool_registry': parsed['tool_registry'],"),
+        ("                receipt['inference_policy'] = inference_evidence", "                if provider == 'gemini':\n                    inference_evidence['tool_registry'] = parsed.get('tool_registry')\n                receipt['inference_policy'] = inference_evidence"))
+    worker_text = worker_raw.decode('utf-8')
+    for before, after in changes:
+        if worker_text.count(before) != 1: raise ValueError('Registry worker repair anchor differs')
+        worker_text = worker_text.replace(before, after)
+    tree = ast.parse(worker_text)
+    parse = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == 'parse_gemini')
+    runner = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == 'NativeRunner')
+    run = next(n for n in runner.body if isinstance(n, ast.FunctionDef) and n.name == 'run')
+    run.name = '_registry_native_run'
+    selected = ast.Module(body=[ast.ImportFrom(module='__future__', names=[ast.alias(name='annotations')], level=0), parse, run], type_ignores=[])
+    namespace = dict(worker.__dict__)
+    namespace['codex_inherited_workspace_command'] = codex_inherited_workspace_command
+    exec(compile(ast.fix_missing_locations(selected), '<r6-reviewed-registry-worker>', 'exec'), namespace)
+    return clone.parse_stream, namespace['parse_gemini'], namespace['_registry_native_run']
+
+
+def install_registry(win, read_bound):
+    from cochem_pipeline import agy_protocol as protocol, worker
+    base = ROOT / '.venv/Lib/site-packages/cochem_pipeline'
+    if (Path(protocol.__file__) != base / 'agy_protocol.py' or Path(worker.__file__) != base / 'worker.py'
+            or hasattr(protocol, '_r6_registry_amendment')):
+        raise ValueError('Registry amendment module identity differs or is already installed')
+    candidate = json.loads(read_bound(win, ROOT / 'pipeline.json', CANDIDATE, 4194304))
+    spec = candidate['providers']['gemini']
+    # Verify the exact pair before replacing any callback. This is not a model probe.
+    validate_registry({'agent': 'cochem-inference-only', 'tools': []}, spec)
+    functions = registry_modules(read_bound(win, base / 'agy_protocol.py', REGISTRY_PROTOCOL, 65536),
+        read_bound(win, base / 'worker.py', REGISTRY_WORKER, 131072), spec, protocol, worker)
+    protocol.parse_stream, worker.parse_gemini, worker.NativeRunner.run = functions
+    protocol._r6_registry_amendment = BINARY_SHA256
+    return dict(schema='cochem-r6-agy-registry-amendment/1', protocol_sha256=REGISTRY_PROTOCOL,
+                worker_sha256=REGISTRY_WORKER, executable_sha256=BINARY_SHA256,
+                agent_sha256=AGENT_SHA256, advertised_registry_scope='cli_builtin_runners',
+                agent_identity_required=True, actual_tool_steps_rejected=True,
+                codex_workspace_selection='validated_process_cwd',
+                installed_files_modified=False)
+
+
+def failure_projection(error):
+    """Fixed failure types/categories; never include exception or provider text."""
+    names = {'ValueError', 'RuntimeError', 'OSError', 'PermissionError', 'AgentGuardError',
+             'WindowsIsolationError', 'KnowledgeError', 'DatabaseError', 'FileNotFoundError',
+             'ProviderFailure', 'AgyIdentityError', 'AgyToolRegistryError'}
+    kind = type(error).__name__
+    frames = [dict(function=f.name, line=f.lineno) for f in traceback.extract_tb(error.__traceback__)
+              if re.fullmatch(r'[A-Za-z_][A-Za-z_0-9]{0,79}', f.name)][-6:]
+    result = dict(schema='cochem-r6-amendment-failure/1',
+        error_type=kind if kind in names else 'OtherError', frames=frames,
+        raw_error_published=False)
+    category = getattr(error, 'category', None)
+    if isinstance(category, str) and category in {
+            'compatibility', 'protocol', 'code', 'auth', 'quota', 'busy', 'provider',
+            'resource', 'timeout', 'unknown', 'configuration'}:
+        result['category'] = category
+    if error.__cause__ is not None:
+        cause = type(error.__cause__).__name__
+        result['cause_type'] = cause if cause in names else 'OtherError'
+    return result
 
 
 def save_failure(error, output):
@@ -69,15 +210,8 @@ def save_failure(error, output):
     if root.parent != ROOT.parent or not re.fullmatch(r'R6Acceptance4\.2\.7-windows-20261012-v1-(agent|knowledge|native)-[a-f0-9]{32}', root.name):
         raise ValueError('Unexpected amendment failure root')
     win.validate_private_directory(root)
-    names = {'ValueError', 'RuntimeError', 'OSError', 'PermissionError', 'AgentGuardError',
-             'WindowsIsolationError', 'KnowledgeError', 'DatabaseError', 'FileNotFoundError'}
-    kind = type(error).__name__
-    frames = [dict(function=f.name, line=f.lineno) for f in traceback.extract_tb(error.__traceback__)
-              if re.fullmatch(r'[A-Za-z_][A-Za-z_0-9]{0,79}', f.name)][-6:]
     with (root / 'amendment-failure.json').open('x', encoding='utf-8') as stream:
-        json.dump(dict(schema='cochem-r6-amendment-failure/1',
-            error_type=kind if kind in names else 'OtherError', frames=frames,
-            raw_error_published=False), stream)
+        json.dump(failure_projection(error), stream)
 
 
 def verify_existing_knowledge(config):

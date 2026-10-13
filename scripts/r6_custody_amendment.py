@@ -75,6 +75,28 @@ BINARY_SHA256 = '38f30c7dd1ed808f5cf98fe2014de3d30903035a4f0df02d3eb72a9ff899374
 AGENT_SHA256 = '5c0082d70d073263a56d748a46187008968c070d0efc7d5b7612c2fd61d11810'
 
 
+def codex_inherited_workspace_command(argv, workspace, descriptor, identity):
+    """Use the isolated process cwd; avoid Codex's strict --cd canonicalization.
+
+    ImDisk's DOS final-path query returns ERROR_INVALID_FUNCTION. The Windows
+    launcher already validates the RAM descriptor, owner, volume and no-reparse
+    ancestry before assigning this exact cwd to the suspended worker process.
+    No host path resolution or alternate workspace is introduced here.
+    """
+    directory = Path(workspace)
+    if (descriptor is None or descriptor.identity != identity or not directory.is_absolute()
+            or '..' in directory.parts
+            or not directory.is_relative_to(Path(descriptor.root))):
+        raise ValueError('Codex inherited cwd requires its assigned RAM workspace')
+    if (argv.count('--cd') != 1 or '-C' in argv
+            or any(arg.startswith(('--cd=', '-C=')) for arg in argv)):
+        raise ValueError('Codex explicit cwd argument differs')
+    index = argv.index('--cd')
+    if index + 1 >= len(argv) or argv[index + 1] != str(workspace):
+        raise ValueError('Codex explicit cwd differs from the launch directory')
+    return [*argv[:index], *argv[index + 2:]]
+
+
 def validate_registry(init, spec):
     """Return metadata, never treat advertised tool names as granted powers."""
     contract = require_agent_contract(spec)
@@ -116,6 +138,8 @@ def registry_modules(protocol_raw, worker_raw, spec, protocol, worker):
     clone.AgyIdentityError, clone.AgyToolRegistryError = protocol.AgyIdentityError, protocol.AgyToolRegistryError
     clone._registry_validate, clone._registry_spec = validate_registry, spec
     changes = (
+        ("                                    inference_only=inference_only,mcp_names=mcp_names)",
+         "                                    inference_only=inference_only,mcp_names=mcp_names)\n            if provider == 'codex':\n                argv = codex_inherited_workspace_command(argv, workspace, ramdisk_workspace, identity.name)\n                inference_evidence['workspace_selection'] = 'validated_process_cwd'"),
         ("                'identity_policy': identity_policy,", "                'identity_policy': identity_policy, 'tool_registry': parsed['tool_registry'],"),
         ("                receipt['inference_policy'] = inference_evidence", "                if provider == 'gemini':\n                    inference_evidence['tool_registry'] = parsed.get('tool_registry')\n                receipt['inference_policy'] = inference_evidence"))
     worker_text = worker_raw.decode('utf-8')
@@ -129,6 +153,7 @@ def registry_modules(protocol_raw, worker_raw, spec, protocol, worker):
     run.name = '_registry_native_run'
     selected = ast.Module(body=[ast.ImportFrom(module='__future__', names=[ast.alias(name='annotations')], level=0), parse, run], type_ignores=[])
     namespace = dict(worker.__dict__)
+    namespace['codex_inherited_workspace_command'] = codex_inherited_workspace_command
     exec(compile(ast.fix_missing_locations(selected), '<r6-reviewed-registry-worker>', 'exec'), namespace)
     return clone.parse_stream, namespace['parse_gemini'], namespace['_registry_native_run']
 
@@ -151,6 +176,7 @@ def install_registry(win, read_bound):
                 worker_sha256=REGISTRY_WORKER, executable_sha256=BINARY_SHA256,
                 agent_sha256=AGENT_SHA256, advertised_registry_scope='cli_builtin_runners',
                 agent_identity_required=True, actual_tool_steps_rejected=True,
+                codex_workspace_selection='validated_process_cwd',
                 installed_files_modified=False)
 
 

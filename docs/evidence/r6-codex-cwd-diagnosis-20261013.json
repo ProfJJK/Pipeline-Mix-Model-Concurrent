@@ -1,0 +1,78 @@
+{
+  "schema": "cochem-codex-ram-cwd-diagnosis/1",
+  "observed_at_utc": "2026-10-13T20:02:28.295219+00:00",
+  "native_commands_executed": 0,
+  "protected_state_modified": false,
+  "api": "GetFinalPathNameByHandleW",
+  "observations": [
+    {
+      "volume": "C:\\",
+      "flags": 0,
+      "success": true,
+      "winerror": 0
+    },
+    {
+      "volume": "C:\\",
+      "flags": 1,
+      "success": true,
+      "winerror": 0
+    },
+    {
+      "volume": "C:\\",
+      "flags": 2,
+      "success": true,
+      "winerror": 0
+    },
+    {
+      "volume": "C:\\",
+      "flags": 4,
+      "success": true,
+      "winerror": 0
+    },
+    {
+      "volume": "C:\\",
+      "flags": 8,
+      "success": true,
+      "winerror": 0
+    },
+    {
+      "volume": "R:\\",
+      "flags": 0,
+      "success": false,
+      "winerror": 1
+    },
+    {
+      "volume": "R:\\",
+      "flags": 1,
+      "success": false,
+      "winerror": 3
+    },
+    {
+      "volume": "R:\\",
+      "flags": 2,
+      "success": true,
+      "winerror": 0
+    },
+    {
+      "volume": "R:\\",
+      "flags": 4,
+      "success": true,
+      "winerror": 0
+    },
+    {
+      "volume": "R:\\",
+      "flags": 8,
+      "success": false,
+      "winerror": 1
+    }
+  ],
+  "stderr_bytes": 40,
+  "stderr_sha256": "bf3b7cabd780d9bb2724f0fb4ba1bc0e72f016a6d5cffb6896ba2fceed61433c",
+  "known_public_error": "Error: Incorrect function. (os error 1)",
+  "codex_version": "0.160.0",
+  "codex_sha256_verified": "fdda5fa3cf3fb3d000b876720742857676293e4315e4b045fae6f8bd7e866d1d",
+  "source_reference": "https://github.com/openai/codex/blob/rust-v0.160.0/codex-rs/exec/src/lib.rs",
+  "inference": "Explicit --cd strictly canonicalizes before inference; inherited cwd does not use this strict startup branch.",
+  "repaired_provider_execution_verified": false,
+  "probe_modified_observed_roots": false
+}

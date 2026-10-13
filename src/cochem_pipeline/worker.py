@@ -677,6 +677,28 @@ def write_native_failure_metadata(log_dir, metadata):
         stream.write(data)
 
 
+def codex_inherited_workspace_command(argv, workspace, descriptor, identity):
+    """Use the isolated process cwd; avoid Codex's strict --cd canonicalization.
+
+    ImDisk's DOS final-path query returns ERROR_INVALID_FUNCTION. The Windows
+    launcher already validates the RAM descriptor, owner, volume and no-reparse
+    ancestry before assigning this exact cwd to the suspended worker process.
+    No host path resolution or alternate workspace is introduced here.
+    """
+    directory = Path(workspace)
+    if (descriptor is None or descriptor.identity != identity or not directory.is_absolute()
+            or '..' in directory.parts
+            or not directory.is_relative_to(Path(descriptor.root))):
+        raise ValueError('Codex inherited cwd requires its assigned RAM workspace')
+    if (argv.count('--cd') != 1 or '-C' in argv
+            or any(arg.startswith(('--cd=', '-C=')) for arg in argv)):
+        raise ValueError('Codex explicit cwd argument differs')
+    index = argv.index('--cd')
+    if index + 1 >= len(argv) or argv[index + 1] != str(workspace):
+        raise ValueError('Codex explicit cwd differs from the launch directory')
+    return [*argv[:index], *argv[index + 2:]]
+
+
 class NativeRunner:
     """Launch inside a dedicated Windows identity and a kill-on-close Job Object."""
     def __init__(self, config):
@@ -987,6 +1009,9 @@ class NativeRunner:
         try:
             argv = provider_command(provider,prefix,model,str(workspace),spec,reasoning_effort,
                                     inference_only=inference_only,mcp_names=mcp_names)
+            if provider == 'codex':
+                argv = codex_inherited_workspace_command(argv, workspace, ramdisk_workspace, identity.name)
+                inference_evidence['workspace_selection'] = 'validated_process_cwd'
             from .native_effort import effort_contract, effort_binary_digest
             binding = effort_contract(provider, model, reasoning_effort, spec)
             if binding is not None:
