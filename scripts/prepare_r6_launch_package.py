@@ -29,7 +29,7 @@ def read_regular(path, maximum=16777216):
     return data
 
 
-def prepare(repository, bundle, destination, auth_recovery=False):
+def prepare(repository, bundle, destination, auth_recovery=False, verified_continuation=False):
     repository,bundle,destination=map(Path,(repository,bundle,destination))
     if destination.exists() or not destination.is_absolute() or re.search(r'(?i)[\\/](gdrive|google drive)[\\/]',str(destination)):
         raise ValueError('Use a fresh ordinary launch folder outside Google Drive')
@@ -49,6 +49,11 @@ def prepare(repository, bundle, destination, auth_recovery=False):
     inputs['attended_agy_terminal.py']=read_regular(repository/'src/cochem_pipeline/attended_agy_terminal.py')
     if auth_recovery:
         for name in ('r6_auth_recovery.py', 'verify_r6_auth_recovery.ps1'):
+            inputs[name]=read_regular(repository/'scripts'/name)
+    if verified_continuation:
+        if not auth_recovery:
+            raise ValueError('Verified continuation reuses the installed R6')
+        for name in ('r6_native_retirement.py', 'r6_retirement_guard.py'):
             inputs[name]=read_regular(repository/'scripts'/name)
     if not 10 <= len(inputs) <= 1024 or sum(map(len,inputs.values()))>128*1024**2:
         raise ValueError('Launch input inventory exceeds bounds')
@@ -73,6 +78,8 @@ def prepare(repository, bundle, destination, auth_recovery=False):
         user_input_window_minutes=20,late_prompts=False,installation_and_host_acceptance_executed=False)
     if auth_recovery:
         launch['auth_recovery']='20261012-first-auth-hold'
+    if verified_continuation:
+        launch['verified_signin_continuation']='20261013-six-agy-verified-r4-v7'
     data=(json.dumps(launch,indent=2)+'\n').encode()
     with (destination/'launch-manifest.json').open('xb') as out:out.write(data)
     launch_hash=digest(data)
@@ -92,4 +99,5 @@ if __name__=='__main__':
     parser=argparse.ArgumentParser(description=__doc__)
     for name in ('repository','bundle','destination'):parser.add_argument('--'+name,required=True)
     parser.add_argument('--auth-recovery', action='store_true')
+    parser.add_argument('--verified-continuation', action='store_true')
     print(json.dumps(prepare(**vars(parser.parse_args())),indent=2))

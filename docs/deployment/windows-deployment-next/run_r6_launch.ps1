@@ -42,7 +42,8 @@ function Open-R6LaunchPins {
         $stream.Position=0;$pins[$name]=[string]$row.sha256
     }
     foreach($name in @('run_r6_launch.ps1','install_r6_runtime.ps1','run_r6_system_phase.ps1','activate_r6_runtime.ps1',
-        'r6_retarget_core.ps1','r6_attended_agy.ps1','RUN_427_R5_SITTING.ps1','stage_aetherdesk_427_payloads.ps1')){
+        'r6_retarget_core.ps1','r6_attended_agy.ps1','RUN_427_R5_SITTING.ps1','stage_aetherdesk_427_payloads.ps1',
+        'login_pipeline_worker_agy_terminal.ps1','worker_agy_terminal_bridge.py','attended_agy_terminal.py')){
         if(-not $pins.ContainsKey($name)){throw ('Launch package is missing '+$name)}}
     $pins
 }
@@ -111,6 +112,17 @@ function Test-R6AuthRecovery {
     return $true
 }
 
+function Test-R6VerifiedContinuation {
+    param($Manifest)
+    $property=$Manifest.PSObject.Properties['verified_signin_continuation']
+    if($null -eq $property){return $false}
+    if($property.Value -cne '20261013-six-agy-verified-r4-v7' -or -not (Test-R6AuthRecovery $Manifest)){
+        throw 'Unreviewed signed-in continuation mode.'}
+    foreach($name in @('r6_native_retirement.py','r6_retirement_guard.py')){
+        if(-not $script:R6Pins.ContainsKey($name)){throw 'Owner retirement code is not pinned.'}}
+    return $true
+}
+
 function Write-R6PublicStatus {
     param([string]$Status,$Result=$null)
     if(-not (Test-Path -LiteralPath $script:SittingRoot -PathType Container)){return}
@@ -161,10 +173,13 @@ function Invoke-R6LaunchSequence {
     Write-Host ('Sanitized status reports: '+$script:SittingRoot+'\status-*.json')
     Write-R6PublicStatus 'RUNNING'
     $resume=Test-R6AuthRecovery $Manifest
+    $signedIn=Test-R6VerifiedContinuation $Manifest
     if($resume){
         $script:R6Phase='verify_existing_installation'
-        $verified=Invoke-R6LaunchChild 'verify_r6_auth_recovery.ps1' @('-InstallerSha256',$script:R6Pins['install_r6_runtime.ps1'],
+        $verifyArguments=@('-InstallerSha256',$script:R6Pins['install_r6_runtime.ps1'],
             '-PhaseWrapperSha256',$script:R6Pins['run_r6_system_phase.ps1'])
+        if($signedIn){$verifyArguments+='-AuthenticatedContinuation'}
+        $verified=Invoke-R6LaunchChild 'verify_r6_auth_recovery.ps1' $verifyArguments
         if($verified.status -cne 'EXISTING_R6_AUTH_RECOVERY_PREREQUISITES_VERIFIED'){throw 'Existing R6 recovery prerequisites differ.'}}
     $script:R6Phase='quiescence';Invoke-R5Stage2
     if(-not $resume){
@@ -177,6 +192,7 @@ function Invoke-R6LaunchSequence {
     # never requires the owner to extract another private provider report.
     Write-Host ($auth.result|ConvertTo-Json -Depth 8)
     if($auth.result.status -cne 'ALL_SESSIONS_VERIFIED'){
+        if($signedIn){throw 'A verified session changed. Status is recorded above; no legacy sign-in or late prompt was started.'}
         $missing=@($auth.result.checks|Where-Object {$_.authenticated -ne $true})
         # Existing Claude/Codex sign-ins are never copied or reset. An unclear
         # status or expired session is a prerequisite failure at the attended
@@ -186,7 +202,9 @@ function Invoke-R6LaunchSequence {
         foreach($row in $missing){
             $script:R6Phase='attended_gemini_'+$row.worker
             Invoke-R6LaunchChild 'r6_attended_agy.ps1' @('-Slot',$row.worker,'-DeadlineUtc',$script:R6InputDeadline.ToString('o'),
-                '-WrapperSha256',$script:R6Pins['login_pipeline_worker_interactive_agy_r4_v1.ps1'],'-Apply') -Attended
+                '-WrapperSha256',$script:R6Pins['login_pipeline_worker_interactive_agy_r4_v1.ps1'],
+                '-TerminalWrapperSha256',$script:R6Pins['login_pipeline_worker_agy_terminal.ps1'],
+                '-PublicStatusRoot',$script:SittingRoot,'-Apply') -Attended
         }
         $auth=Invoke-R6AcceptancePhase 'auth' $Manifest
         Save-R6AuthSummary $auth.result
@@ -211,6 +229,7 @@ function Invoke-R6LaunchSequence {
         $arguments+=@('-SourceAttempt',$script:R5.base_source.source_attempt,'-StopAttempt',$script:R5.base_source.stop_attempt)}
     if($script:R6Pins.ContainsKey('r6_native_retirement.py')){
         $arguments+=@('-RetirementHelperSha256',$script:R6Pins['r6_native_retirement.py'])}
+    if($signedIn){$arguments+=@('-RetirementGuardSha256',$script:R6Pins['r6_retirement_guard.py'])}
     $script:R6CutoverRequested=$true
     $activated=Invoke-R6LaunchChild 'activate_r6_runtime.ps1' $arguments
     if($activated.status -cne 'WARDEN_R6_RUNNING_HEALTH_VERIFIED'){throw 'R6 activation was not verified.'}
@@ -238,13 +257,15 @@ function Invoke-R6LaunchMain {
     $script:R6CutoverRequested=$false;$script:R6Phase='package';$script:R5=$null
     try{
         $script:R6Pins=Open-R6LaunchPins $manifest $script:R6Directory $handles
+        $signedIn=Test-R6VerifiedContinuation $manifest
         if(Test-R6AuthRecovery $manifest){
             foreach($name in @('r6_auth_recovery.py','verify_r6_auth_recovery.ps1')){
                 if(-not $script:R6Pins.ContainsKey($name)){throw 'Recovery helper is not pinned.'}}}
         if(-not $ApplyRequested){
             $retired=$script:R6Pins.ContainsKey('r6_native_retirement.py')
             @{status='R6_LAUNCH_PLAN';model_targets=$(if($retired){26}else{27});retired_model_targets=$(if($retired){1}else{0});
-                maximum_shared_slots=4;input_window_minutes=20;later_prompts=$false;installation_and_host_acceptance_executed=$false}|ConvertTo-Json;return
+                maximum_shared_slots=4;input_window_minutes=20;later_prompts=$false;reuse_verified_sessions=$signedIn;
+                runtime_retirement_guard=$signedIn;installation_and_host_acceptance_executed=$false}|ConvertTo-Json;return
         }
         $identity=[Security.Principal.WindowsIdentity]::GetCurrent()
         if($PSVersionTable.PSEdition -cne 'Desktop' -or -not [Environment]::Is64BitProcess -or $env:COMPUTERNAME -cne 'AETHERDESK' -or

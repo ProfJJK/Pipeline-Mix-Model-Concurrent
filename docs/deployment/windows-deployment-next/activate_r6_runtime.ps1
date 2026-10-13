@@ -7,7 +7,31 @@
 param([string]$CoreSha256,[string]$InstallerSha256,[string]$ManifestSha256,
     [string]$CandidateSha256,[string]$EvidencePath,[string]$EvidenceSha256,
     [string]$Attempt,[string]$SourceAttempt='',[string]$StopAttempt='',
-    [string]$RetirementHelperSha256='',[switch]$Apply)
+    [string]$RetirementHelperSha256='',[string]$RetirementGuardSha256='',[switch]$Apply)
+
+function Set-R6RetirementContext {
+    param($Context,[string]$GuardPath,[string]$GuardHash)
+    if($GuardHash -cnotmatch '^[a-f0-9]{64}$' -or
+        $GuardPath -cnotmatch '^C:\\Program Files\\CoChem\\R6Retirement4\.2\.7-windows-20261013-v[1-9][0-9]{0,2}\\r6_retirement_guard\.py$'){
+        throw 'Unexpected protected R6 retirement binding.'}
+    $Context.config_mode='OWNER_TEN_TIER_ACCEPTED_WITH_PRO_RETIREMENT'
+    $Context.action.arguments='-I -B "'+$GuardPath+'" --guard-sha256 '+$GuardHash+' --config "'+$Context.config_path+
+        '" --queue-launch-output-root "'+$Context.queue_launch_output_root+'" --docker-wait-seconds 900'
+    $Context.retirement_guard=@{path=$GuardPath;sha256=$GuardHash;decision='owner-2026-10-12-pro-retired';replacement_selected=$false}
+}
+
+function Copy-R6RetirementGuard {
+    param([string]$Source,[string]$Destination,[string]$Hash,$Handles)
+    $length=(Get-Item -LiteralPath $Source).Length
+    if($length -gt 65536){throw 'Retirement startup amendment exceeds its bound.'}
+    $inputStream=Open-VerifiedFile $Source $Hash $length
+    try{
+        New-PrivateDirectory (Split-Path -Parent $Destination)
+        $stream=[IO.FileStream]::new($Destination,[IO.FileMode]::CreateNew,[Security.AccessControl.FileSystemRights]::Write,[IO.FileShare]::None,4096,[IO.FileOptions]::None,(New-PrivateAcl $false))
+        try{$inputStream.CopyTo($stream);$stream.Flush($true)}finally{$stream.Dispose()}
+        $Handles.Add((Open-VerifiedFile $Destination $Hash $length))
+    }finally{$inputStream.Dispose()}
+}
 
 function Import-R6ActivationFunctions {
     param([string]$Path,[string]$Hash)
@@ -110,13 +134,15 @@ function New-R6TargetContext {
 function Invoke-R6Activation {
     param([string]$CoreHash,[string]$InstallerHash,[string]$ManifestHash,[string]$CandidateHash,
         [string]$EvidencePath,[string]$EvidenceHash,[string]$Attempt,[string]$SourceAttempt,[string]$StopAttempt,[bool]$ApplyRequested,
-        [string]$RetirementHelperHash='')
+        [string]$RetirementHelperHash='',[string]$RetirementGuardHash='')
     foreach($hash in @($CoreHash,$InstallerHash,$ManifestHash,$CandidateHash,$EvidenceHash)){
         if($hash -cnotmatch '^[a-f0-9]{64}$'){throw 'Activation requires exact reviewed hashes.'}}
     if($RetirementHelperHash -and ($RetirementHelperHash -cnotmatch '^[a-f0-9]{64}$' -or
         $ManifestHash -cne 'bffcf617620320109a3ff1bcbdcc2e1d4918f9571721dc4642efeed4d0b7a2c4' -or
         $CandidateHash -cne 'a8b9b2052402f30860188721f986686c5a2f6785e563045edf295adae250f288')){
         throw 'Model retirement is restricted to the exact installed R6.'}
+    if($RetirementGuardHash -and ($RetirementGuardHash -cnotmatch '^[a-f0-9]{64}$' -or -not $RetirementHelperHash)){
+        throw 'The runtime retirement amendment requires its accepted native plan.'}
     if($Attempt -cnotmatch '^v[1-9][0-9]{0,2}$' -or ($SourceAttempt -and $SourceAttempt -cnotmatch '^v[1-9][0-9]{0,2}$') -or
         ($StopAttempt -and ($StopAttempt -cnotmatch '^v[1-9][0-9]{0,2}$' -or -not $SourceAttempt))){throw 'Invalid source/stop/target attempt.'}
     if($EvidencePath -cnotmatch '^C:\\Program Files\\CoChem\\R6Sitting4\.2\.7-windows-20261012-[a-f0-9]{32}\\acceptance-index\.json$'){
@@ -154,6 +180,10 @@ function Invoke-R6Activation {
         $runtime=[ordered]@{root=$runtimeRoot;python=(Join-Path $runtimeRoot '.venv\Scripts\python.exe');source_root=(Join-Path $runtimeRoot '.venv\Lib');
             install_after_path=$installPath;install_after_sha256=$installControl.Sha256;revision_sha256=$revision;source_manifest_sha256=$ManifestHash}
         $context=New-R6TargetContext $runtime $CandidateHash
+        if($RetirementGuardHash){
+            $guardPath=Join-Path (Join-Path $script:base ('R6Retirement4.2.7-windows-20261013-'+$Attempt)) 'r6_retirement_guard.py'
+            Set-R6RetirementContext $context $guardPath $RetirementGuardHash
+        }
         $script:targetRoot=Join-Path $script:base ('WardenRetarget4.2.7-windows-20261012-r6-'+$Attempt)
         $script:targetSourceRoot=$context.source_root
         # Docker readiness may legitimately consume its full 900-second bound.
@@ -164,14 +194,16 @@ function Invoke-R6Activation {
         $source=Assert-RetargetSource (Get-WardenTaskState $folder)
         if(Test-Path -LiteralPath $script:targetRoot){throw 'Existing R6 cutover evidence must be preserved; no automatic resume.'}
         if(-not $ApplyRequested){@{status='R6_ACTIVATION_READ_ONLY_PLAN';source=$source;context=$context;activation_ready=$false}|ConvertTo-Json -Depth 8;return}
+        if($RetirementGuardHash){Copy-R6RetirementGuard (Join-Path $PSScriptRoot 'r6_retirement_guard.py') $guardPath $RetirementGuardHash $held}
         $result=Invoke-Retarget $folder $context $lineage
         $binding=[ordered]@{receipt_path=$result.retarget_receipt_path;receipt_sha256=$result.retarget_receipt_sha256;sddl=$result.sddl;
             source=[ordered]@{source_state=$result.source.source_state;source_attempt=$result.source.source_attempt;stop_attempt=$result.source.stop_attempt}}
         $start=Invoke-StartOnce $folder $context $binding
         @{schema='cochem-r6-activation-result/1';status=$start.status;receipt_path=$start.receipt_path;receipt_sha256=$start.receipt_sha256;
-            evidence_sha256=$EvidenceHash;manifest_sha256=$ManifestHash;candidate_sha256=$CandidateHash;full_srs_acceptance=$false}|ConvertTo-Json -Depth 8
+            evidence_sha256=$EvidenceHash;manifest_sha256=$ManifestHash;candidate_sha256=$CandidateHash;
+            retirement_guard_sha256=$RetirementGuardHash;full_srs_acceptance=$false}|ConvertTo-Json -Depth 8
     }finally{foreach($stream in $held){$stream.Dispose()}}
 }
 
 $ErrorActionPreference='Stop';Set-StrictMode -Version Latest
-Invoke-R6Activation $CoreSha256 $InstallerSha256 $ManifestSha256 $CandidateSha256 $EvidencePath $EvidenceSha256 $Attempt $SourceAttempt $StopAttempt ([bool]$Apply) $RetirementHelperSha256
+Invoke-R6Activation $CoreSha256 $InstallerSha256 $ManifestSha256 $CandidateSha256 $EvidencePath $EvidenceSha256 $Attempt $SourceAttempt $StopAttempt ([bool]$Apply) $RetirementHelperSha256 $RetirementGuardSha256

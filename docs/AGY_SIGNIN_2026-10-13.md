@@ -2,6 +2,10 @@
 
 ## Successful host run and owner preference
 
+**The owner subsequently extended this preference to Codex and Claude as well
+as Agy.** See [the shared sign-in standard](SIGN_IN_PREFERENCE_2026-10-13.md),
+including the different direction of Codex's device code.
+
 The owner ran `agy-signin-c4d4a66` and explicitly asked to retain this interaction
 for future sign-ins, describing it as easy to use. The preferred
 flow is **Copy URL -> open manually -> paste authorization code into the standard

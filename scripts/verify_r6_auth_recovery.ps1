@@ -2,7 +2,7 @@
 <# Read-only prerequisite for the specific 2026-10-12 authentication hold.
    Does not run Python, providers, tasks, installation or a daemon. #>
 [CmdletBinding()]
-param([string]$InstallerSha256,[string]$PhaseWrapperSha256)
+param([string]$InstallerSha256,[string]$PhaseWrapperSha256,[switch]$AuthenticatedContinuation)
 
 function Read-R6RecoveryJson {
     param([string]$Path,[string]$Hash='')
@@ -35,14 +35,14 @@ function Assert-R6AuthRecoveryRows {
 }
 
 function Get-R6ReviewedAuthTask {
-    param([ValidateSet('CoChem-4.2.7-R6Acceptance-auth-226ce1d64f29486c838fca043f6bf904','CoChem-4.2.7-R6Acceptance-auth-56126335ff314eb497cd409fd58e6b1e','CoChem-4.2.7-R6Acceptance-auth-f1b5e414c1b44a5fb3c7d7686dbc9ff8','CoChem-4.2.7-R6Acceptance-auth-d16cef7a1743414db634d8a47acf894f')]
+    param([ValidateSet('CoChem-4.2.7-R6Acceptance-auth-226ce1d64f29486c838fca043f6bf904','CoChem-4.2.7-R6Acceptance-auth-56126335ff314eb497cd409fd58e6b1e','CoChem-4.2.7-R6Acceptance-auth-f1b5e414c1b44a5fb3c7d7686dbc9ff8','CoChem-4.2.7-R6Acceptance-auth-d16cef7a1743414db634d8a47acf894f','CoChem-4.2.7-R6Acceptance-auth-c5ffd975db154abe9411be085e25f96d')]
         [string]$Name='CoChem-4.2.7-R6Acceptance-auth-226ce1d64f29486c838fca043f6bf904')
     $scheduler=New-Object -ComObject 'Schedule.Service';$scheduler.Connect()
     $scheduler.GetFolder('\').GetTask($Name)
 }
 
 function Assert-R6ReviewedRestore {
-    param($Receipt,[ValidateSet('v3','v4','v5','v6')][string]$Attempt='v3')
+    param($Receipt,[ValidateSet('v3','v4','v5','v6','v7')][string]$Attempt='v3')
     # This is the hash-bound persisted start receipt, not a launch-series
     # result. The production writer does not put a "started" flag in it.
     if($Receipt.schema -cne 'cochem-warden-start/3' -or
@@ -278,8 +278,88 @@ function Assert-R6ReviewedPrefixFailure {
     Assert-R6ReviewedAuthTask $Root 'CoChem-4.2.7-R6Acceptance-auth-226ce1d64f29486c838fca043f6bf904'
 }
 
+function Get-R6SignInTasks {
+    $scheduler=New-Object -ComObject 'Schedule.Service';$scheduler.Connect()
+    @($scheduler.GetFolder('\').GetTasks(1)|Where-Object {$_.Name -cmatch '^CoChem-4\.2\.7-(InteractiveAgyTerminal|AgySignIn)-'})
+}
+
+function Assert-R6ReviewedRegistrationHold {
+    param([string]$Root)
+    $result=Read-R6RecoveryJson (Join-Path $Root 'result.json')
+    if($result.phase -cne 'auth' -or $result.status -cne 'PHASE_COMPLETED' -or
+        $result.manifest_sha256 -cne 'bffcf617620320109a3ff1bcbdcc2e1d4918f9571721dc4642efeed4d0b7a2c4' -or
+        $result.candidate_sha256 -cne 'a8b9b2052402f30860188721f986686c5a2f6785e563045edf295adae250f288' -or
+        $result.result.status_helper_sha256 -cne '79b7029cd998f25c0a01300924bb3972f830f7783618ce3c99260b089510aaec'){
+        throw 'The reviewed pre-registration authentication binding differs.'}
+    Assert-R6AuthRecoveryRows $result.result 'ATTENDED_LOGIN_REQUIRED'
+    Assert-R6ReviewedAuthTask $Root 'CoChem-4.2.7-R6Acceptance-auth-c5ffd975db154abe9411be085e25f96d'
+    $terminalRoot=Join-Path $script:base 'InteractiveAgyTerminal427-r4-slot1-920c3ba4a0aa4c1094eaf4ce3319eba4'
+    $held=Read-R6RecoveryJson (Join-Path $terminalRoot 'session-held.json')
+    if($held.schema -cne 'cochem-interactive-agy-terminal-held/1' -or $held.status -cne 'HELD' -or
+        $held.slot -cne 'slot1' -or $held.nonce -cne '920c3ba4a0aa4c1094eaf4ce3319eba4' -or
+        $held.phase -cne 'register' -or $held.run_requested -ne $false -or $null -ne $held.receipt_sha256 -or
+        $held.raw_provider_output_recorded -ne $false -or $held.code_recorded -ne $false){throw 'The preserved never-run terminal hold differs.'}
+    foreach($name in @('receipt.json','session-result.json','input.once')){
+        if(Test-Path -LiteralPath (Join-Path $terminalRoot $name)){throw 'The reviewed never-run terminal has later artifacts.'}}
+    $tasks=@(Get-R6SignInTasks|Where-Object {$_.Name -ceq 'CoChem-4.2.7-InteractiveAgyTerminal-r4-slot1-920c3ba4a0aa4c1094eaf4ce3319eba4'})
+    if($tasks.Count -ne 1){throw 'Reviewed terminal task inventory differs.'}
+    $task=$tasks[0]
+    $arguments='-I -B "'+(Join-Path $terminalRoot 'worker_agy_terminal_bridge.py')+'" --slot slot1 --nonce 920c3ba4a0aa4c1094eaf4ce3319eba4'
+    Assert-R6PhaseTask $task 'C:\Program Files\CoChem\Pipeline4.2.7-windows-20261009-r4\.venv\Scripts\python.exe' $arguments $terminalRoot 900 $true
+    if($task.State -ne 3 -or $task.GetInstances(0).Count -ne 0 -or $task.LastTaskResult -ne 267011 -or
+        $task.LastRunTime -ge [DateTime]'2026-10-12'){throw 'The reviewed terminal task is no longer never-run.'}
+    $restore=Read-R6RecoveryJson (Join-Path $script:base 'WardenRetarget4.2.7-windows-20261011-r4-v7\start-receipt.json') '449bff46b15018e1ff47e389c5765df49f86b4cee36e3b1c8778390568e4cf97'
+    Assert-R6ReviewedRestore $restore 'v7'
+    $null=Read-R6RecoveryJson (Join-Path $script:base 'WardenRetarget4.2.7-windows-20261011-r4-v7\retarget-receipt.json') '80c50e6272940fe89bf53e2c01e9c38481ab6b1e32b7392d4c7946fed1c29d67'
+}
+
+function Assert-R6VerifiedSignInRows {
+    param($Value)
+    if($Value.status -cne 'ALL_SIX_AGY_PROFILES_VERIFIED' -or @($Value.checks).Count -ne 6 -or
+        $Value.native_model_jobs_executed -ne 0 -or $Value.daemon_tasks_changed -ne $false -or
+        $Value.credentials_copied -ne $false -or $Value.activation_ready -ne $false){throw 'The six-profile sign-in evidence differs.'}
+    $seen=@{}
+    foreach($row in @($Value.checks)){
+        if($row.slot -cnotmatch '^slot[1-6]$' -or $seen.ContainsKey($row.slot) -or $row.authenticated -ne $true -or
+            $row.status -cne 'SIGNED_IN_AND_VERIFIED' -or $row.cleanup_verified -ne $true -or
+            $row.after.decision -cne 'VERIFIED' -or $row.after.exit_code -ne 0 -or $row.after.cleanup_verified -ne $true){
+            throw 'A profile lacks post-login verification or cleanup.'}
+        foreach($field in @('cleanup_verified','terminal_cleanup_verified','input_file_deleted','code_write_completed')){
+            if($row.login.$field -ne $true){throw 'A reviewed profile login did not finish cleanup.'}}
+        $seen[$row.slot]=$true
+    }
+}
+
+function Assert-R6SuccessfulStandaloneSignIn {
+    $nonce='6f2553e0f3e04a1598e64ffaad1d7255';$root=Join-Path $script:base ('AgySignIn427-'+$nonce)
+    $public=Read-R6RecoveryJson (Join-Path $root 'status.json') '96e4d2a872ff64a265efde9f1d1dade42db73f9da85863befc93692ece7ccfff'
+    if($public.schema -cne 'cochem-agy-signin-result/1' -or $public.root -cne $root){throw 'Verified sign-in public binding differs.'}
+    Assert-R6VerifiedSignInRows $public
+    $private=Read-R6RecoveryJson (Join-Path $root 'result.json')
+    if($private.schema -cne 'cochem-agy-signin-batch/1' -or $private.nonce -cne $nonce -or $private.system_sid -cne 'S-1-5-18'){
+        throw 'Verified sign-in private binding differs.'}
+    Assert-R6VerifiedSignInRows $private
+    $names=@('CoChem-4.2.7-InteractiveAgyTerminal-r4-slot1-920c3ba4a0aa4c1094eaf4ce3319eba4',
+        'CoChem-4.2.7-AgySignIn-29d5943c97954a7695d57c722e917cd2',('CoChem-4.2.7-AgySignIn-'+$nonce))
+    $tasks=@(Get-R6SignInTasks)
+    if($tasks.Count -ne $names.Count){throw 'An unreviewed profile sign-in task exists.'}
+    foreach($task in $tasks){
+        if($task.Name -cnotin $names -or $task.GetInstances(0).Count -ne 0 -or $task.State -notin @(1,3)){
+            throw 'A profile sign-in task is active or unreviewed.'}
+        if($task.Name -ceq $names[2] -and $task.LastTaskResult -ne 0){throw 'The successful sign-in broker is not terminal and successful.'}
+        if($task.Name -ceq $names[1]){
+            if($task.LastTaskResult -ne 2){throw 'The earlier prompt failure changed.'}
+            $failedRoot=Join-Path $script:base 'AgySignIn427-29d5943c97954a7695d57c722e917cd2'
+            $null=Read-R6RecoveryJson (Join-Path $failedRoot 'status.json') 'a2d3cf3bbaf19f6917ac3826f3fc4bc3774f9fc327e24419e2cf0cb0449ccfa0'
+            $login=Read-R6RecoveryJson (Join-Path $failedRoot 'slot1\login.json')
+            if($login.cleanup_verified -ne $true -or $login.terminal_cleanup_verified -ne $true -or $login.one_line_submitted -ne $false){
+                throw 'The earlier prompt failure did not complete cleanup.'}}
+    }
+    foreach($slot in 1..6){if(Test-Path -LiteralPath (Join-Path $root ('slot'+$slot+'\input.once'))){throw 'Sign-in input remains; preserve it.'}}
+}
+
 function Invoke-R6AuthRecoveryVerification {
-    param([string]$InstallerHash,[string]$PhaseHash,[string]$Directory=$PSScriptRoot)
+    param([string]$InstallerHash,[string]$PhaseHash,[string]$Directory=$PSScriptRoot,[bool]$VerifiedContinuation=$false)
     foreach($hash in @($InstallerHash,$PhaseHash)){if($hash -cnotmatch '^[a-f0-9]{64}$'){throw 'Recovery helper pins are required.'}}
     $phase=Join-Path $Directory 'run_r6_system_phase.ps1'
     $handle=[IO.File]::Open($phase,'Open','Read','Read')
@@ -298,6 +378,7 @@ function Invoke-R6AuthRecoveryVerification {
         Set-R6Constants
         foreach($definition in @(Import-R6CopyFunctions $Directory)){. ([scriptblock]::Create($definition))}
         Initialize-FileIdentity
+        if($VerifiedContinuation){Assert-R6SuccessfulStandaloneSignIn}
         Assert-R6AuthRecoveryEvidence
     }finally{$handle.Dispose()}
 }
@@ -332,6 +413,7 @@ function Assert-R6AuthRecoveryEvidence {
                     'R6Acceptance4.2.7-windows-20261012-v1-auth-56126335ff314eb497cd409fd58e6b1e'{Assert-R6ReviewedConsoleHold $folder.FullName}
                     'R6Acceptance4.2.7-windows-20261012-v1-auth-f1b5e414c1b44a5fb3c7d7686dbc9ff8'{Assert-R6ReviewedNativeLoginFailure $folder.FullName;$reviewedNativeFailure=$true}
                     'R6Acceptance4.2.7-windows-20261012-v1-auth-d16cef7a1743414db634d8a47acf894f'{Assert-R6ReviewedTuiAuth $folder.FullName;$reviewedTuiFailure=$true}
+                    'R6Acceptance4.2.7-windows-20261012-v1-auth-c5ffd975db154abe9411be085e25f96d'{Assert-R6ReviewedRegistrationHold $folder.FullName}
                     default {throw 'An unreviewed recovery authentication attempt exists; preserve it and do not repeat.'}
                 }}}
         Assert-R6ReviewedInteractiveCensus $reviewedNativeFailure $reviewedTuiFailure
@@ -342,4 +424,4 @@ function Assert-R6AuthRecoveryEvidence {
 }
 
 $ErrorActionPreference='Stop';Set-StrictMode -Version Latest
-Invoke-R6AuthRecoveryVerification $InstallerSha256 $PhaseWrapperSha256|ConvertTo-Json -Depth 6
+Invoke-R6AuthRecoveryVerification $InstallerSha256 $PhaseWrapperSha256 $PSScriptRoot ([bool]$AuthenticatedContinuation)|ConvertTo-Json -Depth 6
