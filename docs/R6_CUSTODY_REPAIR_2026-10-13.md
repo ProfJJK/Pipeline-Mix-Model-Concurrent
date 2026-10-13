@@ -172,6 +172,11 @@ are recorded below after the frozen read-only plan passes.
 
 ## Replacement package after the 09:18 hold
 
+**Update after the 09:34 owner run:** this replacement is spent. All 18 sign-ins,
+knowledge and agent checks passed; native acceptance held. R4 v9 restoration
+did not verify. Follow `R6_NATIVE_HOLD_2026-10-13.md`; do not replay the command
+below or any earlier package. The following preparation details are historical.
+
 Source checkpoint **7451831** supplies both permission-boundary fixes. Fresh
 ordinary package: `C:\Users\ansac\CoChem427\r6-launch-7451831`, **499 pinned
 inputs**. Launch manifest SHA256:

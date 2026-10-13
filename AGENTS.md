@@ -77,6 +77,14 @@ This is the preferred interface, not a claim that all three adapters have been
 implemented or accepted on this host. Reuse verified sessions before asking for input.
 
 ## Current handoff
+2026-10-13 09:34 attempt: `r6-launch-7451831` has now run and is spent.
+All 18 sign-ins, knowledge and agent acceptance passed; native acceptance held
+at Agy response compatibility. R4 restore v9 did not verify, although a read-only
+health observation found R4 responding. Do not replay deployment or sign-ins.
+Read `docs/R6_NATIVE_HOLD_2026-10-13.md` for the exact evidence and prepared
+read-only diagnostic. Preserve every protected task/root and running process.
+The continuation notes below describe the earlier preparation, not current readiness.
+
 2026-10-13: Agy sign-in succeeded for all six profiles. R6 continuation is prepared
 in `docs/R6_SIGNED_IN_CONTINUATION_2026-10-13.md`; only the owner runs its fresh
 Administrator command. The 07:33 attempt verified all 18 provider sessions and
