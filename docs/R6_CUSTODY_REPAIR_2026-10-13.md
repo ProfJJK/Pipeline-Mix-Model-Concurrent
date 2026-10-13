@@ -96,3 +96,26 @@ Keep R7 separate. Older R7 bundles expect the old R6 daemon action and cannot
 be reused after this amended R6 startup. A future R7 package must bind the new
 R6 source action and include the canonical directory fix; do not reuse its
 spent R6 prerequisite recovery.
+
+## Delivered package
+
+Repair source checkpoint: `bf5b5f6` on `feature/r6-routing-pivots`.
+Fresh ordinary package: `C:\Users\ansac\CoChem427\r6-launch-bf5b5f6`.
+It pins **499 inputs**; launch manifest SHA256:
+`621b520f38cc5454e12a0b33092ffe6959a05041b028efe79e95f523d866811f`.
+The package retains installed source_commit `359ca92` deliberately; the
+supplemental repair is bound separately rather than misidentifying the installed
+release. Its assembly receipt remains a preparation record, not host acceptance.
+
+The actual frozen PowerShell entry point completed its **read-only** plan in
+8.476 seconds with exit0, 26 retained model targets, four shared slots,
+`directory_custody_amendment=true`, `reuse_completed_knowledge=true`,
+`profile_restaging=false` and `later_prompts=false`. That timing excludes
+privileged checks and unattended provider acceptance.
+
+The engineer reviewed the hash/copy/action chain and source/receipt consumers.
+No Apply was invoked. The owner command is in
+[RETURN_SETUP_R6_2026-10-13.txt](RETURN_SETUP_R6_2026-10-13.txt), mirrored as
+`windows-deployment-next\RETURN_SETUP_R6.txt` in the deployment workspace.
+Do not replay earlier launch packages or the spent diagnostic. Preserve this
+package unchanged and read the new sanitized sitting status after owner execution.
