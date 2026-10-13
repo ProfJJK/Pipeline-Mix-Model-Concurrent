@@ -1,5 +1,10 @@
 # R6 continuation after successful six-profile sign-in
 
+**07:14 attempt held before the R4 stop.** The `2571003` command below is spent;
+preserve it and use only the replacement owner sheet after publication. The
+receipt-projection defect and repair are recorded in
+[R6_VERIFIER_REPAIR_2026-10-13.md](R6_VERIFIER_REPAIR_2026-10-13.md).
+
 **Owner command:** [RETURN_SETUP_R6_2026-10-13.txt](RETURN_SETUP_R6_2026-10-13.txt).
 Frozen launcher `C:\Users\ansac\CoChem427\r6-launch-2571003` has 494 pinned inputs.
 Launch manifest SHA-256:

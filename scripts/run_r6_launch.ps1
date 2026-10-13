@@ -70,10 +70,35 @@ function Invoke-R6LaunchChild {
     $text=($output|ForEach-Object {$_.ToString()}) -join "`n"
     $log=Join-Path $script:SittingRoot ($script:R6Phase+'-'+[Guid]::NewGuid().ToString('N')+'.log')
     $null=Write-R5RecordText $log $text
-    if($code -ne 0){throw ('Phase child failed; protected log: '+$log)}
+    if($code -ne 0){
+        if($Name -ceq 'verify_r6_auth_recovery.ps1'){
+            $script:R6VerificationFailure=Read-R6VerificationFailure $text}
+        throw ('Phase child failed; protected log: '+$log)}
     $json=Get-R5JsonTail $text
     if($null -eq $json){throw 'Phase child returned no structured result.'}
     $json
+}
+
+function Read-R6VerificationFailure {
+    param([string]$Text)
+    # Independently validate the child's metadata before it enters public status.
+    try{
+        $value=Get-R5JsonTail $Text
+        if($null -eq $value -or $value.schema -cne 'cochem-r6-verification-failure/1' -or
+            $value.status -cne 'VERIFICATION_FAILED' -or $value.raw_error_published -ne $false -or
+            $value.error_type -cnotin @('RuntimeException','PropertyNotFoundException','PSArgumentException',
+                'ArgumentException','InvalidOperationException','UnauthorizedAccessException','IOException',
+                'ItemNotFoundException','CommandNotFoundException','MethodInvocationException',
+                'ParameterBindingException','ParameterBindingValidationException','COMException','OtherException') -or
+            $value.hresult -isnot [int] -or @($value.frames).Count -gt 6){return $null}
+        $frames=@()
+        foreach($frame in @($value.frames)){
+            if(($frame.function -cnotmatch '^(Assert|Read|Open|Get|Import|Initialize|Invoke|Set)-R6[A-Za-z0-9-]*$' -and
+                $frame.function -cnotin @('Assert-ProtectedPath','Open-VerifiedFile','Initialize-FileIdentity')) -or
+                $frame.function.Length -gt 120 -or $frame.line -isnot [int] -or $frame.line -lt 1 -or $frame.line -gt 9999999){return $null}
+            $frames+=@{function=[string]$frame.function;line=[int]$frame.line}}
+        @{error_type=[string]$value.error_type;hresult=[int]$value.hresult;frames=$frames}
+    }catch{return $null}
 }
 
 function Write-R5RecordText {
@@ -135,6 +160,8 @@ function Write-R6PublicStatus {
             elseif($null -ne $Result.PSObject.Properties[$key]){$safe[$key]=$Result.PSObject.Properties[$key].Value}}}
     if($null -ne (Get-Variable -Name R6AuthSummary -Scope Script -ErrorAction SilentlyContinue)){
         $safe.authentication=$script:R6AuthSummary}
+    if($null -ne (Get-Variable -Name R6VerificationFailure -Scope Script -ErrorAction SilentlyContinue) -and
+        $null -ne $script:R6VerificationFailure){$safe.verification_failure=$script:R6VerificationFailure}
     $name='status-'+[DateTime]::UtcNow.ToString('yyyyMMddTHHmmssfffffff')+'-'+[Guid]::NewGuid().ToString('N')+'.json'
     $acl=[Security.AccessControl.FileSecurity]::new();$acl.SetAccessRuleProtection($true,$false)
     $acl.SetOwner([Security.Principal.SecurityIdentifier]::new('S-1-5-32-544'))
@@ -254,7 +281,7 @@ function Invoke-R6LaunchMain {
     $script:R6Directory=Split-Path -Parent ([IO.Path]::GetFullPath($ManifestPath))
     if($script:R6Directory -cne $PSScriptRoot){throw 'Launch manifest must be beside this entry point.'}
     $handles=[Collections.Generic.List[IO.FileStream]]::new();$mutex=$null;$locked=$false;$started=$false
-    $script:R6CutoverRequested=$false;$script:R6Phase='package';$script:R5=$null
+    $script:R6CutoverRequested=$false;$script:R6Phase='package';$script:R5=$null;$script:R6VerificationFailure=$null
     try{
         $script:R6Pins=Open-R6LaunchPins $manifest $script:R6Directory $handles
         $signedIn=Test-R6VerifiedContinuation $manifest
@@ -299,6 +326,7 @@ function Invoke-R6LaunchMain {
             try{$restore=Invoke-R5Restore 'R6 preparation held before cutover'}catch{$restore=@{ok=$false;restored=$false}}}
         $record=@{schema='cochem-r6-launch-result/1';status='HELD_PRESERVE_EVIDENCE';phase=$script:R6Phase;error_type=$failure.Exception.GetType().Name;
             automatic_retry=$false;late_prompt=$false;cutover_requested=$script:R6CutoverRequested;recovery=$restore;activation_ready=$false}
+        if($null -ne $script:R6VerificationFailure){$record.verification_failure=$script:R6VerificationFailure}
         if($started -and (Test-Path -LiteralPath $script:SittingRoot)){
             $record.receipt_path=Join-Path $script:SittingRoot 'r6-held.json'
             $null=Write-R5RecordText $record.receipt_path ($record|ConvertTo-Json -Depth 8)}

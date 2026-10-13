@@ -324,7 +324,10 @@ function Assert-R6VerifiedSignInRows {
             $row.status -cne 'SIGNED_IN_AND_VERIFIED' -or $row.cleanup_verified -ne $true -or
             $row.after.decision -cne 'VERIFIED' -or $row.after.exit_code -ne 0 -or $row.after.cleanup_verified -ne $true){
             throw 'A profile lacks post-login verification or cleanup.'}
-        foreach($field in @('cleanup_verified','terminal_cleanup_verified','input_file_deleted','code_write_completed')){
+        # The broker projects cleanup_verified onto the profile row above.
+        # Its nested login projection contains terminal cleanup and input facts,
+        # not another cleanup_verified property (see sequence() in the writer).
+        foreach($field in @('terminal_cleanup_verified','input_file_deleted','code_write_completed')){
             if($row.login.$field -ne $true){throw 'A reviewed profile login did not finish cleanup.'}}
         $seen[$row.slot]=$true
     }
@@ -383,6 +386,27 @@ function Invoke-R6AuthRecoveryVerification {
     }finally{$handle.Dispose()}
 }
 
+function Get-R6VerificationFailure {
+    param([Management.Automation.ErrorRecord]$Failure)
+    # Publish only source positions and exception types, never error messages,
+    # evidence contents, full paths, provider output, URLs or account details.
+    $kind=$Failure.Exception.GetType().Name
+    if($kind -cnotin @('RuntimeException','PropertyNotFoundException','PSArgumentException',
+        'ArgumentException','InvalidOperationException','UnauthorizedAccessException','IOException',
+        'ItemNotFoundException','CommandNotFoundException','MethodInvocationException',
+        'ParameterBindingException','ParameterBindingValidationException','COMException')){$kind='OtherException'}
+    $frames=@()
+    foreach($match in [regex]::Matches([string]$Failure.ScriptStackTrace,'(?m)^at ([A-Za-z0-9_-]+), [^\r\n]*: line ([0-9]{1,7})\r?$')){
+        $name=$match.Groups[1].Value
+        if($name -cmatch '^(Assert|Read|Open|Get|Import|Initialize|Invoke|Set)-R6[A-Za-z0-9-]*$' -or
+            $name -cin @('Assert-ProtectedPath','Open-VerifiedFile','Initialize-FileIdentity')){
+            $frames+=@{function=$name;line=[int]$match.Groups[2].Value}
+            if($frames.Count -ge 6){break}}
+    }
+    @{schema='cochem-r6-verification-failure/1';status='VERIFICATION_FAILED';error_type=$kind;
+        hresult=[int]$Failure.Exception.HResult;frames=$frames;raw_error_published=$false}
+}
+
 function Assert-R6AuthRecoveryEvidence {
         $manifestHash='bffcf617620320109a3ff1bcbdcc2e1d4918f9571721dc4642efeed4d0b7a2c4'
         $candidateHash='a8b9b2052402f30860188721f986686c5a2f6785e563045edf295adae250f288'
@@ -424,4 +448,11 @@ function Assert-R6AuthRecoveryEvidence {
 }
 
 $ErrorActionPreference='Stop';Set-StrictMode -Version Latest
-Invoke-R6AuthRecoveryVerification $InstallerSha256 $PhaseWrapperSha256 $PSScriptRoot ([bool]$AuthenticatedContinuation)|ConvertTo-Json -Depth 6
+try{
+    Invoke-R6AuthRecoveryVerification $InstallerSha256 $PhaseWrapperSha256 $PSScriptRoot ([bool]$AuthenticatedContinuation)|ConvertTo-Json -Depth 6
+}catch{
+    $failure=$_
+    Write-Error -ErrorRecord $failure -ErrorAction Continue
+    Get-R6VerificationFailure $failure|ConvertTo-Json -Depth 6
+    exit 1
+}

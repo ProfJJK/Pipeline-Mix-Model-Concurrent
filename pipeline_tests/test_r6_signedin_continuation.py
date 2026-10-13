@@ -84,11 +84,12 @@ def rows():
         daemon_tasks_changed=False, credentials_copied=False, activation_ready=False,
         checks=[dict(slot=f'slot{i}',authenticated=True,status='SIGNED_IN_AND_VERIFIED',cleanup_verified=True,
             after=dict(decision='VERIFIED',exit_code=0,cleanup_verified=True),
-            login=dict(cleanup_verified=True,terminal_cleanup_verified=True,input_file_deleted=True,code_write_completed=True))
+            login=dict(terminal_cleanup_verified=True,input_file_deleted=True,code_write_completed=True))
             for i in range(1,7)])
 
 
-@pytest.mark.parametrize('fault',['','duplicate','missing','auth','cleanup','after','login_exit_only','model_job'])
+@pytest.mark.parametrize('fault',['','duplicate','missing','auth','cleanup','after','login_exit_only','model_job',
+    'row_cleanup','status_cleanup','input_left','code_not_written','missing_terminal_cleanup'])
 def test_accept_only_six_verified_post_login_rows(monkeypatch,fault):
     monkeypatch.setattr(ps_fixture,'SCRIPT',ROOT/'scripts/verify_r6_auth_recovery.ps1')
     value=rows()
@@ -99,12 +100,56 @@ def test_accept_only_six_verified_post_login_rows(monkeypatch,fault):
     if fault=='after':value['checks'][0]['after']['exit_code']=1
     if fault=='login_exit_only':value['checks'][0]['after']['decision']='UNKNOWN'
     if fault=='model_job':value['native_model_jobs_executed']=1
+    if fault=='row_cleanup':value['checks'][0]['cleanup_verified']=False
+    if fault=='status_cleanup':value['checks'][0]['after']['cleanup_verified']=False
+    if fault=='input_left':value['checks'][0]['login']['input_file_deleted']=False
+    if fault=='code_not_written':value['checks'][0]['login']['code_write_completed']=False
+    if fault=='missing_terminal_cleanup':del value['checks'][0]['login']['terminal_cleanup_verified']
     result=ps_fixture.run_ps("$value='"+json.dumps(value)+"'|ConvertFrom-Json\n"+r'''
 $held=$false
 try{Assert-R6VerifiedSignInRows $value}catch{$held=$true}
 @{held=$held}|ConvertTo-Json -Compress
 ''')
     assert result['held'] is bool(fault)
+
+
+def test_receipt_from_production_signin_sequence_passes_verifier(monkeypatch, tmp_path):
+    """Exercise the producer's actual projection, with native operations replaced."""
+    spec = importlib.util.spec_from_file_location('signin_producer', ROOT/'scripts/worker_agy_signin_batch.py')
+    producer = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(producer)
+    monkeypatch.setattr(producer, 'write_new', lambda *args: None)
+    def status(slot, child, phase):
+        return dict(decision='LOGIN_REQUIRED' if phase == 'before' else 'VERIFIED',
+                    exit_code=1 if phase == 'before' else 0, cleanup_verified=True)
+    def login(slot, child):
+        return dict(status='LOGIN_SESSION_ENDED_AFTER_INPUT_STATUS_REQUIRED', native_exit_code=1,
+                    cleanup_verified=True, terminal_cleanup_verified=True, one_line_submitted=True,
+                    code_write_completed=True, input_file_deleted=True, pause_marker_seen=False)
+    value = rows()
+    value['checks'] = producer.sequence(tmp_path, 'a'*32, float('inf'), status, login)
+    assert all('cleanup_verified' not in row['login'] for row in value['checks'])
+    monkeypatch.setattr(ps_fixture, 'SCRIPT', ROOT/'scripts/verify_r6_auth_recovery.ps1')
+    result = ps_fixture.run_ps("$value='"+json.dumps(value)+"'|ConvertFrom-Json\n"+r'''
+Assert-R6VerifiedSignInRows $value
+@{verified=$true}|ConvertTo-Json -Compress
+''')
+    assert result['verified']
+
+
+def test_owner_successful_public_receipt_passes_verifier(monkeypatch):
+    """Read only the already-public report; never open private evidence or run providers."""
+    path = Path(r'C:\Program Files\CoChem\AgySignIn427-6f2553e0f3e04a1598e64ffaad1d7255\status.json')
+    if not path.exists():
+        pytest.skip('Owner public receipt is not available on this host')
+    import hashlib
+    assert hashlib.sha256(path.read_bytes()).hexdigest() == '96e4d2a872ff64a265efde9f1d1dade42db73f9da85863befc93692ece7ccfff'
+    monkeypatch.setattr(ps_fixture, 'SCRIPT', ROOT/'scripts/verify_r6_auth_recovery.ps1')
+    result = ps_fixture.run_ps("$value=Get-Content -LiteralPath '"+str(path)+"' -Raw|ConvertFrom-Json\n"+r'''
+Assert-R6VerifiedSignInRows $value
+@{verified=$true;profiles=@($value.checks).Count}|ConvertTo-Json -Compress
+''')
+    assert result == dict(verified=True, profiles=6)
 
 
 def test_task_action_binds_guard_and_still_uses_original_config(monkeypatch):
