@@ -1,5 +1,11 @@
 # R7 owner deployment package
 
+The current standalone sign-in package is `agy-signin-c4d4a66`, repairing the
+actual native prompt wording and replacing the unusable TUI display with a
+standard Windows URL/code dialog. See [the owner command](AGY_SIGNIN_READY.txt).
+This does not deploy R6/R7. The preceding `agy-signin-b048393` attempt is spent
+and preserved with verified cleanup and no submitted code.
+
 **2026-10-13 update: this deployment command is spent.** The owner ran 534e7fe;
 its task-permission validation failed before Agy startup, then restored R4 v7.
 The current action is the separate [Agy sign-in command](AGY_SIGNIN_READY.txt).

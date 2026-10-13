@@ -1,35 +1,34 @@
-AGY SIGN-IN ONLY - SIX PROFILES, ONE COMMAND
+AGY SIGN-IN ONLY - STANDARD COPY/PASTE, SIX PROFILES
 
-In an idle Administrator PowerShell window, run:
+Run this replacement once in an idle Administrator PowerShell window:
 
-C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -File "C:\Users\ansac\CoChem427\agy-signin-b048393\signin_agy_profiles.ps1" -ManifestSha256 8da1c1c5ae4710d4f56043a5804b810eaafd561a9e6ee70f58134c26a8f3dd27 -Apply
+C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -STA -File "C:\Users\ansac\CoChem427\agy-signin-c4d4a66\signin_agy_profiles.ps1" -ManifestSha256 d072f88a3570e0ab9a900361322bfe0fdfb5daffa5b7184fdc49ce5ea12a0f82 -Apply
 
-For each profile that needs sign-in:
-1. Open the NEW Google URL printed for that profile in your browser yourself.
-2. Sign in, paste the returned authorization CODE into the masked PowerShell
-   prompt, and press Enter once. The script verifies it, then advances.
+For each profile that needs sign-in, a standard Windows dialog appears:
+1. Click Copy URL and open that fresh URL yourself in your browser.
+2. Copy the authorization code from the browser.
+3. Paste it into the dialog's masked code field with Ctrl+V, then click
+   Submit or press Enter. The script verifies this profile, then advances.
 
-The script never opens the browser. Do not use an earlier URL/code or paste
-the entire callback URL. Q is ordinary code text; Escape cancels.
-Existing verified Agy sessions are skipped. Codex and Claude are not touched.
+The URL text is also selectable. No custom shift/up/down keys, native TUI,
+console code prompt, automatic browser opening or automatic clipboard read.
+Cancel or close the dialog to end the sequence. Do not reuse an old URL/code.
+Already authenticated Agy profiles are reused. Codex/Claude stay unchanged.
 
-Success is the final ALL_SIX_AGY_PROFILES_VERIFIED result. Then you are done
-with this sign-in command. R4 remains running; R6/R7 are not deployed by it.
-If it holds, preserve the final JSON and its status.json path. Do not rerun
-the spent deployment command or attempt another code using an old URL.
+This repairs the b048393 attempt: the old parser did not recognize Agy's
+actual code prompt, so it discarded keyboard input and timed out. The
+replacement verifies that exact ended task and its cleanup before proceeding.
+The prior package, task and reports are preserved. Do not rerun b048393.
 
-The initial actual read-only custody checks took 6.913 seconds. The exact
-packaged read-only plan passed in 0.710 seconds. Google consent and network
-latency determine total sign-in time; six authorizations in one minute have
-not been demonstrated. No planned deployment wait occurs in this command.
-New input is permitted only in the first 20 minutes; cleanup/verification
-can finish after the last input without further questions.
+Success is ALL_SIX_AGY_PROFILES_VERIFIED. This is only authentication: it
+leaves R4 alone, performs no model jobs, and does not deploy R6 or R7.
+If it holds, return the final status/error; preserve all files and tasks.
+All input is within the first 20 minutes; verification can finish afterward.
+The previous owner run took 96.3 seconds before profile sign-in. Total setup
+and six Google approvals in one minute are not verified or guaranteed.
 
-Source: b0483934d76dc758d6f314377559177b2e666f56; preceding registration fix 9e33975.
-Package: C:\Users\ansac\CoChem427\agy-signin-b048393 (16 pinned files).
-141 serialized Windows source/inert tests passed (latest run 15.09 seconds).
-No native Agy/Google authorization was performed by the engineering session.
-The owner run provides the first actual native authentication result.
-
-The latest supplied host evidence is successful R4 restoration v7 after
-534e7fe failed before requesting Agy startup. All earlier artifacts remain.
+Source: c4d4a660f709bf73b8638c3d0bc4681c5facc6ec.
+Package: C:\Users\ansac\CoChem427\agy-signin-c4d4a66 (16 pinned files).
+168 serialized source/inert Windows tests passed; 37 owner-interface tests
+passed again after final styling. Exact packaged read-only plan passed in
+0.582 seconds. Native OAuth acceptance remains for the owner run.
