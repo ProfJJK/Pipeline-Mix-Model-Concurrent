@@ -51,3 +51,17 @@ The engineering process has not run Apply, a provider, a daemon or any task
 lifecycle action. The replacement launch continues to use immutable installed
 R6 source `359ca92`, the reviewed R4 v7 recovery and the prior Pro-retirement
 startup amendment. It remains R6-only, with no planned late input or sign-in.
+
+## Delivered replacement
+
+Immutable folder: `C:\Users\ansac\CoChem427\r6-launch-c7a9241`.
+Manifest SHA-256:
+`4a4bfb7974f8b773d1fc4b6a820b649d59c9b4d5f4e58f9814f283737ee70458`.
+The actual packaged read-only plan verified 494 inputs in 7.16 seconds and
+returned `R6_LAUNCH_PLAN`, session reuse enabled, no later prompts, 26 model
+targets and four shared slots. Relative to `2571003`, executable changes are
+limited to the verifier and its parent launcher; the remaining differences
+are two historical owner instruction sheets bundled as reference material.
+Use the updated deployment workspace `RETURN_SETUP_R6.txt`, not a historical
+sheet inside an older or copied package. Its single command is also in
+[RETURN_SETUP_R6_2026-10-13.txt](RETURN_SETUP_R6_2026-10-13.txt).

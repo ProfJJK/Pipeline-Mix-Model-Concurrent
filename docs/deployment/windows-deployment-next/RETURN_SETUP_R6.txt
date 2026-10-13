@@ -1,9 +1,9 @@
-R6 STARTUP — AFTER THE SUCCESSFUL SIX-PROFILE AGY SIGN-IN
-13 October 2026; replaces every earlier R6 install/auth-recovery command.
+R6 STARTUP — CORRECTED SIGN-IN RECEIPT VERIFICATION
+13 October 2026; replaces the spent 2571003 command and all earlier R6 commands.
 
 Open Administrator Windows PowerShell and paste this ONE command once:
 
-C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -File "C:\Users\ansac\CoChem427\r6-launch-2571003\run_r6_launch.ps1" -LaunchManifest "C:\Users\ansac\CoChem427\r6-launch-2571003\launch-manifest.json" -LaunchManifestSha256 c087cf5adc962e76a288a323f7bd5a541351f2806eca0a3a40527220a15dbd7f -Apply
+C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -File "C:\Users\ansac\CoChem427\r6-launch-c7a9241\run_r6_launch.ps1" -LaunchManifest "C:\Users\ansac\CoChem427\r6-launch-c7a9241\launch-manifest.json" -LaunchManifestSha256 4a4bfb7974f8b773d1fc4b6a820b649d59c9b4d5f4e58f9814f283737ee70458 -Apply
 
 No new sign-in is planned. The command verifies and reuses the installed R6 and
 existing Codex, Claude and Agy sessions. You can leave it running after starting.
@@ -17,8 +17,13 @@ if they pass. The explicit protected startup amendment excludes retired Gemini
 Pro from selection/admission. Tiers 5/6 keep Claude/Codex and then back off.
 Four shared slots, existing sign-ins, R:, databases, captures and budgets remain.
 
-215 Windows source/fixture tests passed. The actual 494-input frozen launch
-package returned R6_LAUNCH_PLAN in 7.00 seconds without Apply. These are source
+The verifier now reads cleanup at the location the successful sign-in writer
+actually uses. It was tested against your unchanged six-profile public report;
+no new sign-in or cleanup is needed. Future verification holds publish sanitized
+exception types and source positions in the status report, without login data.
+
+233 Windows source/fixture tests passed. The actual 494-input frozen launch
+package returned R6_LAUNCH_PLAN in 7.16 seconds without Apply. These are source
 and package checks, not confirmation that R6 has started on this machine.
 
 Expected successful final status: WARDEN_R6_RUNNING_HEALTH_VERIFIED.
