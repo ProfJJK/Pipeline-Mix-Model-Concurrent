@@ -1,6 +1,12 @@
 # R7 owner deployment package
 
-## Current replacement: native terminal recovery and one owner sitting
+**2026-10-13 update: this deployment command is spent.** The owner ran 534e7fe;
+its task-permission validation failed before Agy startup, then restored R4 v7.
+The current action is the separate [Agy sign-in command](AGY_SIGNIN_READY.txt).
+Do not repeat R6/R7 deployment. The sections below preserve earlier delivery
+bindings, not permission to rerun them.
+
+## Historical replacement: native terminal recovery and one owner sitting
 
 The new owner command is in
 `docs/deployment/windows-deployment-next/RETURN_SETUP_R7.txt` and the deployment

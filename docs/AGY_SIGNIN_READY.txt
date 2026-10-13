@@ -1,0 +1,35 @@
+AGY SIGN-IN ONLY - SIX PROFILES, ONE COMMAND
+
+In an idle Administrator PowerShell window, run:
+
+C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -File "C:\Users\ansac\CoChem427\agy-signin-b048393\signin_agy_profiles.ps1" -ManifestSha256 8da1c1c5ae4710d4f56043a5804b810eaafd561a9e6ee70f58134c26a8f3dd27 -Apply
+
+For each profile that needs sign-in:
+1. Open the NEW Google URL printed for that profile in your browser yourself.
+2. Sign in, paste the returned authorization CODE into the masked PowerShell
+   prompt, and press Enter once. The script verifies it, then advances.
+
+The script never opens the browser. Do not use an earlier URL/code or paste
+the entire callback URL. Q is ordinary code text; Escape cancels.
+Existing verified Agy sessions are skipped. Codex and Claude are not touched.
+
+Success is the final ALL_SIX_AGY_PROFILES_VERIFIED result. Then you are done
+with this sign-in command. R4 remains running; R6/R7 are not deployed by it.
+If it holds, preserve the final JSON and its status.json path. Do not rerun
+the spent deployment command or attempt another code using an old URL.
+
+The initial actual read-only custody checks took 6.913 seconds. The exact
+packaged read-only plan passed in 0.710 seconds. Google consent and network
+latency determine total sign-in time; six authorizations in one minute have
+not been demonstrated. No planned deployment wait occurs in this command.
+New input is permitted only in the first 20 minutes; cleanup/verification
+can finish after the last input without further questions.
+
+Source: b0483934d76dc758d6f314377559177b2e666f56; preceding registration fix 9e33975.
+Package: C:\Users\ansac\CoChem427\agy-signin-b048393 (16 pinned files).
+141 serialized Windows source/inert tests passed (latest run 15.09 seconds).
+No native Agy/Google authorization was performed by the engineering session.
+The owner run provides the first actual native authentication result.
+
+The latest supplied host evidence is successful R4 restoration v7 after
+534e7fe failed before requesting Agy startup. All earlier artifacts remain.
