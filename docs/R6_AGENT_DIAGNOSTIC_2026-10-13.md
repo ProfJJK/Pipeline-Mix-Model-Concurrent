@@ -95,3 +95,25 @@ that binds these completed auth/knowledge receipts and R4 v8. The old recovery
 verifier deliberately refuses existing knowledge; do not weaken that history
 check or replay `fresh_knowledge`. Native selector acceptance, preview and R6
 cutover remain outstanding. Keep R7 separate and do not claim it deployed.
+
+## Delivered one-command package
+
+Source checkpoint `798e3c4f546711da87d96a86ff0c922feab3978a` is frozen in
+`C:\Users\ansac\CoChem427\r6-agent-diagnostic-798e3c4` with five pinned files.
+Manifest SHA-256:
+`2aff8f037c88eae0d7aa9737983f23f25a6ddc00b1a71cb82230efcd6a689443`.
+The actual packaged read-only invocation exited zero with
+`READ_ONLY_PACKAGE_VERIFIED` in 0.367 seconds; that timing excludes protected
+installation validation and the owner-run SYSTEM diagnostic.
+
+The fixed fresh output root, created only by the owner command, is
+`C:\Program Files\CoChem\R6AgentDiagnostic427-45da557a0e364dac95d42e2ae2f9a4fc`.
+Read its sanitized `status.json` after the owner reports completion. Do not
+assume it exists or run Apply from the engineering session. The owner can walk
+away after launching the command; no subsequent input is requested.
+
+The current instruction sheet is
+[RETURN_R6_AGENT_DIAGNOSTIC_2026-10-13.txt](RETURN_R6_AGENT_DIAGNOSTIC_2026-10-13.txt).
+Both deployment workspace R6 setup sheets now point to this diagnostic and
+explicitly hold the spent deployment command. All immutable older packages
+remain untouched.

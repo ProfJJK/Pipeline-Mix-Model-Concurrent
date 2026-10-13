@@ -1,0 +1,33 @@
+R6 AGENT-CUSTODY DIAGNOSTIC — NO SIGN-IN OR DEPLOYMENT
+13 October 2026
+
+The 07:33 run verified all 18 provider sessions and completed R6 knowledge.
+It held in agent protection acceptance; the saved ValueError omitted its cause.
+R4 was restored as v8. R6 is not started. Preserve all earlier attempts and
+the new knowledge state; do not repeat any earlier R6/R7 deployment command.
+
+In Administrator Windows PowerShell, paste this ONE command once:
+
+C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -File "C:\Users\ansac\CoChem427\r6-agent-diagnostic-798e3c4\inspect_r6_agent_custody.ps1" -ManifestSha256 2aff8f037c88eae0d7aa9737983f23f25a6ddc00b1a71cb82230efcd6a689443 -Apply
+
+You can walk away immediately after starting it. Keep the computer awake and
+the PowerShell window open. There are no URLs, sign-ins, choices or late prompts.
+Protected code validation runs first; the SYSTEM diagnostic itself has a
+10-minute bound. This is not a promise of an overall one-minute runtime.
+
+It creates one new protected diagnostic task, reads the existing receipts and
+checks the same installed protection logic, recording the failed stage and
+numeric Windows results. The handle checks request access without writing,
+deleting or renaming paths. R4 stays running. Existing accounts, credentials,
+knowledge, databases, budgets, R: and task definitions are preserved.
+
+Administrator access is needed to register this protected SYSTEM diagnostic;
+the engineering process cannot exercise the isolated worker tokens itself.
+This is a diagnostic, not permission to weaken a check or launch R6.
+
+Return the final JSON or its report_path. DIAGNOSTIC_CAPTURED means the
+observation was saved, even if it captured a failed protection check. Do not
+rerun the command on any result. All output files and the task are preserved.
+
+72 source/Windows fixture tests passed. The five-file packaged read-only plan
+passed. Actual SYSTEM diagnostic/deployment acceptance has not yet been run.

@@ -1,33 +1,33 @@
-R6 STARTUP — CORRECTED SIGN-IN RECEIPT VERIFICATION
-13 October 2026; replaces the spent 2571003 command and all earlier R6 commands.
+R6 AGENT-CUSTODY DIAGNOSTIC — NO SIGN-IN OR DEPLOYMENT
+13 October 2026
 
-Open Administrator Windows PowerShell and paste this ONE command once:
+The 07:33 run verified all 18 provider sessions and completed R6 knowledge.
+It held in agent protection acceptance; the saved ValueError omitted its cause.
+R4 was restored as v8. R6 is not started. Preserve all earlier attempts and
+the new knowledge state; do not repeat any earlier R6/R7 deployment command.
 
-C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -File "C:\Users\ansac\CoChem427\r6-launch-c7a9241\run_r6_launch.ps1" -LaunchManifest "C:\Users\ansac\CoChem427\r6-launch-c7a9241\launch-manifest.json" -LaunchManifestSha256 4a4bfb7974f8b773d1fc4b6a820b649d59c9b4d5f4e58f9814f283737ee70458 -Apply
+In Administrator Windows PowerShell, paste this ONE command once:
 
-No new sign-in is planned. The command verifies and reuses the installed R6 and
-existing Codex, Claude and Agy sessions. You can leave it running after starting.
-Keep the computer awake and the PowerShell window open. Acceptance and startup
-may take longer than 20 minutes; no later input, restart or continuation command
-is planned. This starts R6 only, not R7.
+C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -File "C:\Users\ansac\CoChem427\r6-agent-diagnostic-798e3c4\inspect_r6_agent_custody.ps1" -ManifestSha256 2aff8f037c88eae0d7aa9737983f23f25a6ddc00b1a71cb82230efcd6a689443 -Apply
 
-It checks the preserved R4 v7 / login history, stops R4 under the existing
-recovery procedure, performs fresh status/acceptance checks, then starts R6 only
-if they pass. The explicit protected startup amendment excludes retired Gemini
-Pro from selection/admission. Tiers 5/6 keep Claude/Codex and then back off.
-Four shared slots, existing sign-ins, R:, databases, captures and budgets remain.
+You can walk away immediately after starting it. Keep the computer awake and
+the PowerShell window open. There are no URLs, sign-ins, choices or late prompts.
+Protected code validation runs first; the SYSTEM diagnostic itself has a
+10-minute bound. This is not a promise of an overall one-minute runtime.
 
-The verifier now reads cleanup at the location the successful sign-in writer
-actually uses. It was tested against your unchanged six-profile public report;
-no new sign-in or cleanup is needed. Future verification holds publish sanitized
-exception types and source positions in the status report, without login data.
+It creates one new protected diagnostic task, reads the existing receipts and
+checks the same installed protection logic, recording the failed stage and
+numeric Windows results. The handle checks request access without writing,
+deleting or renaming paths. R4 stays running. Existing accounts, credentials,
+knowledge, databases, budgets, R: and task definitions are preserved.
 
-233 Windows source/fixture tests passed. The actual 494-input frozen launch
-package returned R6_LAUNCH_PLAN in 7.16 seconds without Apply. These are source
-and package checks, not confirmation that R6 has started on this machine.
+Administrator access is needed to register this protected SYSTEM diagnostic;
+the engineering process cannot exercise the isolated worker tokens itself.
+This is a diagnostic, not permission to weaken a check or launch R6.
 
-Expected successful final status: WARDEN_R6_RUNNING_HEALTH_VERIFIED.
-Sanitized progress is written to the printed R6Sitting folder's status-*.json.
-If held, preserve the result and files. Do not repeat the command or sign in
-again. Pre-cutover failures restore R4; a possibly started R6 is preserved for
-review rather than stopped automatically.
+Return the final JSON or its report_path. DIAGNOSTIC_CAPTURED means the
+observation was saved, even if it captured a failed protection check. Do not
+rerun the command on any result. All output files and the task are preserved.
+
+72 source/Windows fixture tests passed. The five-file packaged read-only plan
+passed. Actual SYSTEM diagnostic/deployment acceptance has not yet been run.
