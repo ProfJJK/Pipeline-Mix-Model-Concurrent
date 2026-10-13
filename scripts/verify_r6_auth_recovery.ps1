@@ -415,7 +415,7 @@ function Assert-R6CustodyContinuationEvidence {
     $manifestHash='bffcf617620320109a3ff1bcbdcc2e1d4918f9571721dc4642efeed4d0b7a2c4'
     $candidateHash='a8b9b2052402f30860188721f986686c5a2f6785e563045edf295adae250f288'
     $null=Read-R6RecoveryJson (Join-Path $script:targetRoot 'install-manifest.json') $manifestHash
-    $candidate=Read-R6RecoveryJson (Join-Path $script:targetRoot 'pipeline.json') $candidateHash
+    $null=Read-R6RecoveryJson (Join-Path $script:targetRoot 'pipeline.json') $candidateHash
     $installed=Read-R6RecoveryJson (Join-Path $script:targetRoot 'install-after.json')
     if((Test-Path -LiteralPath (Join-Path $script:targetRoot 'install-held.json')) -or
         $installed.status -cne 'STOPPED_RUNTIME_INSTALLED' -or $installed.manifest_sha256 -cne $manifestHash -or
@@ -437,8 +437,12 @@ function Assert-R6CustodyContinuationEvidence {
         if($entry.phase -ceq 'knowledge' -and $row.result.status -cne 'NEW_KNOWLEDGE_AUTHORITY_VERIFIED'){
             throw 'The completed knowledge receipt differs.'}
     }
-    if(-not (Test-Path -LiteralPath $candidate.knowledge.state_root -PathType Container)){
-        throw 'The completed knowledge state is missing; no automatic creation.'}
+    # This preflight runs as the owner, not SYSTEM. The pinned candidate and
+    # prior receipt bind the expected state without opening its SYSTEM-only
+    # directory. The mandatory SYSTEM knowledge phase checks the directory,
+    # generation, authority and integrity before native acceptance/cutover.
+    # Its validate_private_directory call precedes KnowledgeService creation:
+    # missing/inaccessible state holds; it is never created or refreshed here.
     $diagnostic=Read-R6RecoveryJson (Join-Path $script:base 'R6AgentDiagnostic427-45da557a0e364dac95d42e2ae2f9a4fc\status.json') 'c124feb02e72f061109624993cb0538ef0ebe30431a3c2eeff39f659ca3b7f0c'
     if($diagnostic.status -cne 'DIAGNOSTIC_CAPTURED' -or @($diagnostic.workers).Count -ne 1 -or
         $diagnostic.workers[0].failure.reason -cne 'CUSTODY_ACCESS_NOT_DENIED' -or
@@ -458,7 +462,8 @@ function Assert-R6CustodyContinuationEvidence {
     Assert-R6NotReferenced
     $null=Assert-R6Tree;Assert-R6Interpreter
     @{status='EXISTING_R6_AUTH_RECOVERY_PREREQUISITES_VERIFIED';continuation='AGENT_CUSTODY_REPAIR';
-        installation_repeated=$false;knowledge_rebuild_allowed=$false;state_modified=$false}
+        installation_repeated=$false;knowledge_rebuild_allowed=$false;state_modified=$false;
+        knowledge_state_verified=$false;knowledge_state_verification='REQUIRED_IN_SYSTEM_KNOWLEDGE_PHASE'}
 }
 
 function Assert-R6AuthRecoveryEvidence {

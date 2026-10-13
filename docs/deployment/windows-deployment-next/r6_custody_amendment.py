@@ -83,7 +83,7 @@ def save_failure(error, output):
 def verify_existing_knowledge(config):
     from cochem_pipeline import windows as win
     from cochem_pipeline.r6_host_acceptance import read_bound
-    from cochem_pipeline.knowledge import KnowledgeService
+    from cochem_pipeline.knowledge import KnowledgeService, _ancestors, _read_bytes
     from cochem_pipeline.knowledge_authority import KnowledgeAuthority
     from cochem_pipeline.planning_governance import canonical_authority
     prior = json.loads(read_bound(win, KNOWLEDGE, KNOWLEDGE_HASH))
@@ -94,13 +94,19 @@ def verify_existing_knowledge(config):
     state = Path(config.knowledge.state_root)
     # Never let the service constructor create missing state on a recovery.
     win.validate_private_directory(state)
-    pointer = read_bound(win, state / 'current.json', maximum=16384)
+    def read_state(path, maximum):
+        # State lives under private ProgramData, not a privileged code root.
+        # Use the installed knowledge reader's private ACL, ordinary-file,
+        # size, file-identity and modification checks. No permission changes.
+        _ancestors(path.parent)
+        return _read_bytes(path, maximum, private=True)
+    pointer = read_state(state / 'current.json', 16384)
     current = json.loads(pointer)
     previous = prior['result']['evidence']
     if not re.fullmatch(r'g-[0-9a-f]{32}', str(current.get('generation', ''))) or current['generation'] != previous['generation']:
         raise ValueError('Completed knowledge generation differs')
     index = state / current['generation'] / 'knowledge_index.db'
-    before = read_bound(win, index, maximum=128 * 1024**2)
+    before = read_state(index, 128 * 1024**2)
     service = KnowledgeService(config.knowledge)
     try:
         evidence = KnowledgeAuthority(service, canonical_authority()).status(force=True)
@@ -114,7 +120,7 @@ def verify_existing_knowledge(config):
             raise ValueError('Completed knowledge authority is not ready')
     finally:
         service.close()
-    if pointer != read_bound(win, state / 'current.json', maximum=16384) or before != read_bound(win, index, maximum=128 * 1024**2):
+    if pointer != read_state(state / 'current.json', 16384) or before != read_state(index, 128 * 1024**2):
         raise ValueError('Knowledge changed during read-only verification')
     return dict(schema='cochem-r6-knowledge-reuse/1', status='EXISTING_KNOWLEDGE_AUTHORITY_VERIFIED',
         prior_receipt_sha256=KNOWLEDGE_HASH, generation=current['generation'],

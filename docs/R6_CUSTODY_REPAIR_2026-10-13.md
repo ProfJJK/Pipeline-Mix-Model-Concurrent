@@ -1,5 +1,54 @@
 # R6 continuation after the proved directory-custody defect
 
+## 09:18 continuation hold and permission-boundary repair
+
+The owner ran `r6-launch-bf5b5f6`. Its public sitting report under
+`R6Sitting4.2.7-windows-20261012-40103f08e0e344a19ee1d64d0231b805`
+records `UnauthorizedAccessException` (HResult -2147024891) in
+`Assert-R6CustodyContinuationEvidence`, line 440. That line called `Test-Path`
+against the private ProgramData knowledge state from the owner process. The
+hold preceded R4 stop, any new SYSTEM phase and cutover. R4 v8 was running at
+inspection. Preserve that package and evidence; do not rerun its command.
+
+The corrected owner preflight verifies the pinned candidate and historical
+receipt without opening the private state. It explicitly reports
+`knowledge_state_verified=false` and
+`knowledge_state_verification=REQUIRED_IN_SYSTEM_KNOWLEDGE_PHASE`. The existing
+mandatory SYSTEM phase remains responsible for current directory ACLs,
+generation, canonical authority, integrity and unchanged bytes. Missing or
+inaccessible state is rejected before construction of the knowledge service;
+no create, refresh, ownership or ACL repair is attempted.
+
+Review also found a second defect before execution: the SYSTEM helper used
+`r6_host_acceptance.read_bound`, whose validator only accepts protected code
+under Program Files/Windows, for the ProgramData pointer and index. Those
+reads now use the installed knowledge service's `_read_bytes(private=True)`
+and `_ancestors` checks. The private reader enforces ACLs, ordinary files,
+single file links, size bounds, opened-file identity and unchanged metadata.
+The prior Program Files receipt still uses the original hash-bound code reader.
+Canonical and frozen installed `knowledge.py` bytes match, SHA256
+`1bf720ed5df342704552b3e0996ee1cdaebd8f9d7f26fc345b4e5a848e2d2f0f`.
+
+Both permission errors were reproduced in regressions before their fixes.
+The tests now deny owner access to private state and reject treating private
+state as code. They also exercise the production private-file validator with
+an explicit temporary ACL adapter, reject failed private ACL checks, and prove
+missing/inaccessible state cannot reach service creation. Temporary SQLite
+verification preserves file bytes and mtimes. These remain source/fixture
+tests, not actual SYSTEM acceptance.
+
+The remaining owner-side checks were reviewed: installation tree/interpreter,
+receipt readers and activation index stay under Program Files; task inspection
+uses the owner-admin scheduler interface. Private state reads stay in the
+SYSTEM knowledge phase. Its successful receipt remains mandatory for cutover.
+
+Final source/fixture verification for this correction: **300 passed in 76.45
+seconds**, serialized under repository Python 3.12. Coverage includes both
+permission regressions, unchanged Win32 directory sharing, knowledge/activation
+interoperability, phase ordering, stop-on-failure, preservation and startup
+amendment binding. No live provider command, SYSTEM task or daemon ran in these
+tests. The earlier 297-test run below describes the previous package.
+
 The owner-run diagnostic completed. Its ordinary-readable report is
 `C:\Program Files\CoChem\R6AgentDiagnostic427-45da557a0e364dac95d42e2ae2f9a4fc\status.json`,
 SHA256 `c124feb02e72f061109624993cb0538ef0ebe30431a3c2eeff39f659ca3b7f0c`.
@@ -97,7 +146,7 @@ be reused after this amended R6 startup. A future R7 package must bind the new
 R6 source action and include the canonical directory fix; do not reuse its
 spent R6 prerequisite recovery.
 
-## Delivered package
+## Previous package (spent at 09:18)
 
 Repair source checkpoint: `bf5b5f6` on `feature/r6-routing-pivots`.
 Fresh ordinary package: `C:\Users\ansac\CoChem427\r6-launch-bf5b5f6`.
@@ -117,5 +166,6 @@ The engineer reviewed the hash/copy/action chain and source/receipt consumers.
 No Apply was invoked. The owner command is in
 [RETURN_SETUP_R6_2026-10-13.txt](RETURN_SETUP_R6_2026-10-13.txt), mirrored as
 `windows-deployment-next\RETURN_SETUP_R6.txt` in the deployment workspace.
-Do not replay earlier launch packages or the spent diagnostic. Preserve this
-package unchanged and read the new sanitized sitting status after owner execution.
+Do not replay this package, earlier launch packages or the spent diagnostic.
+Preserve all their files and receipts unchanged. Replacement package details
+are recorded below after the frozen read-only plan passes.

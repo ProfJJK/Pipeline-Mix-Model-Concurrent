@@ -9,6 +9,7 @@ from types import SimpleNamespace
 import pytest
 
 from scripts import r6_custody_amendment as amendment
+from cochem_pipeline.knowledge import _protected as production_knowledge_protected
 from pipeline_tests import test_install_r6_runtime as ps_fixture
 from pipeline_tests.test_knowledge import corpus, portable_knowledge_permissions, ratify
 
@@ -56,7 +57,7 @@ def test_installed_amendment_updates_both_acceptance_and_production_import(monke
             del guard._r6_custody_amendment
 
 
-@pytest.mark.parametrize('fault', ['', 'generation', 'hash', 'authority', 'metadata'])
+@pytest.mark.parametrize('fault', ['', 'generation', 'hash', 'authority', 'metadata', 'private_acl'])
 def test_completed_knowledge_is_read_only_and_never_refreshed(corpus, monkeypatch, fault):
     from cochem_pipeline import windows as win, r6_host_acceptance as host, knowledge, knowledge_authority
     corpus.docs['.sources/reference.md'] += '\n' + ('Published immutable evidence and verified recovery. ' * 1800)
@@ -69,7 +70,11 @@ def test_completed_knowledge_is_read_only_and_never_refreshed(corpus, monkeypatc
     if fault == 'generation': evidence['generation'] = 'g-' + '0' * 32
     if fault == 'metadata': evidence['manifest_sha256'] = '0' * 64
     data = json.dumps(receipt).encode()
-    ordinary = SimpleNamespace(validate_code_path=lambda path: None)
+    # Keep the production separation between Program Files code and private
+    # ProgramData state. A blanket no-op here hid use of the wrong validator.
+    def code_path(path):
+        raise win.WindowsIsolationError('Private state is not privileged code')
+    ordinary = SimpleNamespace(validate_code_path=code_path)
     original = host.read_bound
     def read(win, path, expected=None, maximum=16777216):
         if path == amendment.KNOWLEDGE:
@@ -79,6 +84,16 @@ def test_completed_knowledge_is_read_only_and_never_refreshed(corpus, monkeypatc
         return original(ordinary, path, expected, maximum)
     monkeypatch.setattr(host, 'read_bound', read)
     monkeypatch.setattr(win, 'validate_private_directory', lambda path: path.stat())
+    private_reads = []
+    def private_path(path):
+        assert any(root == path or root in path.parents for root in (corpus.private, corpus.root))
+        if fault == 'private_acl' and path.name == 'current.json':
+            raise win.WindowsIsolationError('Private pointer ACL is not accepted')
+        path.stat()
+        if Path(corpus.config.state_root) in path.parents:
+            private_reads.append(path.name)
+    monkeypatch.setattr(win, 'validate_private_path', private_path)
+    monkeypatch.setattr(knowledge, '_protected', production_knowledge_protected)
     def status(self, *, force):
         return dict(self.knowledge.status(), authority_matches_capture=fault != 'authority')
     monkeypatch.setattr(knowledge_authority.KnowledgeAuthority, '__init__', lambda self, service, captured: setattr(self, 'knowledge', service))
@@ -89,12 +104,14 @@ def test_completed_knowledge_is_read_only_and_never_refreshed(corpus, monkeypatc
         return {str(p.relative_to(state)): (p.read_bytes(), p.stat().st_mtime_ns) for p in state.rglob('*') if p.is_file()}
     before = snapshot()
     if fault:
-        with pytest.raises(ValueError): amendment.verify_existing_knowledge(SimpleNamespace(knowledge=corpus.config))
+        expected = win.WindowsIsolationError if fault == 'private_acl' else ValueError
+        with pytest.raises(expected): amendment.verify_existing_knowledge(SimpleNamespace(knowledge=corpus.config))
     else:
         result = amendment.verify_existing_knowledge(SimpleNamespace(knowledge=corpus.config))
         assert result['status'] == 'EXISTING_KNOWLEDGE_AUTHORITY_VERIFIED'
         assert result['generation'] == pointer['generation'] and result['integrity_check'] == 'ok'
         assert not result['rebuilt'] and not result['existing_state_modified']
+        assert private_reads.count('current.json') >= 2 and private_reads.count('knowledge_index.db') >= 2
         assert_activation_accepts_written_knowledge(monkeypatch, result)
     assert snapshot() == before
 
@@ -102,6 +119,30 @@ def test_completed_knowledge_is_read_only_and_never_refreshed(corpus, monkeypatc
 def ps(monkeypatch, script, body):
     monkeypatch.setattr(ps_fixture, 'SCRIPT', Path(__file__).parents[1] / 'scripts' / script)
     return ps_fixture.run_ps(body)
+
+
+@pytest.mark.parametrize('failure', [FileNotFoundError, PermissionError])
+def test_system_knowledge_check_refuses_missing_or_inaccessible_state_before_service_creation(tmp_path, monkeypatch, failure):
+    from cochem_pipeline import windows as win, r6_host_acceptance as host, knowledge
+    state = tmp_path / 'private-knowledge'
+    receipt = dict(phase='knowledge', status='PHASE_COMPLETED', manifest_sha256=amendment.MANIFEST,
+        candidate_sha256=amendment.CANDIDATE, result=dict(status='NEW_KNOWLEDGE_AUTHORITY_VERIFIED'))
+    events = []
+    def read(win, path, expected=None, maximum=16777216):
+        assert path == amendment.KNOWLEDGE and expected == amendment.KNOWLEDGE_HASH
+        events.append('receipt')
+        return json.dumps(receipt).encode()
+    def validate(path):
+        assert path == state
+        events.append('private-directory')
+        raise failure('inert SYSTEM permission boundary')
+    monkeypatch.setattr(host, 'read_bound', read)
+    monkeypatch.setattr(win, 'validate_private_directory', validate)
+    monkeypatch.setattr(knowledge, 'KnowledgeService', lambda *a, **k: pytest.fail('must not create or refresh state'))
+    with pytest.raises(failure):
+        amendment.verify_existing_knowledge(SimpleNamespace(knowledge=SimpleNamespace(state_root=str(state))))
+    assert events == ['receipt', 'private-directory']
+    assert not state.exists()
 
 
 def assert_activation_accepts_written_knowledge(monkeypatch, result):
@@ -214,7 +255,11 @@ function Read-R6RecoveryJson {param($Path,$Hash)
  if($phase -eq 'knowledge' -and 'FAULT' -eq 'knowledge'){$result.status='changed'}
  @{schema='cochem-r6-system-phase/1';phase=$phase;status=$(if($phase -eq 'agent'){'HELD_PRESERVE_PARTIAL'}else{'PHASE_COMPLETED'});manifest_sha256='bffcf617620320109a3ff1bcbdcc2e1d4918f9571721dc4642efeed4d0b7a2c4';candidate_sha256='a8b9b2052402f30860188721f986686c5a2f6785e563045edf295adae250f288';result=$result}
 }
-function Test-Path {param($LiteralPath,$PathType) $LiteralPath -ceq 'C:\fixture\knowledge'}
+function Test-Path {param($LiteralPath,$PathType)
+ if($LiteralPath -ceq 'C:\fixture\knowledge'){
+  $script:events.Add('owner-private-knowledge-probe')
+  throw [UnauthorizedAccessException]::new('SYSTEM-private fixture denies the owner')}
+ $false}
 function Get-ChildItem {param($LiteralPath,[switch]$Directory)
  @([pscustomobject]@{Name='R6Acceptance4.2.7-windows-20261012-v1-knowledge-47776d31bd0e4773be318bde56f5be0a'},
  [pscustomobject]@{Name='R6Acceptance4.2.7-windows-20261012-v1-agent-0269bb0c420b488bbb4874841be21ea0'})
@@ -229,11 +274,15 @@ function New-Object {param($ComObject)
 function Assert-R6NotReferenced {$script:events.Add('not_referenced')}
 function Assert-R6Tree {$script:events.Add('tree')}
 function Assert-R6Interpreter {$script:events.Add('interpreter')}
-$errorText=$null;try{$value=Assert-R6CustodyContinuationEvidence}catch{$errorText=$_.Exception.Message}
-@{error=$errorText;events=@($script:events)}|ConvertTo-Json -Compress
+$errorText=$null;$value=$null;try{$value=Assert-R6CustodyContinuationEvidence}catch{$errorText=$_.Exception.Message}
+@{error=$errorText;events=@($script:events);verification=$value}|ConvertTo-Json -Compress
 '''.replace('FAULT', fault))
+    assert 'owner-private-knowledge-probe' not in result['events'], result
     assert bool(result['error']) is bool(fault), result
-    if not fault: assert result['events'][-3:] == ['not_referenced', 'tree', 'interpreter']
+    if not fault:
+        assert result['events'][-3:] == ['not_referenced', 'tree', 'interpreter']
+        assert result['verification']['knowledge_state_verification'] == 'REQUIRED_IN_SYSTEM_KNOWLEDGE_PHASE'
+        assert result['verification']['knowledge_state_verified'] is False
 
 
 def test_daemon_entry_point_installs_pinned_custody_before_start(monkeypatch):
