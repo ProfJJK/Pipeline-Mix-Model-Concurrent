@@ -114,15 +114,25 @@ function Read-R6AmendmentFailure {
                 try{$candidate=$line|ConvertFrom-Json
                     if($candidate.PSObject.Properties['schema'] -and $candidate.schema -ceq 'cochem-r6-amendment-failure/1'){$value=$candidate;break}}
                 catch{}}}
+        $kinds=@('ValueError','RuntimeError','OSError','PermissionError','AgentGuardError',
+            'WindowsIsolationError','KnowledgeError','DatabaseError','FileNotFoundError','OtherError',
+            'ProviderFailure','AgyIdentityError','AgyToolRegistryError')
         if($null -eq $value -or $value.schema -cne 'cochem-r6-amendment-failure/1' -or
-            $value.raw_error_published -ne $false -or $value.error_type -cnotin @('ValueError','RuntimeError','OSError',
-                'PermissionError','AgentGuardError','WindowsIsolationError','KnowledgeError','DatabaseError','FileNotFoundError','OtherError') -or
+            $value.raw_error_published -ne $false -or $value.error_type -cnotin $kinds -or
             @($value.frames).Count -gt 6){return $null}
         $frames=@()
         foreach($frame in @($value.frames)){
             if($frame.function -cnotmatch '^[A-Za-z_][A-Za-z_0-9]{0,79}$' -or $frame.line -isnot [int] -or $frame.line -lt 1){return $null}
             $frames+=@{function=[string]$frame.function;line=[int]$frame.line}}
-        @{error_type=[string]$value.error_type;frames=$frames}
+        $result=@{error_type=[string]$value.error_type;frames=$frames}
+        if($null -ne $value.PSObject.Properties['category']){
+            if($value.category -isnot [string] -or $value.category -cnotin @('compatibility','protocol','code','auth',
+                'quota','busy','provider','resource','timeout','unknown','configuration')){return $null}
+            $result.category=$value.category}
+        if($null -ne $value.PSObject.Properties['cause_type']){
+            if($value.cause_type -isnot [string] -or $value.cause_type -cnotin $kinds){return $null}
+            $result.cause_type=$value.cause_type}
+        $result
     }catch{return $null}
 }
 

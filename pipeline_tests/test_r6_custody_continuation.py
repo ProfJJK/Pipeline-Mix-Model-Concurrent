@@ -322,3 +322,46 @@ def test_public_failure_metadata_survives_trailing_powershell_error_and_excludes
     result = ps(monkeypatch, 'run_r6_launch.ps1', body)['value']
     if fault: assert result is None
     else: assert result == dict(error_type='ValueError', frames=[dict(function='verify_worker', line=49)])
+
+
+@pytest.mark.parametrize('cause_name', ['AgyIdentityError', 'AgyToolRegistryError'])
+def test_native_failure_preserves_category_and_cause_through_public_projection(monkeypatch, cause_name):
+    from scripts.r6_custody_amendment import failure_projection
+    from cochem_pipeline import agy_protocol
+    from cochem_pipeline.failures import ProviderFailure
+    try:
+        try:
+            raise getattr(agy_protocol, cause_name)('private provider output')
+        except ValueError as cause:
+            raise ProviderFailure('compatibility') from cause
+    except ProviderFailure as error:
+        value = failure_projection(error)
+    assert value['error_type'] == 'ProviderFailure'
+    assert value['category'] == 'compatibility'
+    assert value['cause_type'] == cause_name
+    assert 'private provider output' not in json.dumps(value)
+    body = "$text='" + json.dumps(value) + "'+\"`n\"+'PowerShell terminating error'\n"
+    body += '@{value=(Read-R6AmendmentFailure $text)}|ConvertTo-Json -Depth 6 -Compress'
+    result = ps(monkeypatch, 'run_r6_launch.ps1', body)['value']
+    assert result == {key: value[key] for key in ('error_type', 'category', 'cause_type', 'frames')}
+
+
+def test_failure_projection_never_copies_unknown_types_or_categories():
+    from scripts.r6_custody_amendment import failure_projection
+    private_type = type('private-provider-text', (Exception,), {})
+    error = private_type('secret credential')
+    error.category = 'private-provider-text'
+    error.__cause__ = private_type('private response')
+    value = failure_projection(error)
+    assert value['error_type'] == value['cause_type'] == 'OtherError'
+    assert 'category' not in value
+    assert 'private' not in json.dumps(value) and 'secret' not in json.dumps(value)
+
+
+@pytest.mark.parametrize('field', ['category', 'cause_type'])
+def test_public_failure_rejects_unrecognized_optional_metadata(monkeypatch, field):
+    value = dict(schema='cochem-r6-amendment-failure/1', error_type='ProviderFailure',
+        frames=[], raw_error_published=False, **{field: 'secret credential'})
+    body = "$text='" + json.dumps(value) + "'\n"
+    body += '@{value=(Read-R6AmendmentFailure $text)}|ConvertTo-Json -Depth 6 -Compress'
+    assert ps(monkeypatch, 'run_r6_launch.ps1', body)['value'] is None

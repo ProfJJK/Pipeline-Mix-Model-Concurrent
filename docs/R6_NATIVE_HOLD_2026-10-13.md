@@ -60,3 +60,18 @@ These tests do not attest native provider support or Windows deployment.
 Future continuation must preserve completed knowledge/custody evidence and
 sign-ins, resolve the native incompatibility and bind the observed R4 state.
 No new deployment package has been issued for this hold.
+
+## Source reporting repair
+
+The source-only failure projection now preserves the fixed `ProviderFailure`
+type, its allowlisted category and the explicit `AgyIdentityError` or
+`AgyToolRegistryError` cause. The public PowerShell consumer independently
+validates those fields. Exception text, native response text and arbitrary
+category/type values remain excluded. The previous immutable packages are
+unchanged. This improves the next package's diagnostics; it does not resolve or
+accept the current native compatibility failure.
+
+The combined reporting, launch, custody-continuation and diagnostic regression
+run passed **74 tests in 22.21 seconds**, serialized under repository Python
+3.12. The new regression covers the actual ProviderFailure-from-Agy-error chain
+through Python projection and Windows PowerShell public reporting.

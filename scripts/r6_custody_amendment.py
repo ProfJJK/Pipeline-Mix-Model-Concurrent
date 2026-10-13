@@ -61,6 +61,28 @@ def install(expected_hash):
         directory_share_mode=3, installed_files_modified=False, acl_modified=False)
 
 
+def failure_projection(error):
+    """Fixed failure types/categories; never include exception or provider text."""
+    names = {'ValueError', 'RuntimeError', 'OSError', 'PermissionError', 'AgentGuardError',
+             'WindowsIsolationError', 'KnowledgeError', 'DatabaseError', 'FileNotFoundError',
+             'ProviderFailure', 'AgyIdentityError', 'AgyToolRegistryError'}
+    kind = type(error).__name__
+    frames = [dict(function=f.name, line=f.lineno) for f in traceback.extract_tb(error.__traceback__)
+              if re.fullmatch(r'[A-Za-z_][A-Za-z_0-9]{0,79}', f.name)][-6:]
+    result = dict(schema='cochem-r6-amendment-failure/1',
+        error_type=kind if kind in names else 'OtherError', frames=frames,
+        raw_error_published=False)
+    category = getattr(error, 'category', None)
+    if isinstance(category, str) and category in {
+            'compatibility', 'protocol', 'code', 'auth', 'quota', 'busy', 'provider',
+            'resource', 'timeout', 'unknown', 'configuration'}:
+        result['category'] = category
+    if error.__cause__ is not None:
+        cause = type(error.__cause__).__name__
+        result['cause_type'] = cause if cause in names else 'OtherError'
+    return result
+
+
 def save_failure(error, output):
     """Private fixed metadata; the wrapper publishes only this allowlisted form."""
     from cochem_pipeline import windows as win
@@ -69,15 +91,8 @@ def save_failure(error, output):
     if root.parent != ROOT.parent or not re.fullmatch(r'R6Acceptance4\.2\.7-windows-20261012-v1-(agent|knowledge|native)-[a-f0-9]{32}', root.name):
         raise ValueError('Unexpected amendment failure root')
     win.validate_private_directory(root)
-    names = {'ValueError', 'RuntimeError', 'OSError', 'PermissionError', 'AgentGuardError',
-             'WindowsIsolationError', 'KnowledgeError', 'DatabaseError', 'FileNotFoundError'}
-    kind = type(error).__name__
-    frames = [dict(function=f.name, line=f.lineno) for f in traceback.extract_tb(error.__traceback__)
-              if re.fullmatch(r'[A-Za-z_][A-Za-z_0-9]{0,79}', f.name)][-6:]
     with (root / 'amendment-failure.json').open('x', encoding='utf-8') as stream:
-        json.dump(dict(schema='cochem-r6-amendment-failure/1',
-            error_type=kind if kind in names else 'OtherError', frames=frames,
-            raw_error_published=False), stream)
+        json.dump(failure_projection(error), stream)
 
 
 def verify_existing_knowledge(config):
