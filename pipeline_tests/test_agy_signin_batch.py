@@ -178,7 +178,8 @@ def test_broker_terminal_path_from_fresh_url_to_private_code_and_cleanup(batch,t
         def poll(self): return 0 if finished[0] else None
         def close(self,drain): self.cleanup_verified=True;calls.append('cleanup')
     def launch(*args,output_ready,**kwargs):
-        output_ready(io.BytesIO(b'https://accounts.google.com/o/oauth2/auth?fixture=fresh\nPaste the authorization code below:\n'))
+        output_ready(io.BytesIO(b'https://accounts.google.com/o/oauth2/auth?fixture=fresh\n'
+            b'After authenticating, copy the code displayed in the browser and paste it below:\n\nauthorization code...\nshift+up/down Navigate'))
         return Session()
     monkeypatch.setattr(terminal,'launch_attended_agy',launch)
     original=bridge.TerminalOutput.accept
@@ -204,6 +205,9 @@ def test_broker_terminal_path_from_fresh_url_to_private_code_and_cleanup(batch,t
     assert not (root/'input.once').exists()
     assert b'PRIVATE-CODE' not in (root/'operator.log').read_bytes()
     assert 'PRIVATE-CODE' not in (root/'login.json').read_text()
+    prompt=json.loads((root/'prompt-ready.json').read_text())
+    assert prompt==dict(schema='cochem-agy-code-prompt/1',slot='slot1',nonce=nonce,
+                       url='https://accounts.google.com/o/oauth2/auth?fixture=fresh')
     if short_write:
         assert result['status']=='LOGIN_FAILED_OR_CANCELLED' and not result['code_write_completed']
     else:

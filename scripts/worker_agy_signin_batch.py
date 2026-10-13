@@ -146,7 +146,10 @@ def login_one(win, resources, support, legacy, terminal, bridge, identity, spec,
         phase = 'terminal_input'
         legacy.LOGIN_SECONDS = min(600, max(1, deadline-time.time()))
         with (root/'operator.log').open('xb', buffering=0) as log:
-            output = bridge.TerminalOutput(legacy, log, report, terminal)
+            def prompt_ready(url):
+                write_new(root/'prompt-ready.json', dict(schema='cochem-agy-code-prompt/1',
+                    nonce=nonce, slot=root.name, url=url))
+            output = bridge.TerminalOutput(legacy, log, report, terminal, on_prompt=prompt_ready)
             try:
                 code = bridge.read_loop(legacy, terminal, session, events, output, root, nonce, win, report, channels)
             finally:

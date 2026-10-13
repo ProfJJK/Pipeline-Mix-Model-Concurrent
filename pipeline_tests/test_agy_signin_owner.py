@@ -76,32 +76,96 @@ try{throw 'PRIVATE-CODE-AND-URL'}catch{Get-SigninFailure $_ 'register'|ConvertTo
 
 
 def test_owner_console_relays_fresh_url_and_submits_one_masked_line(run_ps,tmp_path):
-    code_source=str(ROOT/'docs/deployment/windows-deployment-next/claude-code-input-v6.ps1')
-    terminal_source=str(ROOT/'scripts/login_pipeline_worker_agy_terminal.ps1')
-    legacy_source=str(ROOT/'docs/deployment/windows-deployment-next/login_pipeline_worker_interactive_agy_r4_v1.ps1')
     result=run_ps(r'''
-foreach($source in @('CODE','TERMINAL','LEGACY')){
- foreach($d in @(Import-SigninDefinitions $source)){. ([scriptblock]::Create($d))}}
-$root='ROOT';$nonce=('a'*32);$script:sent=@();$script:display='';$script:messages=@();$script:keyIndex=0
-$script:keys=@();foreach($c in 'FixtureQCode'.ToCharArray()){$script:keys+=,[ConsoleKeyInfo]::new($c,[ConsoleKey]::A,$false,$false,$false)}
-$script:keys+=,[ConsoleKeyInfo]::new([char]13,[ConsoleKey]::Enter,$false,$false,$false)
-function Clear-ClaudeConsoleInput {@{console_queue_clear=$true}}
+$root='ROOT';$nonce=('a'*32);$script:sent=@();$script:display='';$script:messages=@()
 function Write-Host {param($Object) $script:messages+=,[string]$Object}
 function Test-InstanceComplete {param($Instance) $false}
-function Read-AgyOperatorLog {param($Path) "https://accounts.google.com/o/oauth2/auth?fixture=fresh`nPaste the authorization code below:`n"}
-function Write-AgyConsoleText {param($Text) $script:display+=$Text}
-function Test-AgyConsoleKeyAvailable {$script:keyIndex -lt $script:keys.Count}
-function Read-AgyConsoleKey {$key=$script:keys[$script:keyIndex];$script:keyIndex++;$key}
+function Read-SigninJson {param($Path) Get-Content -LiteralPath $Path -Raw|ConvertFrom-Json}
+function Show-SigninCodePrompt {param($Url,$Slot,$Root,$Deadline)
+ $script:display=$Url
+ $secret=[Security.SecureString]::new();foreach($c in 'FixtureQCode'.ToCharArray()){$secret.AppendChar($c)}
+ @{Status='SUBMIT';Secret=$secret}}
 function Write-PrivatePacket {param($Path,$Nonce,$Secret)
  $ptr=[Runtime.InteropServices.Marshal]::SecureStringToBSTR($Secret)
  try{$script:sent+=,[Runtime.InteropServices.Marshal]::PtrToStringBSTR($ptr)}finally{[Runtime.InteropServices.Marshal]::ZeroFreeBSTR($ptr)}
  [IO.File]::WriteAllText((Join-Path $root 'result.json'),'{}')}
-[IO.File]::WriteAllText((Join-Path $root 'operator.log'),'fixture')
+[IO.File]::WriteAllText((Join-Path $root 'prompt-ready.json'),(@{schema='cochem-agy-code-prompt/1';
+ nonce=$nonce;slot=(Split-Path $root -Leaf);url='https://accounts.google.com/o/oauth2/auth?fixture=fresh'}|ConvertTo-Json))
 $output=[IO.StringWriter]::new();$original=[Console]::Out
 try{[Console]::SetOut($output);Invoke-SigninConsole 'fixture' $root $nonce ([DateTime]::UtcNow.AddMinutes(1))}finally{[Console]::SetOut($original)}
 @{sent=@($script:sent);url=$script:display;console=$output.ToString();messages=@($script:messages)}|ConvertTo-Json -Compress
-'''.replace('CODE',code_source).replace('TERMINAL',terminal_source).replace('LEGACY',legacy_source).replace('ROOT',str(tmp_path)))
+'''.replace('ROOT',str(tmp_path)))
     assert result['sent']==['FixtureQCode']
     assert 'https://accounts.google.com/' in result['url']
     assert 'FixtureQCode' not in result['console']
     assert any('Verifying' in text for text in result['messages'])
+
+
+@pytest.mark.parametrize('mutation', ['', 'nonce', 'slot', 'scheme', 'host', 'userinfo', 'fragment'])
+def test_fresh_prompt_identity_and_url_are_bound_before_dialog(run_ps, mutation):
+    value=run_ps(r'''
+$p=[pscustomobject]@{schema='cochem-agy-code-prompt/1';nonce=('a'*32);slot='slot1';url='https://accounts.google.com/oauth?fixture=fresh'}
+switch('MUTATION'){
+ 'nonce'{$p.nonce='other'} 'slot'{$p.slot='slot2'} 'scheme'{$p.url='http://accounts.google.com/oauth'}
+ 'host'{$p.url='https://accounts.google.com.evil/oauth'} 'userinfo'{$p.url='https://user@accounts.google.com/oauth'}
+ 'fragment'{$p.url='https://accounts.google.com/oauth#other'}}
+$held=$false;try{Assert-SigninPrompt $p 'slot1' ('a'*32)}catch{$held=$true}
+@{held=$held}|ConvertTo-Json -Compress
+'''.replace('MUTATION',mutation))
+    assert value['held'] is bool(mutation)
+
+
+@pytest.mark.parametrize('mode',['submit','empty','expired','closed'])
+def test_standard_windows_fields_and_submit_boundary_without_showing_window(run_ps,tmp_path,mode):
+    result=run_ps(r'''
+$root='ROOT';$deadline=[DateTime]::UtcNow.AddMinutes(1)
+$view=New-SigninPromptView 'https://accounts.google.com/oauth?fixture=fresh' 'slot1'
+$context=@{Result=$null;Error=$null}
+try{
+ $view.Url.SelectAll();$selected=$view.Url.SelectedText
+ if('MODE' -ne 'empty'){$view.Code.Password='Fixture-Q-Code'}
+ if('MODE' -eq 'expired'){$deadline=[DateTime]::UtcNow.AddSeconds(-1)}
+ if('MODE' -eq 'closed'){[IO.File]::WriteAllText((Join-Path $root 'input.closed'),'fixture')}
+ Complete-SigninPrompt $view $context $root $deadline
+ Complete-SigninPrompt $view $context $root $deadline
+ $state=if($context.Result){$context.Result.Status}else{'EMPTY'}
+ $length=if($context.Result -and $context.Result.Secret){$context.Result.Secret.Length}else{0}
+ @{state=$state;secret_length=$length;selected=$selected;readonly=$view.Url.IsReadOnly;
+   masked_type=$view.Code.GetType().FullName;custom_bindings=$view.Code.InputBindings.Count;
+   default_button=$view.Submit.IsDefault;cancel_button=$view.Cancel.IsCancel;
+   field_cleared=($view.Code.SecurePassword.Length -eq 0)}|ConvertTo-Json -Compress
+}finally{if($context.Result -and $context.Result.Secret){$context.Result.Secret.Dispose()};$view.Code.Clear();$view.Window.Close()}
+'''.replace('ROOT',str(tmp_path)).replace('MODE',mode))
+    assert result['state']==dict(submit='SUBMIT',empty='EMPTY',expired='EXPIRED',closed='EXPIRED')[mode]
+    assert result['secret_length']==(14 if mode=='submit' else 0)
+    assert result['selected']=='https://accounts.google.com/oauth?fixture=fresh'
+    assert result['readonly'] and result['masked_type']=='System.Windows.Controls.PasswordBox'
+    assert result['custom_bindings']==0 and result['default_button'] and result['cancel_button']
+    if mode=='submit':assert result['field_cleared']
+
+
+@pytest.mark.parametrize('mutation',['','task','active','exit','hash','nonce','cleanup','submitted','reason'])
+def test_only_reviewed_ended_prompt_failure_may_be_preserved_and_passed(run_ps, mutation):
+    value=run_ps(r'''
+$script:cochemRoot='C:\fixture';$script:nonce='29d5943c97954a7695d57c722e917cd2'
+$task=[pscustomobject]@{Name=('CoChem-4.2.7-AgySignIn-'+$script:nonce);LastTaskResult=2;State=3;Instances=0}
+$task|Add-Member ScriptMethod GetSecurityDescriptor {param($flags) 'fixture-sddl'}
+$task|Add-Member ScriptMethod GetInstances {param($flags) [pscustomobject]@{Count=$this.Instances}}
+function Assert-RegisteredTaskAcl {param($Sddl) if($Sddl -cne 'fixture-sddl'){throw 'bad'}}
+function Read-R3Control {param($Path,$Hash,$Maximum)
+ if('MUTATION' -eq 'hash' -or $Hash -cne 'a2d3cf3bbaf19f6917ac3826f3fc4bc3774f9fc327e24419e2cf0cb0449ccfa0'){throw 'changed'}}
+function Write-Host {param($Object)}
+$script:result=[pscustomobject]@{nonce=$script:nonce;checks=@([pscustomobject]@{slot='slot1';cleanup_verified=$true})}
+$script:login=[pscustomobject]@{nonce=$script:nonce;cleanup_verified=$true;terminal_cleanup_verified=$true;
+ input_closed_marker_written=$true;one_line_submitted=$false;code_write_completed=$false;
+ terminal_hold_reason='FRESH_GOOGLE_PROMPT_NOT_OBSERVED'}
+function Read-SigninJson {param($Path) if($Path.EndsWith('login.json')){$script:login}else{$script:result}}
+switch('MUTATION'){
+ 'task'{$task.Name+='other'} 'active'{$task.Instances=1} 'exit'{$task.LastTaskResult=3}
+ 'nonce'{$script:result.nonce='other'} 'cleanup'{$script:login.cleanup_verified=$false}
+ 'submitted'{$script:login.one_line_submitted=$true} 'reason'{$script:login.terminal_hold_reason='other'}}
+$folder=[pscustomobject]@{Task=$task};$folder|Add-Member ScriptMethod GetTasks {param($flags) ,$this.Task}
+$held=$false;try{Assert-NoRunningSignins $folder}catch{$held=$true}
+@{held=$held}|ConvertTo-Json -Compress
+'''.replace('MUTATION',mutation))
+    assert value['held'] is bool(mutation)

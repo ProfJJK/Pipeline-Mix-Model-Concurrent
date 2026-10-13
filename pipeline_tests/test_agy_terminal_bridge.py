@@ -102,6 +102,34 @@ def test_a_prompt_before_the_google_url_cannot_unlock_code(bridge, legacy):
     assert output.prompt_ready
 
 
+@pytest.mark.parametrize('chunk_size', [1, 7, 4096])
+def test_installed_131_prompt_with_footer_creates_one_ready_event(bridge, legacy, chunk_size):
+    # Exact wording/row layout from the owner's failure, synthetic URL only.
+    screen = (b'Open the URL below in your browser:\n' + b'-'*1024 +
+        b'\nhttps://accounts.google.com/o/oauth2/auth?fixture=fresh\n' + b'-'*1024 +
+        b'\nAfter authenticating, copy the code displayed in the browser and paste it below:\n'
+        b'\nauthorization code...\n\nshift+up/down Navigate')
+    ready = []
+    output = bridge.TerminalOutput(legacy, io.BytesIO(), {}, on_prompt=ready.append)
+    for at in range(0, len(screen), chunk_size):
+        output.accept(screen[at:at+chunk_size], False)
+    output.accept(screen, False)  # Native redraw is not a second prompt.
+    assert output.prompt_ready
+    assert ready == ['https://accounts.google.com/o/oauth2/auth?fixture=fresh']
+    output.finish()
+    assert output.report['native_markers']['before_input']['paste_prompt_present']
+
+
+@pytest.mark.parametrize('screen', [
+    'authorization code...\nhttps://accounts.google.com/oauth',
+    'https://accounts.google.com/oauth\nshift+up/down Navigate',
+    'https://accounts.google.com.evil/oauth\nPaste the authorization code:',
+    'https://accounts.google.com/oauth\nAfter authenticating, copy the code displayed in the browser and paste it below:',
+])
+def test_footer_or_partial_or_foreign_prompt_does_not_open_input(bridge, screen):
+    assert bridge.google_code_prompt(screen) is None
+
+
 def test_cursor_addressed_native_menu_has_separate_rows_and_one_public_return(bridge, legacy):
     output = bridge.TerminalOutput(legacy, io.BytesIO(), {})
     display = output.accept(b'\x1b[1;1HSelect login method:\x1b[2;1H> 1. Google OAuth\x1b[3;1H  2. API key', False)

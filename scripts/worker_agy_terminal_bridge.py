@@ -17,6 +17,7 @@ import re
 import sys
 import threading
 import time
+from urllib.parse import urlsplit
 
 PARENT_NAME = 'worker_agy_login_bridge_r4_v1.py'
 PARENT_PIN = '4074878f100ae59b804c95bd97b3280ccaa09f919ffaa365a3e2c6985045b8d9'
@@ -27,6 +28,26 @@ ROOT_PREFIX = 'InteractiveAgyTerminal427-r4-'
 SESSION_PARENT = Path(r'C:\Program Files\CoChem')
 STARTUP_SECONDS = 30
 PROMPT_SECONDS = 60
+
+
+def google_code_prompt(text):
+    """Recognize the native consent screen, not its navigation footer.
+
+    Both known wordings must follow this process's complete Google URL. The
+    1.3.1 screen says 'copy the code ... paste it below' plus a placeholder;
+    it never says the previously assumed 'paste the authorization code'.
+    """
+    for match in reversed(list(re.finditer(r'https://accounts\.google\.com/[^\s<>]+', text))):
+        url = match.group()
+        parsed = urlsplit(url)
+        if parsed.netloc != 'accounts.google.com' or parsed.fragment:
+            continue
+        tail = text[match.end():]
+        if re.search(r'(?:paste|enter) the authorization code|enter the redirect url', tail, re.I) or re.search(
+                r'After authenticating,\s*copy the code displayed in the browser and paste it below:'
+                r'\s*authorization code\.{3}', tail, re.I):
+            return url
+    return None
 
 
 def session_root(slot, nonce):
@@ -48,7 +69,7 @@ def pinned_module(root, name, pin):
 
 class TerminalOutput:
     """One ready consent screen, bounded redraw scanning, no secret publication."""
-    def __init__(self, legacy, log, report, terminal=None):
+    def __init__(self, legacy, log, report, terminal=None, on_prompt=None):
         self.legacy, self.report = legacy, report
         self.output = legacy.SessionOutput(log, report)
         if terminal is None:
@@ -57,6 +78,7 @@ class TerminalOutput:
         self.output.before = terminal.TerminalPublisher(legacy)
         self.window = ''
         self.prompt_ready = False
+        self.on_prompt = on_prompt
         self.extra_markers = {}
         self.after_display = legacy.Publisher()
         self.after_window = ''
@@ -71,12 +93,12 @@ class TerminalOutput:
             for name, seen in markers.items():
                 self.extra_markers[name] = self.extra_markers.get(name, False) or seen
             frozen = self.prompt_ready
-            url = re.search(r'https://accounts\.google\.com/', self.window, re.I)
-            # Require order as well as marker presence: an earlier stale code
-            # prompt must not unlock a later URL in this process's output.
-            self.prompt_ready = self.prompt_ready or bool(url and re.search(
-                r'(?:paste|enter) the authorization code|enter the redirect url',
-                self.window[url.end():], re.I))
+            url = google_code_prompt(self.window)
+            if not self.prompt_ready and url:
+                self.prompt_ready = True
+                self.extra_markers['paste_prompt_present'] = True
+                if self.on_prompt is not None:
+                    self.on_prompt(url)
             if frozen:
                 # Never exhaust the public log merely by repainting a ready
                 # code field while the owner completes browser consent.

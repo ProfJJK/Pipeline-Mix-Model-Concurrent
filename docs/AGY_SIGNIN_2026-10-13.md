@@ -1,5 +1,52 @@
 # Standalone Agy sign-in for the six pipeline profiles
 
+## Latest repair: native prompt wording and ordinary copy/paste
+
+The owner ran `agy-signin-b048393`. Agy 1.3.1 successfully produced a fresh
+Google URL, followed by **"After authenticating, copy the code displayed in
+the browser and paste it below:"** and the **"authorization code..."** field.
+The wrapper expected different words, never enabled input, discarded keys,
+and expired at 60 seconds with `FRESH_GOOGLE_PROMPT_NOT_OBSERVED`.
+The `shift+up/down Navigate` footer was native TUI output, not usable owner
+controls. No code was submitted. The public receipt confirms worker and
+terminal cleanup. This was a wrapper recognition defect, not a demonstrated
+Google authorization failure.
+
+Reviewed attempt: `AgySignIn427-29d5943c97954a7695d57c722e917cd2`.
+Public `status.json` SHA-256:
+`a2d3cf3bbaf19f6917ac3826f3fc4bc3774f9fc327e24419e2cf0cb0449ccfa0`.
+The replacement verifies that exact receipt, ended task, private input-closed
+marker receipt and cleanup before permitting a fresh namespace. It preserves
+the old task, files and package. Other failed or active brokers still hold.
+
+The native parser now recognizes the observed wording, including split output
+and redraws. It emits one private, nonce/slot-bound `prompt-ready.json` only
+after the fresh Google URL and code field are recognized. The owner interface
+uses that signal instead of implementing a second prompt regex. A standard
+Windows dialog provides a read-only selectable URL, an explicit **Copy URL**
+button, a masked **PasswordBox** with ordinary paste/selection, **Submit** and
+**Cancel**. There are no custom key handlers or raw console-key polling. The
+browser still must be opened manually; neither opening the dialog nor copying
+the URL opens a browser. Authorization codes go directly from SecurePassword
+to the existing private packet writer, never to PowerShell history or logs.
+Closing the dialog or its deadline cancels; a timer also closes it when the
+native input window ends. Both boundaries are checked again before sending.
+
+168 serialized source/inert Windows fixtures passed in 24.38 seconds; all 37
+owner-interface fixtures passed again in 14.29 seconds after final styling.
+They exercise the exact captured
+prompt wording with synthetic URLs, bytewise chunking, stale/partial/foreign
+prompts, one private readiness signal, actual WPF controls without showing a
+window, expiry/closed-input refusal, preserved reviewed failure and one code/CR
+through the real parser/read loop with an in-memory terminal. An offscreen
+render verified that all dialog controls fit. These tests do not constitute
+native Google sign-in acceptance. The owner run measured **96.3 seconds**
+before profile sign-in, so the older 6.913-second read-only measurement below
+must not be represented as end-to-end setup timing or a one-minute guarantee.
+
+The replacement command/package are recorded in `AGY_SIGNIN_READY.txt` and
+the deployment workspace's `SIGN_IN_AGY.txt`. Do not rerun b048393.
+
 The owner requested a short, URL-only sign-in script independent of R6/R7
 deployment. `scripts/signin_agy_profiles.ps1` stages one small SYSTEM broker
 and handles the six existing Agy profiles sequentially. It prints each fresh
@@ -7,7 +54,7 @@ Google URL for manual opening, accepts one masked authorization code, and
 verifies that profile with a new native catalog-status command. Already
 authenticated profiles are reused. It does not open a browser or deploy R6/R7.
 
-## Why the latest run failed
+## Earlier deployment registration failure
 
 The owner ran `r7-bundle-534e7fe`. Its new terminal task held in `register` with
 `MethodInvocationException` and `run_requested=false`: Agy was never started.

@@ -32,7 +32,7 @@ function Set-AgyTerminalConstants {
     $script:terminalSource=Join-Path $Directory 'attended_agy_terminal.py'
     $script:terminalBridgeSource=Join-Path $Directory 'worker_agy_terminal_bridge.py'
     $script:terminalHash='bedff42652ca92031ef056ef9f21d584c502bc9f1227598b1098f83f808ebeda'
-    $script:terminalBridgeHash='cd66754db09d1f568e8e5ac9c3b024620c68b472b0e9c6c5e76be48cb72bf4e4'
+    $script:terminalBridgeHash='f7955a7d744ff2c6145eab989ae502f0346170f078a7490b5461abd54cdfce8f'
 }
 
 function Set-AgyTerminalNames {

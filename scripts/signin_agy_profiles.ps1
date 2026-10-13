@@ -70,9 +70,32 @@ function Assert-NoRunningSignins {
             if($task.GetInstances(0).Count -ne 0 -or $task.State -notin @(1,3)){
                 throw 'An earlier profile sign-in/status task is still active; preserve it.'}
             if($task.Name -cmatch '^CoChem-4\.2\.7-AgySignIn-' -and $task.LastTaskResult -notin @(0,267011)){
-                throw 'An earlier standalone broker failed; preserve its result for review before another attempt.'}
+                Assert-ReviewedSigninFailure $task}
         }
     }
+}
+
+function Assert-ReviewedSigninFailure {
+    param($Task)
+    # The owner supplied this failure; the readable receipt was independently
+    # reviewed. Permit only this ended, cleaned-up prompt-recognition failure.
+    $nonce='29d5943c97954a7695d57c722e917cd2'
+    $root=Join-Path $script:cochemRoot ('AgySignIn427-'+$nonce)
+    if($Task.Name -cne ('CoChem-4.2.7-AgySignIn-'+$nonce) -or $Task.LastTaskResult -ne 2 -or
+        $Task.State -notin @(1,3) -or $Task.GetInstances(0).Count -ne 0){
+        throw 'An unreviewed or active prior sign-in broker exists. Preserve its evidence.'}
+    Assert-RegisteredTaskAcl ([string]$Task.GetSecurityDescriptor(7))
+    $null=Read-R3Control (Join-Path $root 'status.json') 'a2d3cf3bbaf19f6917ac3826f3fc4bc3774f9fc327e24419e2cf0cb0449ccfa0' 65536
+    $result=Read-SigninJson (Join-Path $root 'result.json')
+    $login=Read-SigninJson (Join-Path $root 'slot1\login.json')
+    if($result.nonce -cne $nonce -or @($result.checks).Count -ne 1 -or
+        $result.checks[0].slot -cne 'slot1' -or $result.checks[0].cleanup_verified -ne $true -or
+        $login.nonce -cne $nonce -or $login.cleanup_verified -ne $true -or
+        $login.terminal_cleanup_verified -ne $true -or $login.input_closed_marker_written -ne $true -or
+        $login.one_line_submitted -ne $false -or $login.code_write_completed -ne $false -or
+        $login.terminal_hold_reason -cne 'FRESH_GOOGLE_PROMPT_NOT_OBSERVED'){
+        throw 'The reviewed prior sign-in cleanup or receipt differs.'}
+    Write-Host 'Previous prompt-recognition failure is ended and cleaned up; its evidence is preserved.'
 }
 
 function Get-SigninFailure {
@@ -109,49 +132,121 @@ function Wait-SigninSlot {
     Read-SigninJson $result
 }
 
+function Assert-SigninPrompt {
+    param($Prompt,[string]$Slot,[string]$Nonce)
+    if($Prompt.schema -cne 'cochem-agy-code-prompt/1' -or $Prompt.nonce -cne $Nonce -or
+       $Prompt.slot -cne $Slot -or $Prompt.url -isnot [string] -or $Prompt.url.Length -gt 4096){
+        throw 'The fresh native sign-in prompt identity differs.'}
+    $uri=[Uri]$Prompt.url
+    if(-not $uri.IsAbsoluteUri -or $uri.Scheme -cne 'https' -or $uri.Host -cne 'accounts.google.com' -or
+        $uri.Port -ne 443 -or $uri.UserInfo -or $uri.Fragment){throw 'The native sign-in URL is not a Google HTTPS URL.'}
+}
+
+function New-SigninPromptView {
+    param([string]$Url,[string]$Slot)
+    # Standard WPF edit controls own selection and paste. No Console.ReadKey,
+    # custom navigation bindings, clipboard reads, or provider TUI is exposed.
+    Add-Type -AssemblyName PresentationFramework
+    $window=[Windows.Window]::new();$window.Title='Agy sign-in - '+$Slot
+    $window.Width=800;$window.Height=420;$window.MinWidth=640;$window.MinHeight=420;$window.ResizeMode='CanResize'
+    $window.Background=[Windows.Media.Brushes]::White;$window.Foreground=[Windows.Media.Brushes]::Black
+    $window.WindowStartupLocation='CenterScreen'
+    $panel=[Windows.Controls.StackPanel]::new();$panel.Margin='18';$panel.Background=[Windows.Media.Brushes]::White;$window.Content=$panel
+    $intro=[Windows.Controls.TextBlock]::new();$intro.Text='1. Copy this fresh URL and open it in your browser. No browser is opened automatically.'
+    $intro.TextWrapping='Wrap';$panel.Children.Add($intro)|Out-Null
+    $urlBox=[Windows.Controls.TextBox]::new();$urlBox.Text=$Url;$urlBox.IsReadOnly=$true
+    $urlBox.TextWrapping='Wrap';$urlBox.Height=85;$urlBox.VerticalScrollBarVisibility='Auto';$urlBox.Margin='0,8,0,6'
+    $panel.Children.Add($urlBox)|Out-Null
+    $copy=[Windows.Controls.Button]::new();$copy.Content='Copy URL';$copy.HorizontalAlignment='Left';$copy.Padding='12,4'
+    $panel.Children.Add($copy)|Out-Null
+    $label=[Windows.Controls.TextBlock]::new();$label.Text='2. Paste the browser authorization code below (Ctrl+V), then press Enter or Submit.'
+    $label.TextWrapping='Wrap';$label.Margin='0,12,0,6';$panel.Children.Add($label)|Out-Null
+    $code=[Windows.Controls.PasswordBox]::new();$code.MaxLength=2048;$code.Height=30
+    $panel.Children.Add($code)|Out-Null
+    $message=[Windows.Controls.TextBlock]::new();$message.TextWrapping='Wrap';$message.Margin='0,6,0,6'
+    $panel.Children.Add($message)|Out-Null
+    $buttons=[Windows.Controls.StackPanel]::new();$buttons.Orientation='Horizontal';$panel.Children.Add($buttons)|Out-Null
+    $submit=[Windows.Controls.Button]::new();$submit.Content='Submit';$submit.IsDefault=$true;$submit.Padding='20,5'
+    $cancel=[Windows.Controls.Button]::new();$cancel.Content='Cancel';$cancel.IsCancel=$true;$cancel.Padding='20,5';$cancel.Margin='10,0,0,0'
+    $buttons.Children.Add($submit)|Out-Null;$buttons.Children.Add($cancel)|Out-Null
+    @{Window=$window;Url=$urlBox;Copy=$copy;Code=$code;Message=$message;Submit=$submit;Cancel=$cancel}
+}
+
+function Test-SigninPromptOpen {
+    param([string]$Root,[DateTime]$Deadline)
+    [DateTime]::UtcNow -lt $Deadline -and
+        -not (Test-Path -LiteralPath (Join-Path $Root 'input.closed')) -and
+        -not (Test-Path -LiteralPath (Join-Path $Root 'result.json'))
+}
+
+function Complete-SigninPrompt {
+    param($View,$Context,[string]$Root,[DateTime]$Deadline)
+    if($null -ne $Context.Result){return}
+    if(-not (Test-SigninPromptOpen $Root $Deadline)){
+        $Context.Result=@{Status='EXPIRED';Secret=$null};$View.Window.Close();return}
+    $secret=$View.Code.SecurePassword
+    if($secret.Length -eq 0){$secret.Dispose();$View.Message.Text='Paste the authorization code first.';return}
+    $Context.Result=@{Status='SUBMIT';Secret=$secret}
+    $View.Code.Clear();$View.Window.Close()
+}
+
+function Show-SigninCodePrompt {
+    param([string]$Url,[string]$Slot,[string]$Root,[DateTime]$Deadline)
+    $view=New-SigninPromptView $Url $Slot;$context=@{Result=$null;Error=$null}
+    $timer=[Windows.Threading.DispatcherTimer]::new();$timer.Interval=[TimeSpan]::FromMilliseconds(200)
+    try{
+        $view.Copy.Add_Click({
+            try{[Windows.Clipboard]::SetText($view.Url.Text);$view.Message.Text='URL copied. Open it manually in your browser.'}
+            catch{$view.Message.Text='Clipboard is busy. Select the URL text and press Ctrl+C.'}
+        })
+        $view.Submit.Add_Click({
+            try{Complete-SigninPrompt $view $context $Root $Deadline}
+            catch{$context.Error=$_;$view.Window.Close()}
+        })
+        $view.Cancel.Add_Click({$view.Window.Close()})
+        $timer.Add_Tick({
+            try{if($null -eq $context.Result -and -not (Test-SigninPromptOpen $Root $Deadline)){
+                $context.Result=@{Status='EXPIRED';Secret=$null};$view.Window.Close()}}
+            catch{$context.Error=$_;$view.Window.Close()}
+        })
+        $view.Window.Add_ContentRendered({$null=$view.Code.Focus()})
+        $timer.Start();$null=$view.Window.ShowDialog()
+        if($context.Error){throw $context.Error}
+        if($null -eq $context.Result){$context.Result=@{Status='CANCEL';Secret=$null}}
+        $context.Result
+    }catch{
+        if($context.Result -and $context.Result.Secret){$context.Result.Secret.Dispose()}
+        throw
+    }finally{$timer.Stop();$view.Code.Clear();$view.Window.Close()}
+}
+
 function Invoke-SigninConsole {
     param($Instance,[string]$Root,[string]$Nonce,[DateTime]$Deadline)
-    $log=Join-Path $Root 'operator.log';$closed=Join-Path $Root 'input.closed';$result=Join-Path $Root 'result.json'
-    $seen=0;$ready=$false;$state=New-ClaudeCodeInput;$submittedAt=$null
+    $promptPath=Join-Path $Root 'prompt-ready.json';$closed=Join-Path $Root 'input.closed';$result=Join-Path $Root 'result.json'
+    $submitted=$false;$submittedAt=$null;$answer=$null
     try{
-        $null=Clear-ClaudeConsoleInput
         while(-not (Test-Path -LiteralPath $result) -and -not (Test-InstanceComplete $Instance)){
-            if(-not $state.Submitted -and [DateTime]::UtcNow -ge $Deadline){
+            if(-not $submitted -and [DateTime]::UtcNow -ge $Deadline){
                 Write-CancelRequest $Root $Nonce;throw 'The initial input window expired; no late sign-in is requested.'}
-            if($state.Submitted -and [DateTime]::UtcNow -ge $submittedAt.AddSeconds(180)){
+            if($submitted -and [DateTime]::UtcNow -ge $submittedAt.AddSeconds(180)){
                 Write-CancelRequest $Root $Nonce;throw 'Native completion exceeded its bound; preserve the broker task.'}
-            $windowClosed=Test-Path -LiteralPath $closed
-            if(-not $ready -and -not $state.Submitted -and (Test-Path -LiteralPath $log)){
-                $text=Read-AgyOperatorLog $log;$at=Find-AgyCodePrompt $text
-                $end=if($at -ge 0){$at}else{$text.Length-(Get-AgyPromptPrefixHold $text)}
-                if($end -gt $seen){Write-AgyConsoleText ($text.Substring($seen,$end-$seen));$seen=$end}
-                if($at -ge 0 -and -not $windowClosed){
-                    $ready=$true;Write-Host '';Write-Host 'Open the fresh URL above yourself. Paste ONLY its returned authorization code, then Enter.'
-                    [Console]::Write('Code (masked; Escape cancels): ')
-                }
-            }
-            $count=0
-            while($count -lt 256 -and (Test-AgyConsoleKeyAvailable)){
-                $key=Read-AgyConsoleKey;$count++
-                if($windowClosed -or $state.Submitted -or $state.Closed){continue}
-                Invoke-AgyTerminalKey $state $key $ready
-                if($state.CancelRequested -or $state.SubmissionRequested){break}
-            }
-            $key=$null
-            if($state.CancelRequested){Write-CancelRequest $Root $Nonce;throw 'Sign-in cancelled; no later profile will start.'}
-            if($state.SubmissionRequested -and -not $state.Submitted -and $ready -and -not $windowClosed){
-                if([DateTime]::UtcNow -lt $Deadline -and -not (Test-Path -LiteralPath $closed)){
-                    Write-PrivatePacket (Join-Path $Root 'input.once') $Nonce $state.Secret
-                    Complete-ClaudeCodeInput -State $state;$submittedAt=[DateTime]::UtcNow
-                    Write-Host '';Write-Host 'Code submitted. Verifying this profile...'
-                }
+            if(-not $submitted -and -not (Test-Path -LiteralPath $closed) -and (Test-Path -LiteralPath $promptPath)){
+                $prompt=Read-SigninJson $promptPath;$slot=Split-Path $Root -Leaf
+                Assert-SigninPrompt $prompt $slot $Nonce
+                Write-Host ('Fresh sign-in URL: '+$prompt.url)
+                Write-Host 'Use the sign-in dialog to copy the URL and paste the code. No terminal navigation keys are needed.'
+                $answer=Show-SigninCodePrompt $prompt.url $slot $Root $Deadline
+                if($answer.Status -cne 'SUBMIT' -or -not (Test-SigninPromptOpen $Root $Deadline)){
+                    Write-CancelRequest $Root $Nonce;throw 'Sign-in cancelled or its input window ended; no later profile will start.'}
+                try{Write-PrivatePacket (Join-Path $Root 'input.once') $Nonce $answer.Secret}
+                finally{$answer.Secret.Dispose();$answer=$null}
+                $submitted=$true;$submittedAt=[DateTime]::UtcNow
+                Write-Host 'Code submitted. Verifying this profile...'
             }
             Start-Sleep -Milliseconds 100
         }
     }finally{
-        Close-ClaudeCodeInput -State $state
-        $drained=Clear-ClaudeConsoleInput
-        if(-not $drained.console_queue_clear){throw 'Console queue did not clear; no later prompt is safe.'}
+        if($answer -and $answer.Secret){$answer.Secret.Dispose()}
     }
 }
 
@@ -184,6 +279,9 @@ function Invoke-SigninMain {
         foreach($definition in @(Import-SigninDefinitions (Join-Path $Directory 'login_pipeline_worker_agy_terminal.ps1'))){. ([scriptblock]::Create($definition))}
         foreach($definition in @(Import-AgyTerminalLegacy $Directory '381fb8daec6999d16e75ab163f28d0dda6459b1b44f9695962cf43213cedcb60')){. ([scriptblock]::Create($definition))}
         Assert-AgyLoginHost $true $true
+        if([Threading.Thread]::CurrentThread.ApartmentState -ne 'STA'){
+            throw 'Use Windows PowerShell with -STA for the standard sign-in dialog.'}
+        Add-Type -AssemblyName PresentationFramework
         Set-AgyLoginConstants 'slot1' 'tui' $Directory
         $script:copyHelper=Join-Path $Directory 'stage_aetherdesk_427_payloads.ps1'
         foreach($definition in @(Get-AgyLoginHelperDefinitions)){. ([scriptblock]::Create($definition))}
