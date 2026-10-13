@@ -1,5 +1,9 @@
 # R6 owner launch package — 12 October 2026
 
+**Current command, 13 October:** [R6 startup after successful sign-in](RETURN_SETUP_R6_2026-10-13.txt).
+This reuses the installation below, verifies R4 v7 and all sessions, and applies
+the separately bound Pro retirement at startup. Earlier commands are historical.
+
 **Update: the owner ran this package. Installation completed; authentication
 held and R4 was restored. Do not rerun the fresh-install command below. Use
 [the separate authentication recovery](R6_AUTH_RECOVERY_2026-10-12.md).**

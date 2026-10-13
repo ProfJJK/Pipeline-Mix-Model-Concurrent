@@ -1,5 +1,10 @@
 # R6 authentication recovery — 12 October 2026
 
+**13 October update:** all six Agy sign-ins succeeded. The current owner command
+is [the signed-in R6 continuation](RETURN_SETUP_R6_2026-10-13.txt), which binds
+R4 v7, reuses sessions and never opens the old terminal sign-in flow. The commands
+and recovery packages described below are historical; do not rerun them.
+
 Use [RETURN_SETUP_R6_AUTH_RECOVERY.txt](deployment/windows-deployment-next/RETURN_SETUP_R6_AUTH_RECOVERY.txt).
 Do not rerun the original fresh-install command. Its completed installation and
 all original source/build/bundle/launch artifacts remain unchanged.

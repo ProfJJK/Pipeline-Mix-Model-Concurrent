@@ -77,6 +77,12 @@ This is the preferred interface, not a claim that all three adapters have been
 implemented or accepted on this host. Reuse verified sessions before asking for input.
 
 ## Current handoff
+2026-10-13: Agy sign-in succeeded for all six profiles. R6 continuation is prepared
+in `docs/R6_SIGNED_IN_CONTINUATION_2026-10-13.md`; only the owner runs its fresh
+Administrator command. R4 v7 is the last verified restoration; do not claim R6
+startup until its actual receipt is available. Codex/Claude/Agy share the sign-in
+preference above. The following 12 October handoff is historical context.
+
 2026-10-12: the Claude Code session has released all locks to the takeover agent; see
 `docs/AGENT_RELEASE_NOTICE_2026-10-12.md`.
 Start with `docs/WINDOWS_AGENT_HANDOFF_4.2.7_2026-10-11.md` (branch `feature/r5-gemini-and-runtime-fixes`):

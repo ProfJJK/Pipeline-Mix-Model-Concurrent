@@ -1,31 +1,28 @@
-R6 AUTHENTICATION RECOVERY — corrected import path, 12 October 2026
+R6 STARTUP — AFTER THE SUCCESSFUL SIX-PROFILE AGY SIGN-IN
+13 October 2026; replaces every earlier R6 install/auth-recovery command.
 
-Run this NEW command once in 64-bit Administrator Windows PowerShell as ansac.
-Do not rerun RETURN_SETUP_R6.txt or the original fresh installer.
+Open Administrator Windows PowerShell and paste this ONE command once:
 
-R6 is already installed. All six Codex and six Claude sessions passed.
-The six Agy checks exited 1 without an authentication decision; they are not
-proof of logout. This command checks their status with improved diagnostics.
-Only explicit Agy logout prompts for sign-in. Existing successful sessions
-are reused, not copied/reset. No application or dependency is reinstalled.
+C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -File "C:\Users\ansac\CoChem427\r6-launch-2571003\run_r6_launch.ps1" -LaunchManifest "C:\Users\ansac\CoChem427\r6-launch-2571003\launch-manifest.json" -LaunchManifestSha256 c087cf5adc962e76a288a323f7bd5a541351f2806eca0a3a40527220a15dbd7f -Apply
 
-All planned input is in the first 20 minutes. Watch the console initially;
-follow Agy instructions only if shown. Once it says you can walk away, the
-remaining acceptance and activation run unattended and may take much longer.
-Keep Windows running. No restart or later manual continuation is planned.
+No new sign-in is planned. The command verifies and reuses the installed R6 and
+existing Codex, Claude and Agy sessions. You can leave it running after starting.
+Keep the computer awake and the PowerShell window open. Acceptance and startup
+may take longer than 20 minutes; no later input, restart or continuation command
+is planned. This starts R6 only, not R7.
 
-C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -File "C:\Users\ansac\CoChem427\r6-auth-recovery-eb982cb\run_r6_launch.ps1" -LaunchManifest "C:\Users\ansac\CoChem427\r6-auth-recovery-eb982cb\launch-manifest.json" -LaunchManifestSha256 bc1cb7b2c1ac4eac872cfde38b57f382cdef24388a9902f9899020bd10dfbf58 -Apply
+It checks the preserved R4 v7 / login history, stops R4 under the existing
+recovery procedure, performs fresh status/acceptance checks, then starts R6 only
+if they pass. The explicit protected startup amendment excludes retired Gemini
+Pro from selection/admission. Tiers 5/6 keep Claude/Codex and then back off.
+Four shared slots, existing sign-ins, R:, databases, captures and budgets remain.
 
-If it holds, preserve its files/tasks and return the final output. Do not
-repeat this command. Sanitized status files are readable by the engineering
-session; provider credentials and raw output are excluded.
+215 Windows source/fixture tests passed. The actual 494-input frozen launch
+package returned R6_LAUNCH_PLAN in 7.00 seconds without Apply. These are source
+and package checks, not confirmation that R6 has started on this machine.
 
-Before R6 cutover is requested, failures use the reviewed R4 restoration.
-After cutover is requested, potentially running state is preserved for review.
-
-Reviewed recovery source: eb982cb. Existing runtime source: 359ca92.
-The previous recovery stopped on an empty helper path before stopping R4.
-Keep that package and its evidence; this new package fixes the import scope.
-86 focused tests passed, including the reproduced error, actual helper import
-chain and full inert verification paths. Packaged read-only launch plan passed.
-Actual recovery, native model acceptance and R6 deployment are NOT attested yet.
+Expected successful final status: WARDEN_R6_RUNNING_HEALTH_VERIFIED.
+Sanitized progress is written to the printed R6Sitting folder's status-*.json.
+If held, preserve the result and files. Do not repeat the command or sign in
+again. Pre-cutover failures restore R4; a possibly started R6 is preserved for
+review rather than stopped automatically.

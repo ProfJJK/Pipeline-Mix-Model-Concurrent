@@ -1,5 +1,12 @@
 # R6 continuation after successful six-profile sign-in
 
+**Owner command:** [RETURN_SETUP_R6_2026-10-13.txt](RETURN_SETUP_R6_2026-10-13.txt).
+Frozen launcher `C:\Users\ansac\CoChem427\r6-launch-2571003` has 494 pinned inputs.
+Launch manifest SHA-256:
+`c087cf5adc962e76a288a323f7bd5a541351f2806eca0a3a40527220a15dbd7f`.
+Launch tooling is source `2571003fe0f8c47461f55a1142d606f117cb318a`;
+the immutable installed R6 stays source `359ca92`.
+
 The owner requested R6 startup after all six Agy profiles passed fresh native
 status checks. The original R6 runtime `359ca92` is already installed. This
 continuation reuses it and does not install R7 or repeat sign-in.
@@ -59,3 +66,7 @@ native retirement evidence, old policy indices, exact protected task action,
 copy bytes/collision preservation, phase settings and package drift. The policy
 filter is also exercised against the original frozen R6 routing source.
 No provider, scheduled task, service or live daemon was started by these tests.
+The actual frozen entry point ran without Apply in **7.00 seconds**, verified
+all package inputs and returned `R6_LAUNCH_PLAN`, 26 targets, four slots,
+`reuse_verified_sessions=true`, `runtime_retirement_guard=true`, and no later
+prompts. No SYSTEM acceptance or startup was performed by the engineering agent.
