@@ -1,0 +1,25 @@
+{
+  "schema": "cochem-r6-owner-package-review/1",
+  "repair_source_commit": "d19b42c717c28da8621f0c49b8c1bcb5ee10eeb2",
+  "package": "C:\\Users\\ansac\\CoChem427\\r6-launch-d19b42c",
+  "manifest_sha256": "a131f896a42bd959e4d7bc50fbd1f90bfb92f6fa8c9c4bb274c11c167b652ba1",
+  "pins_verified": 501,
+  "helper_sha256": "a0c0d361e687483eb6d7976a4fb5794d703ca2bebfece3e9a28a2fc654b7ee35",
+  "source_tests": {
+    "passed": 582,
+    "skipped": 2,
+    "seconds": 75.23
+  },
+  "packaged_read_only_plan": {
+    "exit_code": 0,
+    "elapsed_seconds": 7.1352752,
+    "status": "R6_LAUNCH_PLAN",
+    "later_prompts": false,
+    "codex_ram_cwd_amendment": true,
+    "verified_r4_v10_continuation": true,
+    "interrupted_r4_start_continuation": false
+  },
+  "owner_execution_prepared": true,
+  "apply_executed": false,
+  "deployment_acceptance_verified": false
+}

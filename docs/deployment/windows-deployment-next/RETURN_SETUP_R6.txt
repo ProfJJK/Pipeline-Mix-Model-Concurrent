@@ -1,21 +1,23 @@
-R6 NATIVE COMMAND HELD - 2026-10-13 11:37 RUN
+R6 CONTINUATION READY - CODEX RAM WORKSPACE REPAIR - 13 OCTOBER 2026
 
-The d6d336e deployment command has run and must not be repeated.
-All 18 sign-ins, knowledge and agent checks passed. Native acceptance then
-held on an unclassified nonzero provider command exit. R4 v10 restoration
-verified health. R6 was not activated.
+Latest diagnostic: Agy Flash Low and Claude Haiku Medium passed. Codex Luna
+Medium stopped at startup with Windows error 1 while resolving the RAM cwd.
+This fresh package uses the same validated process cwd without redundant --cd.
+R4 v10 is the last verified restoration. R6 is not yet activated.
 
-ONE READ-ONLY DIAGNOSTIC IN YOUR EXISTING ADMINISTRATOR POWERSHELL:
+In an idle Administrator Windows PowerShell window, run the ONE command below
+ONCE. Existing sessions and knowledge are reused. No sign-in or later input
+is planned. After starting, you can walk away; leave the computer awake and
+the PowerShell window open. Tests and cutover can take longer than 20 minutes.
+The script preserves evidence and restores R4 on a pre-cutover hold; it does
+not automatically replay a failed phase. If it holds, preserve the final output.
 
-C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -File "C:\Users\ansac\Documents\Codex\2026-10-06\the-github-repository-is-located-at\windows-deployment-next\inspect-r6-native-hold-20261013-v2.ps1"
+C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -File "C:\Users\ansac\CoChem427\r6-launch-d19b42c\run_r6_launch.ps1" -LaunchManifest "C:\Users\ansac\CoChem427\r6-launch-d19b42c\launch-manifest.json" -LaunchManifestSha256 a131f896a42bd959e4d7bc50fbd1f90bfb92f6fa8c9c4bb274c11c167b652ba1 -Apply
 
-Return only its printed report path or error. It saves sanitized metadata for
-the agent to read. It does not deploy, sign in, run providers, change tasks or
-change permissions. Windows denies the ordinary agent process access to the
-private failure records, so this read-only export needs the existing admin
-window. No provider output, authorization code or URL is published.
+582 source/fixture tests passed; 2 skipped (symlink privilege). The actual frozen
+entry point's read-only plan passed in 7.14 seconds and verified 501 pins.
+These checks are not deployed native or full SRS acceptance.
 
-40 serialized Windows source/fixture tests passed. These are not host
-acceptance. No new deployment command is ready until the native failure is
-identified. Preserve all prior packages, receipts and running state.
-See repository docs/R6_NATIVE_EXIT_2026-10-13.md.
+Do not use previous R6/R7 deployment commands or repeat any sign-in script.
+This package handles R6 only; the older immutable packages remain untouched.
+Details: C:\Users\ansac\source\repos\Pipeline-Mix-Model-Concurrent-r6\docs\R6_CODEX_RAM_CWD_REPAIR_2026-10-13.md

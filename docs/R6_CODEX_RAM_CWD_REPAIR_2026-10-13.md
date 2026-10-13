@@ -106,3 +106,26 @@ Review checked the unchanged Windows launch boundary, exact-source amendment,
 same acceptance/startup helper hash, known historical receipt coverage, R4 v10
 normal stop lineage, no late prompts and preservation on failure. These source
 tests are not deployed native or full SRS acceptance.
+
+## Delivered package
+
+Repair source: `d19b42c717c28da8621f0c49b8c1bcb5ee10eeb2`.
+Fresh immutable package: `C:\Users\ansac\CoChem427\r6-launch-d19b42c`.
+It contains **501 pinned inputs**. Launch manifest SHA256:
+`a131f896a42bd959e4d7bc50fbd1f90bfb92f6fa8c9c4bb274c11c167b652ba1`.
+Supplemental helper SHA256:
+`a0c0d361e687483eb6d7976a4fb5794d703ca2bebfece3e9a28a2fc654b7ee35`.
+
+The actual frozen Windows PowerShell entry point's read-only plan returned
+exit 0 in **7.14 seconds**, verifying all pins. It explicitly reports the Codex
+cwd repair, normal verified-v10 continuation, 26 retained targets, four shared
+slots, session/knowledge reuse and no later prompts. No Apply was invoked.
+The original installed source still reads 359ca92; the repair is separately
+bound by the supplemental helper hash. The assembly receipt remains historical
+preparation metadata; `docs/evidence/r6-codex-cwd-package-review-20261013.json`
+records the subsequent review and plan result.
+
+The single owner command is in `docs/RETURN_SETUP_R6_2026-10-13.txt` and the
+deployment workspace's `RETURN_SETUP_R6.txt` and `RETURN_SETUP_R6_AUTH_RECOVERY.txt`.
+Only those mutable instruction sheets were replaced. Earlier frozen packages
+were preserved. Await owner execution; deployment acceptance remains unverified.
