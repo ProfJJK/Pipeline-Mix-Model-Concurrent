@@ -84,6 +84,11 @@ completed new R6 knowledge, then held at agent acceptance with ValueError.
 R4 v8 is the last verified restoration; do not replay c7a9241, rebuild the
 completed knowledge or claim R6 startup. Read
 `docs/R6_AGENT_DIAGNOSTIC_2026-10-13.md` for the focused diagnostic and evidence.
+The diagnostic is now completed: READ_CONTROL-only directory handles did not
+enforce delete sharing. Read `docs/R6_CUSTODY_REPAIR_2026-10-13.md` for the
+proved repair and explicit continuation reusing completed knowledge/sign-ins.
+Only the owner runs the fresh pinned continuation. Old R7 bundles must not
+be used against its amended R6 startup action.
 Codex/Claude/Agy share the sign-in
 preference above. The following 12 October handoff is historical context.
 

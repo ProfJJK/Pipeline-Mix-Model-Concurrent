@@ -29,7 +29,7 @@ def read_regular(path, maximum=16777216):
     return data
 
 
-def prepare(repository, bundle, destination, auth_recovery=False, verified_continuation=False):
+def prepare(repository, bundle, destination, auth_recovery=False, verified_continuation=False, custody_continuation=False):
     repository,bundle,destination=map(Path,(repository,bundle,destination))
     if destination.exists() or not destination.is_absolute() or re.search(r'(?i)[\\/](gdrive|google drive)[\\/]',str(destination)):
         raise ValueError('Use a fresh ordinary launch folder outside Google Drive')
@@ -55,6 +55,10 @@ def prepare(repository, bundle, destination, auth_recovery=False, verified_conti
             raise ValueError('Verified continuation reuses the installed R6')
         for name in ('r6_native_retirement.py', 'r6_retirement_guard.py'):
             inputs[name]=read_regular(repository/'scripts'/name)
+    if custody_continuation:
+        if not verified_continuation:
+            raise ValueError('Custody continuation requires the signed-in, immutable R6')
+        inputs['r6_custody_amendment.py']=read_regular(repository/'scripts/r6_custody_amendment.py')
     if not 10 <= len(inputs) <= 1024 or sum(map(len,inputs.values()))>128*1024**2:
         raise ValueError('Launch input inventory exceeds bounds')
     for name in inputs:
@@ -80,6 +84,8 @@ def prepare(repository, bundle, destination, auth_recovery=False, verified_conti
         launch['auth_recovery']='20261012-first-auth-hold'
     if verified_continuation:
         launch['verified_signin_continuation']='20261013-six-agy-verified-r4-v7'
+    if custody_continuation:
+        launch['agent_custody_continuation']='20261013-reviewed-agent-hold-r4-v8'
     data=(json.dumps(launch,indent=2)+'\n').encode()
     with (destination/'launch-manifest.json').open('xb') as out:out.write(data)
     launch_hash=digest(data)
@@ -100,4 +106,5 @@ if __name__=='__main__':
     for name in ('repository','bundle','destination'):parser.add_argument('--'+name,required=True)
     parser.add_argument('--auth-recovery', action='store_true')
     parser.add_argument('--verified-continuation', action='store_true')
+    parser.add_argument('--custody-continuation', action='store_true')
     print(json.dumps(prepare(**vars(parser.parse_args())),indent=2))

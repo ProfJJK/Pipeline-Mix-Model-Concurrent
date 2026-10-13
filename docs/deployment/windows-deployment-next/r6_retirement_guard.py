@@ -12,6 +12,7 @@ import argparse
 import hashlib
 from pathlib import Path
 import sys
+import types
 
 ROOT = Path(r'C:\Program Files\CoChem\Pipeline4.2.7-windows-20261012-r6-v1')
 CANDIDATE = 'a8b9b2052402f30860188721f986686c5a2f6785e563045edf295adae250f288'
@@ -50,6 +51,7 @@ def apply_retirement(policy_class, routing_store=None):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--guard-sha256', required=True)
+    parser.add_argument('--custody-sha256')
     parser.add_argument('--config', required=True)
     parser.add_argument('--queue-launch-output-root', required=True)
     parser.add_argument('--docker-wait-seconds', type=int, required=True)
@@ -65,6 +67,13 @@ def main():
     # the installed revision checks to make the supplemental binding disappear.
     read_bound(win, Path(__file__), args.guard_sha256, 65536)
     read_bound(win, Path(args.config), CANDIDATE)
+    if args.custody_sha256:
+        path = Path(__file__).with_name('r6_custody_amendment.py')
+        raw = read_bound(win, path, args.custody_sha256, 65536)
+        helper = types.ModuleType('r6_custody_amendment')
+        helper.__file__ = str(path)
+        exec(compile(raw, str(path), 'exec'), helper.__dict__)
+        helper.install(args.custody_sha256)
     from cochem_pipeline.routing import RoutingPolicy
     from cochem_pipeline import routing_store
     apply_retirement(RoutingPolicy, routing_store)

@@ -5,7 +5,7 @@
 [CmdletBinding()]
 param([ValidateSet('auth','knowledge','agent','native','preview')][string]$Phase,
     [string]$ManifestSha256,[string]$CandidateSha256,[string]$InstallerSha256,
-    [string]$Attempt,[string]$AuthRecoverySha256,[string]$NativeRetirementSha256,[switch]$Apply)
+    [string]$Attempt,[string]$AuthRecoverySha256,[string]$NativeRetirementSha256,[string]$CustodyAmendmentSha256,[switch]$Apply)
 
 function Import-R6PhaseInstaller {
     param([string]$Hash,[string]$Directory=$PSScriptRoot)
@@ -79,7 +79,8 @@ function Test-R6PhaseFinished {
     # A unique task has never run before. Windows can round LastRunTime to
     # seconds; tolerate that precision only after Run returned successfully.
     $ran=([DateTime]$Task.LastRunTime).ToUniversalTime() -ge $RequestedAt.AddSeconds(-2)
-    $receipt=(Test-Path -LiteralPath (Join-Path $Root 'result.json')) -or (Test-Path -LiteralPath (Join-Path $Root 'held.json'))
+    $receipt=(Test-Path -LiteralPath (Join-Path $Root 'result.json')) -or (Test-Path -LiteralPath (Join-Path $Root 'held.json')) -or
+        (Test-Path -LiteralPath (Join-Path $Root 'amendment-failure.json'))
     if($ran -and -not $receipt){throw 'R6 acceptance exited without a receipt; preserve its task and logs.'}
     return ($ran -and $receipt)
 }
@@ -102,6 +103,15 @@ function Invoke-R6PhaseTask {
         Copy-R6Payload ([pscustomobject]@{source=$source;destination=$helper;relative='source/knowledge/control';
             sha256=$script:NativeRetirementSha256;length=(Get-Item -LiteralPath $source).Length})
         $arguments='-I -B "'+$helper+'" --output "'+$Root+'" --manifest-hash '+$ManifestHash+' --candidate-hash '+$CandidateHash
+    }
+    if($script:CustodyAmendmentSha256){
+        $helper=Join-Path $Root 'r6_custody_amendment.py'
+        $source=Join-Path $PSScriptRoot 'r6_custody_amendment.py'
+        Copy-R6Payload ([pscustomobject]@{source=$source;destination=$helper;relative='source/knowledge/control';
+            sha256=$script:CustodyAmendmentSha256;length=(Get-Item -LiteralPath $source).Length})
+        if($Phase -cin @('agent','knowledge')){
+            $arguments='-I -B "'+$helper+'" --phase '+$Phase+' --output "'+$Root+'" --manifest-hash '+$ManifestHash+' --candidate-hash '+$CandidateHash}
+        $arguments+=' --custody-sha256 '+$script:CustodyAmendmentSha256
     }
     $definition=$Scheduler.NewTask(0)
     $definition.RegistrationInfo.Description='One reviewed R6 '+$Phase+' acceptance; no daemon launch, triggers, retries or automatic cleanup.'
@@ -131,7 +141,13 @@ function Invoke-R6PhaseTask {
         if($finished){break}
     }while([DateTime]::UtcNow -lt $deadline)
     if(-not $finished){throw 'R6 acceptance exceeded its bound; preserve its task/process and evidence.'}
-    if([int]$task.LastTaskResult -ne 0 -or (Test-Path -LiteralPath (Join-Path $Root 'held.json'))){throw 'R6 acceptance held; no automatic retry.'}
+    if([int]$task.LastTaskResult -ne 0 -or (Test-Path -LiteralPath (Join-Path $Root 'held.json'))){
+        $diagnostic=Join-Path $Root 'amendment-failure.json'
+        if(Test-Path -LiteralPath $diagnostic){
+            Assert-ProtectedPath $diagnostic
+            if((Get-Item -LiteralPath $diagnostic).Length -le 16384){
+                Write-Host (Get-Content -LiteralPath $diagnostic -Raw)}}
+        throw 'R6 acceptance held; no automatic retry.'}
     $path=Join-Path $Root 'result.json'
     if((Get-Item -LiteralPath $path).Length -gt 4194304){throw 'R6 acceptance result exceeds bounds.'}
     Assert-ProtectedPath $path
@@ -152,6 +168,12 @@ function Invoke-R6PhaseMain {
         $ManifestHash -cne 'bffcf617620320109a3ff1bcbdcc2e1d4918f9571721dc4642efeed4d0b7a2c4' -or
         $CandidateHash -cne 'a8b9b2052402f30860188721f986686c5a2f6785e563045edf295adae250f288')){
         throw 'Native retirement is restricted to the exact installed R6 native phase.'}
+    if($script:CustodyAmendmentSha256 -and ($Phase -cnotin @('agent','knowledge','native') -or
+        $script:CustodyAmendmentSha256 -cnotmatch '^[a-f0-9]{64}$' -or
+        ($Phase -ceq 'native' -and -not $script:NativeRetirementSha256) -or
+        $ManifestHash -cne 'bffcf617620320109a3ff1bcbdcc2e1d4918f9571721dc4642efeed4d0b7a2c4' -or
+        $CandidateHash -cne 'a8b9b2052402f30860188721f986686c5a2f6785e563045edf295adae250f288')){
+        throw 'Custody repair is restricted to the reviewed R6 continuation phases.'}
     if($Phase -notin @('auth','knowledge','agent','native','preview') -or $Attempt -cnotmatch '^[a-f0-9]{32}$'){throw 'A reviewed phase and fresh attempt are required.'}
     if($PSVersionTable.PSEdition -cne 'Desktop' -or -not [Environment]::Is64BitProcess -or $env:COMPUTERNAME -cne 'AETHERDESK'){throw 'Use 64-bit Windows PowerShell 5.1 on AETHERDESK.'}
     if($ApplyRequested){

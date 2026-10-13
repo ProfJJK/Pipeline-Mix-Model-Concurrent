@@ -107,7 +107,10 @@ def lock_worker_profile(win, token, sid, contract):
         # Non-inheritable handles; OPEN_REPARSE_POINT prevents following a link.
         # Directories allow normal writes but never deletion/rename. Agent files
         # allow readers only. All handles survive until verified native teardown.
-        handle = api['kernel32'].CreateFileW(str(path), 0x20000 if directory else 0x80000000,
+        # READ_CONTROL alone is metadata access and does not participate in
+        # Windows read/write/delete sharing checks. FILE_LIST_DIRECTORY (1)
+        # makes the retained directory handle enforce the missing SHARE_DELETE.
+        handle = api['kernel32'].CreateFileW(str(path), 0x20001 if directory else 0x80000000,
                     3 if directory else 1, None, 3, 0x02200000, None)
         if handle in (None, 0, C.c_void_p(-1).value):
             raise ValueError('Agy agent path could not be held against replacement')

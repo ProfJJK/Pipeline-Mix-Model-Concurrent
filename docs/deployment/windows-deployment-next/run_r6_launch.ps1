@@ -71,6 +71,8 @@ function Invoke-R6LaunchChild {
     $log=Join-Path $script:SittingRoot ($script:R6Phase+'-'+[Guid]::NewGuid().ToString('N')+'.log')
     $null=Write-R5RecordText $log $text
     if($code -ne 0){
+        if($Name -ceq 'run_r6_system_phase.ps1'){
+            $script:R6AmendmentFailure=Read-R6AmendmentFailure $text}
         if($Name -ceq 'verify_r6_auth_recovery.ps1'){
             $script:R6VerificationFailure=Read-R6VerificationFailure $text}
         throw ('Phase child failed; protected log: '+$log)}
@@ -101,6 +103,29 @@ function Read-R6VerificationFailure {
     }catch{return $null}
 }
 
+function Read-R6AmendmentFailure {
+    param([string]$Text)
+    try{
+        # The one-line diagnostic precedes PowerShell's terminating error.
+        # Parse that bounded document, not a JSON tail followed by error text.
+        $value=$null
+        foreach($line in $Text.Split("`n")){
+            if($line.Length -le 16384 -and $line.StartsWith('{')){
+                try{$candidate=$line|ConvertFrom-Json
+                    if($candidate.PSObject.Properties['schema'] -and $candidate.schema -ceq 'cochem-r6-amendment-failure/1'){$value=$candidate;break}}
+                catch{}}}
+        if($null -eq $value -or $value.schema -cne 'cochem-r6-amendment-failure/1' -or
+            $value.raw_error_published -ne $false -or $value.error_type -cnotin @('ValueError','RuntimeError','OSError',
+                'PermissionError','AgentGuardError','WindowsIsolationError','KnowledgeError','DatabaseError','FileNotFoundError','OtherError') -or
+            @($value.frames).Count -gt 6){return $null}
+        $frames=@()
+        foreach($frame in @($value.frames)){
+            if($frame.function -cnotmatch '^[A-Za-z_][A-Za-z_0-9]{0,79}$' -or $frame.line -isnot [int] -or $frame.line -lt 1){return $null}
+            $frames+=@{function=[string]$frame.function;line=[int]$frame.line}}
+        @{error_type=[string]$value.error_type;frames=$frames}
+    }catch{return $null}
+}
+
 function Write-R5RecordText {
     param([string]$Path,[string]$Text)
     $acl=[Security.AccessControl.FileSecurity]::new();$acl.SetAccessRuleProtection($true,$false)
@@ -123,6 +148,8 @@ function Invoke-R6AcceptancePhase {
         $arguments+=@('-AuthRecoverySha256',$script:R6Pins['r6_auth_recovery.py'])}
     if($Phase -ceq 'native' -and $script:R6Pins.ContainsKey('r6_native_retirement.py')){
         $arguments+=@('-NativeRetirementSha256',$script:R6Pins['r6_native_retirement.py'])}
+    if($Phase -cin @('knowledge','agent','native') -and (Test-R6CustodyContinuation $Manifest)){
+        $arguments+=@('-CustodyAmendmentSha256',$script:R6Pins['r6_custody_amendment.py'])}
     Invoke-R6LaunchChild 'run_r6_system_phase.ps1' $arguments
 }
 
@@ -148,6 +175,16 @@ function Test-R6VerifiedContinuation {
     return $true
 }
 
+function Test-R6CustodyContinuation {
+    param($Manifest)
+    $property=$Manifest.PSObject.Properties['agent_custody_continuation']
+    if($null -eq $property){return $false}
+    if($property.Value -cne '20261013-reviewed-agent-hold-r4-v8' -or -not (Test-R6VerifiedContinuation $Manifest) -or
+        -not $script:R6Pins.ContainsKey('r6_custody_amendment.py')){
+        throw 'Unreviewed or unpinned directory custody continuation.'}
+    return $true
+}
+
 function Write-R6PublicStatus {
     param([string]$Status,$Result=$null)
     if(-not (Test-Path -LiteralPath $script:SittingRoot -PathType Container)){return}
@@ -162,6 +199,8 @@ function Write-R6PublicStatus {
         $safe.authentication=$script:R6AuthSummary}
     if($null -ne (Get-Variable -Name R6VerificationFailure -Scope Script -ErrorAction SilentlyContinue) -and
         $null -ne $script:R6VerificationFailure){$safe.verification_failure=$script:R6VerificationFailure}
+    if($null -ne (Get-Variable -Name R6AmendmentFailure -Scope Script -ErrorAction SilentlyContinue) -and
+        $null -ne $script:R6AmendmentFailure){$safe.amendment_failure=$script:R6AmendmentFailure}
     $name='status-'+[DateTime]::UtcNow.ToString('yyyyMMddTHHmmssfffffff')+'-'+[Guid]::NewGuid().ToString('N')+'.json'
     $acl=[Security.AccessControl.FileSecurity]::new();$acl.SetAccessRuleProtection($true,$false)
     $acl.SetOwner([Security.Principal.SecurityIdentifier]::new('S-1-5-32-544'))
@@ -201,11 +240,13 @@ function Invoke-R6LaunchSequence {
     Write-R6PublicStatus 'RUNNING'
     $resume=Test-R6AuthRecovery $Manifest
     $signedIn=Test-R6VerifiedContinuation $Manifest
+    $custody=Test-R6CustodyContinuation $Manifest
     if($resume){
         $script:R6Phase='verify_existing_installation'
         $verifyArguments=@('-InstallerSha256',$script:R6Pins['install_r6_runtime.ps1'],
             '-PhaseWrapperSha256',$script:R6Pins['run_r6_system_phase.ps1'])
-        if($signedIn){$verifyArguments+='-AuthenticatedContinuation'}
+        if($custody){$verifyArguments+='-AgentCustodyContinuation'}
+        elseif($signedIn){$verifyArguments+='-AuthenticatedContinuation'}
         $verified=Invoke-R6LaunchChild 'verify_r6_auth_recovery.ps1' $verifyArguments
         if($verified.status -cne 'EXISTING_R6_AUTH_RECOVERY_PREREQUISITES_VERIFIED'){throw 'Existing R6 recovery prerequisites differ.'}}
     $script:R6Phase='quiescence';Invoke-R5Stage2
@@ -238,9 +279,12 @@ function Invoke-R6LaunchSequence {
         if($auth.result.status -cne 'ALL_SESSIONS_VERIFIED'){throw 'Authentication remained unverified after the attended window.'}
     }
     Write-Host 'Authentication verified. You can walk away now. No further input or restart is planned.' -ForegroundColor Green
-    $script:R6Phase='agent_staging'
-    $stage=Invoke-R6LaunchChild 'agy-isolation-evidence-r4-v1.ps1' @('-StageOnly','-Attempt',[Guid]::NewGuid().ToString('N'),'-Apply')
-    if($stage.decision -cne 'COMPLETE'){throw 'Protected six-worker agent staging was not verified.'}
+    if($custody){
+        $stage=@{decision='PRESERVED_EXISTING_STAGING';restaged=$false;verified_by='agent acceptance'}
+    }else{
+        $script:R6Phase='agent_staging'
+        $stage=Invoke-R6LaunchChild 'agy-isolation-evidence-r4-v1.ps1' @('-StageOnly','-Attempt',[Guid]::NewGuid().ToString('N'),'-Apply')
+        if($stage.decision -cne 'COMPLETE'){throw 'Protected six-worker agent staging was not verified.'}}
     $phases=@($auth)
     foreach($phase in @('knowledge','agent','native','preview')){$phases+=Invoke-R6AcceptancePhase $phase $Manifest}
     $index=[ordered]@{schema='cochem-r6-acceptance-index/1';manifest_sha256=$Manifest.manifest_sha256;candidate_sha256=$Manifest.candidate_sha256;
@@ -257,6 +301,7 @@ function Invoke-R6LaunchSequence {
     if($script:R6Pins.ContainsKey('r6_native_retirement.py')){
         $arguments+=@('-RetirementHelperSha256',$script:R6Pins['r6_native_retirement.py'])}
     if($signedIn){$arguments+=@('-RetirementGuardSha256',$script:R6Pins['r6_retirement_guard.py'])}
+    if($custody){$arguments+=@('-CustodyAmendmentSha256',$script:R6Pins['r6_custody_amendment.py'])}
     $script:R6CutoverRequested=$true
     $activated=Invoke-R6LaunchChild 'activate_r6_runtime.ps1' $arguments
     if($activated.status -cne 'WARDEN_R6_RUNNING_HEALTH_VERIFIED'){throw 'R6 activation was not verified.'}
@@ -282,9 +327,11 @@ function Invoke-R6LaunchMain {
     if($script:R6Directory -cne $PSScriptRoot){throw 'Launch manifest must be beside this entry point.'}
     $handles=[Collections.Generic.List[IO.FileStream]]::new();$mutex=$null;$locked=$false;$started=$false
     $script:R6CutoverRequested=$false;$script:R6Phase='package';$script:R5=$null;$script:R6VerificationFailure=$null
+    $script:R6AmendmentFailure=$null
     try{
         $script:R6Pins=Open-R6LaunchPins $manifest $script:R6Directory $handles
         $signedIn=Test-R6VerifiedContinuation $manifest
+        $custody=Test-R6CustodyContinuation $manifest
         if(Test-R6AuthRecovery $manifest){
             foreach($name in @('r6_auth_recovery.py','verify_r6_auth_recovery.ps1')){
                 if(-not $script:R6Pins.ContainsKey($name)){throw 'Recovery helper is not pinned.'}}}
@@ -292,7 +339,9 @@ function Invoke-R6LaunchMain {
             $retired=$script:R6Pins.ContainsKey('r6_native_retirement.py')
             @{status='R6_LAUNCH_PLAN';model_targets=$(if($retired){26}else{27});retired_model_targets=$(if($retired){1}else{0});
                 maximum_shared_slots=4;input_window_minutes=20;later_prompts=$false;reuse_verified_sessions=$signedIn;
-                runtime_retirement_guard=$signedIn;installation_and_host_acceptance_executed=$false}|ConvertTo-Json;return
+                runtime_retirement_guard=$signedIn;directory_custody_amendment=$custody;
+                reuse_completed_knowledge=$custody;profile_restaging=(-not $custody);
+                installation_and_host_acceptance_executed=$false}|ConvertTo-Json;return
         }
         $identity=[Security.Principal.WindowsIdentity]::GetCurrent()
         if($PSVersionTable.PSEdition -cne 'Desktop' -or -not [Environment]::Is64BitProcess -or $env:COMPUTERNAME -cne 'AETHERDESK' -or
@@ -327,6 +376,7 @@ function Invoke-R6LaunchMain {
         $record=@{schema='cochem-r6-launch-result/1';status='HELD_PRESERVE_EVIDENCE';phase=$script:R6Phase;error_type=$failure.Exception.GetType().Name;
             automatic_retry=$false;late_prompt=$false;cutover_requested=$script:R6CutoverRequested;recovery=$restore;activation_ready=$false}
         if($null -ne $script:R6VerificationFailure){$record.verification_failure=$script:R6VerificationFailure}
+        if($null -ne $script:R6AmendmentFailure){$record.amendment_failure=$script:R6AmendmentFailure}
         if($started -and (Test-Path -LiteralPath $script:SittingRoot)){
             $record.receipt_path=Join-Path $script:SittingRoot 'r6-held.json'
             $null=Write-R5RecordText $record.receipt_path ($record|ConvertTo-Json -Depth 8)}

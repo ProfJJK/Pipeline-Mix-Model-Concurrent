@@ -11,6 +11,7 @@ import argparse
 import copy
 import hashlib
 from pathlib import Path
+import types
 
 MANIFEST = 'bffcf617620320109a3ff1bcbdcc2e1d4918f9571721dc4642efeed4d0b7a2c4'
 CANDIDATE = 'a8b9b2052402f30860188721f986686c5a2f6785e563045edf295adae250f288'
@@ -45,11 +46,21 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     for key in ('output', 'manifest-hash', 'candidate-hash'):
         parser.add_argument('--'+key, required=True)
+    parser.add_argument('--custody-sha256')
     args = parser.parse_args()
     if (args.manifest_hash, args.candidate_hash) != (MANIFEST, CANDIDATE):
         raise ValueError('Retirement is restricted to the exact installed R6')
     from cochem_pipeline import r6_native_acceptance as native
     from cochem_pipeline import r6_host_acceptance as host
+    custody = None
+    if args.custody_sha256:
+        from cochem_pipeline import windows as win
+        path = Path(__file__).with_name('r6_custody_amendment.py')
+        raw = host.read_bound(win, path, args.custody_sha256, 65536)
+        helper = types.ModuleType('r6_custody_amendment')
+        helper.__file__ = str(path)
+        exec(compile(raw, str(path), 'exec'), helper.__dict__)
+        custody = helper.install(args.custody_sha256)
     original_plan, original_run = native.build_plan, native.run_probes
     plans = []
     def build(candidate):
@@ -63,12 +74,18 @@ def main():
             raise ValueError('Retirement selector coverage differs')
         result['owner_retirement'] = dict(plans[0]['owner_retirement'],
             helper_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest())
+        if custody is not None:
+            result['agent_custody_amendment'] = custody
         return result
     # Only this private one-shot process changes callbacks. host.run still
     # verifies SYSTEM, exact interpreter, manifest, candidate and installed tree.
     native.build_plan, native.run_probes = build, run
     try:
         host.run('native', args.output, args.manifest_hash, args.candidate_hash)
+    except Exception as error:
+        if custody is not None:
+            helper.save_failure(error, args.output)
+        raise
     finally:
         native.build_plan, native.run_probes = original_plan, original_run
 

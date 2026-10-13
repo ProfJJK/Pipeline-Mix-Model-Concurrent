@@ -7,10 +7,10 @@
 param([string]$CoreSha256,[string]$InstallerSha256,[string]$ManifestSha256,
     [string]$CandidateSha256,[string]$EvidencePath,[string]$EvidenceSha256,
     [string]$Attempt,[string]$SourceAttempt='',[string]$StopAttempt='',
-    [string]$RetirementHelperSha256='',[string]$RetirementGuardSha256='',[switch]$Apply)
+    [string]$RetirementHelperSha256='',[string]$RetirementGuardSha256='',[string]$CustodyAmendmentSha256='',[switch]$Apply)
 
 function Set-R6RetirementContext {
-    param($Context,[string]$GuardPath,[string]$GuardHash)
+    param($Context,[string]$GuardPath,[string]$GuardHash,[string]$CustodyHash='')
     if($GuardHash -cnotmatch '^[a-f0-9]{64}$' -or
         $GuardPath -cnotmatch '^C:\\Program Files\\CoChem\\R6Retirement4\.2\.7-windows-20261013-v[1-9][0-9]{0,2}\\r6_retirement_guard\.py$'){
         throw 'Unexpected protected R6 retirement binding.'}
@@ -18,15 +18,21 @@ function Set-R6RetirementContext {
     $Context.action.arguments='-I -B "'+$GuardPath+'" --guard-sha256 '+$GuardHash+' --config "'+$Context.config_path+
         '" --queue-launch-output-root "'+$Context.queue_launch_output_root+'" --docker-wait-seconds 900'
     $Context.retirement_guard=@{path=$GuardPath;sha256=$GuardHash;decision='owner-2026-10-12-pro-retired';replacement_selected=$false}
+    if($CustodyHash){
+        if($CustodyHash -cnotmatch '^[a-f0-9]{64}$'){throw 'Invalid custody startup pin.'}
+        $Context.action.arguments+=' --custody-sha256 '+$CustodyHash
+        $Context.custody_amendment=@{path=(Join-Path (Split-Path -Parent $GuardPath) 'r6_custody_amendment.py');sha256=$CustodyHash}
+    }
 }
 
 function Copy-R6RetirementGuard {
-    param([string]$Source,[string]$Destination,[string]$Hash,$Handles)
+    param([string]$Source,[string]$Destination,[string]$Hash,$Handles,[switch]$ExistingParent)
     $length=(Get-Item -LiteralPath $Source).Length
     if($length -gt 65536){throw 'Retirement startup amendment exceeds its bound.'}
     $inputStream=Open-VerifiedFile $Source $Hash $length
     try{
-        New-PrivateDirectory (Split-Path -Parent $Destination)
+        if($ExistingParent){Assert-PrivateAcl (Split-Path -Parent $Destination)}
+        else{New-PrivateDirectory (Split-Path -Parent $Destination)}
         $stream=[IO.FileStream]::new($Destination,[IO.FileMode]::CreateNew,[Security.AccessControl.FileSystemRights]::Write,[IO.FileShare]::None,4096,[IO.FileOptions]::None,(New-PrivateAcl $false))
         try{$inputStream.CopyTo($stream);$stream.Flush($true)}finally{$stream.Dispose()}
         $Handles.Add((Open-VerifiedFile $Destination $Hash $length))
@@ -49,7 +55,7 @@ function Import-R6ActivationFunctions {
 }
 
 function Assert-R6AcceptanceIndex {
-    param($Index,[string]$ManifestHash,[string]$CandidateHash,[string]$RetirementHelperHash='')
+    param($Index,[string]$ManifestHash,[string]$CandidateHash,[string]$RetirementHelperHash='',[string]$CustodyHash='')
     if($Index.schema -cne 'cochem-r6-acceptance-index/1' -or $Index.manifest_sha256 -cne $ManifestHash -or
         $Index.candidate_sha256 -cne $CandidateHash -or @($Index.phases).Count -ne 5){throw 'R6 acceptance index binding differs.'}
     $seen=@{};$revision=$null
@@ -70,11 +76,20 @@ function Assert-R6AcceptanceIndex {
         if($null -eq $revision){$revision=$row.revision.source_sha256}
         elseif($revision -cne $row.revision.source_sha256){throw 'Acceptance phases refer to different installed revisions.'}
         $result=$row.result
+        if($CustodyHash -and $phase -cin @('agent','native')){Assert-R6CustodyAmendment $result.agent_custody_amendment $CustodyHash}
         switch -CaseSensitive ($phase){
             'auth' {if($result.status -cne 'ALL_SESSIONS_VERIFIED' -or @($result.checks).Count -ne 18 -or
                 @($result.checks|Where-Object {-not (Test-ExactBool $_.authenticated $true)}).Count){throw 'Worker authentication is incomplete.'}}
             'agent' {if($result.status -cne 'SIX_WORKER_AGENT_CUSTODY_VERIFIED'){throw 'Six-worker custody was not verified.'}}
-            'knowledge' {if($result.status -cne 'NEW_KNOWLEDGE_AUTHORITY_VERIFIED'){throw 'R6 knowledge authority was not verified.'}}
+            'knowledge' {
+                if($CustodyHash){
+                    if($result.schema -cne 'cochem-r6-knowledge-reuse/1' -or $result.status -cne 'EXISTING_KNOWLEDGE_AUTHORITY_VERIFIED' -or
+                        $result.prior_receipt_sha256 -cne '5bcc2dc08c3edb5c7918e75f66ef33959b5f5cbaf8d62dd1c2c2c86db73a6abf' -or
+                        -not (Test-ExactBool $result.rebuilt $false) -or -not (Test-ExactBool $result.existing_state_modified $false) -or
+                        $result.integrity_check -cne 'ok' -or -not (Test-ExactBool $result.evidence.ready $true) -or
+                        -not (Test-ExactBool $result.evidence.authority_matches_capture $true)){
+                        throw 'Completed R6 knowledge was not reverified without rebuilding.'}
+                }elseif($result.status -cne 'NEW_KNOWLEDGE_AUTHORITY_VERIFIED'){throw 'R6 knowledge authority was not verified.'}}
             'native' {
                 $expectedTargets=if($RetirementHelperHash){26}else{27}
                 if($result.status -cnotin @('ALL_NATIVE_SELECTORS_ACCEPTED','NATIVE_ACCEPTANCE_PARTIAL_AVAILABILITY') -or
@@ -118,6 +133,16 @@ function Assert-R6NativeRetirement {
         throw 'The owner-pinned model retirement evidence differs.'}
 }
 
+function Assert-R6CustodyAmendment {
+    param($Value,[string]$Expected)
+    if($Expected -cnotmatch '^[a-f0-9]{64}$' -or $Value.schema -cne 'cochem-r6-directory-custody-amendment/1' -or
+        $Value.helper_sha256 -cne $Expected -or
+        $Value.original_guard_sha256 -cne 'd86c90750dc2112ce8ff1bc9a4937898eb35cadbf4362050b04381e2138e6591' -or
+        $Value.repaired_guard_sha256 -cne '6d8cce1fb2896a489c522f79c639256b9b296b8a92db6edc4f006f2105d1e9bf' -or $Value.directory_desired_access -ne 131073 -or
+        $Value.directory_share_mode -ne 3 -or -not (Test-ExactBool $Value.installed_files_modified $false) -or
+        -not (Test-ExactBool $Value.acl_modified $false)) {throw 'Accepted directory custody repair differs from the startup binding.'}
+}
+
 function New-R6TargetContext {
     param($Runtime,[string]$CandidateHash)
     $queue=Join-Path $script:privateRoot 'queue-launch-r6'
@@ -134,7 +159,7 @@ function New-R6TargetContext {
 function Invoke-R6Activation {
     param([string]$CoreHash,[string]$InstallerHash,[string]$ManifestHash,[string]$CandidateHash,
         [string]$EvidencePath,[string]$EvidenceHash,[string]$Attempt,[string]$SourceAttempt,[string]$StopAttempt,[bool]$ApplyRequested,
-        [string]$RetirementHelperHash='',[string]$RetirementGuardHash='')
+        [string]$RetirementHelperHash='',[string]$RetirementGuardHash='',[string]$CustodyHash='')
     foreach($hash in @($CoreHash,$InstallerHash,$ManifestHash,$CandidateHash,$EvidenceHash)){
         if($hash -cnotmatch '^[a-f0-9]{64}$'){throw 'Activation requires exact reviewed hashes.'}}
     if($RetirementHelperHash -and ($RetirementHelperHash -cnotmatch '^[a-f0-9]{64}$' -or
@@ -143,6 +168,8 @@ function Invoke-R6Activation {
         throw 'Model retirement is restricted to the exact installed R6.'}
     if($RetirementGuardHash -and ($RetirementGuardHash -cnotmatch '^[a-f0-9]{64}$' -or -not $RetirementHelperHash)){
         throw 'The runtime retirement amendment requires its accepted native plan.'}
+    if($CustodyHash -and ($CustodyHash -cnotmatch '^[a-f0-9]{64}$' -or -not $RetirementGuardHash)){
+        throw 'The custody amendment requires the pinned runtime entry point.'}
     if($Attempt -cnotmatch '^v[1-9][0-9]{0,2}$' -or ($SourceAttempt -and $SourceAttempt -cnotmatch '^v[1-9][0-9]{0,2}$') -or
         ($StopAttempt -and ($StopAttempt -cnotmatch '^v[1-9][0-9]{0,2}$' -or -not $SourceAttempt))){throw 'Invalid source/stop/target attempt.'}
     if($EvidencePath -cnotmatch '^C:\\Program Files\\CoChem\\R6Sitting4\.2\.7-windows-20261012-[a-f0-9]{32}\\acceptance-index\.json$'){
@@ -173,7 +200,7 @@ function Invoke-R6Activation {
         $null=Read-R3Control (Join-Path $runtimeRoot 'pipeline.json') $CandidateHash
         Assert-PrivateAcl $EvidencePath
         $index=(Read-R3Text (Read-R3Control $EvidencePath $EvidenceHash))|ConvertFrom-Json
-        $revision=Assert-R6AcceptanceIndex $index $ManifestHash $CandidateHash $RetirementHelperHash
+        $revision=Assert-R6AcceptanceIndex $index $ManifestHash $CandidateHash $RetirementHelperHash $CustodyHash
         if($revision -cne $installed.revision.source_sha256){throw 'R6 acceptance revision differs from installation.'}
         $null=Assert-R4Pins (Assert-R4InstalledBindings);$lineage=Assert-R4RetargetLineage;$null=Assert-ClientConfig
         $null=Assert-CodeTreeOnce $script:r4Root
@@ -182,7 +209,7 @@ function Invoke-R6Activation {
         $context=New-R6TargetContext $runtime $CandidateHash
         if($RetirementGuardHash){
             $guardPath=Join-Path (Join-Path $script:base ('R6Retirement4.2.7-windows-20261013-'+$Attempt)) 'r6_retirement_guard.py'
-            Set-R6RetirementContext $context $guardPath $RetirementGuardHash
+            Set-R6RetirementContext $context $guardPath $RetirementGuardHash $CustodyHash
         }
         $script:targetRoot=Join-Path $script:base ('WardenRetarget4.2.7-windows-20261012-r6-'+$Attempt)
         $script:targetSourceRoot=$context.source_root
@@ -195,15 +222,16 @@ function Invoke-R6Activation {
         if(Test-Path -LiteralPath $script:targetRoot){throw 'Existing R6 cutover evidence must be preserved; no automatic resume.'}
         if(-not $ApplyRequested){@{status='R6_ACTIVATION_READ_ONLY_PLAN';source=$source;context=$context;activation_ready=$false}|ConvertTo-Json -Depth 8;return}
         if($RetirementGuardHash){Copy-R6RetirementGuard (Join-Path $PSScriptRoot 'r6_retirement_guard.py') $guardPath $RetirementGuardHash $held}
+        if($CustodyHash){Copy-R6RetirementGuard (Join-Path $PSScriptRoot 'r6_custody_amendment.py') $context.custody_amendment.path $CustodyHash $held -ExistingParent}
         $result=Invoke-Retarget $folder $context $lineage
         $binding=[ordered]@{receipt_path=$result.retarget_receipt_path;receipt_sha256=$result.retarget_receipt_sha256;sddl=$result.sddl;
             source=[ordered]@{source_state=$result.source.source_state;source_attempt=$result.source.source_attempt;stop_attempt=$result.source.stop_attempt}}
         $start=Invoke-StartOnce $folder $context $binding
         @{schema='cochem-r6-activation-result/1';status=$start.status;receipt_path=$start.receipt_path;receipt_sha256=$start.receipt_sha256;
             evidence_sha256=$EvidenceHash;manifest_sha256=$ManifestHash;candidate_sha256=$CandidateHash;
-            retirement_guard_sha256=$RetirementGuardHash;full_srs_acceptance=$false}|ConvertTo-Json -Depth 8
+            retirement_guard_sha256=$RetirementGuardHash;custody_amendment_sha256=$CustodyHash;full_srs_acceptance=$false}|ConvertTo-Json -Depth 8
     }finally{foreach($stream in $held){$stream.Dispose()}}
 }
 
 $ErrorActionPreference='Stop';Set-StrictMode -Version Latest
-Invoke-R6Activation $CoreSha256 $InstallerSha256 $ManifestSha256 $CandidateSha256 $EvidencePath $EvidenceSha256 $Attempt $SourceAttempt $StopAttempt ([bool]$Apply) $RetirementHelperSha256 $RetirementGuardSha256
+Invoke-R6Activation $CoreSha256 $InstallerSha256 $ManifestSha256 $CandidateSha256 $EvidencePath $EvidenceSha256 $Attempt $SourceAttempt $StopAttempt ([bool]$Apply) $RetirementHelperSha256 $RetirementGuardSha256 $CustodyAmendmentSha256

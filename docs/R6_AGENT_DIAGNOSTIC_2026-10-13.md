@@ -1,5 +1,9 @@
 # R6 agent acceptance hold after the 07:33 run
 
+**Completed diagnostic:** see [R6_CUSTODY_REPAIR_2026-10-13.md](R6_CUSTODY_REPAIR_2026-10-13.md).
+The sections below preserve the diagnostic preparation history. Do not replay
+that spent diagnostic or the earlier deployment command.
+
 The owner ran immutable `r6-launch-c7a9241`. Sitting
 `53b47af9480c4db181e71a79f18a3cad` verified the existing installation,
 all six Codex, six Claude and six Agy sessions, completed agent staging and

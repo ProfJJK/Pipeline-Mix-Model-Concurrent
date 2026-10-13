@@ -2,7 +2,7 @@
 <# Read-only prerequisite for the specific 2026-10-12 authentication hold.
    Does not run Python, providers, tasks, installation or a daemon. #>
 [CmdletBinding()]
-param([string]$InstallerSha256,[string]$PhaseWrapperSha256,[switch]$AuthenticatedContinuation)
+param([string]$InstallerSha256,[string]$PhaseWrapperSha256,[switch]$AuthenticatedContinuation,[switch]$AgentCustodyContinuation)
 
 function Read-R6RecoveryJson {
     param([string]$Path,[string]$Hash='')
@@ -362,7 +362,7 @@ function Assert-R6SuccessfulStandaloneSignIn {
 }
 
 function Invoke-R6AuthRecoveryVerification {
-    param([string]$InstallerHash,[string]$PhaseHash,[string]$Directory=$PSScriptRoot,[bool]$VerifiedContinuation=$false)
+    param([string]$InstallerHash,[string]$PhaseHash,[string]$Directory=$PSScriptRoot,[bool]$VerifiedContinuation=$false,[bool]$CustodyContinuation=$false)
     foreach($hash in @($InstallerHash,$PhaseHash)){if($hash -cnotmatch '^[a-f0-9]{64}$'){throw 'Recovery helper pins are required.'}}
     $phase=Join-Path $Directory 'run_r6_system_phase.ps1'
     $handle=[IO.File]::Open($phase,'Open','Read','Read')
@@ -381,8 +381,10 @@ function Invoke-R6AuthRecoveryVerification {
         Set-R6Constants
         foreach($definition in @(Import-R6CopyFunctions $Directory)){. ([scriptblock]::Create($definition))}
         Initialize-FileIdentity
-        if($VerifiedContinuation){Assert-R6SuccessfulStandaloneSignIn}
-        Assert-R6AuthRecoveryEvidence
+        if($CustodyContinuation){Assert-R6CustodyContinuationEvidence}
+        else{
+            if($VerifiedContinuation){Assert-R6SuccessfulStandaloneSignIn}
+            Assert-R6AuthRecoveryEvidence}
     }finally{$handle.Dispose()}
 }
 
@@ -405,6 +407,58 @@ function Get-R6VerificationFailure {
     }
     @{schema='cochem-r6-verification-failure/1';status='VERIFICATION_FAILED';error_type=$kind;
         hresult=[int]$Failure.Exception.HResult;frames=$frames;raw_error_published=$false}
+}
+
+function Assert-R6CustodyContinuationEvidence {
+    # A separate, evidence-bound continuation for the completed 07:33 attempt.
+    # Do not weaken the old first-auth-hold verifier or rebuild its knowledge.
+    $manifestHash='bffcf617620320109a3ff1bcbdcc2e1d4918f9571721dc4642efeed4d0b7a2c4'
+    $candidateHash='a8b9b2052402f30860188721f986686c5a2f6785e563045edf295adae250f288'
+    $null=Read-R6RecoveryJson (Join-Path $script:targetRoot 'install-manifest.json') $manifestHash
+    $candidate=Read-R6RecoveryJson (Join-Path $script:targetRoot 'pipeline.json') $candidateHash
+    $installed=Read-R6RecoveryJson (Join-Path $script:targetRoot 'install-after.json')
+    if((Test-Path -LiteralPath (Join-Path $script:targetRoot 'install-held.json')) -or
+        $installed.status -cne 'STOPPED_RUNTIME_INSTALLED' -or $installed.manifest_sha256 -cne $manifestHash -or
+        $installed.source_commit -cne '359ca92e57b2d74eb407b258cf53123d80ef1467'){
+        throw 'Only the completed immutable R6 installation may be reused.'}
+    $evidence=@(
+        @{phase='auth';id='9e0a79eaef0d4c2eb749842913ce38ec';file='result.json';status='PHASE_COMPLETED';hash='32361af0aeee844c2a6173d8f44e3e5898a22d0640adcdb6f8bc9b0f4b026d85'},
+        @{phase='knowledge';id='47776d31bd0e4773be318bde56f5be0a';file='result.json';status='PHASE_COMPLETED';hash='5bcc2dc08c3edb5c7918e75f66ef33959b5f5cbaf8d62dd1c2c2c86db73a6abf'},
+        @{phase='agent';id='0269bb0c420b488bbb4874841be21ea0';file='held.json';status='HELD_PRESERVE_PARTIAL';hash='5c86817a543f53cdbb6307832bca5dad4634a014f81de88979046eaf8fdab1a4'})
+    foreach($entry in $evidence){
+        $name='R6Acceptance4.2.7-windows-20261012-v1-'+$entry.phase+'-'+$entry.id
+        $row=Read-R6RecoveryJson (Join-Path (Join-Path $script:base $name) $entry.file) $entry.hash
+        if($row.schema -cne 'cochem-r6-system-phase/1' -or $row.phase -cne $entry.phase -or
+            $row.status -cne $entry.status -or $row.manifest_sha256 -cne $manifestHash -or
+            $row.candidate_sha256 -cne $candidateHash){throw 'Reviewed phase binding differs.'}
+        if($entry.phase -ceq 'auth' -and ($row.result.status -cne 'ALL_SESSIONS_VERIFIED' -or
+            @($row.result.checks).Count -ne 18 -or @($row.result.checks|Where-Object {$_.authenticated -ne $true -or $_.cleanup_verified -ne $true}).Count)){
+            throw 'The reviewed successful sign-ins differ.'}
+        if($entry.phase -ceq 'knowledge' -and $row.result.status -cne 'NEW_KNOWLEDGE_AUTHORITY_VERIFIED'){
+            throw 'The completed knowledge receipt differs.'}
+    }
+    if(-not (Test-Path -LiteralPath $candidate.knowledge.state_root -PathType Container)){
+        throw 'The completed knowledge state is missing; no automatic creation.'}
+    $diagnostic=Read-R6RecoveryJson (Join-Path $script:base 'R6AgentDiagnostic427-45da557a0e364dac95d42e2ae2f9a4fc\status.json') 'c124feb02e72f061109624993cb0538ef0ebe30431a3c2eeff39f659ca3b7f0c'
+    if($diagnostic.status -cne 'DIAGNOSTIC_CAPTURED' -or @($diagnostic.workers).Count -ne 1 -or
+        $diagnostic.workers[0].failure.reason -cne 'CUSTODY_ACCESS_NOT_DENIED' -or
+        $diagnostic.workers[0].handle_cleanup_observed -ne $true){throw 'Reviewed directory diagnostic differs.'}
+    $restore=Read-R6RecoveryJson (Join-Path $script:base 'WardenRetarget4.2.7-windows-20261011-r4-v8\start-receipt.json') '3cd7e7f1826acc141f7e7144f03c062e32162d5be0a7b6282d82aba3db13fbc4'
+    if($restore.schema -cne 'cochem-warden-start/3' -or $restore.status -cne 'WARDEN_R4_RESTARTED_HEALTH_VERIFIED' -or
+        $restore.target -cne 'r4' -or $restore.attempt -cne 'v8' -or $restore.enabled_after -ne $true -or
+        $restore.running_instances -ne 1 -or $restore.health.samples_stable -ne $true){throw 'Reviewed R4 v8 restoration differs.'}
+    foreach($folder in Get-ChildItem -LiteralPath $script:base -Directory){
+        if($folder.Name -cmatch '^R6Acceptance4\.2\.7-windows-20261012-v1-(knowledge|agent|native|preview)-'){
+            $allowed=@($evidence|Where-Object {('R6Acceptance4.2.7-windows-20261012-v1-'+$_.phase+'-'+$_.id) -ceq $folder.Name})
+            if($allowed.Count -ne 1){throw 'An unreviewed later R6 phase exists. Preserve it; do not repeat.'}}}
+    $scheduler=New-Object -ComObject 'Schedule.Service';$scheduler.Connect()
+    foreach($task in @($scheduler.GetFolder('\').GetTasks(1))){
+        if([string]$task.Name -cmatch '^CoChem-4\.2\.7-(R6Acceptance-|AgySignIn-|InteractiveAgy|R6AgentDiagnostic-)' -and
+            ($task.State -in @(2,4) -or $task.GetInstances(0).Count -ne 0)){throw 'A prior profile or acceptance task is active.'}}
+    Assert-R6NotReferenced
+    $null=Assert-R6Tree;Assert-R6Interpreter
+    @{status='EXISTING_R6_AUTH_RECOVERY_PREREQUISITES_VERIFIED';continuation='AGENT_CUSTODY_REPAIR';
+        installation_repeated=$false;knowledge_rebuild_allowed=$false;state_modified=$false}
 }
 
 function Assert-R6AuthRecoveryEvidence {
@@ -449,7 +503,7 @@ function Assert-R6AuthRecoveryEvidence {
 
 $ErrorActionPreference='Stop';Set-StrictMode -Version Latest
 try{
-    Invoke-R6AuthRecoveryVerification $InstallerSha256 $PhaseWrapperSha256 $PSScriptRoot ([bool]$AuthenticatedContinuation)|ConvertTo-Json -Depth 6
+    Invoke-R6AuthRecoveryVerification $InstallerSha256 $PhaseWrapperSha256 $PSScriptRoot ([bool]$AuthenticatedContinuation) ([bool]$AgentCustodyContinuation)|ConvertTo-Json -Depth 6
 }catch{
     $failure=$_
     Write-Error -ErrorRecord $failure -ErrorAction Continue
