@@ -130,7 +130,8 @@ $bounded=$false;try{{$null=Read-NativeHoldFile {ps(str(path))} 2}}catch{{$bounde
     assert path.stat().st_mtime_ns == before
 
 
-def fixture_report(run_ps, *, tamper=False, read_error=False):
+def fixture_report(run_ps, *, tamper=False, read_error=False, provider='gemini',
+                   model='gemini-3.8-flash', effort='low', target=0, mismatch=False):
     # Everything including COM is replaced. This executes the complete report
     # builder against synthetic receipts, including its bound attempt paths.
     stdout = '\n'.join(json.dumps(row) for row in events())
@@ -140,13 +141,15 @@ function Read-NativeHoldFile {{param([string]$Path,[int]$Maximum=4194304,[switch
  $script:reads.Add($Path)
  if($Path.EndsWith('start-held.json')){{throw 'fixture denied'}}
  if($Path.EndsWith('native-held.json')){{
-  return @{{present=$true;sha256=('a'*64);value=@{{schema='cochem-r6-native-acceptance/1';phase='target-00'}}}}}}
- if($Path.EndsWith('target-00-reservation.json')){{
+  return @{{present=$true;sha256=('a'*64);value=@{{schema='cochem-r6-native-acceptance/1';phase='target-{target:02d}'}}}}}}
+ if($Path.EndsWith('target-{target:02d}-reservation.json')){{
   return @{{present=$true;sha256=('b'*64);value=@{{schema='cochem-r6-disposable-native-reservation/1';
-   node=@{{attempt_id='{('../bad' if tamper else 'c' * 32)}';worker_slot='slot1';route=@{{provider='gemini';model='gemini-3.8-flash';reasoning_effort='low'}}}}}}}}}}
+   node=@{{attempt_id='{('../bad' if tamper else 'c' * 32)}';worker_slot='slot1';route=@{{provider='{provider}';model='{model}';reasoning_effort='{effort}'}}}}}}}}}}
+ if($Path.EndsWith('target-00-verified.json')){{
+  return @{{present=$true;sha256=('1'*64);value=@{{provider='gemini';model='gemini-3.8-flash';effort='low';worker='slot1';status='NATIVE_SELECTOR_ACCEPTED';response='{SECRET}'}}}}}}
  if($Path.EndsWith('failure.json')){{
   return @{{present=$true;sha256=('d'*64);value=@{{schema='cochem-native-failure-metadata/1';category='compatibility';
-    envelope_kind='agy_identity';stdout_sha256=('e'*64);stderr_sha256=('f'*64)}}}}}}
+    envelope_kind='agy_identity';exit_code=1;stdout_sha256=('e'*64);stderr_sha256=('{('0' if mismatch else 'f')}'*64)}}}}}}
  if($Path.EndsWith('stdout.log')){{
   {"throw 'fixture denied'" if read_error else "return @{present=$true;sha256=('e'*64);value=" + ps(stdout) + "}"}}}
  if($Path.EndsWith('stderr.log')){{return @{{present=$true;sha256=('f'*64);value=''}}}}
@@ -212,3 +215,94 @@ def test_export_has_no_mutation_or_provider_entry_points():
         assert forbidden not in source
     assert "'CreateNew','Write','Read'" in source
     assert 'Invoke-NativeHoldDiagnostic $OutputDirectory' in source
+
+
+@pytest.mark.parametrize('provider,model,effort', [
+    ('claude', 'claude-haiku-5-5', 'medium'),
+    ('codex', 'gpt-6-luna', 'high'),
+    ('gemini', 'gemini-3.8-flash', 'high'),
+])
+def test_latest_attempt_reports_actual_target_and_prior_acceptance(run_ps, provider, model, effort):
+    result = fixture_report(run_ps, provider=provider, model=model, effort=effort, target=1)
+    report = result['report']
+    assert SECRET not in json.dumps(result)
+    assert report['schema'] == 'cochem-r6-native-hold-diagnostic/2'
+    assert report['native_detail_status'] == 'PROJECTED_EXISTING_PROBE'
+    assert report['target']['provider'] == provider and report['target']['model'] == model
+    assert report['target']['effort'] == effort and report['target']['phase'] == 'target-01'
+    assert report['native_failure']['projection']['exit_code'] == 1
+    assert report['completed_targets'][0]['status'] == 'NATIVE_SELECTOR_ACCEPTED'
+    assert report['completed_targets'][0]['model'] == 'gemini-3.8-flash'
+    assert ('protocol' in report) == (provider == 'gemini')
+    assert any('native-c9ff4ce625824ebaafff6f4d216f271d' in p for p in result['reads'])
+    assert any('r4-v10' in p for p in result['reads'])
+    assert not any('native-344364d3b6434266a29c7bb61a654220' in p for p in result['reads'])
+
+
+@pytest.mark.parametrize('provider,model', [('claude', SECRET), ('gemini', 'gemini-3.1-pro'),
+                                          ('codex', 'claude-haiku-5-5')])
+def test_unrecognized_cross_provider_and_retired_targets_do_not_read_raw_stream(run_ps, provider, model):
+    result = fixture_report(run_ps, provider=provider, model=model)
+    assert result['report']['native_detail_status'] == 'READ_OR_BINDING_FAILED'
+    assert not any(p.endswith('stdout.log') for p in result['reads'])
+    assert SECRET not in json.dumps(result)
+
+
+def test_attempt_hash_mismatch_is_reported_without_claiming_binding(run_ps):
+    value = fixture_report(run_ps, mismatch=True)['report']
+    assert value['stream_hashes_match_failure'] is False
+
+
+@pytest.mark.parametrize('code', [-1073741819, 3221225477, 1])
+def test_signed_and_unsigned_native_exit_codes_are_preserved(run_ps, code):
+    value = run_ps(f"Select-NativeHoldRecord @{{exit_code={code};api_status=403;claude_result_subtype='error_during_execution'}}|ConvertTo-Json -Compress")
+    assert value == {'exit_code': code, 'api_status': 403, 'claude_result_subtype': 'error_during_execution'}
+
+
+@pytest.mark.parametrize('diagnostic,marker', [
+    ('Error: When using --print, --output-format stream-json requires --verbose', 'verbose_required'),
+    ('error: unknown flag --effort', 'unknown_flag'),
+    ('rpc error: code = ResourceExhausted desc = quota limit', 'quota'),
+    ('HTTP/2 403: Permission denied', 'permission_denied'),
+    ('panic: runtime error: invalid memory address', 'panic'),
+    ('json_schema validation failed', 'schema'),
+    ('UNAUTHENTICATED: token expired', 'authentication'),
+])
+def test_error_observations_have_fixed_vocabulary_no_raw_text(run_ps, diagnostic, marker):
+    value = run_ps(f"Get-NativeExitIndicators {ps(diagnostic + ' ' + SECRET)}|ConvertTo-Json -Depth 8 -Compress")
+    assert SECRET not in json.dumps(value)
+    assert value['markers'][marker]
+    assert value['envelopes']['non_json_lines'] == 1
+    if '--verbose' in diagnostic:
+        assert set(value['flags']) == {'--print', '--output-format', '--verbose'}
+    if '403' in diagnostic:
+        assert value['http_status'] == [403]
+
+
+def test_structured_diagnostics_and_ansi_are_observations_not_acceptance(run_ps):
+    raw = '\n'.join([json.dumps({'type': 'result', 'is_error': True, 'result': SECRET}),
+                     '\x1b[31mHTTP status 429: rate limit\x1b[0m ' + SECRET])
+    value = run_ps(f"Get-NativeExitIndicators {ps(raw)}|ConvertTo-Json -Depth 8 -Compress")
+    assert SECRET not in json.dumps(value)
+    assert value['envelopes']['result_records'] == value['envelopes']['is_error_records'] == 1
+    assert value['envelopes']['json_lines'] == value['envelopes']['non_json_lines'] == 1
+    assert value['markers']['quota'] and value['http_status'] == [429]
+    assert 'accepted' not in value and 'category' not in value
+
+
+def test_diagnostic_size_and_line_bounds(run_ps):
+    value = run_ps("""
+$large=$false;try{$null=Get-NativeExitIndicators ('x'*8388609)}catch{$large=$true}
+$lines=Get-NativeExitIndicators ("{}\n"*32769)
+@{large_rejected=$large;lines=$lines}|ConvertTo-Json -Depth 8 -Compress
+""")
+    assert value['large_rejected']
+    assert value['lines']['envelopes']['projection_truncated']
+
+
+def test_exact_agent_identity_is_observed_without_exporting_unknown_name(run_ps):
+    data = events()
+    data[0]['init']['agent'] = 'cochem-inference-only'
+    assert protocol(run_ps, data)['init_agent'] == 'EXPECTED'
+    data[0]['init']['agent'] = SECRET
+    assert protocol(run_ps, data)['init_agent'] == 'OTHER_VALUE'

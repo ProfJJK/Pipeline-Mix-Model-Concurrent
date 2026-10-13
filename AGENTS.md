@@ -77,6 +77,16 @@ This is the preferred interface, not a claim that all three adapters have been
 implemented or accepted on this host. Reuse verified sessions before asking for input.
 
 ## Current handoff
+2026-10-13 11:37 run: `r6-launch-d6d336e` is now spent. All 18 sessions,
+knowledge and agent checks passed again. Native acceptance held at frozen
+worker.py:1033 with ProviderFailure category `code`: an unclassified nonzero
+native exit, before response validation. The provider/target/reason are not
+yet established. R4 restoration v10 returned verified health; admission capacity
+was zero, so do not claim work admission. Read `docs/R6_NATIVE_EXIT_2026-10-13.md`.
+The read-only v2 diagnostic targets this exact attempt and is the only pending
+owner action. Do not replay deployment, repeat sign-ins or weaken validation.
+The following paragraphs are historical preparation and earlier outcomes.
+
 2026-10-13 native diagnostic received: first Agy inference succeeded, with no
 tool steps, but its global CLI registry advertisement triggered our parser.
 Read `docs/R6_AGY_REGISTRY_REPAIR_2026-10-13.md`. The repair is exact-binary/agent

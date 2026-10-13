@@ -1,5 +1,5 @@
 #Requires -Version 5.1
-<# Read-only export of the exact 2026-10-13 09:34 R6 native hold and R4 v9
+<# Read-only export of the exact 2026-10-13 11:37 R6 native hold and R4 v10
    restoration. No provider, task, daemon, sign-in, cleanup or deployment is
    executed. Existing native output is reduced to protocol flags/counts; no
    output text, prompt, session ID, credential or URL is exported. #>
@@ -48,11 +48,12 @@ function Select-NativeHoldRecord {
             'WARDEN_R4_RESTARTED_HEALTH_VERIFIED','WARDEN_RETARGETED_TO_R4_NOT_STARTED','WARDEN_START_HELD',
             'SIX_WORKER_AGENT_CUSTODY_VERIFIED','SIX_WORKER_CUSTODY_VERIFIED',
             'EXISTING_KNOWLEDGE_AUTHORITY_VERIFIED','ALL_SESSIONS_VERIFIED');
-        phase=@('auth','knowledge','agent','native','preview');target=@('r4','r6');attempt=@('v8','v9');
+        phase=@('auth','knowledge','agent','native','preview');target=@('r4','r6');attempt=@('v9','v10');
         error_type=@('ProviderFailure','ValueError','RuntimeError','WindowsIsolationError','OSError','PermissionError',
             'TimeoutError','RuntimeException','PropertyNotFoundException','UnauthorizedAccessException');
         category=@('compatibility','protocol','code','auth','quota','busy','provider','resource','timeout','unknown','configuration');
         envelope_kind=@('none','agy_identity','agy_tool_registry','agy_error','claude_result','claude_api_error');
+        claude_result_subtype=@('success','error_during_execution','error_max_turns','error_max_budget_usd','error_max_structured_output_retries');
         stage=@('BEFORE_RUN','RUN','HEALTH_WAIT','POST_START_READBACK','TRIGGER_ENABLE','RECEIPT')}
     foreach($name in $enums.Keys){
         $v=Get-NativeHoldMember $Value $name
@@ -63,10 +64,12 @@ function Select-NativeHoldRecord {
         'retarget_receipt_sha256','receipt_sha256','helper_sha256')){
         $v=Get-NativeHoldMember $Value $name
         if($v -is [string] -and $v -cmatch '^[a-f0-9]{64}$'){$safe[$name]=$v}}
-    foreach($name in @('completed','exit_code','stdout_bytes','stderr_bytes','started_at','finished_at',
+    foreach($name in @('completed','api_status','stdout_bytes','stderr_bytes','started_at','finished_at',
         'task_state','running_instances','last_task_result','last_health_pid','health_samples')){
         $v=Get-NativeHoldMember $Value $name
         if($v -is [int] -or $v -is [long] -or $v -is [double]){if($v -ge 0 -and $v -lt 1e16){$safe[$name]=$v}}}
+    $exitCode=Get-NativeHoldMember $Value 'exit_code'
+    if(($exitCode -is [int] -or $exitCode -is [long]) -and $exitCode -ge -2147483648 -and $exitCode -le 4294967295){$safe.exit_code=$exitCode}
     foreach($name in @('automatic_retry','automatic_retry_allowed','late_prompt','activation_ready','cutover_requested',
         'enabled_before','enabled_after','exactly_one_start','exactly_one_start_requested','run_requested',
         'held_before_run','enable_requested','health_gate_passed','stop_recovery_allowed','interrupted',
@@ -109,6 +112,8 @@ function Get-NativeHoldProtocol {
         $safe.event_order_matches=((Get-NativeHoldMember $events[0] 'event') -ceq 'init' -and
             (Get-NativeHoldMember $events[-1] 'event') -ceq 'result')
         $init=Get-NativeHoldMember $events[0] 'init';$terminal=Get-NativeHoldMember $events[-1] 'result'
+        $agent=Get-NativeHoldMember $init 'agent'
+        $safe.init_agent=if($null -eq $agent){'ABSENT'}elseif($agent -ceq 'cochem-inference-only'){'EXPECTED'}else{'OTHER_VALUE'}
         foreach($pair in @(@{name='init_model';record=$init},@{name='terminal_model';record=$terminal})){
             $model=Get-NativeHoldMember $pair.record 'model'
             if($null -ne $model){$safe[$pair.name]=if($model -ceq $Expected){'EXPECTED'}elseif($model -ceq 'gemini-3.8-flash'){'CANONICAL_FLASH_WITHOUT_EFFORT'}else{'OTHER_VALUE'}}}
@@ -145,6 +150,81 @@ function Get-NativeHoldProtocol {
     return $safe
 }
 
+function Get-NativeHoldTarget {
+    param($Route,[string]$Worker)
+    $models=@{gemini=@('gemini-3.8-flash');codex=@('gpt-6-luna','gpt-6.1-sol','gpt-6-astra');
+        claude=@('claude-haiku-5-5','claude-sonnet-5-5','claude-opus-5-5','claude-fable-5-1')}
+    $provider=Get-NativeHoldMember $Route 'provider';$model=Get-NativeHoldMember $Route 'model'
+    $effort=Get-NativeHoldMember $Route 'reasoning_effort'
+    if($provider -isnot [string] -or $provider -cnotin @('gemini','codex','claude') -or
+        $model -isnot [string] -or $model -cnotin $models[$provider] -or
+        $effort -isnot [string] -or $effort -cnotin @('low','medium','high','xhigh','max') -or
+        $Worker -cnotmatch '^slot[1-6]$'){throw 'Unexpected probe identity'}
+    return @{provider=$provider;model=$model;effort=$effort;worker=$Worker}
+}
+
+function Get-NativeExitIndicators {
+    param([string]$Text)
+    # Diagnostic observations only. These markers never classify availability,
+    # approve a selector, or relax the production native parser.
+    if($Text.Length -gt 8388608){throw 'Diagnostic text exceeds its bound.'}
+    $plain=[regex]::Replace($Text,'\x1b\[[0-?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b[@-_]','')
+    $patterns=[ordered]@{
+        unknown_flag='unknown (?:flag|option|argument|shorthand)|unrecognized (?:option|argument)|unexpected argument';
+        invalid_argument='invalid[_ ](?:argument|request)|invalid value|requires an? argument';
+        unsupported_effort='unsupported.{0,40}(?:effort|reasoning)|(?:effort|reasoning).{0,40}(?:unsupported|invalid|not supported)';
+        unsupported_model='model[_ ]not[_ ](?:found|available|supported)|unknown[_ ]model|unsupported[_ ]model|no such model';
+        permission_denied='permission[_ ]denied|access (?:is )?denied|operation not permitted|EACCES|EPERM';
+        authentication='unauthenticated|unauthorized|authentication[_ ](?:failed|error)|not logged in|please (?:sign|log) in|login required';
+        token_expired='token.{0,40}(?:expired|invalid)|invalid_grant|expired.{0,40}token';
+        quota='quota|rate[_ -]limit|resource[_ ]exhausted|too many requests|usage limit';
+        capacity='overloaded|capacity.{0,30}(?:exceeded|exhausted)|server[_ ]busy';
+        internal_error='internal[_ ](?:server[_ ])?error|rpc error|api error|AGY_ERROR:';
+        unavailable='unavailable|bad gateway|gateway timeout|service.{0,20}down';
+        timeout='timeout|timed out|deadline[_ ]exceeded|context deadline';
+        network='connection (?:refused|reset|closed)|ECONN|ENOTFOUND|no such host|network|dial tcp|broken pipe';
+        tls='TLS|certificate|x509|SSL';
+        cancelled='cancelled|canceled|interrupted|SIGINT|SIGTERM';
+        missing_file='no such file|not found|cannot find|ENOENT';
+        panic='panic:|fatal error|runtime error|segmentation|access violation|stack overflow';
+        memory='out of memory|cannot allocate|allocation failed|quota underflow';
+        stream_json='stream-json|stream_json|JSON parse|invalid JSON|unmarshal|decode|malformed|unexpected (?:EOF|end)';
+        schema='json-schema|json_schema|structured output|schema validation|schema is invalid';
+        agent='agent not found|unknown agent|agent config|agents file|custom agent';
+        tool='tool call|tool execution|tool use|tool_use|tool_result|tool error';
+        turn_limit='max[_ -]turns|maximum.{0,20}turns|turn limit';
+        budget='max[_ -]budget|budget exceeded|budget limit';
+        verbose_required='verbose.{0,60}(?:required|must)|(?:requires|require|must).{0,60}verbose';
+        stdin='stdin|standard input|non-interactive|noninteractive|TTY|terminal';
+        backend='backend|upstream|endpoint|RPC|ConnectError'
+    }
+    $found=[ordered]@{}
+    foreach($name in $patterns.Keys){$found[$name]=[regex]::IsMatch($plain,$patterns[$name],'IgnoreCase')}
+    $flags=@(foreach($name in @('--model','--effort','--reasoning-effort','--agent','--agents','--output-format',
+        '--input-format','--json-schema','--verbose','--max-turns','--max-budget-usd','--allowedTools','--tools',
+        '--settings','--system-prompt','--print','--no-session-persistence','--disable-slash-commands')){
+        if($plain.Contains($name)){$name}})
+    $http=@(foreach($code in @(400,401,403,404,408,409,422,429,500,502,503,504,529)){
+        if([regex]::IsMatch($plain,('(?i)(?:HTTP(?:/\d(?:\.\d)?)?|status(?:[_ ]code)?)[\s:="]{1,8}'+$code+'\b'))){$code}})
+    $envelopes=[ordered]@{json_lines=0;non_json_lines=0;error_records=0;result_records=0;is_error_records=0;
+        init_records=0;success_records=0;failure_records=0;projection_truncated=$false}
+    $lines=@($plain -split "`n"|Where-Object {$_.Trim()})
+    if($lines.Count -gt 32768){$envelopes.projection_truncated=$true;return @{markers=$found;flags=$flags;http_status=$http;envelopes=$envelopes}}
+    foreach($line in $lines){
+        try{$row=$line|ConvertFrom-Json -ErrorAction Stop;$envelopes.json_lines++
+            foreach($field in @('event','type')){
+                $kind=Get-NativeHoldMember $row $field
+                if($kind -ceq 'error'){$envelopes.error_records++}
+                if($kind -ceq 'result'){$envelopes.result_records++}
+                if($kind -ceq 'init'){$envelopes.init_records++}}
+            if((Get-NativeHoldMember $row 'is_error') -eq $true){$envelopes.is_error_records++}
+            $result=Get-NativeHoldMember $row 'result';$status=Get-NativeHoldMember $result 'status'
+            if($status -ceq 'SUCCESS'){$envelopes.success_records++}
+            if($status -cin @('ERROR','FAILED','FAILURE')){$envelopes.failure_records++}
+        }catch{$envelopes.non_json_lines++}}
+    return @{markers=$found;flags=$flags;http_status=$http;envelopes=$envelopes}
+}
+
 function Get-NativeHoldTask {
     param($Folder,[string]$Name)
     try{$task=$Folder.GetTask($Name)}catch{
@@ -169,13 +249,13 @@ function Get-NativeHoldTaskFolder {
 
 function Get-NativeHoldReport {
     $base='C:\Program Files\CoChem'
-    $native=Join-Path $base 'R6Acceptance4.2.7-windows-20261012-v1-native-344364d3b6434266a29c7bb61a654220'
-    $restore=Join-Path $base 'WardenRetarget4.2.7-windows-20261011-r4-v9'
-    $report=[ordered]@{schema='cochem-r6-native-hold-diagnostic/1';observed_at_utc=[DateTime]::UtcNow.ToString('o');
+    $native=Join-Path $base 'R6Acceptance4.2.7-windows-20261012-v1-native-c9ff4ce625824ebaafff6f4d216f271d'
+    $restore=Join-Path $base 'WardenRetarget4.2.7-windows-20261011-r4-v10'
+    $report=[ordered]@{schema='cochem-r6-native-hold-diagnostic/2';observed_at_utc=[DateTime]::UtcNow.ToString('o');
         protected_state_modified=$false;provider_commands_executed=0;task_mutations=0;credentials_read=$false;
-        raw_provider_output_read=$false;raw_provider_output_published=$false;records=@();tasks=@{}}
+        raw_provider_output_read=$false;raw_provider_output_published=$false;records=@();completed_targets=@();tasks=@{}}
     $paths=@((Join-Path $native 'held.json'),(Join-Path $native 'native\native-held.json'))
-    foreach($entry in @('auth-91783f2dd02046cb898f5f56d6611eb1','knowledge-92f0eb26813548c3a3e63337f64e90d9','agent-85176adb54f04d4ea21eaa66a126b336')){
+    foreach($entry in @('auth-3f38a0d197444bc885366496eb549ac6','knowledge-bcc27b51c50d4bf7bd733cfecffcdec2','agent-6ca1c0225e8a4e6caac5c4fd0349558b')){
         $paths+=Join-Path $base ('R6Acceptance4.2.7-windows-20261012-v1-'+$entry+'\result.json')}
     foreach($name in @('retarget-receipt.json','start-intent.json','start-held.json','start-receipt.json')){$paths+=Join-Path $restore $name}
     foreach($path in $paths){
@@ -188,14 +268,27 @@ function Get-NativeHoldReport {
         $phase=Get-NativeHoldMember $held.value 'phase'
         if($held.value.schema -cne 'cochem-r6-native-acceptance/1' -or
             $phase -cnotmatch '^target-[0-9]{2}$'){throw 'Unexpected held target'}
+        $number=[int]$phase.Substring(7)
+        if($number -gt 26){throw 'Unexpected target number'}
+        foreach($i in 0..$number){
+            if($i -ge $number){break}
+            $priorPhase='target-{0:00}' -f $i
+            foreach($suffix in @('verified','unavailable')){
+                try{$prior=Read-NativeHoldFile (Join-Path $native ('native\'+$priorPhase+'-'+$suffix+'.json'))
+                    if(-not $prior.present){continue}
+                    $row=$prior.value
+                    $target=Get-NativeHoldTarget @{provider=$row.provider;model=$row.model;reasoning_effort=$row.effort} $row.worker
+                    if($row.status -cnotin @('NATIVE_SELECTOR_ACCEPTED','PROVIDER_TEMPORARILY_UNAVAILABLE','NOT_PROBED_POOL_UNAVAILABLE')){throw 'Unexpected prior target status'}
+                    $target.phase=$priorPhase;$target.status=$row.status;$target.sha256=$prior.sha256
+                    $report.completed_targets+=,$target
+                }catch{$report.completed_targets+=,@{phase=$priorPhase;status='READ_OR_BINDING_FAILED'}}}}
         $reservation=Read-NativeHoldFile (Join-Path $native ('native\'+$phase+'-reservation.json'))
         $node=$reservation.value.node;$route=$node.route;$id=$node.attempt_id
         if($reservation.value.schema -cne 'cochem-r6-disposable-native-reservation/1' -or
-            $id -isnot [string] -or $id -cnotmatch '^[a-f0-9]{32}$' -or $route.provider -cne 'gemini' -or $route.model -cne 'gemini-3.8-flash' -or
-            $route.reasoning_effort -cnotin @('low','medium','high') -or $node.worker_slot -cnotmatch '^slot[1-6]$'){
+            $id -isnot [string] -or $id -cnotmatch '^[a-f0-9]{32}$'){
             throw 'Unexpected probe identity'}
-        $report.target=@{phase=$phase;provider='gemini';model='gemini-3.8-flash';effort=$route.reasoning_effort;
-            worker=$node.worker_slot;reservation_sha256=$reservation.sha256}
+        $report.target=Get-NativeHoldTarget $route $node.worker_slot
+        $report.target.phase=$phase;$report.target.reservation_sha256=$reservation.sha256
         $attempt=Join-Path $native ('native\attempts\'+$id)
         $failure=Read-NativeHoldFile (Join-Path $attempt 'failure.json')
         if($failure.value.schema -cne 'cochem-native-failure-metadata/1'){throw 'Unexpected native metadata'}
@@ -203,7 +296,9 @@ function Get-NativeHoldReport {
         $out=Read-NativeHoldFile (Join-Path $attempt 'stdout.log') 8388608 -Text
         $err=Read-NativeHoldFile (Join-Path $attempt 'stderr.log') 8388608 -Text
         $report.raw_provider_output_read=$true
-        $report.protocol=Get-NativeHoldProtocol $out.value $err.value ('gemini-3.8-flash-'+$route.reasoning_effort)
+        if($route.provider -ceq 'gemini'){$report.protocol=Get-NativeHoldProtocol $out.value $err.value ('gemini-3.8-flash-'+$route.reasoning_effort)}
+        $report.stdout_indicators=Get-NativeExitIndicators $out.value
+        $report.stderr_indicators=Get-NativeExitIndicators $err.value
         $report.stream_hashes=@{stdout=$out.sha256;stderr=$err.sha256}
         $report.stream_hashes_match_failure=($out.sha256 -ceq $failure.value.stdout_sha256 -and $err.sha256 -ceq $failure.value.stderr_sha256)
         $report.native_detail_status='PROJECTED_EXISTING_PROBE'
@@ -211,7 +306,7 @@ function Get-NativeHoldReport {
     try{
         $folder=Get-NativeHoldTaskFolder
         $report.tasks.warden=Get-NativeHoldTask $folder 'CoChem-4.2.7-Warden'
-        $report.tasks.native=Get-NativeHoldTask $folder 'CoChem-4.2.7-R6Acceptance-native-344364d3b6434266a29c7bb61a654220'
+        $report.tasks.native=Get-NativeHoldTask $folder 'CoChem-4.2.7-R6Acceptance-native-c9ff4ce625824ebaafff6f4d216f271d'
     }catch{$report.task_inspection='UNREADABLE'}
     return $report
 }
@@ -226,7 +321,7 @@ function Invoke-NativeHoldDiagnostic {
         if($part.Attributes -band [IO.FileAttributes]::ReparsePoint){throw 'Diagnostic destination is redirected.'}
         $part=$part.Parent}
     $report=Get-NativeHoldReport
-    $path=Join-Path $destination ('r6-native-hold-diagnostic-'+[DateTime]::UtcNow.ToString('yyyyMMddTHHmmssfffffff')+'-'+[Guid]::NewGuid().ToString('N')+'.json')
+    $path=Join-Path $destination ('r6-native-hold-v2-diagnostic-'+[DateTime]::UtcNow.ToString('yyyyMMddTHHmmssfffffff')+'-'+[Guid]::NewGuid().ToString('N')+'.json')
     $data=[Text.UTF8Encoding]::new($false).GetBytes(($report|ConvertTo-Json -Depth 12))
     $stream=[IO.File]::Open($path,'CreateNew','Write','Read')
     try{$stream.Write($data,0,$data.Length);$stream.Flush($true)}finally{$stream.Dispose()}

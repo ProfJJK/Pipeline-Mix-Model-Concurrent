@@ -1,5 +1,11 @@
 # R6 Agy registry repair and native continuation
 
+**Update after the owner's 11:37 run:** the package below is spent. All sessions,
+knowledge and agent checks passed; native acceptance now held on an unclassified
+nonzero native command exit. R4 v10 restoration verified health. Read
+`R6_NATIVE_EXIT_2026-10-13.md` for the targeted diagnostic; do not replay this
+continuation. The following sections describe its earlier preparation.
+
 ## Confirmed cause
 
 The owner's sanitized diagnostic from 15:42 UTC shows that the first native

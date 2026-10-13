@@ -1,34 +1,21 @@
-R6 AGY REGISTRY REPAIR AND CONTINUATION - 2026-10-13
+R6 NATIVE COMMAND HELD - 2026-10-13 11:37 RUN
 
-Run this command ONCE in Administrator Windows PowerShell.
-No new sign-in is planned. You can walk away after starting it.
-Keep the computer awake while acceptance and startup finish.
+The d6d336e deployment command has run and must not be repeated.
+All 18 sign-ins, knowledge and agent checks passed. Native acceptance then
+held on an unclassified nonzero provider command exit. R4 v10 restoration
+verified health. R6 was not activated.
 
-C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -File "C:\Users\ansac\CoChem427\r6-launch-d6d336e\run_r6_launch.ps1" -LaunchManifest "C:\Users\ansac\CoChem427\r6-launch-d6d336e\launch-manifest.json" -LaunchManifestSha256 1dbb422ba4d8aaa81baf2c3519b4fff6f0fa1b6447b22ab8a1eaae48b3ba06a9 -Apply
+ONE READ-ONLY DIAGNOSTIC IN YOUR EXISTING ADMINISTRATOR POWERSHELL:
 
-The Agy request succeeded with no tool calls. Our parser mistook its global
-CLI tool advertisement for this agent's permissions. The repair is bound to
-the exact protected executable and inference-only agent; actual tool calls,
-subagent activity and model substitution remain rejected.
+C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -File "C:\Users\ansac\Documents\Codex\2026-10-06\the-github-repository-is-located-at\windows-deployment-next\inspect-r6-native-hold-20261013-v2.ps1"
 
-This fresh package reuses installed R6 and the 18 verified sessions.
-It verifies existing knowledge without rebuilding or restaging profiles.
-It handles the specifically recorded interrupted R4 v9 start using the
-reviewed stop helper, then runs the remaining acceptance and R6 cutover.
-Administrator access is required for SYSTEM tests and the Warden transaction.
-There are no planned late prompts, reboot or manual continuation commands.
-A changed session or failed check holds without asking for input.
+Return only its printed report path or error. It saves sanitized metadata for
+the agent to read. It does not deploy, sign in, run providers, change tasks or
+change permissions. Windows denies the ordinary agent process access to the
+private failure records, so this read-only export needs the existing admin
+window. No provider output, authorization code or URL is published.
 
-456 serialized source/fixture tests passed. The actual frozen package's
-read-only plan passed in 6.955 seconds. These are not host acceptance:
-R6 startup and actual model support still require this owner-run command.
-The unattended checks can take longer than 20 minutes.
-
-On a hold, preserve everything and return the final status. Do not retry.
-Pre-cutover failure invokes reviewed R4 restoration after a completed stop;
-once cutover is requested, possible running state is preserved for review.
-The prior R4 v9 restore was not verified; the new script does not assume it was.
-All earlier packages, tasks, receipts, credentials and databases remain intact.
-Do not replay 7451831 or older R6/R7 commands.
-R7 remains separate and needs a package bound to the final R6 action.
-Details: repository docs/R6_AGY_REGISTRY_REPAIR_2026-10-13.md.
+40 serialized Windows source/fixture tests passed. These are not host
+acceptance. No new deployment command is ready until the native failure is
+identified. Preserve all prior packages, receipts and running state.
+See repository docs/R6_NATIVE_EXIT_2026-10-13.md.
