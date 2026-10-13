@@ -1,58 +1,29 @@
-R6 AGY AUTHORIZATION REPAIR + R7 — ONE ADMINISTRATOR COMMAND
-Prepared 2026-10-12. Source b274974. Supersedes the failed e32949a command.
-All earlier packages, failed sessions, tasks and receipts remain preserved.
+DEPLOYMENT HELD — DO NOT RERUN R7 B274974
+Updated after the actual owner-run TUI failure, 2026-10-12 evening.
 
-The diagnostic confirms your code was fed to Agy. Its print-mode login ended
-after 62.08 seconds; both installed binaries contain a 60-second print-mode
-authorization deadline. This is a strong suspect, not a proven provider cause.
-This replacement uses the bridge's existing interactive login mode. A successful
-fresh native status check must still prove authentication. Existing Codex and
-Claude sign-ins are reused; credentials are not copied or reset.
+The TUI produced zero output, no sign-in URL and no code prompt. It timed out
+without receiving a code. Its owned bridge cleanup is verified. The outer
+wrapper has no completion receipt, and the latest Administrator diagnostic
+shows R4 still disabled. R6/R7 deployment has not completed.
 
-1. Open Windows PowerShell as Administrator under AETHERDESK\ansac; accept UAC.
-2. Paste the SINGLE command below and press Enter once.
-3. Complete any requested Agy worker sign-ins at the start. Open the printed
-   Google URL in your browser. Paste the returned authorization code into the
-   masked Code prompt in this same PowerShell window, then press Enter. Do not
-   paste codes into this chat. Escape cancels; letters P and Q are ordinary input.
+Use an idle Administrator PowerShell prompt under AETHERDESK\ansac. Run the
+following RECOVERY command once. It restores the reviewed R4 controller as a
+fresh v6 attempt; it does not sign in, deploy R6/R7 or retry the failed login.
+All old receipts/tasks/roots, credentials, databases, budgets and R: remain.
 
-C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -File "C:\Users\ansac\CoChem427\r7-bundle-b274974\run_r7_launch.ps1" -LaunchManifest "C:\Users\ansac\CoChem427\r7-bundle-b274974\launch-manifest.json" -LaunchManifestSha256 cbc6a7bf1b1bbf49076e50789a9d9bfe320b6a41aaa0bacd2c6a0f2c9d56149e -Apply
+C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -File "C:\Users\ansac\Documents\Codex\2026-10-06\the-github-repository-is-located-at\windows-deployment-next\restore-r4-after-agy-tui-20261012-v1.ps1" -Apply
 
-All requested input is confined to the first 20 minutes after this command
-starts. Six isolated Agy profiles may need authorization. Provider timing is
-not guaranteed; expiry preserves evidence and holds instead of requesting late
-input. The native interactive bridge can end a still-open Agy after its bounded
-post-input wait; the subsequent status check decides whether sign-in succeeded.
+No additional input is planned. Leave the window open until it returns.
+Return its final JSON or error. If it reports another deployment console still
+running or any other hold, preserve the evidence; do not retry or kill processes.
+The workstation rules reserve scheduled-task restoration for the owner.
 
-When the green message says "Authentication verified. You can walk away now",
-leave the window open and the computer on. You can use other apps. Remaining
-native acceptance, installation and cutovers run unattended and may take much
-longer than 20 minutes. No planned late prompts, restart or continuation command.
-A temporary awake request ends when the script exits; no power plan is changed.
+Recovery helper SHA256:
+ffef5cf218821ef13e0e1a71cf13cf079839d22a686b5c8fafb46ec6a4c8598f
+37 serialized diagnostic/recovery fixture tests passed in 10.76 seconds.
+Default read-only recovery plan passed. Engineering did not run Apply.
 
-The command verifies the exact earlier failure and R4 v5 restoration, reuses the
-installed R6 without reinstalling it, authenticates only explicitly logged-out
-profiles, completes R6 acceptance and activation, then installs R7 stopped. R7
-waits for idle work, backs up the full job database, migrates catalog authority
-and verifies native control-probe publication. Uncertain state holds for review;
-rollback occurs only where the preserved transaction proves it safe.
-
-Gemini Pro retirement follows your decision: tiers 5 and 6 use their existing
-Claude/Codex choices, then back off; Flash is not substituted. R6's pinned native
-amendment checks 26 remaining targets and records Pro as retired/unprobed. R7
-publishes the versioned retirement catalog. Four shared slots, Chapter 06, R:,
-its startup task, credentials, original databases/captures and repair budgets
-are preserved. Historical captures and installed R6 configuration are retained.
-
-Sanitized status paths are printed during the run. Success ends with
-R7_RUNNING_CATALOG_PUBLICATION_VERIFIED. This verifies deployment/publication,
-not full 4.2.7 SRS acceptance. If HELD or an error appears, preserve the output,
-tasks and files; do not repeat this command or run an older command separately.
-
-Engineering verification: 461 distinct serialized Windows source/inert tests
-passed. All three exact packaged read-only plans passed in 2.657 seconds, and
-the packaged console probe verified unredirected output and child exit 0.
-The bundle has 307 installer inputs and 481 pinned R6 prerequisite inputs;
-479 prerequisite inputs are identical to e32949a. Only the attended Agy helper
-and exact failed-session verifier differ. No engineering Apply, OAuth/provider
-execution, SYSTEM deployment or protected-state mutation was performed.
+The older delivery sheet RETURN_SETUP_R7_B274974.txt is preserved as history;
+its deployment command is withdrawn. Do not run it or reuse an old OAuth URL.
+The failed bundle itself has not been edited. A future replacement requires a
+repaired native login path and review of this new session/restore evidence.

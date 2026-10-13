@@ -1,5 +1,66 @@
 # Actual attended Agy failure after the console correction
 
+## Latest actual Windows state: zero-output TUI attempt
+
+The owner ran `r7-bundle-b274974` at 19:09 local. Existing R6 verification
+and reuse of the twelve Codex/Claude sessions passed. R4 v5 was stopped by
+the reviewed stop v5. Slot1's TUI then produced **zero native output bytes**,
+no URL and no code prompt. Its receipt records `TimeoutError` in `native_wait`
+after 601.436 seconds, with owned bridge cleanup verified and no line submitted.
+This is a failure of the engineering login integration; it is not evidence that
+the owner pasted an invalid code or that Google rejected a code.
+
+The new session is
+`InteractiveAgy427-r4-slot1-43804e7a8d44457aa9810305923c219f`.
+Its receipt SHA256 is
+`dfad79544643ccfbca3653a66024f3e3020fa63ea23f46ce702430da9376b72a`.
+At 00:31:06 UTC on 2026-10-13 its task was terminal (state 3, result 2,
+zero instances), but `session-held.json` was absent. The Warden remained
+disabled with zero instances, and R4 restore v6 had not been created. Bridge
+cleanup must not be represented as completed outer-wrapper rollback.
+
+The owner's second invocation at 19:24 stopped during inspection because the
+first bridge was still alive. It made no deployment change. The bridge's two
+reported Python PIDs had ended when ordinary inspection ran later. The exact
+protected diagnostic, returned by the owner, is
+`r6-agy-tui-diagnostic-20261013T0031067140729-da64ae931085462fabd86edd38e1976f.json`
+in the deployment workspace. It contains fixed metadata, not provider output,
+authorization codes or credentials. The terminal task/receipt and absent
+wrapper record are the current evidence, rather than an assumed restoration.
+
+`scripts/inspect_r6_agy_tui_failure.ps1` reads the exact session/task and R4
+restoration metadata without mutation. Its missing/empty-record projections
+cannot grant terminal acceptance. The owner copy is
+`inspect-r6-agy-tui-20261012-v1.ps1`, SHA256
+`3062d5e161f87b39917af818eb4162ee08173480b2e96e1b62e5911c3aaf5efd`.
+
+`scripts/restore_r4_after_agy_tui.ps1` is a separate owner-only recovery,
+defaulting to an inert plan. Apply requires the exact inspected bridge hash,
+terminal task definition, absent input packet and reviewed stop v5 receipt
+`f62d79731b2e1d0440f1ed49b6d43334f8ff3ddfc2b1a45ab670a85f0d232d67`.
+It takes both deployment leases, holds all 481 original prerequisite pins,
+and delegates once to the unchanged pinned `retarget-warden-r5.ps1`:
+target r4, fresh v6, source v5, stop v5. That implementation independently
+checks stopped-source lineage, runtime custody, worker/process absence,
+database backup continuity and SYSTEM health. It does not authenticate Agy,
+deploy R6/R7, clear or retry old tasks, or overwrite any previous evidence.
+Active consoles, changed evidence or an existing v6 root hold without retry.
+The owner copy is `restore-r4-after-agy-tui-20261012-v1.ps1`, SHA256
+`ffef5cf218821ef13e0e1a71cf13cf079839d22a686b5c8fafb46ec6a4c8598f`.
+
+**37 serialized Windows/Python 3.12 diagnostic and recovery fixture tests
+passed in 10.76 seconds.** The exact recovery entry's default read-only plan
+also passed. No engineering Apply, provider execution, task mutation or
+protected write occurred. Actual R4 restoration is pending the owner's result.
+
+The bridge launches the TUI with anonymous pipes and `CREATE_NO_WINDOW`.
+Google documents local browser launch versus a manual URL/code flow over SSH
+in [Installation and auth](https://www.antigravity.google/docs/cli/install/).
+A missing terminal or selection of the local-browser flow are hypotheses;
+the zero-output receipt does not distinguish them. No new authentication
+selector, environment override or ConPTY implementation is accepted yet.
+Do not rerun `b274974` or present its TUI path as host-accepted.
+
 The owner ran `r7-bundle-e32949a` at 17:43:38 local on 2026-10-12. The
 readable status records and owner transcript establish the following Windows
 evidence; these are separate from source and fixture test results.

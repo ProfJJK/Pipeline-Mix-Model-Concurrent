@@ -1,10 +1,25 @@
 # R7 owner deployment package
 
-## Current replacement: interactive Agy authorization and reviewed failed session
+## Current hold: TUI authentication produced no output
+
+The owner has now run `b274974`. Its TUI login emitted no URL or prompt and
+timed out after ten minutes. The exact terminal bridge receipt verifies cleanup
+and no submitted line, but the outer wrapper has no completion record. The
+owner's 00:31:06 UTC diagnostic confirms R4 is disabled and restore v6 absent.
+R6 activation and R7 installation/cutover have not been verified. **Do not
+rerun this package.** Its immutable files and earlier packages are preserved.
+
+A separate reviewed owner-only R4 recovery is now on the current owner sheet;
+it is not a new R6/R7 deployment command. See
+[the exact Windows evidence and recovery](R6_AGY_LOGIN_FAILURE_2026-10-12.md).
+Source and fixture results below remain valid for their tested boundaries;
+they did not establish working native TUI authorization on this workstation.
+
+## Historical replacement: interactive Agy authorization and reviewed failed session
 
 The owner command is in `docs/deployment/windows-deployment-next/RETURN_SETUP_R7.txt`.
 Fresh source is `b274974bf533f69b61d2aa5cf0bce3a815fbd9de`; immutable bundle is
-`C:\Users\ansac\CoChem427\r7-bundle-b274974`. The owner has not run it.
+`C:\Users\ansac\CoChem427\r7-bundle-b274974`. The owner subsequently ran it; see the hold above.
 The failed `e32949a` package, all prior sessions and the installed R6 remain intact.
 
 The returned diagnostic proves that the prior Agy bridge fed the owner's code,
