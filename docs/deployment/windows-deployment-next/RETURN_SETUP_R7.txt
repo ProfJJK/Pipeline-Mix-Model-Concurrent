@@ -1,29 +1,20 @@
-DEPLOYMENT HELD — DO NOT RERUN R7 B274974
-Updated after the actual owner-run TUI failure, 2026-10-12 evening.
+DEPLOYMENT HELD — DO NOT RERUN R7 B274974 OR THE R4 RECOVERY
+Updated after the owner's verified R4 v6 restoration.
 
-The TUI produced zero output, no sign-in URL and no code prompt. It timed out
-without receiving a code. Its owned bridge cleanup is verified. The outer
-wrapper has no completion receipt, and the latest Administrator diagnostic
-shows R4 still disabled. R6/R7 deployment has not completed.
+The TUI login produced zero output, no sign-in URL and no code prompt.
+It timed out without receiving a code. Its owned bridge cleanup is verified.
+The owner then ran the separate reviewed R4 recovery once; it succeeded as v6
+with SYSTEM process identity and health verified. Admission capacity remains
+zero. R6/R7 deployment has not completed.
 
-Use an idle Administrator PowerShell prompt under AETHERDESK\ansac. Run the
-following RECOVERY command once. It restores the reviewed R4 controller as a
-fresh v6 attempt; it does not sign in, deploy R6/R7 or retry the failed login.
-All old receipts/tasks/roots, credentials, databases, budgets and R: remain.
+No further owner command is ready. The login transport is being repaired.
+Preserve all old packages, receipts, tasks and roots. Do not repeat the spent
+recovery, rerun B274974, or reuse an old OAuth URL.
 
-C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -File "C:\Users\ansac\Documents\Codex\2026-10-06\the-github-repository-is-located-at\windows-deployment-next\restore-r4-after-agy-tui-20261012-v1.ps1" -Apply
+R4 v6 start receipt SHA256:
+f2de0214197af0c54ff04c25246dd74a13d210de007fc107e6d485b9ad5ab50f
+R4 v6 retarget receipt SHA256:
+0a59de000c06cda9426ea5f9e7f76ff1e9f63dd11c33ced8a85f7cbffa577fc7
 
-No additional input is planned. Leave the window open until it returns.
-Return its final JSON or error. If it reports another deployment console still
-running or any other hold, preserve the evidence; do not retry or kill processes.
-The workstation rules reserve scheduled-task restoration for the owner.
-
-Recovery helper SHA256:
-ffef5cf218821ef13e0e1a71cf13cf079839d22a686b5c8fafb46ec6a4c8598f
-37 serialized diagnostic/recovery fixture tests passed in 10.76 seconds.
-Default read-only recovery plan passed. Engineering did not run Apply.
-
-The older delivery sheet RETURN_SETUP_R7_B274974.txt is preserved as history;
-its deployment command is withdrawn. Do not run it or reuse an old OAuth URL.
-The failed bundle itself has not been edited. A future replacement requires a
-repaired native login path and review of this new session/restore evidence.
+The older delivery sheet RETURN_SETUP_R7_B274974.txt and immutable bundle
+remain preserved as history; their deployment command is withdrawn.

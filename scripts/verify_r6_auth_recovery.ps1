@@ -35,14 +35,14 @@ function Assert-R6AuthRecoveryRows {
 }
 
 function Get-R6ReviewedAuthTask {
-    param([ValidateSet('CoChem-4.2.7-R6Acceptance-auth-226ce1d64f29486c838fca043f6bf904','CoChem-4.2.7-R6Acceptance-auth-56126335ff314eb497cd409fd58e6b1e','CoChem-4.2.7-R6Acceptance-auth-f1b5e414c1b44a5fb3c7d7686dbc9ff8')]
+    param([ValidateSet('CoChem-4.2.7-R6Acceptance-auth-226ce1d64f29486c838fca043f6bf904','CoChem-4.2.7-R6Acceptance-auth-56126335ff314eb497cd409fd58e6b1e','CoChem-4.2.7-R6Acceptance-auth-f1b5e414c1b44a5fb3c7d7686dbc9ff8','CoChem-4.2.7-R6Acceptance-auth-d16cef7a1743414db634d8a47acf894f')]
         [string]$Name='CoChem-4.2.7-R6Acceptance-auth-226ce1d64f29486c838fca043f6bf904')
     $scheduler=New-Object -ComObject 'Schedule.Service';$scheduler.Connect()
     $scheduler.GetFolder('\').GetTask($Name)
 }
 
 function Assert-R6ReviewedRestore {
-    param($Receipt,[ValidateSet('v3','v4','v5')][string]$Attempt='v3')
+    param($Receipt,[ValidateSet('v3','v4','v5','v6')][string]$Attempt='v3')
     # This is the hash-bound persisted start receipt, not a launch-series
     # result. The production writer does not put a "started" flag in it.
     if($Receipt.schema -cne 'cochem-warden-start/3' -or
@@ -96,18 +96,88 @@ function Assert-R6ReviewedConsoleHold {
 }
 
 function Assert-R6ReviewedInteractiveCensus {
-    param([bool]$ReviewedNativeFailure=$false)
+    param([bool]$ReviewedNativeFailure=$false,[bool]$ReviewedTuiFailure=$false)
     $roots=@(Get-ChildItem -LiteralPath $script:base -Directory -Filter 'InteractiveAgy427-r4-slot1-*')
     $tasks=@(Get-R6Slot1InteractiveTasks)
     if(-not $ReviewedNativeFailure){
         if($roots.Count -ne 0 -or $tasks.Count -ne 0){throw 'A slot1 interactive login session exists; preserve and review it.'}
         return
     }
-    $rootName='InteractiveAgy427-r4-slot1-67d70b0983cc48e2abf7c561aca29f86'
-    $taskName='CoChem-4.2.7-InteractiveAgy-r4-slot1-67d70b0983cc48e2abf7c561aca29f86'
-    if($roots.Count -ne 1 -or $tasks.Count -ne 1 -or $roots[0].Name -cne $rootName -or
-        $roots[0].FullName -cne (Join-Path $script:base $rootName) -or $tasks[0].Name -cne $taskName){
-        throw 'Interactive login inventory differs from the one reviewed terminal failure.'}
+    $nonces=@('67d70b0983cc48e2abf7c561aca29f86')
+    if($ReviewedTuiFailure){$nonces+='43804e7a8d44457aa9810305923c219f'}
+    if($roots.Count -ne $nonces.Count -or $tasks.Count -ne $nonces.Count){throw 'Interactive login inventory differs from reviewed terminal failures.'}
+    foreach($nonce in $nonces){
+        $rootName='InteractiveAgy427-r4-slot1-'+$nonce;$taskName='CoChem-4.2.7-InteractiveAgy-r4-slot1-'+$nonce
+        $matched=@($roots|Where-Object {$_.Name -ceq $rootName -and $_.FullName -ceq (Join-Path $script:base $rootName)})
+        if($matched.Count -ne 1 -or @($tasks|Where-Object {$_.Name -ceq $taskName}).Count -ne 1){throw 'Interactive login inventory contains an unreviewed root or task.'}
+    }
+}
+
+function Assert-R6ReviewedTuiReceipt {
+    param($Receipt)
+    if($Receipt.schema -cne 'cochem-interactive-agy-login/1' -or $Receipt.slot -cne 'slot1' -or
+        $Receipt.nonce -cne '43804e7a8d44457aa9810305923c219f' -or $Receipt.login_mode -cne 'tui' -or
+        $Receipt.status -cne 'LOGIN_FAILED_OR_CANCELLED' -or $Receipt.system_sid -cne 'S-1-5-18' -or
+        $Receipt.cleanup_verified -isnot [bool] -or -not $Receipt.cleanup_verified -or $Receipt.one_line_submitted -ne $false -or
+        $Receipt.input_closed_marker_written -ne $true -or $Receipt.login_commands_executed -ne 1 -or $Receipt.model_jobs_executed -ne 0 -or
+        $Receipt.authentication_verified -ne $false -or $Receipt.activation_ready -ne $false -or $Receipt.secret_published -ne $false -or
+        $Receipt.native_output_after_input_published -ne $false -or $Receipt.native_output_bytes_before_input -ne 0 -or
+        $Receipt.native_output_published_bytes_before_input -ne 0 -or $Receipt.failure.phase -cne 'native_wait' -or
+        $Receipt.failure.error_type -cne 'TimeoutError' -or $null -ne $Receipt.failure.winerror -or
+        $Receipt.helper_sha256 -cne '4074878f100ae59b804c95bd97b3280ccaa09f919ffaa365a3e2c6985045b8d9' -or
+        $Receipt.support_sha256 -cne '45681477194d97b144e8ee4505d4364d73d58aaef19c8428c846df642c834839' -or
+        $Receipt.native_executable_sha256 -cne '38f30c7dd1ed808f5cf98fe2014de3d30903035a4f0df02d3eb72a9ff8993741'){
+        throw 'The reviewed zero-output terminal session differs.'}
+}
+
+function Get-R6ReviewedTuiTask {
+    $scheduler=New-Object -ComObject 'Schedule.Service';$scheduler.Connect()
+    $scheduler.GetFolder('\').GetTask('CoChem-4.2.7-InteractiveAgy-r4-slot1-43804e7a8d44457aa9810305923c219f')
+}
+
+function Assert-R6ReviewedTuiSession {
+    # The outer console failed to finish. Do not infer a rollback from that
+    # missing record: bind the independently completed owner recovery instead.
+    $nonce='43804e7a8d44457aa9810305923c219f';$root=Join-Path $script:base ('InteractiveAgy427-r4-slot1-'+$nonce)
+    $receipt=Read-R6RecoveryJson (Join-Path $root 'receipt.json') 'dfad79544643ccfbca3653a66024f3e3020fa63ea23f46ce702430da9376b72a'
+    Assert-R6ReviewedTuiReceipt $receipt
+    if((Test-Path -LiteralPath (Join-Path $root 'input.once')) -or (Test-Path -LiteralPath (Join-Path $root 'session-result.json')) -or
+        (Test-Path -LiteralPath (Join-Path $root 'session-held.json'))){throw 'The reviewed TUI attempt now has different terminal artifacts.'}
+    $task=Get-R6ReviewedTuiTask
+    $python='C:\Program Files\CoChem\Pipeline4.2.7-windows-20261009-r4\.venv\Scripts\python.exe'
+    $arguments='-I -B "'+(Join-Path $root 'worker_agy_login_bridge_r4_v1.py')+'" --slot slot1 --nonce '+$nonce+' --login-mode tui'
+    Assert-R6PhaseTask $task $python $arguments $root 900 $true
+    if($task.Name -cne ('CoChem-4.2.7-InteractiveAgy-r4-slot1-'+$nonce) -or $task.State -ne 3 -or
+        $task.GetInstances(0).Count -ne 0 -or [long]$task.LastTaskResult -ne 2){throw 'The reviewed TUI task is not terminal.'}
+    $null=Read-R6RecoveryJson (Join-Path $script:base 'WardenStop4.2.7-windows-20261011-r5-v5\stop-receipt.json') 'f62d79731b2e1d0440f1ed49b6d43334f8ff3ddfc2b1a45ab670a85f0d232d67'
+    $null=Read-R6RecoveryJson (Join-Path $script:base 'WardenRetarget4.2.7-windows-20261011-r4-v6\retarget-receipt.json') '0a59de000c06cda9426ea5f9e7f76ff1e9f63dd11c33ced8a85f7cbffa577fc7'
+    $restore=Read-R6RecoveryJson (Join-Path $script:base 'WardenRetarget4.2.7-windows-20261011-r4-v6\start-receipt.json') 'f2de0214197af0c54ff04c25246dd74a13d210de007fc107e6d485b9ad5ab50f'
+    Assert-R6ReviewedRestore $restore 'v6'
+    foreach($payload in @([pscustomobject]@{name='worker_agy_login_bridge_r4_v1.py';hash=$receipt.helper_sha256},
+        [pscustomobject]@{name='worker_native_status_support.py';hash=$receipt.support_sha256})){
+        $path=Join-Path $root $payload.name;Assert-ProtectedPath $path;$length=(Get-Item -LiteralPath $path).Length
+        if($length -gt 1048576){throw 'The reviewed TUI helper exceeds its bound.'}
+        $handle=Open-VerifiedFile $path $payload.hash $length;try{}finally{$handle.Dispose()}
+    }
+}
+
+function Assert-R6ReviewedTuiAuth {
+    param([string]$Root)
+    if($Root -cne (Join-Path $script:base 'R6Acceptance4.2.7-windows-20261012-v1-auth-d16cef7a1743414db634d8a47acf894f')){throw 'Unreviewed TUI authentication namespace.'}
+    $result=Read-R6RecoveryJson (Join-Path $Root 'result.json')
+    if($result.phase -cne 'auth' -or $result.status -cne 'PHASE_COMPLETED' -or
+        $result.manifest_sha256 -cne 'bffcf617620320109a3ff1bcbdcc2e1d4918f9571721dc4642efeed4d0b7a2c4' -or
+        $result.candidate_sha256 -cne 'a8b9b2052402f30860188721f986686c5a2f6785e563045edf295adae250f288' -or
+        $result.result.status_helper_sha256 -cne '79b7029cd998f25c0a01300924bb3972f830f7783618ce3c99260b089510aaec'){
+        throw 'The preserved TUI authentication binding differs.'}
+    Assert-R6AuthRecoveryRows $result.result 'ATTENDED_LOGIN_REQUIRED'
+    foreach($row in @($result.result.checks|Where-Object {$_.provider -ceq 'gemini'})){
+        if($row.reason -cne 'AGY_MODELS_EXPLICIT_SIGN_OUT' -or $row.stdout_bytes -ne 0 -or $row.stderr_bytes -ne 122 -or
+            $row.stdout_sha256 -cne 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855' -or
+            $row.stderr_sha256 -cne '148fc48c6aeaf4d5f5780d0e38fc39215de098c1537c57e09410d4dad9718a1d'){
+            throw 'Preserved TUI authentication was not the exact explicit sign-out protocol.'}}
+    Assert-R6ReviewedAuthTask $Root 'CoChem-4.2.7-R6Acceptance-auth-d16cef7a1743414db634d8a47acf894f'
+    Assert-R6ReviewedTuiSession
 }
 
 function Assert-R6ReviewedNativeLoginFailure {
@@ -251,7 +321,7 @@ function Assert-R6AuthRecoveryEvidence {
         if($held.status -cne 'HELD_PRESERVE_EVIDENCE' -or $held.phase -cne 'auth' -or $held.cutover_requested -ne $false -or
             $held.recovery.ok -ne $true -or $held.recovery.restored -ne $true){throw 'Original hold/recovery binding differs.'}
         if(Test-Path -LiteralPath $candidate.knowledge.state_root){throw 'A later knowledge phase already exists; preserve it.'}
-        $reviewedNativeFailure=$false
+        $reviewedNativeFailure=$false;$reviewedTuiFailure=$false
         foreach($folder in Get-ChildItem -LiteralPath $script:base -Directory){
             if($folder.Name -cmatch '^R6Acceptance4\.2\.7-windows-20261012-v1-(knowledge|agent|native|preview)-'){
                 throw 'A later acceptance phase already exists; preserve it.'}
@@ -261,9 +331,10 @@ function Assert-R6AuthRecoveryEvidence {
                     'R6Acceptance4.2.7-windows-20261012-v1-auth-226ce1d64f29486c838fca043f6bf904'{Assert-R6ReviewedPrefixFailure $folder.FullName}
                     'R6Acceptance4.2.7-windows-20261012-v1-auth-56126335ff314eb497cd409fd58e6b1e'{Assert-R6ReviewedConsoleHold $folder.FullName}
                     'R6Acceptance4.2.7-windows-20261012-v1-auth-f1b5e414c1b44a5fb3c7d7686dbc9ff8'{Assert-R6ReviewedNativeLoginFailure $folder.FullName;$reviewedNativeFailure=$true}
+                    'R6Acceptance4.2.7-windows-20261012-v1-auth-d16cef7a1743414db634d8a47acf894f'{Assert-R6ReviewedTuiAuth $folder.FullName;$reviewedTuiFailure=$true}
                     default {throw 'An unreviewed recovery authentication attempt exists; preserve it and do not repeat.'}
                 }}}
-        Assert-R6ReviewedInteractiveCensus $reviewedNativeFailure
+        Assert-R6ReviewedInteractiveCensus $reviewedNativeFailure $reviewedTuiFailure
         Assert-R6NotReferenced
         $null=Assert-R6Tree;Assert-R6Interpreter
         @{status='EXISTING_R6_AUTH_RECOVERY_PREREQUISITES_VERIFIED';installation_repeated=$false;state_modified=$false;

@@ -11,6 +11,7 @@ NEW_SCRIPTS = (
     'run_r6_launch.ps1', 'install_r6_runtime.ps1', 'run_r6_system_phase.ps1',
     'activate_r6_runtime.ps1', 'r6_retarget_core.ps1', 'r6_attended_agy.ps1',
     'stage_aetherdesk_427_payloads.ps1',
+    'login_pipeline_worker_agy_terminal.ps1', 'worker_agy_terminal_bridge.py',
 )
 
 
@@ -45,6 +46,7 @@ def prepare(repository, bundle, destination, auth_recovery=False):
     mirror=repository/'docs/deployment/windows-deployment-next'
     inputs={p.name:read_regular(p) for p in sorted(mirror.iterdir()) if p.is_file()}
     for name in NEW_SCRIPTS: inputs[name]=read_regular(repository/'scripts'/name)
+    inputs['attended_agy_terminal.py']=read_regular(repository/'src/cochem_pipeline/attended_agy_terminal.py')
     if auth_recovery:
         for name in ('r6_auth_recovery.py', 'verify_r6_auth_recovery.ps1'):
             inputs[name]=read_regular(repository/'scripts'/name)

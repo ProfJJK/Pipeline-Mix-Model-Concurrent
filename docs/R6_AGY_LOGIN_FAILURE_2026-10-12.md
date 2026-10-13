@@ -51,14 +51,27 @@ The owner copy is `restore-r4-after-agy-tui-20261012-v1.ps1`, SHA256
 **37 serialized Windows/Python 3.12 diagnostic and recovery fixture tests
 passed in 10.76 seconds.** The exact recovery entry's default read-only plan
 also passed. No engineering Apply, provider execution, task mutation or
-protected write occurred. Actual R4 restoration is pending the owner's result.
+protected write occurred.
+
+The owner subsequently ran this exact recovery once. The v6 result is
+`WARDEN_R4_RESTARTED_HEALTH_VERIFIED`: SYSTEM process 46380, parent 2556,
+one verified listener, and the original R4 runtime. The start receipt SHA256 is
+`f2de0214197af0c54ff04c25246dd74a13d210de007fc107e6d485b9ad5ab50f`;
+the retarget receipt SHA256 is
+`0a59de000c06cda9426ea5f9e7f76ff1e9f63dd11c33ced8a85f7cbffa577fc7`.
+Knowledge readiness and its authority binding passed. Admission capacity was
+zero and `warden_controller_ready` was false. This proves R4 restoration,
+not completed R6/R7 deployment or work admission. The recovery command is
+spent; do not repeat it. No provider command or deployment was requested.
 
 The bridge launches the TUI with anonymous pipes and `CREATE_NO_WINDOW`.
 Google documents local browser launch versus a manual URL/code flow over SSH
 in [Installation and auth](https://www.antigravity.google/docs/cli/install/).
 A missing terminal or selection of the local-browser flow are hypotheses;
-the zero-output receipt does not distinguish them. No new authentication
-selector, environment override or ConPTY implementation is accepted yet.
+the zero-output receipt does not distinguish them. The replacement source
+supplies a native pseudoconsole and a fixed attended-only manual-flow hint; see
+[the transport repair and verification](R6_AGY_TERMINAL_RECOVERY_2026-10-13.md).
+Actual native authorization through it is not accepted yet.
 Do not rerun `b274974` or present its TUI path as host-accepted.
 
 The owner ran `r7-bundle-e32949a` at 17:43:38 local on 2026-10-12. The

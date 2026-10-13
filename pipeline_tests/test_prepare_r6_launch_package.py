@@ -20,6 +20,8 @@ def fixture(tmp_path):
         lines.append(f"'{name}'='{hashlib.sha256(data).hexdigest()}'")
     (mirror/'RUN_427_R5_SITTING.ps1').write_text('\n'.join(lines),encoding='utf-8')
     for name in packager.NEW_SCRIPTS:(scripts/name).write_text('# inert fixture',encoding='utf-8')
+    (repo/'src/cochem_pipeline').mkdir(parents=True)
+    (repo/'src/cochem_pipeline/attended_agy_terminal.py').write_text('# inert fixture')
     bundle=tmp_path/'bundle';bundle.mkdir()
     (bundle/'pipeline.json').write_bytes(b'{}')
     (bundle/'install-manifest.json').write_bytes(b'{}')

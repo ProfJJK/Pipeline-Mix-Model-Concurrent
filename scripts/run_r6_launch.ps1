@@ -42,7 +42,8 @@ function Open-R6LaunchPins {
         $stream.Position=0;$pins[$name]=[string]$row.sha256
     }
     foreach($name in @('run_r6_launch.ps1','install_r6_runtime.ps1','run_r6_system_phase.ps1','activate_r6_runtime.ps1',
-        'r6_retarget_core.ps1','r6_attended_agy.ps1','RUN_427_R5_SITTING.ps1','stage_aetherdesk_427_payloads.ps1')){
+        'r6_retarget_core.ps1','r6_attended_agy.ps1','RUN_427_R5_SITTING.ps1','stage_aetherdesk_427_payloads.ps1',
+        'login_pipeline_worker_agy_terminal.ps1','worker_agy_terminal_bridge.py','attended_agy_terminal.py')){
         if(-not $pins.ContainsKey($name)){throw ('Launch package is missing '+$name)}}
     $pins
 }
@@ -186,7 +187,9 @@ function Invoke-R6LaunchSequence {
         foreach($row in $missing){
             $script:R6Phase='attended_gemini_'+$row.worker
             Invoke-R6LaunchChild 'r6_attended_agy.ps1' @('-Slot',$row.worker,'-DeadlineUtc',$script:R6InputDeadline.ToString('o'),
-                '-WrapperSha256',$script:R6Pins['login_pipeline_worker_interactive_agy_r4_v1.ps1'],'-Apply') -Attended
+                '-WrapperSha256',$script:R6Pins['login_pipeline_worker_interactive_agy_r4_v1.ps1'],
+                '-TerminalWrapperSha256',$script:R6Pins['login_pipeline_worker_agy_terminal.ps1'],
+                '-PublicStatusRoot',$script:SittingRoot,'-Apply') -Attended
         }
         $auth=Invoke-R6AcceptancePhase 'auth' $Manifest
         Save-R6AuthSummary $auth.result

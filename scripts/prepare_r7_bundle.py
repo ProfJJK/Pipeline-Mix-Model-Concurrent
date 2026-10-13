@@ -49,9 +49,14 @@ def prepare_recovery(destination, repository):
             payload=read_regular(Path(repository)/'scripts'/row['name'])
         with (destination/row['name']).open('xb') as out:out.write(payload)
         row.update(sha256=sha(payload),length=len(payload))
-    payload=read_regular(Path(repository)/'scripts/r6_native_retirement.py')
-    with destination.joinpath('r6_native_retirement.py').open('xb') as out:out.write(payload)
-    manifest['scripts'].append(dict(name='r6_native_retirement.py',sha256=sha(payload),length=len(payload)))
+    for name,relative_source in (
+        ('r6_native_retirement.py','scripts/r6_native_retirement.py'),
+        ('login_pipeline_worker_agy_terminal.ps1','scripts/login_pipeline_worker_agy_terminal.ps1'),
+        ('worker_agy_terminal_bridge.py','scripts/worker_agy_terminal_bridge.py'),
+        ('attended_agy_terminal.py','src/cochem_pipeline/attended_agy_terminal.py')):
+        payload=read_regular(Path(repository)/relative_source)
+        with destination.joinpath(name).open('xb') as out:out.write(payload)
+        manifest['scripts'].append(dict(name=name,sha256=sha(payload),length=len(payload)))
     raw=(json.dumps(manifest,indent=2)+'\n').encode()
     with destination.joinpath('launch-manifest.json').open('xb') as out:out.write(raw)
     return dict(directory=str(destination),manifest_sha256=sha(raw),original_manifest_sha256=RECOVERY_PIN,

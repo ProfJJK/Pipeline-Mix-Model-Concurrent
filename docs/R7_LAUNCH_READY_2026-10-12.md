@@ -9,8 +9,9 @@ owner's 00:31:06 UTC diagnostic confirms R4 is disabled and restore v6 absent.
 R6 activation and R7 installation/cutover have not been verified. **Do not
 rerun this package.** Its immutable files and earlier packages are preserved.
 
-A separate reviewed owner-only R4 recovery is now on the current owner sheet;
-it is not a new R6/R7 deployment command. See
+A separate reviewed owner-only R4 recovery has now succeeded as v6, with
+SYSTEM process identity and health verified. It reports zero admission
+capacity. Its command is spent; no new deployment command is ready. See
 [the exact Windows evidence and recovery](R6_AGY_LOGIN_FAILURE_2026-10-12.md).
 Source and fixture results below remain valid for their tested boundaries;
 they did not establish working native TUI authorization on this workstation.
