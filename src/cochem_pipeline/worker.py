@@ -309,7 +309,8 @@ def parse_payload(content: str) -> dict:
 
 
 def parse_gemini(raw: str, protocol: str, requested_model: str, *, native: dict | None = None,
-                 identity_policy: str | None = None, stderr: str | None = None) -> dict:
+                 identity_policy: str | None = None, stderr: str | None = None,
+                 inference_spec: dict | None = None) -> dict:
     """Parse one Gemini result; reported_model is always the routed canonical id.
 
     Under the reviewed agy identity policy ``native`` is the binding
@@ -330,7 +331,8 @@ def parse_gemini(raw: str, protocol: str, requested_model: str, *, native: dict 
                 or any(not isinstance(native[key], str) or not native[key] for key in ('argv', 'reports'))
                 or not isinstance(requested_model, str) or not requested_model):
             raise ValueError('Agy identity policy requires the routed model and its reviewed native binding')
-        parsed = parse_stream(raw, native['reports'], identity_policy=identity_policy, stderr=stderr)
+        parsed = parse_stream(raw, native['reports'], identity_policy=identity_policy, stderr=stderr,
+                              inference_spec=inference_spec)
         if parsed['reported_model'] != native['reports']:
             raise AgyIdentityError('Agy reported model differs from the reviewed native binding')
         return {'content': parsed['content'], 'session_id': parsed['session_id'],
@@ -338,6 +340,7 @@ def parse_gemini(raw: str, protocol: str, requested_model: str, *, native: dict 
                 'native_reported_model': parsed['reported_model'],
                 'native_selected_model': native['argv'],
                 'identity_policy': identity_policy,
+                'tool_registry': parsed['tool_registry'],
                 'usage': parsed['usage'], 'terminal_success': True}
     if identity_policy is not None:
         raise ValueError('Gemini identity policy requires the agy-stream-json protocol')
@@ -1036,9 +1039,12 @@ class NativeRunner:
                     except BrokenPipeError as exc:
                         raise ProviderFailure('protocol') from exc
                     try:
+                        from .agy_tool_registry import BINARY_SHA256 as agy_registry_binary
+                        registry_spec = (spec if provider == 'gemini' and
+                            spec['inference_only']['executable_sha256'] == agy_registry_binary else None)
                         parsed = (parse_result(provider,raw) if provider!='gemini' else
                                   parse_gemini(raw,spec['protocol'],model,native=native_binding,
-                                               identity_policy=identity_policy,stderr=stderr))
+                                               identity_policy=identity_policy,stderr=stderr,inference_spec=registry_spec))
                         reported_effort = native_reported_effort(provider,raw)
                         if provider != 'codex' and reasoning_effort is not None:
                             from .native_effort import reported_profile
@@ -1109,6 +1115,8 @@ class NativeRunner:
             receipt['docker_denial'] = process.docker_denial_evidence
             if inference_evidence is not None:
                 inference_evidence['source_context_sha256'] = source_context_sha256
+                if provider == 'gemini':
+                    inference_evidence['tool_registry'] = parsed.get('tool_registry')
                 receipt['inference_policy'] = inference_evidence
             if hasattr(process,'resource_limits_evidence'):
                 receipt['resource_limits'] = process.resource_limits_evidence

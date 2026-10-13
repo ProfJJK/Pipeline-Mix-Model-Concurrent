@@ -91,6 +91,7 @@ function Assert-R6AcceptanceIndex {
                         throw 'Completed R6 knowledge was not reverified without rebuilding.'}
                 }elseif($result.status -cne 'NEW_KNOWLEDGE_AUTHORITY_VERIFIED'){throw 'R6 knowledge authority was not verified.'}}
             'native' {
+                if($CustodyHash){Assert-R6RegistryAmendment $result.agent_custody_amendment.tool_registry_amendment}
                 $expectedTargets=if($RetirementHelperHash){26}else{27}
                 if($result.status -cnotin @('ALL_NATIVE_SELECTORS_ACCEPTED','NATIVE_ACCEPTANCE_PARTIAL_AVAILABILITY') -or
                     @($result.targets).Count -ne $expectedTargets){throw 'Native selector evidence is incomplete.'}
@@ -141,6 +142,20 @@ function Assert-R6CustodyAmendment {
         $Value.repaired_guard_sha256 -cne '6d8cce1fb2896a489c522f79c639256b9b296b8a92db6edc4f006f2105d1e9bf' -or $Value.directory_desired_access -ne 131073 -or
         $Value.directory_share_mode -ne 3 -or -not (Test-ExactBool $Value.installed_files_modified $false) -or
         -not (Test-ExactBool $Value.acl_modified $false)) {throw 'Accepted directory custody repair differs from the startup binding.'}
+}
+
+function Assert-R6RegistryAmendment {
+    param($Value)
+    if($Value.schema -cne 'cochem-r6-agy-registry-amendment/1' -or
+        $Value.protocol_sha256 -cne '2738b76b140e5bc25860c78a457dd91464b57681b607e44096d4d3bc30317ce2' -or
+        $Value.worker_sha256 -cne 'cb528d87f75c9b05f653aea0d3c23370e5d0f0632869afaca4d37be4e68bf147' -or
+        $Value.executable_sha256 -cne '38f30c7dd1ed808f5cf98fe2014de3d30903035a4f0df02d3eb72a9ff8993741' -or
+        $Value.agent_sha256 -cne '5c0082d70d073263a56d748a46187008968c070d0efc7d5b7612c2fd61d11810' -or
+        $Value.advertised_registry_scope -cne 'cli_builtin_runners' -or
+        -not (Test-ExactBool $Value.agent_identity_required $true) -or
+        -not (Test-ExactBool $Value.actual_tool_steps_rejected $true) -or
+        -not (Test-ExactBool $Value.installed_files_modified $false)){
+        throw 'Accepted Agy registry repair differs from the startup binding.'}
 }
 
 function New-R6TargetContext {

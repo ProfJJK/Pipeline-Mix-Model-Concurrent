@@ -60,7 +60,11 @@ def main():
         helper = types.ModuleType('r6_custody_amendment')
         helper.__file__ = str(path)
         exec(compile(raw, str(path), 'exec'), helper.__dict__)
-        custody = helper.install(args.custody_sha256)
+        try:
+            custody = helper.install(args.custody_sha256, registry=True)
+        except Exception as error:
+            helper.save_failure(error, args.output)
+            raise
     original_plan, original_run = native.build_plan, native.run_probes
     plans = []
     def build(candidate):

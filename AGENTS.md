@@ -77,6 +77,15 @@ This is the preferred interface, not a claim that all three adapters have been
 implemented or accepted on this host. Reuse verified sessions before asking for input.
 
 ## Current handoff
+2026-10-13 native diagnostic received: first Agy inference succeeded, with no
+tool steps, but its global CLI registry advertisement triggered our parser.
+Read `docs/R6_AGY_REGISTRY_REPAIR_2026-10-13.md`. The repair is exact-binary/agent
+bound, with identical supplemental acceptance/startup code for immutable R6.
+The fresh continuation binds native hold and interrupted R4 v9 evidence; do not
+replay 7451831, request sign-ins again, or treat R4 v9 as a verified restoration.
+Only the owner may run the new pinned command. No Apply is authorized to agents.
+The following paragraphs record the preceding history.
+
 2026-10-13 09:34 attempt: `r6-launch-7451831` has now run and is spent.
 All 18 sign-ins, knowledge and agent acceptance passed; native acceptance held
 at Agy response compatibility. R4 restore v9 did not verify, although a read-only

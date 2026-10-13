@@ -157,6 +157,7 @@ function Read-R3Control {param($Path,$Hash,$Bound) $Path}
 function Read-R3Text {param($Path)
  $phase=($Path -split 'v1-')[1].Split('-')[0]
  $stamp=@{schema='cochem-r6-directory-custody-amendment/1';helper_sha256=('d'*64);original_guard_sha256='d86c90750dc2112ce8ff1bc9a4937898eb35cadbf4362050b04381e2138e6591';repaired_guard_sha256='6d8cce1fb2896a489c522f79c639256b9b296b8a92db6edc4f006f2105d1e9bf';directory_desired_access=131073;directory_share_mode=3;installed_files_modified=$false;acl_modified=$false}
+ $stamp.tool_registry_amendment=@{schema='cochem-r6-agy-registry-amendment/1';protocol_sha256='2738b76b140e5bc25860c78a457dd91464b57681b607e44096d4d3bc30317ce2';worker_sha256='cb528d87f75c9b05f653aea0d3c23370e5d0f0632869afaca4d37be4e68bf147';executable_sha256='38f30c7dd1ed808f5cf98fe2014de3d30903035a4f0df02d3eb72a9ff8993741';agent_sha256='5c0082d70d073263a56d748a46187008968c070d0efc7d5b7612c2fd61d11810';advertised_registry_scope='cli_builtin_runners';agent_identity_required=$true;actual_tool_steps_rejected=$true;installed_files_modified=$false}
  $r=switch($phase){
   auth {@{status='ALL_SESSIONS_VERIFIED';checks=@(1..18|ForEach-Object {@{authenticated=$true}})}}
   agent {@{status='SIX_WORKER_AGENT_CUSTODY_VERIFIED';agent_custody_amendment=$stamp}}
@@ -176,19 +177,23 @@ phases=@('auth','agent','knowledge','native','preview'|ForEach-Object {@{phase=$
 
 
 @pytest.mark.parametrize('hold', ['', 'verification', 'auth', 'knowledge', 'agent', 'native', 'preview', 'activation'])
-def test_continuation_reuses_completed_work_and_binds_identical_repair_to_startup(monkeypatch, hold):
+@pytest.mark.parametrize('native_continuation', [False, True])
+def test_continuation_reuses_completed_work_and_binds_identical_repair_to_startup(monkeypatch, hold, native_continuation):
     result = ps(monkeypatch, 'run_r6_launch.ps1', r'''
 $script:events=[Collections.Generic.List[string]]::new();$script:SittingRoot='C:\fixture';$script:R6CutoverRequested=$false
 $script:R6Pins=@{};foreach($name in @('install_r6_runtime.ps1','run_r6_system_phase.ps1','r6_native_retirement.py','r6_retirement_guard.py','r6_custody_amendment.py','r6_retarget_core.ps1')){$script:R6Pins[$name]='a'*64}
 $script:R5=@{base_source=@{kind='r4-restore';source_attempt='v8';stop_attempt='v8'}}
 $manifest=[pscustomobject]@{auth_recovery='20261012-first-auth-hold';verified_signin_continuation='20261013-six-agy-verified-r4-v7';
 agent_custody_continuation='20261013-reviewed-agent-hold-r4-v8';manifest_sha256='bffcf617620320109a3ff1bcbdcc2e1d4918f9571721dc4642efeed4d0b7a2c4';candidate_sha256='a8b9b2052402f30860188721f986686c5a2f6785e563045edf295adae250f288'}
+if(NATIVE){$manifest|Add-Member NoteProperty native_registry_continuation '20261013-reviewed-native-hold-r4-v9'}
 function Invoke-R5Stage0 {$script:events.Add('inspection')}
-function Invoke-R5Stage2 {$script:events.Add('stop')}
+function Invoke-R5Stage2 {if(NATIVE){throw 'wrong stop path'};$script:events.Add('stop')}
+function Invoke-R6NativeContinuationStop {if(-not NATIVE){throw 'unexpected recovery stop'};$script:events.Add('stop')}
 function Invoke-R6LaunchChild {param($Name,$Arguments,[switch]$Attended)
  if($Attended){throw 'must not prompt'}
  if($Name -ceq 'verify_r6_auth_recovery.ps1'){
   $script:events.Add('verification');if('-AgentCustodyContinuation' -notin $Arguments){throw 'wrong recovery'}
+  if(NATIVE -and '-NativeRegistryContinuation' -notin $Arguments){throw 'missing native history binding'}
   if('HOLD' -eq 'verification'){throw 'fixture'}
   return @{status='EXISTING_R6_AUTH_RECOVERY_PREREQUISITES_VERIFIED'}}
  if($Name -ceq 'run_r6_system_phase.ps1'){
@@ -209,7 +214,7 @@ function Write-R5RecordText {param($Path,$Text) $script:events.Add('index');'c'*
 function Get-R5FreeAttempt {param($Prefix) 'v1'}
 $errorText=$null;try{Invoke-R6LaunchSequence $manifest}catch{$errorText=$_.Exception.Message}
 @{events=@($script:events);error=$errorText;cutover=$script:R6CutoverRequested}|ConvertTo-Json -Compress
-'''.replace('HOLD', hold))
+'''.replace('HOLD', hold).replace('NATIVE', '$true' if native_continuation else '$false'))
     expected = ['inspection', 'verification', 'stop', 'auth', 'knowledge', 'agent', 'native', 'preview', 'index', 'activation']
     if hold: expected = expected[:expected.index(hold)+1]
     assert result['events'] == expected, result
@@ -293,7 +298,7 @@ def test_daemon_entry_point_installs_pinned_custody_before_start(monkeypatch):
     monkeypatch.setattr(startup.sys, 'executable', str(startup.ROOT / '.venv/Scripts/python.exe'))
     monkeypatch.setattr(win, 'require_system', lambda: events.append('system'))
     # Trusted helper fixture records only; daemon fixture never launches anything.
-    raw = b'def install(expected):\n    assert expected == "' + b'a'*64 + b'"\n'
+    raw = b'def install(expected, *, registry):\n    assert registry is True\n    assert expected == "' + b'a'*64 + b'"\n'
     def read(win, path, expected, maximum=16777216):
         events.append(path.name)
         if path.name == 'r6_custody_amendment.py':

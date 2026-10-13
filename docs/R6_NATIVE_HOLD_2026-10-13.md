@@ -1,5 +1,12 @@
 # R6 native acceptance hold, 13 October 2026
 
+**Diagnostic received and root cause resolved in source:** the first Agy request
+was successful with no tool steps. This build advertises its global CLI runner
+registry; the installed parser incorrectly treated it as the selected agent's
+permissions. See `R6_AGY_REGISTRY_REPAIR_2026-10-13.md` for evidence, strict
+binary/agent binding and the fresh owner continuation. The diagnostic request
+below is historical and must not be repeated. Deployment remains unverified.
+
 The owner ran immutable `r6-launch-7451831` at 09:34 local time. That package
 is now spent and must not be replayed. Its contents and all earlier evidence
 remain unchanged.

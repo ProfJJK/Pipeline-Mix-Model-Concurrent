@@ -195,6 +195,40 @@ function Test-R6CustodyContinuation {
     return $true
 }
 
+function Test-R6NativeContinuation {
+    param($Manifest)
+    $property=$Manifest.PSObject.Properties['native_registry_continuation']
+    if($null -eq $property){return $false}
+    if($property.Value -cne '20261013-reviewed-native-hold-r4-v9' -or -not (Test-R6CustodyContinuation $Manifest)){
+        throw 'Unreviewed native registry continuation.'}
+    return $true
+}
+
+function Invoke-R6NativeContinuationStop {
+    if($script:R5.base_source.kind -cne 'r4-restore' -or $script:R5.base_source.source_attempt -cne 'v9'){
+        throw 'Native continuation requires the reviewed R4 v9 task action.'}
+    $attempt=Get-R5FreeAttempt $script:NsStopR5
+    $script:R5.s2_attempted=$true;$script:R5.s2_stop_attempt=$attempt
+    $result=Invoke-R5StopR5 $attempt 'r4' 'v9' -RecoverInterruptedStart
+    if(-not $result.ok -or $result.held){throw 'The reviewed interrupted-start stop held. Preserve the running/stopped state; no automatic retry.'}
+    $script:R5.base_source=[pscustomobject]@{kind='r4-restore';source_attempt='v9';stop_attempt=$attempt}
+    $script:R5.s2=$result.status;$script:R5.s2_done=$true
+    Write-R5Receipt 'S02' $result.status
+}
+
+function Get-R6RecoveryFailure {
+    param([Management.Automation.ErrorRecord]$Failure)
+    $kind=$Failure.Exception.GetType().Name
+    if($kind -cnotin @('RuntimeException','PropertyNotFoundException','UnauthorizedAccessException',
+        'IOException','InvalidOperationException','MethodInvocationException','COMException')){$kind='OtherException'}
+    $frames=@()
+    foreach($match in [regex]::Matches([string]$Failure.ScriptStackTrace,'(?m)^at ([A-Za-z0-9_-]+), [^\r\n]*: line ([0-9]{1,7})\r?$')){
+        if($match.Groups[1].Value -cmatch '^(Invoke|Read|Get|Assert|Write|Test|Set)-R[56][A-Za-z0-9-]*$'){
+            $frames+=@{function=$match.Groups[1].Value;line=[int]$match.Groups[2].Value}
+            if($frames.Count -ge 6){break}}}
+    @{error_type=$kind;hresult=[int]$Failure.Exception.HResult;frames=$frames;raw_error_published=$false}
+}
+
 function Write-R6PublicStatus {
     param([string]$Status,$Result=$null)
     if(-not (Test-Path -LiteralPath $script:SittingRoot -PathType Container)){return}
@@ -211,6 +245,8 @@ function Write-R6PublicStatus {
         $null -ne $script:R6VerificationFailure){$safe.verification_failure=$script:R6VerificationFailure}
     if($null -ne (Get-Variable -Name R6AmendmentFailure -Scope Script -ErrorAction SilentlyContinue) -and
         $null -ne $script:R6AmendmentFailure){$safe.amendment_failure=$script:R6AmendmentFailure}
+    if($null -ne (Get-Variable -Name R6RecoveryFailure -Scope Script -ErrorAction SilentlyContinue) -and
+        $null -ne $script:R6RecoveryFailure){$safe.recovery_failure=$script:R6RecoveryFailure}
     $name='status-'+[DateTime]::UtcNow.ToString('yyyyMMddTHHmmssfffffff')+'-'+[Guid]::NewGuid().ToString('N')+'.json'
     $acl=[Security.AccessControl.FileSecurity]::new();$acl.SetAccessRuleProtection($true,$false)
     $acl.SetOwner([Security.Principal.SecurityIdentifier]::new('S-1-5-32-544'))
@@ -251,15 +287,18 @@ function Invoke-R6LaunchSequence {
     $resume=Test-R6AuthRecovery $Manifest
     $signedIn=Test-R6VerifiedContinuation $Manifest
     $custody=Test-R6CustodyContinuation $Manifest
+    $native=Test-R6NativeContinuation $Manifest
     if($resume){
         $script:R6Phase='verify_existing_installation'
         $verifyArguments=@('-InstallerSha256',$script:R6Pins['install_r6_runtime.ps1'],
             '-PhaseWrapperSha256',$script:R6Pins['run_r6_system_phase.ps1'])
         if($custody){$verifyArguments+='-AgentCustodyContinuation'}
         elseif($signedIn){$verifyArguments+='-AuthenticatedContinuation'}
+        if($native){$verifyArguments+='-NativeRegistryContinuation'}
         $verified=Invoke-R6LaunchChild 'verify_r6_auth_recovery.ps1' $verifyArguments
         if($verified.status -cne 'EXISTING_R6_AUTH_RECOVERY_PREREQUISITES_VERIFIED'){throw 'Existing R6 recovery prerequisites differ.'}}
-    $script:R6Phase='quiescence';Invoke-R5Stage2
+    $script:R6Phase='quiescence'
+    if($native){Invoke-R6NativeContinuationStop}else{Invoke-R5Stage2}
     if(-not $resume){
         $script:R6Phase='offline_install'
         $installed=Invoke-R6LaunchChild 'install_r6_runtime.ps1' @('-Manifest',$Manifest.install_manifest,'-ManifestSha256',$Manifest.manifest_sha256,'-Apply')
@@ -337,11 +376,12 @@ function Invoke-R6LaunchMain {
     if($script:R6Directory -cne $PSScriptRoot){throw 'Launch manifest must be beside this entry point.'}
     $handles=[Collections.Generic.List[IO.FileStream]]::new();$mutex=$null;$locked=$false;$started=$false
     $script:R6CutoverRequested=$false;$script:R6Phase='package';$script:R5=$null;$script:R6VerificationFailure=$null
-    $script:R6AmendmentFailure=$null
+    $script:R6AmendmentFailure=$null;$script:R6RecoveryFailure=$null
     try{
         $script:R6Pins=Open-R6LaunchPins $manifest $script:R6Directory $handles
         $signedIn=Test-R6VerifiedContinuation $manifest
         $custody=Test-R6CustodyContinuation $manifest
+        $native=Test-R6NativeContinuation $manifest
         if(Test-R6AuthRecovery $manifest){
             foreach($name in @('r6_auth_recovery.py','verify_r6_auth_recovery.ps1')){
                 if(-not $script:R6Pins.ContainsKey($name)){throw 'Recovery helper is not pinned.'}}}
@@ -350,6 +390,7 @@ function Invoke-R6LaunchMain {
             @{status='R6_LAUNCH_PLAN';model_targets=$(if($retired){26}else{27});retired_model_targets=$(if($retired){1}else{0});
                 maximum_shared_slots=4;input_window_minutes=20;later_prompts=$false;reuse_verified_sessions=$signedIn;
                 runtime_retirement_guard=$signedIn;directory_custody_amendment=$custody;
+                agy_registry_amendment=$native;interrupted_r4_start_continuation=$native;
                 reuse_completed_knowledge=$custody;profile_restaging=(-not $custody);
                 installation_and_host_acceptance_executed=$false}|ConvertTo-Json;return
         }
@@ -382,7 +423,9 @@ function Invoke-R6LaunchMain {
         # code can restore the exact proven R4 source. After that boundary,
         # preserve a possibly running R6 process and never guess a rollback.
         if($started -and -not $script:R6CutoverRequested -and $null -ne $script:R5 -and $script:R5.s2_done){
-            try{$restore=Invoke-R5Restore 'R6 preparation held before cutover'}catch{$restore=@{ok=$false;restored=$false}}}
+            try{$restore=Invoke-R5Restore 'R6 preparation held before cutover'}catch{
+                $script:R6RecoveryFailure=Get-R6RecoveryFailure $_
+                $restore=@{ok=$false;restored=$false;failure=$script:R6RecoveryFailure}}}
         $record=@{schema='cochem-r6-launch-result/1';status='HELD_PRESERVE_EVIDENCE';phase=$script:R6Phase;error_type=$failure.Exception.GetType().Name;
             automatic_retry=$false;late_prompt=$false;cutover_requested=$script:R6CutoverRequested;recovery=$restore;activation_ready=$false}
         if($null -ne $script:R6VerificationFailure){$record.verification_failure=$script:R6VerificationFailure}

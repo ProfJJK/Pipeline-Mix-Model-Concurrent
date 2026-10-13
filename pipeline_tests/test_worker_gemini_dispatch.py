@@ -14,6 +14,7 @@ from types import SimpleNamespace
 import pytest
 
 from cochem_pipeline import agy_protocol, worker
+from cochem_pipeline.agy_agent_guard import RELATIVES
 from cochem_pipeline.agy_protocol import IDENTITY_POLICY, AgyIdentityError, require_serving_model_contract
 from cochem_pipeline.failures import ProviderFailure
 from cochem_pipeline.routing import load_routing_policy, tier_for_score
@@ -58,6 +59,8 @@ def gemini_spec(binary, bindings, contracts=None):
     spec = {'provider': 'gemini', 'model': PRO, 'executable': str(binary),
             'protocol': 'agy-stream-json', 'identity_policy': IDENTITY_POLICY, 'model_bindings': bindings,
             'arguments': list(AGY_ARGV),
+            'agent_definition': {'name': 'cochem-inference-only', 'sha256': '0' * 64,
+                                 'bytes': 1, 'relative_paths': list(RELATIVES)},
             'subscription_probe': {'arguments': list(AUTH_ARGV), 'protocol': 'json-fields',
                                    'expected': {'status': 'SUCCESS', 'command.name': 'models'}},
             'inference_only': {'arguments': list(AGY_ARGV), 'version_arguments': ['--version'],

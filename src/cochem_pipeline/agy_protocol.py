@@ -252,7 +252,7 @@ def require_clean_diagnostics(stderr):
         raise AgyIdentityError('Agy diagnostics report a model error, fallback or reroute')
 
 
-def parse_stream(raw, expected_model, *, identity_policy=None, stderr=None):
+def parse_stream(raw, expected_model, *, identity_policy=None, stderr=None, inference_spec=None):
     """Validate one native conversation; never infer identity from answer prose."""
     if not isinstance(raw, str) or len(raw.encode('utf-8')) > 8 * 1024 * 1024:
         raise ValueError('Agy native output exceeds its bounded stream contract')
@@ -281,7 +281,15 @@ def parse_stream(raw, expected_model, *, identity_policy=None, stderr=None):
         raise ValueError('Agy native selected model and session must match the controller request')
     if init.get('model') != expected_model:
         raise AgyIdentityError('Agy native selected model and session must match the controller request')
-    if init.get('tools') != []:
+    registry = None
+    if inference_spec is not None:
+        from .agy_tool_registry import validate_registry
+        try:
+            registry = validate_registry(init, inference_spec)
+        except (ValueError, TypeError, KeyError) as exc:
+            raise AgyToolRegistryError('Agy reviewed agent or CLI registry binding differs') from exc
+    elif init.get('tools') != []:
+        # No interpretation is inherited by an unreviewed binary/agent pair.
         raise AgyToolRegistryError('Agy stream did not attest an empty native tool registry')
     for event in events[1:-1]:
         step = event.get('step_update')
@@ -312,4 +320,5 @@ def parse_stream(raw, expected_model, *, identity_policy=None, stderr=None):
             'native_selected_model': init['model'],
             'reported_model': init['model'] if identity_policy == IDENTITY_POLICY else None,
             'terminal_success': True,
+            'tool_registry': registry,
             'usage': terminal.get('usage') if isinstance(terminal.get('usage'), dict) else {}}

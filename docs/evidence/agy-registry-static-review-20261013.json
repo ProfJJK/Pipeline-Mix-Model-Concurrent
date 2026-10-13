@@ -1,0 +1,25 @@
+{
+  "schema": "cochem-agy-registry-static-review/1",
+  "executable_sha256": "38f30c7dd1ed808f5cf98fe2014de3d30903035a4f0df02d3eb72a9ff8993741",
+  "method": "PE and Go metadata plus manually reviewed x64 instruction anchors",
+  "functions": [
+    {
+      "function": "buildInitPayload",
+      "rva": "0x2f84340",
+      "bytes": 1056,
+      "sha256": "b2a140a6f93b91393a9d6d30185974895fd02b6aacd00c05e4a5f0b6282584f2"
+    },
+    {
+      "function": "advertisedTools",
+      "rva": "0x2f84760",
+      "bytes": 896,
+      "sha256": "064e528d26a435a11f5bd92a1dd7e1f03bfe448edaecf7e4fbd786288558839a"
+    }
+  ],
+  "global_registry_rva": "0xb2184f0",
+  "caller_argument": "Boolean comparison of execution mode with jetski",
+  "registry_source": "global runner map, not selected-agent tool allowlist",
+  "provider_executed": false,
+  "protected_state_modified": false,
+  "selected_agent_tool_exclusion_host_accepted": false
+}

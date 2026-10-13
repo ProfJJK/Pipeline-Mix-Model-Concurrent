@@ -73,7 +73,7 @@ def main():
         helper = types.ModuleType('r6_custody_amendment')
         helper.__file__ = str(path)
         exec(compile(raw, str(path), 'exec'), helper.__dict__)
-        helper.install(args.custody_sha256)
+        helper.install(args.custody_sha256, registry=True)
     from cochem_pipeline.routing import RoutingPolicy
     from cochem_pipeline import routing_store
     apply_retirement(RoutingPolicy, routing_store)
