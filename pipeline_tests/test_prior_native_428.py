@@ -315,4 +315,3 @@ def test_default_protected_reader_allows_elevated_admin_without_require_system_a
     with pytest.raises(PriorNativeReplayError, match="PROTECTED_READ_HASH_OR_BOUND_MISMATCH") as exc_out:
         _default_protected_reader(outside, digest, 4096)
     assert "protected Program Files/Windows paths" in str(exc_out.value.__cause__)
-

@@ -400,5 +400,3 @@ def test_migration_428_cli_entrypoint_and_rollback_receipt(tmp_path: Path, monke
             ]
         )
     assert (bad_ev / 'migration-held.json').is_file()
-
-

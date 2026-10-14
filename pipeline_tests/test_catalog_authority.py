@@ -131,4 +131,3 @@ def test_authority_root_is_428_and_missing_path_raises_file_not_found(monkeypatc
     monkeypatch.setattr(ctypes, 'get_last_error', lambda: 2)
     with pytest.raises(FileNotFoundError):
         _WindowsCustody(win).acquire('missing-authority', True)
-

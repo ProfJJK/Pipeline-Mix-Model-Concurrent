@@ -649,4 +649,3 @@ $untrustedHeld=$false;try{{Assert-428PrivateReceipt '{esc_receipt}'}}catch{{$unt
         "        Assert-NoReparseAncestors $script:Migration428;Assert-ProtectedPath $script:Migration428"
     ) in script_text
     assert prior_428.AGENT_HOLD_ROOT_NAME == Path(prior_428.AGENT_HOLD_REL).parts[0]
-
