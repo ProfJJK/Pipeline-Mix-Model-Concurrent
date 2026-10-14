@@ -94,3 +94,30 @@ def decode_proposal(data: bytes, current: RoutingPolicy, *, expected_sha256: str
     if raw['schema'] != 'cochem-catalog-change-request/1':
         raise ValueError('Unsupported catalog proposal schema')
     return compile_change(current, raw['catalog'], expected_policy_digest=raw['previous_policy_digest'])
+
+
+def compile_task_catalog_change(
+    current: RoutingPolicy,
+    raw_task_catalog,
+    binary_bindings,
+    *,
+    expected_policy_digest: str,
+    previous_task_catalog=None,
+    candidate_profile_ids=None,
+    retired_profile_ids=(),
+    model_limits=None,
+):
+    """Prepare a 4.2.8 task-matrix catalog binding plan under the current v3 policy."""
+    from .task_catalog_428 import compile_task_catalog_plan
+
+    return compile_task_catalog_plan(
+        current,
+        raw_task_catalog,
+        binary_bindings,
+        expected_policy_digest=expected_policy_digest,
+        previous_task_catalog=previous_task_catalog,
+        candidate_profile_ids=candidate_profile_ids,
+        retired_profile_ids=retired_profile_ids,
+        model_limits=model_limits,
+    )
+
