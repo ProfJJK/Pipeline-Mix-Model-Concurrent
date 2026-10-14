@@ -232,3 +232,38 @@ class RepairQueue:
                 ).fetchall()
         return [self.get_incident(r['incident_id']) for r in rows]
 
+    def mark_waiting_quota(self, incident_id):
+        _id(incident_id)
+        with self._write() as conn:
+            row = conn.execute(
+                'SELECT * FROM repair428_incidents WHERE incident_id=?',
+                (incident_id,),
+            ).fetchone()
+            if row is None or row['state'] not in ('QUEUED', 'WAITING_QUOTA'):
+                raise ValueError('Incident is not queued for quota wait')
+            conn.execute(
+                "UPDATE repair428_incidents SET state='WAITING_QUOTA' WHERE incident_id=?",
+                (incident_id,),
+            )
+        return self.get_incident(incident_id)
+
+    def recover_stale_lease(self, lease, *, cleanup_verified, cleanup_receipt_sha256):
+        _id(lease)
+        _sha(cleanup_receipt_sha256)
+        if cleanup_verified is not True:
+            raise ValueError('Cannot recover stale repair lease without verified native cleanup')
+        with self._write() as conn:
+            row = conn.execute(
+                'SELECT * FROM repair428_incidents WHERE lease=?',
+                (lease,),
+            ).fetchone()
+            if row is None or row['state'] != 'ACTIVE':
+                raise ValueError('Unknown or non-active repair lease')
+            inc_id = row['incident_id']
+            conn.execute(
+                "UPDATE repair428_incidents SET state='QUEUED', lease=NULL, execution_json=NULL WHERE lease=?",
+                (lease,),
+            )
+        return self.get_incident(inc_id)
+
+
