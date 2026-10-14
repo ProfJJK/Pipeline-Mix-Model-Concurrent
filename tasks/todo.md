@@ -43,7 +43,7 @@ Before P428-00, the external R6 runner is valid only for its hardcoded -r6 check
 
 ## P428-02 — Finish the five-option routing policy with evidence
 
-- [ ] Completed; commit/evidence: pending.
+- [x] Completed; commit/evidence: `1a01957` (`src/cochem_pipeline/task_routing.py`, `scripts/audit_428_routing.py`, `docs/4.2.8/AUDIT.md`, `docs/4.2.8/routing-decision-packet.json`, `pipeline_tests/test_task_routing_428.py`; verified with `scripts/run_source_tests_428.py` -> `24 passed in 0.18s`).
 - **Lane / size:** R / M. **Depends on:** P428-01.
 - **Files:** `task_routing.py`, `scripts/audit_428_routing.py`,
   `pipeline_tests/test_task_routing_428.py`; generated routing/audit documents.
@@ -57,7 +57,7 @@ Before P428-00, the external R6 runner is valid only for its hardcoded -r6 check
 
 ## P428-03 — Bind task routes to protected live catalog authority
 
-- [ ] Completed; commit/evidence: pending.
+- [x] Completed; commit/evidence: `b6bc63a` (`src/cochem_pipeline/task_catalog_428.py`, `src/cochem_pipeline/catalog_activation.py`, `src/cochem_pipeline/catalog_journal.py`, `pipeline_tests/test_task_catalog_428.py`; verified with `scripts/run_source_tests_428.py` -> `20 passed in 0.81s` across `test_task_catalog_428.py`, `test_catalog_journal.py`, `test_catalog_store.py`).
 - **Lane / size:** R / M. **Depends on:** P428-01, P428-02.
 - **Files:** proposed `task_catalog_428.py`, `catalog_activation.py`,
   `catalog_journal.py`, proposed `pipeline_tests/test_task_catalog_428.py`.
@@ -72,7 +72,7 @@ Before P428-00, the external R6 runner is valid only for its hardcoded -r6 check
 
 ## P428-04 — Implement exact Gemini Argon native contracts
 
-- [ ] Completed; commit/evidence: pending.
+- [x] Completed; commit/evidence: `70f74e5` (`src/cochem_pipeline/argon_catalog.py`, `pipeline_tests/test_argon_native_428.py`; verified with `scripts/run_source_tests_428.py` -> `13 passed in 0.09s` across `test_argon_catalog.py` and `test_argon_native_428.py`).
 - **Lane / size:** N / M. **Depends on:** P428-01.
 - **Files:** `argon_catalog.py`, `native_effort.py`, `agy_protocol.py`,
   `pipeline_tests/test_argon_catalog.py`, proposed `pipeline_tests/test_argon_native_428.py`.
@@ -87,7 +87,7 @@ Before P428-00, the external R6 runner is valid only for its hardcoded -r6 check
 
 ## P428-05 — Carry R6 repairs into the new release and verify replay design
 
-- [ ] Completed; commit/evidence: pending.
+- [x] Completed; commit/evidence: `f1a4cde` (`scripts/verify_prior_native_428.py`, `pipeline_tests/test_prior_native_428.py`; verified with `scripts/run_source_tests_428.py` -> `59 passed in 0.50s` across `test_prior_native_428.py`, `test_claude_http_status_repair.py`, `test_agy_tool_registry.py`, `test_agy_agent_guard.py`).
 - **Lane / size:** N / M. **Depends on:** P428-01.
 - **Files:** `failures.py`, `scripts/r6_custody_amendment.py`, proposed
   `scripts/verify_prior_native_428.py`, `pipeline_tests/test_claude_http_status_repair.py`,
