@@ -72,6 +72,9 @@ def validate_stage_output(payload, output, route):
     elif stage == 'SIMPLE_EXECUTION':
         from .task_execution_428 import validate_simple_execution_output
         validate_simple_execution_output(state, output)
+    elif stage == 'MICROTASK_EXECUTION':
+        from .microtask_board_428 import validate_microtask_execution_output
+        validate_microtask_execution_output(payload['microtask_node'], output)
     else:
         raise ValueError('Unsupported planning output stage')
     return matches[0]
@@ -167,7 +170,7 @@ def prompt_contract(payload):
             release_criteria=['Pass condition'],depends_on=[],prompt='Self-contained bounded task')])
     elif stage=='MICROTASK_ASSESSMENT':
         contract=dict(assessments=[dict(id='M1',complexity=2,task_types=['COD-TERM'],rationale='Task-specific assessment')])
-    elif stage=='SIMPLE_EXECUTION':
+    elif stage in ('SIMPLE_EXECUTION','MICROTASK_EXECUTION'):
         contract=dict(
             artifact_text='Complete verified deliverable summary',
             deliverables=[dict(name='artifact.txt',content='Deliverable content',sha256='0'*64)],

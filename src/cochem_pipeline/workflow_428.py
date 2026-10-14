@@ -298,6 +298,95 @@ def accept_microtasks(state, rows):
     return result
 
 
+def approve_microtask(state, microtask_id, expected_microtasks_sha256, authenticated_owner_receipt_id):
+    """Record a verified human-owner approval for a newly high-tier (8..10) reassessed microtask."""
+    _stage(state, 'MICROTASKS_READY')
+    _id(microtask_id)
+    _id(authenticated_owner_receipt_id)
+    if _sha(expected_microtasks_sha256) != state.get('microtasks_sha256'):
+        raise ValueError('Microtask approval belongs to a different microtask revision')
+    result = deepcopy(state)
+    matched = False
+    for row in result.get('microtasks', []):
+        if row['id'] == microtask_id:
+            if not 8 <= int(row['complexity']) <= 10:
+                raise ValueError('Only complexity 8..10 microtasks require child owner approval')
+            row['owner_approval'] = dict(
+                receipt_id=authenticated_owner_receipt_id,
+                microtasks_sha256=expected_microtasks_sha256,
+            )
+            matched = True
+            break
+    if not matched:
+        raise ValueError('Unknown microtask ID')
+    return result
+
+
+def compile_reassessed_microtask_plan(state):
+    """Compile a validated, requirement-linked DAG of reassessed microtask descriptors (`P428-12`)."""
+    _stage(state, 'MICROTASKS_READY')
+    rows = state.get('microtasks')
+    wbs_rows = state.get('wbs')
+    if not isinstance(rows, list) or not isinstance(wbs_rows, list):
+        raise ValueError('Task state is missing WBS or reassessed microtasks')
+    ancestors = _dag(rows)
+    wbs_by_id = {row['id']: row for row in wbs_rows}
+    all_srs_reqs = {req['id'] for req in state['document']['requirements']}
+    covered_reqs = set()
+
+    compiled = []
+    for row in rows:
+        if 'assessment' not in row:
+            raise ValueError(f"Microtask {row.get('id')} is missing individual reassessment")
+        check = assessment(row['assessment'])
+        if row.get('complexity') != check['complexity'] or row.get('task_types') != check['task_types']:
+            raise ValueError(f"Microtask {row.get('id')} classification does not match its assessment")
+        wbs_ids = _texts(row['wbs_ids'], 'Microtask WBS links')
+        if set(wbs_ids) - wbs_by_id.keys():
+            raise ValueError('Microtask links unknown WBS item')
+        req_ids = sorted(set().union(*(set(wbs_by_id[w]['requirement_ids']) for w in wbs_ids)))
+        sec_ids = sorted(set().union(*(set(wbs_by_id[w]['section_ids']) for w in wbs_ids)))
+        if not req_ids or set(req_ids) - all_srs_reqs:
+            raise ValueError(f"Microtask {row['id']} lacks valid SRS requirement links")
+        covered_reqs.update(req_ids)
+        for field in ('deliverables', 'audit_metrics', 'release_criteria'):
+            _texts(row[field], field)
+
+        needs_child_approval = False
+        if 8 <= check['complexity'] <= 10:
+            child_app = row.get('owner_approval')
+            if not (isinstance(child_app, dict) and child_app.get('receipt_id')):
+                needs_child_approval = True
+
+        compiled.append(
+            dict(
+                microtask_id=row['id'],
+                parent_task_id=state['task_id'],
+                lineage_kind='WBS_CHILD',
+                attempt_lineage_id=f"{state['task_id']}::mt::{row['id']}",
+                role=row['role'],
+                complexity=check['complexity'],
+                task_types=list(check['task_types']),
+                assessment=deepcopy(check),
+                wbs_ids=list(wbs_ids),
+                section_ids=sec_ids,
+                requirement_ids=req_ids,
+                deliverables=list(row['deliverables']),
+                audit_metrics=list(row['audit_metrics']),
+                release_criteria=list(row['release_criteria']),
+                depends_on=list(row['depends_on']),
+                ancestors=sorted(ancestors[row['id']]),
+                prompt=_text(row['prompt'], 'Microtask prompt', 200000),
+                needs_owner_approval=needs_child_approval,
+                owner_approval=deepcopy(row.get('owner_approval')),
+            )
+        )
+
+    if covered_reqs != all_srs_reqs:
+        raise ValueError('Compiled microtask graph does not cover every SRS requirement')
+    return compiled
+
+
 class AttemptLedger:
     """Serial, fenced quality cycles shared by pivot/fracture descendants.
 
