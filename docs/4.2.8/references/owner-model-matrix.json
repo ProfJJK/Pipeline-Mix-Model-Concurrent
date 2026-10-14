@@ -1,0 +1,224 @@
+{
+  "schemaVersion": "2026.10.2-aa-v4.3.2",
+  "baselineDate": "2026-10-13",
+  "backoffPolicy": {
+    "strategy": "exponential_with_full_jitter_loopback",
+    "baseDelayMs": 5000,
+    "maxDelayMs": 300000,
+    "jitterMs": 3000,
+    "loopbackTarget": "Choice_1_Primary",
+    "escalateTierOnVerificationFailure": true
+  },
+  "normalizationFormulas": {
+    "AGT-PROJ": "(score - 500) / 20.0",
+    "AGT-DELIV": "(score - 500) / 20.0",
+    "GEN-FACT": "(score + 100) / 2.0",
+    "PERCENTAGE_DEFAULT": "score"
+  },
+  "models": {
+    "luna-low": { "provider": "OpenAI", "name": "GPT-6 Luna (Low)", "costPerTask": 0.0045, "inM": 0.10, "outM": 0.50, "cacheM": 0.01, "tps": 126, "scores": { "GEN-DEFAULT": 22, "AGT-PROJ": 1060, "AGT-DELIV": 1120, "AGT-AUTO": 26, "COD-TERM": 19, "COD-SCI": 23, "SCI-FRONT": 14, "SCI-FORMAL": 6, "GEN-FACT": 6, "GEN-DOC": 9, "GEN-LCR": 42 } },
+    "luna-med": { "provider": "OpenAI", "name": "GPT-6 Luna (Medium)", "costPerTask": 0.02, "inM": 0.10, "outM": 0.50, "cacheM": 0.01, "tps": 128, "scores": { "GEN-DEFAULT": 30, "AGT-PROJ": 1190, "AGT-DELIV": 1240, "AGT-AUTO": 34, "COD-TERM": 27, "COD-SCI": 31, "SCI-FRONT": 21, "SCI-FORMAL": 10, "GEN-FACT": 16, "GEN-DOC": 12, "GEN-LCR": 50 } },
+    "luna-high": { "provider": "OpenAI", "name": "GPT-6 Luna (High)", "costPerTask": 0.03, "inM": 0.10, "outM": 0.50, "cacheM": 0.01, "tps": 134, "scores": { "GEN-DEFAULT": 33, "AGT-PROJ": 1260, "AGT-DELIV": 1305, "AGT-AUTO": 39, "COD-TERM": 31, "COD-SCI": 35, "SCI-FRONT": 25, "SCI-FORMAL": 12, "GEN-FACT": 20, "GEN-DOC": 14, "GEN-LCR": 56 } },
+    "luna-xhigh": { "provider": "OpenAI", "name": "GPT-6 Luna (xHigh)", "costPerTask": 0.04, "inM": 0.10, "outM": 0.50, "cacheM": 0.01, "tps": 128, "scores": { "GEN-DEFAULT": 35, "AGT-PROJ": 1300, "AGT-DELIV": 1345, "AGT-AUTO": 41, "COD-TERM": 33, "COD-SCI": 37, "SCI-FRONT": 27, "SCI-FORMAL": 13, "GEN-FACT": 22, "GEN-DOC": 15, "GEN-LCR": 58 } },
+    "luna-max": { "provider": "OpenAI", "name": "GPT-6 Luna (Max)", "costPerTask": 0.07, "inM": 0.10, "outM": 0.50, "cacheM": 0.01, "tps": 135, "scores": { "GEN-DEFAULT": 38, "AGT-PROJ": 1365, "AGT-DELIV": 1400, "AGT-AUTO": 46, "COD-TERM": 37, "COD-SCI": 41, "SCI-FRONT": 31, "SCI-FORMAL": 15, "GEN-FACT": 26, "GEN-DOC": 17, "GEN-LCR": 63 } },
+    "sol-low": { "provider": "OpenAI", "name": "GPT-6.1 Sol (Low)", "costPerTask": 0.13, "inM": 0.50, "outM": 2.50, "cacheM": 0.05, "tps": 51, "scores": { "GEN-DEFAULT": 42, "AGT-PROJ": 1455, "AGT-DELIV": 1470, "AGT-AUTO": 52, "COD-TERM": 43, "COD-SCI": 45, "SCI-FRONT": 38, "SCI-FORMAL": 18, "GEN-FACT": 30, "GEN-DOC": 19, "GEN-LCR": 69 } },
+    "sol-med": { "provider": "OpenAI", "name": "GPT-6.1 Sol (Medium)", "costPerTask": 0.21, "inM": 0.50, "outM": 2.50, "cacheM": 0.05, "tps": 55, "scores": { "GEN-DEFAULT": 48, "AGT-PROJ": 1525, "AGT-DELIV": 1515, "AGT-AUTO": 60, "COD-TERM": 49, "COD-SCI": 51, "SCI-FRONT": 46, "SCI-FORMAL": 22, "GEN-FACT": 36, "GEN-DOC": 22, "GEN-LCR": 74 } },
+    "sol-high": { "provider": "OpenAI", "name": "GPT-6.1 Sol (High)", "costPerTask": 0.32, "inM": 0.50, "outM": 2.50, "cacheM": 0.05, "tps": 58, "scores": { "GEN-DEFAULT": 50, "AGT-PROJ": 1545, "AGT-DELIV": 1540, "AGT-AUTO": 63, "COD-TERM": 52, "COD-SCI": 54, "SCI-FRONT": 49, "SCI-FORMAL": 24, "GEN-FACT": 38, "GEN-DOC": 24, "GEN-LCR": 76 } },
+    "sol-xhigh": { "provider": "OpenAI", "name": "GPT-6.1 Sol (xHigh)", "costPerTask": 0.39, "inM": 0.50, "outM": 2.50, "cacheM": 0.05, "tps": 61, "scores": { "GEN-DEFAULT": 51, "AGT-PROJ": 1555, "AGT-DELIV": 1550, "AGT-AUTO": 65, "COD-TERM": 54, "COD-SCI": 55, "SCI-FRONT": 51, "SCI-FORMAL": 25, "GEN-FACT": 39, "GEN-DOC": 25, "GEN-LCR": 78 } },
+    "sol-max": { "provider": "OpenAI", "name": "GPT-6.1 Sol (Max)", "costPerTask": 0.72, "inM": 0.50, "outM": 2.50, "cacheM": 0.05, "tps": 65, "scores": { "GEN-DEFAULT": 52, "AGT-PROJ": 1565, "AGT-DELIV": 1560, "AGT-AUTO": 66, "COD-TERM": 55, "COD-SCI": 56, "SCI-FRONT": 53, "SCI-FORMAL": 27, "GEN-FACT": 40, "GEN-DOC": 26, "GEN-LCR": 79 } },
+    "astra-low": { "provider": "OpenAI", "name": "GPT-6 Astra (Low)", "costPerTask": 0.82, "inM": 10.00, "outM": 50.00, "cacheM": 1.00, "tps": 72, "scores": { "GEN-DEFAULT": 46, "AGT-PROJ": 1500, "AGT-DELIV": 1510, "AGT-AUTO": 57, "COD-TERM": 48, "COD-SCI": 49, "SCI-FRONT": 43, "SCI-FORMAL": 22, "GEN-FACT": 36, "GEN-DOC": 23, "GEN-LCR": 73 } },
+    "astra-med": { "provider": "OpenAI", "name": "GPT-6 Astra (Medium)", "costPerTask": 1.54, "inM": 10.00, "outM": 50.00, "cacheM": 1.00, "tps": 68, "scores": { "GEN-DEFAULT": 50, "AGT-PROJ": 1535, "AGT-DELIV": 1535, "AGT-AUTO": 63, "COD-TERM": 53, "COD-SCI": 53, "SCI-FRONT": 50, "SCI-FORMAL": 26, "GEN-FACT": 39, "GEN-DOC": 27, "GEN-LCR": 77 } },
+    "astra-high": { "provider": "OpenAI", "name": "GPT-6 Astra (High)", "costPerTask": 2.19, "inM": 10.00, "outM": 50.00, "cacheM": 1.00, "tps": 65, "scores": { "GEN-DEFAULT": 51, "AGT-PROJ": 1550, "AGT-DELIV": 1555, "AGT-AUTO": 65, "COD-TERM": 56, "COD-SCI": 54, "SCI-FRONT": 52, "SCI-FORMAL": 28, "GEN-FACT": 41, "GEN-DOC": 28, "GEN-LCR": 79 } },
+    "astra-xhigh": { "provider": "OpenAI", "name": "GPT-6 Astra (xHigh)", "costPerTask": 2.98, "inM": 10.00, "outM": 50.00, "cacheM": 1.00, "tps": 64, "scores": { "GEN-DEFAULT": 52, "AGT-PROJ": 1560, "AGT-DELIV": 1565, "AGT-AUTO": 67, "COD-TERM": 58, "COD-SCI": 55, "SCI-FRONT": 54, "SCI-FORMAL": 30, "GEN-FACT": 42, "GEN-DOC": 29, "GEN-LCR": 80 } },
+    "astra-max": { "provider": "OpenAI", "name": "GPT-6 Astra (Max)", "costPerTask": 3.26, "inM": 10.00, "outM": 50.00, "cacheM": 1.00, "tps": 63, "scores": { "GEN-DEFAULT": 53, "AGT-PROJ": 1571, "AGT-DELIV": 1572, "AGT-AUTO": 68, "COD-TERM": 59, "COD-SCI": 56, "SCI-FRONT": 55, "SCI-FORMAL": 32, "GEN-FACT": 43, "GEN-DOC": 31, "GEN-LCR": 81 } },
+    "haiku-low": { "provider": "Anthropic", "name": "Claude Haiku 5.5 (Low)", "costPerTask": 0.02, "inM": 0.10, "outM": 0.50, "cacheM": 0.01, "tps": 164, "scores": { "GEN-DEFAULT": 29, "AGT-PROJ": 1220, "AGT-DELIV": 1260, "AGT-AUTO": 35, "COD-TERM": 26, "COD-SCI": 30, "SCI-FRONT": 19, "SCI-FORMAL": 9, "GEN-FACT": 14, "GEN-DOC": 11, "GEN-LCR": 51 } },
+    "haiku-med": { "provider": "Anthropic", "name": "Claude Haiku 5.5 (Medium)", "costPerTask": 0.06, "inM": 0.10, "outM": 0.50, "cacheM": 0.01, "tps": 185, "scores": { "GEN-DEFAULT": 35, "AGT-PROJ": 1340, "AGT-DELIV": 1380, "AGT-AUTO": 43, "COD-TERM": 33, "COD-SCI": 37, "SCI-FRONT": 26, "SCI-FORMAL": 12, "GEN-FACT": 22, "GEN-DOC": 13, "GEN-LCR": 59 } },
+    "haiku-high": { "provider": "Anthropic", "name": "Claude Haiku 5.5 (High)", "costPerTask": 0.11, "inM": 0.10, "outM": 0.50, "cacheM": 0.01, "tps": 210, "scores": { "GEN-DEFAULT": 39, "AGT-PROJ": 1460, "AGT-DELIV": 1480, "AGT-AUTO": 48, "COD-TERM": 38, "COD-SCI": 42, "SCI-FRONT": 32, "SCI-FORMAL": 15, "GEN-FACT": 28, "GEN-DOC": 15, "GEN-LCR": 65 } },
+    "haiku-max": { "provider": "Anthropic", "name": "Claude Haiku 5.5 (Max)", "costPerTask": 0.21, "inM": 0.10, "outM": 0.50, "cacheM": 0.01, "tps": 236, "scores": { "GEN-DEFAULT": 43, "AGT-PROJ": 1578, "AGT-DELIV": 1560, "AGT-AUTO": 53, "COD-TERM": 43, "COD-SCI": 46, "SCI-FRONT": 37, "SCI-FORMAL": 17, "GEN-FACT": 32, "GEN-DOC": 17, "GEN-LCR": 70 } },
+    "sonnet-low": { "provider": "Anthropic", "name": "Claude Sonnet 5.5 (Low)", "costPerTask": 0.35, "inM": 2.00, "outM": 10.00, "cacheM": 0.20, "tps": 101, "scores": { "GEN-DEFAULT": 36, "AGT-PROJ": 1380, "AGT-DELIV": 1420, "AGT-AUTO": 45, "COD-TERM": 37, "COD-SCI": 40, "SCI-FRONT": 28, "SCI-FORMAL": 14, "GEN-FACT": 24, "GEN-DOC": 15, "GEN-LCR": 63 } },
+    "sonnet-med": { "provider": "Anthropic", "name": "Claude Sonnet 5.5 (Medium)", "costPerTask": 0.48, "inM": 2.00, "outM": 10.00, "cacheM": 0.20, "tps": 99, "scores": { "GEN-DEFAULT": 41, "AGT-PROJ": 1500, "AGT-DELIV": 1540, "AGT-AUTO": 51, "COD-TERM": 45, "COD-SCI": 46, "SCI-FRONT": 36, "SCI-FORMAL": 17, "GEN-FACT": 30, "GEN-DOC": 17, "GEN-LCR": 69 } },
+    "sonnet-high": { "provider": "Anthropic", "name": "Claude Sonnet 5.5 (High)", "costPerTask": 0.88, "inM": 2.00, "outM": 10.00, "cacheM": 0.20, "tps": 96, "scores": { "GEN-DEFAULT": 47, "AGT-PROJ": 1620, "AGT-DELIV": 1650, "AGT-AUTO": 59, "COD-TERM": 51, "COD-SCI": 53, "SCI-FRONT": 44, "SCI-FORMAL": 21, "GEN-FACT": 36, "GEN-DOC": 20, "GEN-LCR": 74 } },
+    "sonnet-xhigh": { "provider": "Anthropic", "name": "Claude Sonnet 5.5 (xHigh)", "costPerTask": 2.01, "inM": 2.00, "outM": 10.00, "cacheM": 0.20, "tps": 106, "scores": { "GEN-DEFAULT": 52, "AGT-PROJ": 1695, "AGT-DELIV": 1750, "AGT-AUTO": 66, "COD-TERM": 58, "COD-SCI": 60, "SCI-FRONT": 53, "SCI-FORMAL": 26, "GEN-FACT": 40, "GEN-DOC": 23, "GEN-LCR": 80 } },
+    "sonnet-max": { "provider": "Anthropic", "name": "Claude Sonnet 5.5 (Max)", "costPerTask": 5.46, "inM": 2.00, "outM": 10.00, "cacheM": 0.20, "tps": 136, "scores": { "GEN-DEFAULT": 56, "AGT-PROJ": 1760, "AGT-DELIV": 1845, "AGT-AUTO": 69, "COD-TERM": 63.6, "COD-SCI": 64, "SCI-FRONT": 59, "SCI-FORMAL": 30, "GEN-FACT": 44, "GEN-DOC": 25, "GEN-LCR": 84 } },
+    "opus-low": { "provider": "Anthropic", "name": "Claude Opus 5.5 (Low)", "costPerTask": 0.55, "inM": 4.00, "outM": 20.00, "cacheM": 0.20, "tps": 81, "scores": { "GEN-DEFAULT": 42, "AGT-PROJ": 1540, "AGT-DELIV": 1580, "AGT-AUTO": 52, "COD-TERM": 44, "COD-SCI": 48, "SCI-FRONT": 39, "SCI-FORMAL": 18, "GEN-FACT": 34, "GEN-DOC": 18, "GEN-LCR": 71 } },
+    "opus-med": { "provider": "Anthropic", "name": "Claude Opus 5.5 (Medium)", "costPerTask": 1.34, "inM": 4.00, "outM": 20.00, "cacheM": 0.20, "tps": 82, "scores": { "GEN-DEFAULT": 51, "AGT-PROJ": 1660, "AGT-DELIV": 1710, "AGT-AUTO": 63, "COD-TERM": 54, "COD-SCI": 58, "SCI-FRONT": 51, "SCI-FORMAL": 25, "GEN-FACT": 40, "GEN-DOC": 22, "GEN-LCR": 78 } },
+    "opus-high": { "provider": "Anthropic", "name": "Claude Opus 5.5 (High)", "costPerTask": 1.82, "inM": 4.00, "outM": 20.00, "cacheM": 0.20, "tps": 83, "scores": { "GEN-DEFAULT": 54, "AGT-PROJ": 1690, "AGT-DELIV": 1760, "AGT-AUTO": 68, "COD-TERM": 58, "COD-SCI": 63, "SCI-FRONT": 57, "SCI-FORMAL": 29, "GEN-FACT": 43, "GEN-DOC": 24, "GEN-LCR": 82 } },
+    "opus-xhigh": { "provider": "Anthropic", "name": "Claude Opus 5.5 (xHigh)", "costPerTask": 3.46, "inM": 4.00, "outM": 20.00, "cacheM": 0.20, "tps": 82, "scores": { "GEN-DEFAULT": 56, "AGT-PROJ": 1765, "AGT-DELIV": 1825, "AGT-AUTO": 69, "COD-TERM": 59.6, "COD-SCI": 65, "SCI-FRONT": 59, "SCI-FORMAL": 31, "GEN-FACT": 45, "GEN-DOC": 25, "GEN-LCR": 84 } },
+    "opus-max": { "provider": "Anthropic", "name": "Claude Opus 5.5 (Max)", "costPerTask": 5.98, "inM": 4.00, "outM": 20.00, "cacheM": 0.20, "tps": 96, "scores": { "GEN-DEFAULT": 58, "AGT-PROJ": 1807, "AGT-DELIV": 1866, "AGT-AUTO": 70, "COD-TERM": 59.6, "COD-SCI": 67, "SCI-FRONT": 61.4, "SCI-FORMAL": 32, "GEN-FACT": 46, "GEN-DOC": 26, "GEN-LCR": 85 } },
+    "fable-max": { "provider": "Anthropic", "name": "Claude Fable 5.1 (Max)", "costPerTask": 7.63, "inM": 10.00, "outM": 50.00, "cacheM": 0.25, "tps": 67, "scores": { "GEN-DEFAULT": 53, "AGT-PROJ": 1675, "AGT-DELIV": 1756, "AGT-AUTO": 59, "COD-TERM": 52, "COD-SCI": 63, "SCI-FRONT": 59.1, "SCI-FORMAL": 31, "GEN-FACT": 42, "GEN-DOC": 26, "GEN-LCR": 83 } },
+    "flash35-lite": { "provider": "Google", "name": "Gemini 3.5 Flash-Lite", "costPerTask": 0.19, "inM": 0.25, "outM": 1.25, "cacheM": 0.025, "tps": 220, "scores": { "GEN-DEFAULT": 22, "AGT-PROJ": 1055, "AGT-DELIV": 1110, "AGT-AUTO": 27, "COD-TERM": 12, "COD-SCI": 24, "SCI-FRONT": 13, "SCI-FORMAL": 5, "GEN-FACT": 6, "GEN-DOC": 8, "GEN-LCR": 44 } },
+    "flash38-low": { "provider": "Google", "name": "Gemini 3.8 Flash (Low)", "costPerTask": 0.65, "inM": 0.75, "outM": 3.75, "cacheM": 0.075, "tps": 135, "scores": { "GEN-DEFAULT": 33, "AGT-PROJ": 1140, "AGT-DELIV": 1310, "AGT-AUTO": 42, "COD-TERM": 10, "COD-SCI": 36, "SCI-FRONT": 22, "SCI-FORMAL": 10, "GEN-FACT": 18, "GEN-DOC": 13, "GEN-LCR": 60 } },
+    "flash38-med": { "provider": "Google", "name": "Gemini 3.8 Flash (Medium)", "costPerTask": 0.93, "inM": 0.75, "outM": 3.75, "cacheM": 0.075, "tps": 140, "scores": { "GEN-DEFAULT": 40, "AGT-PROJ": 1180, "AGT-DELIV": 1440, "AGT-AUTO": 52, "COD-TERM": 16, "COD-SCI": 48, "SCI-FRONT": 31, "SCI-FORMAL": 15, "GEN-FACT": 28, "GEN-DOC": 18, "GEN-LCR": 72 } },
+    "flash38-high": { "provider": "Google", "name": "Gemini 3.8 Flash (High)", "costPerTask": 1.24, "inM": 0.75, "outM": 3.75, "cacheM": 0.075, "tps": 341, "scores": { "GEN-DEFAULT": 41, "AGT-PROJ": 1203, "AGT-DELIV": 1485, "AGT-AUTO": 60, "COD-TERM": 20, "COD-SCI": 57, "SCI-FRONT": 35, "SCI-FORMAL": 18, "GEN-FACT": 30, "GEN-DOC": 21, "GEN-LCR": 81 } },
+    "argon-low": { "provider": "Google", "name": "Gemini 4 Argon (Low)", "costPerTask": 0.55, "inM": 2.00, "outM": 10.00, "cacheM": 0.10, "tps": 88, "scores": { "GEN-DEFAULT": 46, "AGT-PROJ": 1360, "AGT-DELIV": 1510, "AGT-AUTO": 62, "COD-TERM": 42, "COD-SCI": 51, "SCI-FRONT": 43, "SCI-FORMAL": 19, "GEN-FACT": 33, "GEN-DOC": 18, "GEN-LCR": 73 } },
+    "argon-med": { "provider": "Google", "name": "Gemini 4 Argon (Medium)", "costPerTask": 1.15, "inM": 2.00, "outM": 10.00, "cacheM": 0.10, "tps": 80, "scores": { "GEN-DEFAULT": 50, "AGT-PROJ": 1450, "AGT-DELIV": 1575, "AGT-AUTO": 70, "COD-TERM": 50, "COD-SCI": 57, "SCI-FRONT": 50, "SCI-FORMAL": 23, "GEN-FACT": 38, "GEN-DOC": 20, "GEN-LCR": 77 } },
+    "argon-high": { "provider": "Google", "name": "Gemini 4 Argon (High)", "costPerTask": 1.99, "inM": 2.00, "outM": 10.00, "cacheM": 0.10, "tps": 75, "scores": { "GEN-DEFAULT": 53, "AGT-PROJ": 1490, "AGT-DELIV": 1624, "AGT-AUTO": 78, "COD-TERM": 57, "COD-SCI": 62, "SCI-FRONT": 57, "SCI-FORMAL": 27, "GEN-FACT": 42, "GEN-DOC": 22, "GEN-LCR": 80 } }
+  },
+  "taskRoutingMatrix": {
+    "AGT-PROJ": {
+      "benchmark": "AA-Briefcase v1.1",
+      "tiers": {
+        "1": { "floor": 1050, "choices": ["haiku-low", "luna-low", "flash38-low", "luna-med", "flash35-lite"], "auditor": "luna-med", "degradedSlots": [] },
+        "2": { "floor": 1150, "choices": ["haiku-low", "luna-med", "flash38-high", "luna-high", "haiku-med"], "auditor": "luna-high", "degradedSlots": [] },
+        "3": { "floor": 1250, "choices": ["haiku-med", "luna-high", "argon-low", "luna-xhigh", "sonnet-low"], "auditor": "luna-max", "degradedSlots": [] },
+        "4": { "floor": 1350, "choices": ["haiku-high", "luna-max", "argon-low", "sol-low", "sonnet-low"], "auditor": "sol-low", "degradedSlots": [] },
+        "5": { "floor": 1450, "choices": ["haiku-max", "sol-low", "argon-med", "sonnet-med", "opus-low"], "auditor": "sol-med", "degradedSlots": [] },
+        "6": { "floor": 1520, "choices": ["haiku-max", "sol-med", "argon-high", "sonnet-high", "sol-high"], "auditor": "sol-high", "degradedSlots": ["argon-high"] },
+        "7": { "floor": 1560, "choices": ["haiku-max", "sol-max", "argon-high", "sonnet-high", "opus-med"], "auditor": "astra-max", "degradedSlots": ["argon-high"] },
+        "8": { "floor": 1620, "choices": ["opus-med", "astra-max", "argon-high", "sonnet-xhigh", "opus-high"], "auditor": "astra-max", "degradedSlots": ["astra-max", "argon-high"] },
+        "9": { "floor": 1720, "choices": ["opus-xhigh", "astra-max", "argon-high", "sonnet-max", "fable-max"], "auditor": "astra-max", "degradedSlots": ["astra-max", "argon-high"] },
+        "10": { "floor": 1800, "choices": ["opus-max", "astra-max", "argon-high", "sonnet-max", "fable-max"], "auditor": "astra-max", "degradedSlots": ["astra-max", "argon-high"] }
+      }
+    },
+    "AGT-DELIV": {
+      "benchmark": "GDPval-AA v2.1",
+      "tiers": {
+        "1": { "floor": 1100, "choices": ["haiku-low", "luna-low", "flash38-low", "luna-med", "flash35-lite"], "auditor": "luna-high", "degradedSlots": [] },
+        "2": { "floor": 1200, "choices": ["haiku-low", "luna-med", "flash38-low", "luna-high", "haiku-med"], "auditor": "luna-high", "degradedSlots": [] },
+        "3": { "floor": 1300, "choices": ["haiku-med", "luna-high", "flash38-low", "luna-xhigh", "sonnet-low"], "auditor": "luna-max", "degradedSlots": [] },
+        "4": { "floor": 1380, "choices": ["haiku-high", "luna-max", "flash38-med", "sol-low", "sonnet-low"], "auditor": "sol-low", "degradedSlots": [] },
+        "5": { "floor": 1450, "choices": ["haiku-max", "sol-low", "argon-low", "sonnet-med", "flash38-high"], "auditor": "sol-med", "degradedSlots": [] },
+        "6": { "floor": 1500, "choices": ["haiku-max", "sol-med", "argon-low", "sonnet-high", "opus-low"], "auditor": "argon-med", "degradedSlots": [] },
+        "7": { "floor": 1550, "choices": ["sonnet-high", "argon-med", "sol-max", "opus-med", "astra-high"], "auditor": "argon-high", "degradedSlots": [] },
+        "8": { "floor": 1600, "choices": ["opus-med", "argon-high", "astra-max", "sonnet-xhigh", "fable-max"], "auditor": "argon-high", "degradedSlots": ["astra-max"] },
+        "9": { "floor": 1720, "choices": ["opus-high", "argon-high", "astra-max", "sonnet-xhigh", "fable-max"], "auditor": "argon-high", "degradedSlots": ["argon-high", "astra-max"] },
+        "10": { "floor": 1840, "choices": ["opus-max", "argon-high", "astra-max", "sonnet-max", "opus-xhigh"], "auditor": "argon-high", "degradedSlots": ["argon-high", "astra-max"] }
+      }
+    },
+    "AGT-AUTO": {
+      "benchmark": "AutomationBench-AA",
+      "tiers": {
+        "1": { "floor": 25, "choices": ["luna-low", "haiku-low", "flash38-low", "luna-med", "flash35-lite"], "auditor": "haiku-low", "degradedSlots": [] },
+        "2": { "floor": 32, "choices": ["haiku-low", "luna-med", "flash38-low", "luna-high", "haiku-med"], "auditor": "luna-high", "degradedSlots": [] },
+        "3": { "floor": 40, "choices": ["haiku-med", "luna-xhigh", "flash38-low", "luna-max", "sonnet-low"], "auditor": "luna-max", "degradedSlots": [] },
+        "4": { "floor": 46, "choices": ["haiku-high", "luna-max", "flash38-med", "sol-low", "sonnet-med"], "auditor": "sol-low", "degradedSlots": [] },
+        "5": { "floor": 52, "choices": ["haiku-max", "sol-low", "flash38-med", "argon-low", "flash38-high"], "auditor": "argon-low", "degradedSlots": [] },
+        "6": { "floor": 58, "choices": ["argon-low", "sol-med", "sonnet-high", "flash38-high", "sol-high"], "auditor": "sol-high", "degradedSlots": [] },
+        "7": { "floor": 63, "choices": ["argon-med", "sol-high", "opus-med", "sol-xhigh", "sonnet-xhigh"], "auditor": "sonnet-xhigh", "degradedSlots": [] },
+        "8": { "floor": 67, "choices": ["argon-high", "opus-high", "astra-max", "argon-med", "sol-max"], "auditor": "opus-high", "degradedSlots": [] },
+        "9": { "floor": 70, "choices": ["argon-high", "opus-max", "astra-max", "argon-med", "sonnet-max"], "auditor": "opus-max", "degradedSlots": ["astra-max"] },
+        "10": { "floor": 75, "choices": ["argon-high", "opus-max", "astra-max", "sonnet-max", "opus-high"], "auditor": "opus-max", "degradedSlots": ["opus-max", "astra-max", "sonnet-max", "opus-high"] }
+      }
+    },
+    "COD-TERM": {
+      "benchmark": "Terminal-Bench 4.0",
+      "tiers": {
+        "1": { "floor": 18, "choices": ["haiku-low", "luna-low", "flash38-high", "luna-med", "haiku-med"], "auditor": "luna-med", "degradedSlots": [] },
+        "2": { "floor": 24, "choices": ["luna-med", "haiku-low", "argon-low", "luna-high", "haiku-med"], "auditor": "haiku-med", "degradedSlots": [] },
+        "3": { "floor": 30, "choices": ["haiku-med", "luna-high", "argon-low", "luna-xhigh", "sonnet-low"], "auditor": "luna-max", "degradedSlots": [] },
+        "4": { "floor": 36, "choices": ["haiku-high", "luna-max", "argon-low", "sonnet-low", "sol-low"], "auditor": "sol-low", "degradedSlots": [] },
+        "5": { "floor": 42, "choices": ["sol-low", "haiku-max", "argon-low", "sonnet-med", "opus-low"], "auditor": "sonnet-high", "degradedSlots": [] },
+        "6": { "floor": 47, "choices": ["sol-med", "sonnet-high", "argon-med", "astra-low", "sol-high"], "auditor": "opus-med", "degradedSlots": [] },
+        "7": { "floor": 51, "choices": ["sol-high", "sonnet-high", "argon-med", "sol-xhigh", "opus-med"], "auditor": "sonnet-xhigh", "degradedSlots": ["argon-med"] },
+        "8": { "floor": 55, "choices": ["sonnet-xhigh", "sol-max", "argon-high", "opus-high", "astra-high"], "auditor": "astra-xhigh", "degradedSlots": [] },
+        "9": { "floor": 58, "choices": ["opus-xhigh", "astra-max", "argon-high", "opus-high", "sonnet-xhigh"], "auditor": "astra-max", "degradedSlots": ["argon-high"] },
+        "10": { "floor": 60, "choices": ["sonnet-max", "opus-max", "astra-max", "argon-high", "opus-xhigh"], "auditor": "astra-max", "degradedSlots": ["astra-max", "argon-high"] }
+      }
+    },
+    "COD-SCI": {
+      "benchmark": "SciCode",
+      "tiers": {
+        "1": { "floor": 22, "choices": ["haiku-low", "luna-low", "flash38-low", "luna-med", "flash35-lite"], "auditor": "luna-med", "degradedSlots": [] },
+        "2": { "floor": 28, "choices": ["luna-med", "haiku-low", "flash38-low", "luna-high", "haiku-med"], "auditor": "haiku-med", "degradedSlots": [] },
+        "3": { "floor": 34, "choices": ["haiku-med", "luna-high", "flash38-low", "luna-xhigh", "sonnet-low"], "auditor": "luna-max", "degradedSlots": [] },
+        "4": { "floor": 40, "choices": ["haiku-high", "luna-max", "flash38-med", "sol-low", "sonnet-low"], "auditor": "sol-low", "degradedSlots": [] },
+        "5": { "floor": 45, "choices": ["haiku-max", "sol-low", "argon-low", "flash38-med", "opus-low"], "auditor": "argon-low", "degradedSlots": [] },
+        "6": { "floor": 50, "choices": ["sol-med", "argon-low", "sonnet-high", "flash38-high", "sol-high"], "auditor": "sonnet-high", "degradedSlots": [] },
+        "7": { "floor": 54, "choices": ["sol-high", "flash38-high", "opus-med", "argon-med", "sol-xhigh"], "auditor": "opus-med", "degradedSlots": [] },
+        "8": { "floor": 58, "choices": ["opus-med", "argon-high", "sol-max", "sonnet-xhigh", "astra-max"], "auditor": "argon-high", "degradedSlots": ["sol-max", "astra-max"] },
+        "9": { "floor": 62, "choices": ["opus-high", "argon-high", "astra-max", "fable-max", "sonnet-max"], "auditor": "argon-high", "degradedSlots": ["astra-max"] },
+        "10": { "floor": 65, "choices": ["opus-max", "argon-high", "astra-max", "opus-xhigh", "sonnet-max"], "auditor": "argon-high", "degradedSlots": ["argon-high", "astra-max"] }
+      }
+    },
+    "SCI-FRONT": {
+      "benchmark": "Humanity's Last Exam (HLE)",
+      "tiers": {
+        "1": { "floor": 12, "choices": ["haiku-low", "luna-low", "flash38-low", "luna-med", "flash35-lite"], "auditor": "luna-med", "degradedSlots": [] },
+        "2": { "floor": 18, "choices": ["luna-med", "haiku-low", "flash38-low", "luna-high", "haiku-med"], "auditor": "haiku-med", "degradedSlots": [] },
+        "3": { "floor": 24, "choices": ["haiku-med", "luna-high", "flash38-med", "luna-xhigh", "sonnet-low"], "auditor": "luna-max", "degradedSlots": [] },
+        "4": { "floor": 30, "choices": ["haiku-high", "luna-max", "flash38-med", "sol-low", "flash38-high"], "auditor": "sol-low", "degradedSlots": [] },
+        "5": { "floor": 36, "choices": ["sol-low", "haiku-max", "argon-low", "opus-low", "sonnet-med"], "auditor": "argon-low", "degradedSlots": [] },
+        "6": { "floor": 42, "choices": ["sol-med", "argon-low", "sonnet-high", "astra-low", "sol-high"], "auditor": "opus-med", "degradedSlots": [] },
+        "7": { "floor": 47, "choices": ["sol-high", "opus-med", "argon-med", "sol-xhigh", "astra-med"], "auditor": "sonnet-xhigh", "degradedSlots": [] },
+        "8": { "floor": 52, "choices": ["sol-max", "sonnet-xhigh", "argon-high", "astra-high", "opus-high"], "auditor": "argon-high", "degradedSlots": [] },
+        "9": { "floor": 56, "choices": ["opus-high", "argon-high", "astra-max", "opus-xhigh", "fable-max"], "auditor": "argon-high", "degradedSlots": ["astra-max"] },
+        "10": { "floor": 60, "choices": ["opus-max", "argon-high", "astra-max", "fable-max", "sonnet-max"], "auditor": "argon-high", "degradedSlots": ["argon-high", "astra-max"] }
+      }
+    },
+    "SCI-FORMAL": {
+      "benchmark": "CritPt",
+      "tiers": {
+        "1": { "floor": 5, "choices": ["luna-low", "haiku-low", "flash38-low", "luna-med", "flash35-lite"], "auditor": "haiku-low", "degradedSlots": [] },
+        "2": { "floor": 8, "choices": ["haiku-low", "luna-med", "flash38-low", "luna-high", "haiku-med"], "auditor": "luna-high", "degradedSlots": [] },
+        "3": { "floor": 11, "choices": ["luna-high", "haiku-med", "flash38-med", "luna-xhigh", "sonnet-low"], "auditor": "haiku-high", "degradedSlots": [] },
+        "4": { "floor": 14, "choices": ["luna-max", "haiku-high", "flash38-med", "sol-low", "sonnet-low"], "auditor": "haiku-max", "degradedSlots": [] },
+        "5": { "floor": 17, "choices": ["sol-low", "haiku-max", "flash38-high", "argon-low", "opus-low"], "auditor": "opus-low", "degradedSlots": [] },
+        "6": { "floor": 20, "choices": ["sol-med", "sonnet-high", "argon-med", "astra-low", "sol-high"], "auditor": "opus-med", "degradedSlots": [] },
+        "7": { "floor": 23, "choices": ["sol-high", "opus-med", "argon-med", "sol-xhigh", "astra-med"], "auditor": "sonnet-xhigh", "degradedSlots": [] },
+        "8": { "floor": 26, "choices": ["sol-max", "sonnet-xhigh", "argon-high", "astra-high", "opus-high"], "auditor": "opus-high", "degradedSlots": [] },
+        "9": { "floor": 29, "choices": ["opus-high", "astra-xhigh", "argon-high", "opus-xhigh", "fable-max"], "auditor": "astra-max", "degradedSlots": ["argon-high"] },
+        "10": { "floor": 32, "choices": ["astra-max", "opus-max", "argon-high", "opus-xhigh", "fable-max"], "auditor": "opus-max", "degradedSlots": ["argon-high"] }
+      }
+    },
+    "GEN-FACT": {
+      "benchmark": "AA-Omniscience",
+      "tiers": {
+        "1": { "floor": 5, "choices": ["luna-low", "haiku-low", "flash38-low", "luna-med", "flash35-lite"], "auditor": "haiku-low", "degradedSlots": [] },
+        "2": { "floor": 12, "choices": ["luna-med", "haiku-low", "flash38-low", "luna-high", "haiku-med"], "auditor": "haiku-med", "degradedSlots": [] },
+        "3": { "floor": 18, "choices": ["luna-high", "haiku-med", "flash38-low", "luna-xhigh", "sonnet-low"], "auditor": "haiku-high", "degradedSlots": [] },
+        "4": { "floor": 24, "choices": ["luna-max", "haiku-high", "flash38-med", "sol-low", "sonnet-low"], "auditor": "sol-low", "degradedSlots": [] },
+        "5": { "floor": 28, "choices": ["sol-low", "haiku-max", "argon-low", "opus-low", "flash38-high"], "auditor": "opus-low", "degradedSlots": [] },
+        "6": { "floor": 33, "choices": ["sol-med", "opus-low", "argon-low", "sonnet-high", "astra-low"], "auditor": "argon-med", "degradedSlots": [] },
+        "7": { "floor": 37, "choices": ["sol-high", "opus-med", "argon-med", "sol-xhigh", "astra-med"], "auditor": "opus-med", "degradedSlots": [] },
+        "8": { "floor": 40, "choices": ["sol-max", "opus-med", "argon-high", "sonnet-xhigh", "astra-high"], "auditor": "argon-high", "degradedSlots": [] },
+        "9": { "floor": 43, "choices": ["opus-high", "astra-max", "argon-high", "opus-xhigh", "fable-max"], "auditor": "astra-max", "degradedSlots": ["argon-high"] },
+        "10": { "floor": 45, "choices": ["opus-max", "astra-max", "argon-high", "opus-xhigh", "sonnet-max"], "auditor": "argon-high", "degradedSlots": ["astra-max", "argon-high"] }
+      }
+    },
+    "GEN-DOC": {
+      "benchmark": "GDP.pdf",
+      "tiers": {
+        "1": { "floor": 8, "choices": ["luna-low", "haiku-low", "flash38-low", "luna-med", "flash35-lite"], "auditor": "haiku-low", "degradedSlots": [] },
+        "2": { "floor": 10, "choices": ["haiku-low", "luna-med", "flash38-low", "luna-high", "haiku-med"], "auditor": "luna-high", "degradedSlots": [] },
+        "3": { "floor": 12, "choices": ["luna-high", "haiku-med", "flash38-low", "luna-xhigh", "sonnet-low"], "auditor": "haiku-high", "degradedSlots": [] },
+        "4": { "floor": 15, "choices": ["luna-max", "haiku-high", "flash38-med", "sol-low", "sonnet-low"], "auditor": "haiku-max", "degradedSlots": [] },
+        "5": { "floor": 17, "choices": ["sol-low", "haiku-max", "argon-low", "flash38-med", "opus-low"], "auditor": "sonnet-high", "degradedSlots": [] },
+        "6": { "floor": 19, "choices": ["sol-med", "sonnet-high", "argon-med", "flash38-high", "astra-low"], "auditor": "opus-med", "degradedSlots": [] },
+        "7": { "floor": 21, "choices": ["sol-high", "flash38-high", "opus-med", "sol-xhigh", "argon-high"], "auditor": "sonnet-xhigh", "degradedSlots": [] },
+        "8": { "floor": 23, "choices": ["sol-max", "sonnet-xhigh", "argon-high", "astra-med", "opus-high"], "auditor": "opus-high", "degradedSlots": ["argon-high"] },
+        "9": { "floor": 26, "choices": ["sol-max", "opus-max", "argon-high", "astra-xhigh", "fable-max"], "auditor": "opus-max", "degradedSlots": ["argon-high"] },
+        "10": { "floor": 30, "choices": ["astra-max", "opus-max", "argon-high", "astra-xhigh", "fable-max"], "auditor": "opus-max", "degradedSlots": ["opus-max", "argon-high", "fable-max"] }
+      }
+    },
+    "GEN-LCR": {
+      "benchmark": "AA-LCR v1.1",
+      "tiers": {
+        "1": { "floor": 40, "choices": ["luna-low", "haiku-low", "flash38-low", "luna-med", "flash35-lite"], "auditor": "haiku-low", "degradedSlots": [] },
+        "2": { "floor": 48, "choices": ["haiku-low", "luna-med", "flash38-low", "luna-high", "haiku-med"], "auditor": "luna-high", "degradedSlots": [] },
+        "3": { "floor": 55, "choices": ["luna-high", "haiku-med", "flash38-low", "luna-xhigh", "sonnet-low"], "auditor": "haiku-high", "degradedSlots": [] },
+        "4": { "floor": 62, "choices": ["luna-max", "haiku-high", "flash38-med", "sol-low", "sonnet-low"], "auditor": "haiku-max", "degradedSlots": [] },
+        "5": { "floor": 68, "choices": ["sol-low", "haiku-max", "argon-low", "flash38-med", "opus-low"], "auditor": "argon-low", "degradedSlots": [] },
+        "6": { "floor": 72, "choices": ["sol-med", "argon-low", "sonnet-high", "flash38-med", "sol-high"], "auditor": "opus-med", "degradedSlots": [] },
+        "7": { "floor": 75, "choices": ["sol-high", "opus-med", "flash38-high", "argon-med", "sol-xhigh"], "auditor": "flash38-high", "degradedSlots": [] },
+        "8": { "floor": 78, "choices": ["sol-max", "flash38-high", "opus-med", "sonnet-xhigh", "argon-high"], "auditor": "opus-high", "degradedSlots": [] },
+        "9": { "floor": 81, "choices": ["flash38-high", "opus-high", "astra-max", "opus-xhigh", "fable-max"], "auditor": "opus-xhigh", "degradedSlots": [] },
+        "10": { "floor": 84, "choices": ["opus-max", "astra-max", "flash38-high", "opus-xhigh", "sonnet-max"], "auditor": "astra-max", "degradedSlots": ["astra-max", "flash38-high"] }
+      }
+    },
+    "GEN-DEFAULT": {
+      "benchmark": "AA Intelligence Index v4.3.2",
+      "tiers": {
+        "1": { "floor": 20, "choices": ["haiku-low", "luna-low", "flash38-low", "luna-med", "flash35-lite"], "auditor": "luna-high", "degradedSlots": [] },
+        "2": { "floor": 28, "choices": ["luna-high", "haiku-low", "flash38-low", "luna-med", "haiku-med"], "auditor": "haiku-med", "degradedSlots": [] },
+        "3": { "floor": 34, "choices": ["haiku-med", "luna-xhigh", "flash38-med", "sonnet-low", "luna-max"], "auditor": "luna-max", "degradedSlots": [] },
+        "4": { "floor": 38, "choices": ["haiku-high", "luna-max", "flash38-med", "sol-low", "sonnet-med"], "auditor": "sol-low", "degradedSlots": [] },
+        "5": { "floor": 41, "choices": ["haiku-max", "sol-low", "argon-low", "opus-low", "flash38-high"], "auditor": "sol-med", "degradedSlots": [] },
+        "6": { "floor": 46, "choices": ["sol-med", "sonnet-high", "argon-low", "astra-low", "opus-low"], "auditor": "opus-med", "degradedSlots": [] },
+        "7": { "floor": 50, "choices": ["sol-high", "opus-med", "argon-med", "sol-xhigh", "astra-med"], "auditor": "sonnet-xhigh", "degradedSlots": [] },
+        "8": { "floor": 52, "choices": ["sol-max", "sonnet-xhigh", "argon-high", "astra-xhigh", "opus-med"], "auditor": "opus-high", "degradedSlots": [] },
+        "9": { "floor": 54, "choices": ["opus-high", "argon-high", "astra-max", "opus-xhigh", "fable-max"], "auditor": "astra-max", "degradedSlots": ["argon-high", "astra-max"] },
+        "10": { "floor": 56, "choices": ["opus-max", "argon-high", "astra-max", "sonnet-max", "fable-max"], "auditor": "astra-max", "degradedSlots": ["argon-high", "astra-max"] }
+      }
+    }
+  }
+}

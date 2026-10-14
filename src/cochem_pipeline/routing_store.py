@@ -196,6 +196,18 @@ def ensure_job(conn, job_id, *, quality_routing=None):
     policy = load_routing_policy(json.loads(row['policy_json']))
     score = score_task(row['kind'], json.loads(row['payload_json']),
                        scoring_version=2 if policy.as_dict()['policy_version'] == 3 else 1)
+    if row['kind'] == 'TASK_PLAN':
+        from .planning_gateway import scoped_policy
+        payload = json.loads(row['payload_json'])
+        intent = payload['planning_intent']
+        # Validate the immutable capture, including candidates and intent hash,
+        # before using the controller journal's assessed tier instead of keywords.
+        if scoped_policy(policy, intent, payload['task_catalog']) != policy.as_dict():
+            raise ValueError('Planning job policy differs from its captured intent')
+        tier = intent['complexity']
+        if type(tier) is not int or not 1 <= tier <= 10:
+            raise ValueError('Planning job requires an assessed complexity')
+        score.update(score=tier, tier=str(tier), planning_intent_sha256=digest(intent))
     if quality_routing is not None:
         from .quality_routing import apply_quality_floor
         if (row['kind'] not in ('CODE_EDIT', 'CODE_TEST_AUTHOR', 'CODE_REVIEW', 'CODE_RESEARCH')

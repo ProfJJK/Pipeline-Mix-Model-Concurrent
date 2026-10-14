@@ -1,0 +1,3873 @@
+{
+  "schema": "cochem-task-routing-audit/1",
+  "source_sha256": "a1dbffc1da519a734af472be9bbe9731ca5fa8b7887261179ddb5a6cd1fdab96",
+  "model_count": 37,
+  "row_count": 110,
+  "findings": [
+    {
+      "task_type": "AGT-PROJ",
+      "tier": 1,
+      "code": "REVIEWER_CAN_BE_PRODUCER",
+      "model_id": "luna-med"
+    },
+    {
+      "task_type": "AGT-PROJ",
+      "tier": 1,
+      "code": "FALLBACK_REPEATS_UNDERLYING_MODEL",
+      "model_id": null
+    },
+    {
+      "task_type": "AGT-PROJ",
+      "tier": 2,
+      "code": "REVIEWER_CAN_BE_PRODUCER",
+      "model_id": "luna-high"
+    },
+    {
+      "task_type": "AGT-PROJ",
+      "tier": 2,
+      "code": "FALLBACK_REPEATS_UNDERLYING_MODEL",
+      "model_id": null
+    },
+    {
+      "task_type": "AGT-PROJ",
+      "tier": 3,
+      "code": "REVIEWER_CAN_BE_PRODUCER",
+      "model_id": "luna-max"
+    },
+    {
+      "task_type": "AGT-PROJ",
+      "tier": 3,
+      "code": "FALLBACK_REPEATS_UNDERLYING_MODEL",
+      "model_id": null
+    },
+    {
+      "task_type": "AGT-PROJ",
+      "tier": 4,
+      "code": "REVIEWER_CAN_BE_PRODUCER",
+      "model_id": "sol-low"
+    },
+    {
+      "task_type": "AGT-PROJ",
+      "tier": 5,
+      "code": "REVIEWER_CAN_BE_PRODUCER",
+      "model_id": "sol-med"
+    },
+    {
+      "task_type": "AGT-PROJ",
+      "tier": 6,
+      "code": "BELOW_FLOOR_MARKED",
+      "model_id": "argon-high",
+      "score": 1490,
+      "floor": 1520
+    },
+    {
+      "task_type": "AGT-PROJ",
+      "tier": 6,
+      "code": "REVIEWER_BELOW_NEXT_TIER",
+      "model_id": "sol-high",
+      "floor": 1560,
+      "score": 1545
+    },
+    {
+      "task_type": "AGT-PROJ",
+      "tier": 6,
+      "code": "REVIEWER_CAN_BE_PRODUCER",
+      "model_id": "sol-high"
+    },
+    {
+      "task_type": "AGT-PROJ",
+      "tier": 6,
+      "code": "FALLBACK_REPEATS_UNDERLYING_MODEL",
+      "model_id": null
+    },
+    {
+      "task_type": "AGT-PROJ",
+      "tier": 7,
+      "code": "BELOW_FLOOR_MARKED",
+      "model_id": "argon-high",
+      "score": 1490,
+      "floor": 1560
+    },
+    {
+      "task_type": "AGT-PROJ",
+      "tier": 7,
+      "code": "REVIEWER_BELOW_NEXT_TIER",
+      "model_id": "astra-max",
+      "floor": 1620,
+      "score": 1571
+    },
+    {
+      "task_type": "AGT-PROJ",
+      "tier": 8,
+      "code": "BELOW_FLOOR_MARKED",
+      "model_id": "astra-max",
+      "score": 1571,
+      "floor": 1620
+    },
+    {
+      "task_type": "AGT-PROJ",
+      "tier": 8,
+      "code": "BELOW_FLOOR_MARKED",
+      "model_id": "argon-high",
+      "score": 1490,
+      "floor": 1620
+    },
+    {
+      "task_type": "AGT-PROJ",
+      "tier": 8,
+      "code": "REVIEWER_BELOW_NEXT_TIER",
+      "model_id": "astra-max",
+      "floor": 1720,
+      "score": 1571
+    },
+    {
+      "task_type": "AGT-PROJ",
+      "tier": 8,
+      "code": "REVIEWER_CAN_BE_PRODUCER",
+      "model_id": "astra-max"
+    },
+    {
+      "task_type": "AGT-PROJ",
+      "tier": 8,
+      "code": "FALLBACK_REPEATS_UNDERLYING_MODEL",
+      "model_id": null
+    },
+    {
+      "task_type": "AGT-PROJ",
+      "tier": 9,
+      "code": "BELOW_FLOOR_MARKED",
+      "model_id": "astra-max",
+      "score": 1571,
+      "floor": 1720
+    },
+    {
+      "task_type": "AGT-PROJ",
+      "tier": 9,
+      "code": "BELOW_FLOOR_MARKED",
+      "model_id": "argon-high",
+      "score": 1490,
+      "floor": 1720
+    },
+    {
+      "task_type": "AGT-PROJ",
+      "tier": 9,
+      "code": "BELOW_FLOOR_UNMARKED",
+      "model_id": "fable-max",
+      "score": 1675,
+      "floor": 1720
+    },
+    {
+      "task_type": "AGT-PROJ",
+      "tier": 9,
+      "code": "REVIEWER_BELOW_NEXT_TIER",
+      "model_id": "astra-max",
+      "floor": 1800,
+      "score": 1571
+    },
+    {
+      "task_type": "AGT-PROJ",
+      "tier": 9,
+      "code": "REVIEWER_CAN_BE_PRODUCER",
+      "model_id": "astra-max"
+    },
+    {
+      "task_type": "AGT-PROJ",
+      "tier": 10,
+      "code": "BELOW_FLOOR_MARKED",
+      "model_id": "astra-max",
+      "score": 1571,
+      "floor": 1800
+    },
+    {
+      "task_type": "AGT-PROJ",
+      "tier": 10,
+      "code": "BELOW_FLOOR_MARKED",
+      "model_id": "argon-high",
+      "score": 1490,
+      "floor": 1800
+    },
+    {
+      "task_type": "AGT-PROJ",
+      "tier": 10,
+      "code": "BELOW_FLOOR_UNMARKED",
+      "model_id": "sonnet-max",
+      "score": 1760,
+      "floor": 1800
+    },
+    {
+      "task_type": "AGT-PROJ",
+      "tier": 10,
+      "code": "BELOW_FLOOR_UNMARKED",
+      "model_id": "fable-max",
+      "score": 1675,
+      "floor": 1800
+    },
+    {
+      "task_type": "AGT-PROJ",
+      "tier": 10,
+      "code": "REVIEWER_BELOW_NEXT_TIER",
+      "model_id": "astra-max",
+      "floor": 1800,
+      "score": 1571
+    },
+    {
+      "task_type": "AGT-PROJ",
+      "tier": 10,
+      "code": "REVIEWER_CAN_BE_PRODUCER",
+      "model_id": "astra-max"
+    },
+    {
+      "task_type": "AGT-DELIV",
+      "tier": 1,
+      "code": "REVIEWER_CAN_BE_PRODUCER",
+      "model_id": "luna-high"
+    },
+    {
+      "task_type": "AGT-DELIV",
+      "tier": 1,
+      "code": "FALLBACK_REPEATS_UNDERLYING_MODEL",
+      "model_id": null
+    },
+    {
+      "task_type": "AGT-DELIV",
+      "tier": 2,
+      "code": "REVIEWER_CAN_BE_PRODUCER",
+      "model_id": "luna-high"
+    },
+    {
+      "task_type": "AGT-DELIV",
+      "tier": 2,
+      "code": "FALLBACK_REPEATS_UNDERLYING_MODEL",
+      "model_id": null
+    },
+    {
+      "task_type": "AGT-DELIV",
+      "tier": 3,
+      "code": "REVIEWER_CAN_BE_PRODUCER",
+      "model_id": "luna-max"
+    },
+    {
+      "task_type": "AGT-DELIV",
+      "tier": 3,
+      "code": "FALLBACK_REPEATS_UNDERLYING_MODEL",
+      "model_id": null
+    },
+    {
+      "task_type": "AGT-DELIV",
+      "tier": 4,
+      "code": "REVIEWER_CAN_BE_PRODUCER",
+      "model_id": "sol-low"
+    },
+    {
+      "task_type": "AGT-DELIV",
+      "tier": 5,
+      "code": "REVIEWER_CAN_BE_PRODUCER",
+      "model_id": "sol-med"
+    },
+    {
+      "task_type": "AGT-DELIV",
+      "tier": 6,
+      "code": "REVIEWER_CAN_BE_PRODUCER",
+      "model_id": "argon-med"
+    },
+    {
+      "task_type": "AGT-DELIV",
+      "tier": 7,
+      "code": "REVIEWER_CAN_BE_PRODUCER",
+      "model_id": "argon-high"
+    },
+    {
+      "task_type": "AGT-DELIV",
+      "tier": 8,
+      "code": "BELOW_FLOOR_MARKED",
+      "model_id": "astra-max",
+      "score": 1572,
+      "floor": 1600
+    },
+    {
+      "task_type": "AGT-DELIV",
+      "tier": 8,
+      "code": "REVIEWER_BELOW_NEXT_TIER",
+      "model_id": "argon-high",
+      "floor": 1720,
+      "score": 1624
+    },
+    {
+      "task_type": "AGT-DELIV",
+      "tier": 8,
+      "code": "REVIEWER_CAN_BE_PRODUCER",
+      "model_id": "argon-high"
+    },
+    {
+      "task_type": "AGT-DELIV",
+      "tier": 9,
+      "code": "BELOW_FLOOR_MARKED",
+      "model_id": "argon-high",
+      "score": 1624,
+      "floor": 1720
+    },
+    {
+      "task_type": "AGT-DELIV",
+      "tier": 9,
+      "code": "BELOW_FLOOR_MARKED",
+      "model_id": "astra-max",
+      "score": 1572,
+      "floor": 1720
+    },
+    {
+      "task_type": "AGT-DELIV",
+      "tier": 9,
+      "code": "REVIEWER_BELOW_NEXT_TIER",
+      "model_id": "argon-high",
+      "floor": 1840,
+      "score": 1624
+    },
+    {
+      "task_type": "AGT-DELIV",
+      "tier": 9,
+      "code": "REVIEWER_CAN_BE_PRODUCER",
+      "model_id": "argon-high"
+    },
+    {
+      "task_type": "AGT-DELIV",
+      "tier": 10,
+      "code": "BELOW_FLOOR_MARKED",
+      "model_id": "argon-high",
+      "score": 1624,
+      "floor": 1840
+    },
+    {
+      "task_type": "AGT-DELIV",
+      "tier": 10,
+      "code": "BELOW_FLOOR_MARKED",
+      "model_id": "astra-max",
+      "score": 1572,
+      "floor": 1840
+    },
+    {
+      "task_type": "AGT-DELIV",
+      "tier": 10,
+      "code": "BELOW_FLOOR_UNMARKED",
+      "model_id": "opus-xhigh",
+      "score": 1825,
+      "floor": 1840
+    },
+    {
+      "task_type": "AGT-DELIV",
+      "tier": 10,
+      "code": "REVIEWER_BELOW_NEXT_TIER",
+      "model_id": "argon-high",
+      "floor": 1840,
+      "score": 1624
+    },
+    {
+      "task_type": "AGT-DELIV",
+      "tier": 10,
+      "code": "REVIEWER_CAN_BE_PRODUCER",
+      "model_id": "argon-high"
+    },
+    {
+      "task_type": "AGT-DELIV",
+      "tier": 10,
+      "code": "FALLBACK_REPEATS_UNDERLYING_MODEL",
+      "model_id": null
+    },
+    {
+      "task_type": "AGT-AUTO",
+      "tier": 1,
+      "code": "REVIEWER_CAN_BE_PRODUCER",
+      "model_id": "haiku-low"
+    },
+    {
+      "task_type": "AGT-AUTO",
+      "tier": 1,
+      "code": "FALLBACK_REPEATS_UNDERLYING_MODEL",
+      "model_id": null
+    },
+    {
+      "task_type": "AGT-AUTO",
+      "tier": 2,
+      "code": "REVIEWER_BELOW_NEXT_TIER",
+      "model_id": "luna-high",
+      "floor": 40,
+      "score": 39
+    },
+    {
+      "task_type": "AGT-AUTO",
+      "tier": 2,
+      "code": "REVIEWER_CAN_BE_PRODUCER",
+      "model_id": "luna-high"
+    },
+    {
+      "task_type": "AGT-AUTO",
+      "tier": 2,
+      "code": "FALLBACK_REPEATS_UNDERLYING_MODEL",
+      "model_id": null
+    },
+    {
+      "task_type": "AGT-AUTO",
+      "tier": 3,
+      "code": "REVIEWER_CAN_BE_PRODUCER",
+      "model_id": "luna-max"
+    },
+    {
+      "task_type": "AGT-AUTO",
+      "tier": 3,
+      "code": "FALLBACK_REPEATS_UNDERLYING_MODEL",
+      "model_id": null
+    },
+    {
+      "task_type": "AGT-AUTO",
+      "tier": 4,
+      "code": "REVIEWER_CAN_BE_PRODUCER",
+      "model_id": "sol-low"
+    },
+    {
+      "task_type": "AGT-AUTO",
+      "tier": 5,
+      "code": "REVIEWER_CAN_BE_PRODUCER",
+      "model_id": "argon-low"
+    },
+    {
+      "task_type": "AGT-AUTO",
+      "tier": 5,
+      "code": "FALLBACK_REPEATS_UNDERLYING_MODEL",
+      "model_id": null
+    },
+    {
+      "task_type": "AGT-AUTO",
+      "tier": 6,
+      "code": "REVIEWER_CAN_BE_PRODUCER",
+      "model_id": "sol-high"
+    },
+    {
+      "task_type": "AGT-AUTO",
+      "tier": 6,
+      "code": "FALLBACK_REPEATS_UNDERLYING_MODEL",
+      "model_id": null
+    },
+    {
+      "task_type": "AGT-AUTO",
+      "tier": 7,
+      "code": "REVIEWER_BELOW_NEXT_TIER",
+      "model_id": "sonnet-xhigh",
+      "floor": 67,
+      "score": 66
+    },
+    {
+      "task_type": "AGT-AUTO",
+      "tier": 7,
+      "code": "REVIEWER_CAN_BE_PRODUCER",
+      "model_id": "sonnet-xhigh"
+    },
+    {
+      "task_type": "AGT-AUTO",
+      "tier": 7,
+      "code": "FALLBACK_REPEATS_UNDERLYING_MODEL",
+      "model_id": null
+    },
+    {
+      "task_type": "AGT-AUTO",
+      "tier": 8,
+      "code": "BELOW_FLOOR_UNMARKED",
+      "model_id": "sol-max",
+      "score": 66,
+      "floor": 67
+    },
+    {
+      "task_type": "AGT-AUTO",
+      "tier": 8,
+      "code": "REVIEWER_BELOW_NEXT_TIER",
+      "model_id": "opus-high",
+      "floor": 70,
+      "score": 68
+    },
+    {
+      "task_type": "AGT-AUTO",
+      "tier": 8,
+      "code": "REVIEWER_CAN_BE_PRODUCER",
+      "model_id": "opus-high"
+    },
+    {
+      "task_type": "AGT-AUTO",
+      "tier": 8,
+      "code": "FALLBACK_REPEATS_UNDERLYING_MODEL",
+      "model_id": null
+    },
+    {
+      "task_type": "AGT-AUTO",
+      "tier": 9,
+      "code": "BELOW_FLOOR_MARKED",
+      "model_id": "astra-max",
+      "score": 68,
+      "floor": 70
+    },
+    {
+      "task_type": "AGT-AUTO",
+      "tier": 9,
+      "code": "BELOW_FLOOR_UNMARKED",
+      "model_id": "sonnet-max",
+      "score": 69,
+      "floor": 70
+    },
+    {
+      "task_type": "AGT-AUTO",
+      "tier": 9,
+      "code": "REVIEWER_BELOW_NEXT_TIER",
+      "model_id": "opus-max",
+      "floor": 75,
+      "score": 70
+    },
+    {
+      "task_type": "AGT-AUTO",
+      "tier": 9,
+      "code": "REVIEWER_CAN_BE_PRODUCER",
+      "model_id": "opus-max"
+    },
+    {
+      "task_type": "AGT-AUTO",
+      "tier": 9,
+      "code": "FALLBACK_REPEATS_UNDERLYING_MODEL",
+      "model_id": null
+    },
+    {
+      "task_type": "AGT-AUTO",
+      "tier": 10,
+      "code": "BELOW_FLOOR_MARKED",
+      "model_id": "opus-max",
+      "score": 70,
+      "floor": 75
+    },
+    {
+      "task_type": "AGT-AUTO",
+      "tier": 10,
+      "code": "BELOW_FLOOR_MARKED",
+      "model_id": "astra-max",
+      "score": 68,
+      "floor": 75
+    },
+    {
+      "task_type": "AGT-AUTO",
+      "tier": 10,
+      "code": "BELOW_FLOOR_MARKED",
+      "model_id": "sonnet-max",
+      "score": 69,
+      "floor": 75
+    },
+    {
+      "task_type": "AGT-AUTO",
+      "tier": 10,
+      "code": "BELOW_FLOOR_MARKED",
+      "model_id": "opus-high",
+      "score": 68,
+      "floor": 75
+    },
+    {
+      "task_type": "AGT-AUTO",
+      "tier": 10,
+      "code": "REVIEWER_BELOW_NEXT_TIER",
+      "model_id": "opus-max",
+      "floor": 75,
+      "score": 70
+    },
+    {
+      "task_type": "AGT-AUTO",
+      "tier": 10,
+      "code": "REVIEWER_CAN_BE_PRODUCER",
+      "model_id": "opus-max"
+    },
+    {
+      "task_type": "AGT-AUTO",
+      "tier": 10,
+      "code": "FALLBACK_REPEATS_UNDERLYING_MODEL",
+      "model_id": null
+    },
+    {
+      "task_type": "COD-TERM",
+      "tier": 1,
+      "code": "REVIEWER_CAN_BE_PRODUCER",
+      "model_id": "luna-med"
+    },
+    {
+      "task_type": "COD-TERM",
+      "tier": 1,
+      "code": "FALLBACK_REPEATS_UNDERLYING_MODEL",
+      "model_id": null
+    },
+    {
+      "task_type": "COD-TERM",
+      "tier": 2,
+      "code": "REVIEWER_CAN_BE_PRODUCER",
+      "model_id": "haiku-med"
+    },
+    {
+      "task_type": "COD-TERM",
+      "tier": 2,
+      "code": "FALLBACK_REPEATS_UNDERLYING_MODEL",
+      "model_id": null
+    },
+    {
+      "task_type": "COD-TERM",
+      "tier": 3,
+      "code": "REVIEWER_CAN_BE_PRODUCER",
+      "model_id": "luna-max"
+    },
+    {
+      "task_type": "COD-TERM",
+      "tier": 3,
+      "code": "FALLBACK_REPEATS_UNDERLYING_MODEL",
+      "model_id": null
+    },
+    {
+      "task_type": "COD-TERM",
+      "tier": 4,
+      "code": "REVIEWER_CAN_BE_PRODUCER",
+      "model_id": "sol-low"
+    },
+    {
+      "task_type": "COD-TERM",
+      "tier": 5,
+      "code": "REVIEWER_CAN_BE_PRODUCER",
+      "model_id": "sonnet-high"
+    },
+    {
+      "task_type": "COD-TERM",
+      "tier": 6,
+      "code": "FALLBACK_REPEATS_UNDERLYING_MODEL",
+      "model_id": null
+    },
+    {
+      "task_type": "COD-TERM",
+      "tier": 7,
+      "code": "BELOW_FLOOR_MARKED",
+      "model_id": "argon-med",
+      "score": 50,
+      "floor": 51
+    },
+    {
+      "task_type": "COD-TERM",
+      "tier": 7,
+      "code": "REVIEWER_CAN_BE_PRODUCER",
+      "model_id": "sonnet-xhigh"
+    },
+    {
+      "task_type": "COD-TERM",
+      "tier": 7,
+      "code": "FALLBACK_REPEATS_UNDERLYING_MODEL",
+      "model_id": null
+    },
+    {
+      "task_type": "COD-TERM",
+      "tier": 8,
+      "code": "REVIEWER_CAN_BE_PRODUCER",
+      "model_id": "astra-xhigh"
+    },
+    {
+      "task_type": "COD-TERM",
+      "tier": 9,
+      "code": "BELOW_FLOOR_MARKED",
+      "model_id": "argon-high",
+      "score": 57,
+      "floor": 58
+    },
+    {
+      "task_type": "COD-TERM",
+      "tier": 9,
+      "code": "REVIEWER_BELOW_NEXT_TIER",
+      "model_id": "astra-max",
+      "floor": 60,
+      "score": 59
+    },
+    {
+      "task_type": "COD-TERM",
+      "tier": 9,
+      "code": "REVIEWER_CAN_BE_PRODUCER",
+      "model_id": "astra-max"
+    },
+    {
+      "task_type": "COD-TERM",
+      "tier": 9,
+      "code": "FALLBACK_REPEATS_UNDERLYING_MODEL",
+      "model_id": null
+    },
+    {
+      "task_type": "COD-TERM",
+      "tier": 10,
+      "code": "BELOW_FLOOR_UNMARKED",
+      "model_id": "opus-max",
+      "score": 59.6,
+      "floor": 60
+    },
+    {
+      "task_type": "COD-TERM",
+      "tier": 10,
+      "code": "BELOW_FLOOR_MARKED",
+      "model_id": "astra-max",
+      "score": 59,
+      "floor": 60
+    },
+    {
+      "task_type": "COD-TERM",
+      "tier": 10,
+      "code": "BELOW_FLOOR_MARKED",
+      "model_id": "argon-high",
+      "score": 57,
+      "floor": 60
+    },
+    {
+      "task_type": "COD-TERM",
+      "tier": 10,
+      "code": "BELOW_FLOOR_UNMARKED",
+      "model_id": "opus-xhigh",
+      "score": 59.6,
+      "floor": 60
+    },
+    {
+      "task_type": "COD-TERM",
+      "tier": 10,
+      "code": "REVIEWER_BELOW_NEXT_TIER",
+      "model_id": "astra-max",
+      "floor": 60,
+      "score": 59
+    },
+    {
+      "task_type": "COD-TERM",
+      "tier": 10,
+      "code": "REVIEWER_CAN_BE_PRODUCER",
+      "model_id": "astra-max"
+    },
+    {
+      "task_type": "COD-TERM",
+      "tier": 10,
+      "code": "FALLBACK_REPEATS_UNDERLYING_MODEL",
+      "model_id": null
+    },
+    {
+      "task_type": "COD-SCI",
+      "tier": 1,
+      "code": "REVIEWER_CAN_BE_PRODUCER",
+      "model_id": "luna-med"
+    },
+    {
+      "task_type": "COD-SCI",
+      "tier": 1,
+      "code": "FALLBACK_REPEATS_UNDERLYING_MODEL",
+      "model_id": null
+    },
+    {
+      "task_type": "COD-SCI",
+      "tier": 2,
+      "code": "REVIEWER_CAN_BE_PRODUCER",
+      "model_id": "haiku-med"
+    },
+    {
+      "task_type": "COD-SCI",
+      "tier": 2,
+      "code": "FALLBACK_REPEATS_UNDERLYING_MODEL",
+      "model_id": null
+    },
+    {
+      "task_type": "COD-SCI",
+      "tier": 3,
+      "code": "REVIEWER_CAN_BE_PRODUCER",
+      "model_id": "luna-max"
+    },
+    {
+      "task_type": "COD-SCI",
+      "tier": 3,
+      "code": "FALLBACK_REPEATS_UNDERLYING_MODEL",
+      "model_id": null
+    },
+    {
+      "task_type": "COD-SCI",
+      "tier": 4,
+      "code": "REVIEWER_CAN_BE_PRODUCER",
+      "model_id": "sol-low"
+    },
+    {
+      "task_type": "COD-SCI",
+      "tier": 5,
+      "code": "REVIEWER_CAN_BE_PRODUCER",
+      "model_id": "argon-low"
+    },
+    {
+      "task_type": "COD-SCI",
+      "tier": 6,
+      "code": "REVIEWER_BELOW_NEXT_TIER",
+      "model_id": "sonnet-high",
+      "floor": 54,
+      "score": 53
+    },
+    {
+      "task_type": "COD-SCI",
+      "tier": 6,
+      "code": "REVIEWER_CAN_BE_PRODUCER",
+      "model_id": "sonnet-high"
+    },
+    {
+      "task_type": "COD-SCI",
+      "tier": 6,
+      "code": "FALLBACK_REPEATS_UNDERLYING_MODEL",
+      "model_id": null
+    },
+    {
+      "task_type": "COD-SCI",
+      "tier": 7,
+      "code": "REVIEWER_CAN_BE_PRODUCER",
+      "model_id": "opus-med"
+    },
+    {
+      "task_type": "COD-SCI",
+      "tier": 7,
+      "code": "FALLBACK_REPEATS_UNDERLYING_MODEL",
+      "model_id": null
+    },
+    {
+      "task_type": "COD-SCI",
+      "tier": 8,
+      "code": "BELOW_FLOOR_MARKED",
+      "model_id": "sol-max",
+      "score": 56,
+      "floor": 58
+    },
+    {
+      "task_type": "COD-SCI",
+      "tier": 8,
+      "code": "BELOW_FLOOR_MARKED",
+      "model_id": "astra-max",
+      "score": 56,
+      "floor": 58
+    },
+    {
+      "task_type": "COD-SCI",
+      "tier": 8,
+      "code": "REVIEWER_CAN_BE_PRODUCER",
+      "model_id": "argon-high"
+    },
+    {
+      "task_type": "COD-SCI",
+      "tier": 9,
+      "code": "BELOW_FLOOR_MARKED",
+      "model_id": "astra-max",
+      "score": 56,
+      "floor": 62
+    },
+    {
+      "task_type": "COD-SCI",
+      "tier": 9,
+      "code": "REVIEWER_BELOW_NEXT_TIER",
+      "model_id": "argon-high",
+      "floor": 65,
+      "score": 62
+    },
+    {
+      "task_type": "COD-SCI",
+      "tier": 9,
+      "code": "REVIEWER_CAN_BE_PRODUCER",
+      "model_id": "argon-high"
+    },
+    {
+      "task_type": "COD-SCI",
+      "tier": 10,
+      "code": "BELOW_FLOOR_MARKED",
+      "model_id": "argon-high",
+      "score": 62,
+      "floor": 65
+    },
+    {
+      "task_type": "COD-SCI",
+      "tier": 10,
+      "code": "BELOW_FLOOR_MARKED",
+      "model_id": "astra-max",
+      "score": 56,
+      "floor": 65
+    },
+    {
+      "task_type": "COD-SCI",
+      "tier": 10,
+      "code": "BELOW_FLOOR_UNMARKED",
+      "model_id": "sonnet-max",
+      "score": 64,
+      "floor": 65
+    },
+    {
+      "task_type": "COD-SCI",
+      "tier": 10,
+      "code": "REVIEWER_BELOW_NEXT_TIER",
+      "model_id": "argon-high",
+      "floor": 65,
+      "score": 62
+    },
+    {
+      "task_type": "COD-SCI",
+      "tier": 10,
+      "code": "REVIEWER_CAN_BE_PRODUCER",
+      "model_id": "argon-high"
+    },
+    {
+      "task_type": "COD-SCI",
+      "tier": 10,
+      "code": "FALLBACK_REPEATS_UNDERLYING_MODEL",
+      "model_id": null
+    },
+    {
+      "task_type": "SCI-FRONT",
+      "tier": 1,
+      "code": "REVIEWER_CAN_BE_PRODUCER",
+      "model_id": "luna-med"
+    },
+    {
+      "task_type": "SCI-FRONT",
+      "tier": 1,
+      "code": "FALLBACK_REPEATS_UNDERLYING_MODEL",
+      "model_id": null
+    },
+    {
+      "task_type": "SCI-FRONT",
+      "tier": 2,
+      "code": "REVIEWER_CAN_BE_PRODUCER",
+      "model_id": "haiku-med"
+    },
+    {
+      "task_type": "SCI-FRONT",
+      "tier": 2,
+      "code": "FALLBACK_REPEATS_UNDERLYING_MODEL",
+      "model_id": null
+    },
+    {
+      "task_type": "SCI-FRONT",
+      "tier": 3,
+      "code": "REVIEWER_CAN_BE_PRODUCER",
+      "model_id": "luna-max"
+    },
+    {
+      "task_type": "SCI-FRONT",
+      "tier": 3,
+      "code": "FALLBACK_REPEATS_UNDERLYING_MODEL",
+      "model_id": null
+    },
+    {
+      "task_type": "SCI-FRONT",
+      "tier": 4,
+      "code": "REVIEWER_CAN_BE_PRODUCER",
+      "model_id": "sol-low"
+    },
+    {
+      "task_type": "SCI-FRONT",
+      "tier": 4,
+      "code": "FALLBACK_REPEATS_UNDERLYING_MODEL",
+      "model_id": null
+    },
+    {
+      "task_type": "SCI-FRONT",
+      "tier": 5,
+      "code": "REVIEWER_CAN_BE_PRODUCER",
+      "model_id": "argon-low"
+    },
+    {
+      "task_type": "SCI-FRONT",
+      "tier": 6,
+      "code": "FALLBACK_REPEATS_UNDERLYING_MODEL",
+      "model_id": null
+    },
+    {
+      "task_type": "SCI-FRONT",
+      "tier": 7,
+      "code": "FALLBACK_REPEATS_UNDERLYING_MODEL",
+      "model_id": null
+    },
+    {
+      "task_type": "SCI-FRONT",
+      "tier": 8,
+      "code": "REVIEWER_CAN_BE_PRODUCER",
+      "model_id": "argon-high"
+    },
+    {
+      "task_type": "SCI-FRONT",
+      "tier": 9,
+      "code": "BELOW_FLOOR_MARKED",
+      "model_id": "astra-max",
+      "score": 55,
+      "floor": 56
+    },
+    {
+      "task_type": "SCI-FRONT",
+      "tier": 9,
+      "code": "REVIEWER_BELOW_NEXT_TIER",
+      "model_id": "argon-high",
+      "floor": 60,
+      "score": 57
+    },
+    {
+      "task_type": "SCI-FRONT",
+      "tier": 9,
+      "code": "REVIEWER_CAN_BE_PRODUCER",
+      "model_id": "argon-high"
+    },
+    {
+      "task_type": "SCI-FRONT",
+      "tier": 9,
+      "code": "FALLBACK_REPEATS_UNDERLYING_MODEL",
+      "model_id": null
+    },
+    {
+      "task_type": "SCI-FRONT",
+      "tier": 10,
+      "code": "BELOW_FLOOR_MARKED",
+      "model_id": "argon-high",
+      "score": 57,
+      "floor": 60
+    },
+    {
+      "task_type": "SCI-FRONT",
+      "tier": 10,
+      "code": "BELOW_FLOOR_MARKED",
+      "model_id": "astra-max",
+      "score": 55,
+      "floor": 60
+    },
+    {
+      "task_type": "SCI-FRONT",
+      "tier": 10,
+      "code": "BELOW_FLOOR_UNMARKED",
+      "model_id": "fable-max",
+      "score": 59.1,
+      "floor": 60
+    },
+    {
+      "task_type": "SCI-FRONT",
+      "tier": 10,
+      "code": "BELOW_FLOOR_UNMARKED",
+      "model_id": "sonnet-max",
+      "score": 59,
+      "floor": 60
+    },
+    {
+      "task_type": "SCI-FRONT",
+      "tier": 10,
+      "code": "REVIEWER_BELOW_NEXT_TIER",
+      "model_id": "argon-high",
+      "floor": 60,
+      "score": 57
+    },
+    {
+      "task_type": "SCI-FRONT",
+      "tier": 10,
+      "code": "REVIEWER_CAN_BE_PRODUCER",
+      "model_id": "argon-high"
+    },
+    {
+      "task_type": "SCI-FORMAL",
+      "tier": 1,
+      "code": "REVIEWER_CAN_BE_PRODUCER",
+      "model_id": "haiku-low"
+    },
+    {
+      "task_type": "SCI-FORMAL",
+      "tier": 1,
+      "code": "FALLBACK_REPEATS_UNDERLYING_MODEL",
+      "model_id": null
+    },
+    {
+      "task_type": "SCI-FORMAL",
+      "tier": 2,
+      "code": "REVIEWER_CAN_BE_PRODUCER",
+      "model_id": "luna-high"
+    },
+    {
+      "task_type": "SCI-FORMAL",
+      "tier": 2,
+      "code": "FALLBACK_REPEATS_UNDERLYING_MODEL",
+      "model_id": null
+    },
+    {
+      "task_type": "SCI-FORMAL",
+      "tier": 3,
+      "code": "REVIEWER_CAN_BE_PRODUCER",
+      "model_id": "haiku-high"
+    },
+    {
+      "task_type": "SCI-FORMAL",
+      "tier": 3,
+      "code": "FALLBACK_REPEATS_UNDERLYING_MODEL",
+      "model_id": null
+    },
+    {
+      "task_type": "SCI-FORMAL",
+      "tier": 4,
+      "code": "REVIEWER_CAN_BE_PRODUCER",
+      "model_id": "haiku-max"
+    },
+    {
+      "task_type": "SCI-FORMAL",
+      "tier": 5,
+      "code": "REVIEWER_BELOW_NEXT_TIER",
+      "model_id": "opus-low",
+      "floor": 20,
+      "score": 18
+    },
+    {
+      "task_type": "SCI-FORMAL",
+      "tier": 5,
+      "code": "REVIEWER_CAN_BE_PRODUCER",
+      "model_id": "opus-low"
+    },
+    {
+      "task_type": "SCI-FORMAL",
+      "tier": 6,
+      "code": "FALLBACK_REPEATS_UNDERLYING_MODEL",
+      "model_id": null
+    },
+    {
+      "task_type": "SCI-FORMAL",
+      "tier": 7,
+      "code": "FALLBACK_REPEATS_UNDERLYING_MODEL",
+      "model_id": null
+    },
+    {
+      "task_type": "SCI-FORMAL",
+      "tier": 8,
+      "code": "REVIEWER_CAN_BE_PRODUCER",
+      "model_id": "opus-high"
+    },
+    {
+      "task_type": "SCI-FORMAL",
+      "tier": 9,
+      "code": "BELOW_FLOOR_MARKED",
+      "model_id": "argon-high",
+      "score": 27,
+      "floor": 29
+    },
+    {
+      "task_type": "SCI-FORMAL",
+      "tier": 9,
+      "code": "REVIEWER_CAN_BE_PRODUCER",
+      "model_id": "astra-max"
+    },
+    {
+      "task_type": "SCI-FORMAL",
+      "tier": 9,
+      "code": "FALLBACK_REPEATS_UNDERLYING_MODEL",
+      "model_id": null
+    },
+    {
+      "task_type": "SCI-FORMAL",
+      "tier": 10,
+      "code": "BELOW_FLOOR_MARKED",
+      "model_id": "argon-high",
+      "score": 27,
+      "floor": 32
+    },
+    {
+      "task_type": "SCI-FORMAL",
+      "tier": 10,
+      "code": "BELOW_FLOOR_UNMARKED",
+      "model_id": "opus-xhigh",
+      "score": 31,
+      "floor": 32
+    },
+    {
+      "task_type": "SCI-FORMAL",
+      "tier": 10,
+      "code": "BELOW_FLOOR_UNMARKED",
+      "model_id": "fable-max",
+      "score": 31,
+      "floor": 32
+    },
+    {
+      "task_type": "SCI-FORMAL",
+      "tier": 10,
+      "code": "REVIEWER_CAN_BE_PRODUCER",
+      "model_id": "opus-max"
+    },
+    {
+      "task_type": "SCI-FORMAL",
+      "tier": 10,
+      "code": "FALLBACK_REPEATS_UNDERLYING_MODEL",
+      "model_id": null
+    },
+    {
+      "task_type": "GEN-FACT",
+      "tier": 1,
+      "code": "REVIEWER_CAN_BE_PRODUCER",
+      "model_id": "haiku-low"
+    },
+    {
+      "task_type": "GEN-FACT",
+      "tier": 1,
+      "code": "FALLBACK_REPEATS_UNDERLYING_MODEL",
+      "model_id": null
+    },
+    {
+      "task_type": "GEN-FACT",
+      "tier": 2,
+      "code": "REVIEWER_CAN_BE_PRODUCER",
+      "model_id": "haiku-med"
+    },
+    {
+      "task_type": "GEN-FACT",
+      "tier": 2,
+      "code": "FALLBACK_REPEATS_UNDERLYING_MODEL",
+      "model_id": null
+    },
+    {
+      "task_type": "GEN-FACT",
+      "tier": 3,
+      "code": "REVIEWER_CAN_BE_PRODUCER",
+      "model_id": "haiku-high"
+    },
+    {
+      "task_type": "GEN-FACT",
+      "tier": 3,
+      "code": "FALLBACK_REPEATS_UNDERLYING_MODEL",
+      "model_id": null
+    },
+    {
+      "task_type": "GEN-FACT",
+      "tier": 4,
+      "code": "REVIEWER_CAN_BE_PRODUCER",
+      "model_id": "sol-low"
+    },
+    {
+      "task_type": "GEN-FACT",
+      "tier": 5,
+      "code": "REVIEWER_CAN_BE_PRODUCER",
+      "model_id": "opus-low"
+    },
+    {
+      "task_type": "GEN-FACT",
+      "tier": 6,
+      "code": "REVIEWER_CAN_BE_PRODUCER",
+      "model_id": "argon-med"
+    },
+    {
+      "task_type": "GEN-FACT",
+      "tier": 7,
+      "code": "REVIEWER_CAN_BE_PRODUCER",
+      "model_id": "opus-med"
+    },
+    {
+      "task_type": "GEN-FACT",
+      "tier": 7,
+      "code": "FALLBACK_REPEATS_UNDERLYING_MODEL",
+      "model_id": null
+    },
+    {
+      "task_type": "GEN-FACT",
+      "tier": 8,
+      "code": "REVIEWER_BELOW_NEXT_TIER",
+      "model_id": "argon-high",
+      "floor": 43,
+      "score": 42
+    },
+    {
+      "task_type": "GEN-FACT",
+      "tier": 8,
+      "code": "REVIEWER_CAN_BE_PRODUCER",
+      "model_id": "argon-high"
+    },
+    {
+      "task_type": "GEN-FACT",
+      "tier": 9,
+      "code": "BELOW_FLOOR_MARKED",
+      "model_id": "argon-high",
+      "score": 42,
+      "floor": 43
+    },
+    {
+      "task_type": "GEN-FACT",
+      "tier": 9,
+      "code": "BELOW_FLOOR_UNMARKED",
+      "model_id": "fable-max",
+      "score": 42,
+      "floor": 43
+    },
+    {
+      "task_type": "GEN-FACT",
+      "tier": 9,
+      "code": "REVIEWER_BELOW_NEXT_TIER",
+      "model_id": "astra-max",
+      "floor": 45,
+      "score": 43
+    },
+    {
+      "task_type": "GEN-FACT",
+      "tier": 9,
+      "code": "REVIEWER_CAN_BE_PRODUCER",
+      "model_id": "astra-max"
+    },
+    {
+      "task_type": "GEN-FACT",
+      "tier": 9,
+      "code": "FALLBACK_REPEATS_UNDERLYING_MODEL",
+      "model_id": null
+    },
+    {
+      "task_type": "GEN-FACT",
+      "tier": 10,
+      "code": "BELOW_FLOOR_MARKED",
+      "model_id": "astra-max",
+      "score": 43,
+      "floor": 45
+    },
+    {
+      "task_type": "GEN-FACT",
+      "tier": 10,
+      "code": "BELOW_FLOOR_MARKED",
+      "model_id": "argon-high",
+      "score": 42,
+      "floor": 45
+    },
+    {
+      "task_type": "GEN-FACT",
+      "tier": 10,
+      "code": "BELOW_FLOOR_UNMARKED",
+      "model_id": "sonnet-max",
+      "score": 44,
+      "floor": 45
+    },
+    {
+      "task_type": "GEN-FACT",
+      "tier": 10,
+      "code": "REVIEWER_BELOW_NEXT_TIER",
+      "model_id": "argon-high",
+      "floor": 45,
+      "score": 42
+    },
+    {
+      "task_type": "GEN-FACT",
+      "tier": 10,
+      "code": "REVIEWER_CAN_BE_PRODUCER",
+      "model_id": "argon-high"
+    },
+    {
+      "task_type": "GEN-FACT",
+      "tier": 10,
+      "code": "FALLBACK_REPEATS_UNDERLYING_MODEL",
+      "model_id": null
+    },
+    {
+      "task_type": "GEN-DOC",
+      "tier": 1,
+      "code": "REVIEWER_CAN_BE_PRODUCER",
+      "model_id": "haiku-low"
+    },
+    {
+      "task_type": "GEN-DOC",
+      "tier": 1,
+      "code": "FALLBACK_REPEATS_UNDERLYING_MODEL",
+      "model_id": null
+    },
+    {
+      "task_type": "GEN-DOC",
+      "tier": 2,
+      "code": "REVIEWER_CAN_BE_PRODUCER",
+      "model_id": "luna-high"
+    },
+    {
+      "task_type": "GEN-DOC",
+      "tier": 2,
+      "code": "FALLBACK_REPEATS_UNDERLYING_MODEL",
+      "model_id": null
+    },
+    {
+      "task_type": "GEN-DOC",
+      "tier": 3,
+      "code": "REVIEWER_CAN_BE_PRODUCER",
+      "model_id": "haiku-high"
+    },
+    {
+      "task_type": "GEN-DOC",
+      "tier": 3,
+      "code": "FALLBACK_REPEATS_UNDERLYING_MODEL",
+      "model_id": null
+    },
+    {
+      "task_type": "GEN-DOC",
+      "tier": 4,
+      "code": "REVIEWER_CAN_BE_PRODUCER",
+      "model_id": "haiku-max"
+    },
+    {
+      "task_type": "GEN-DOC",
+      "tier": 7,
+      "code": "FALLBACK_REPEATS_UNDERLYING_MODEL",
+      "model_id": null
+    },
+    {
+      "task_type": "GEN-DOC",
+      "tier": 8,
+      "code": "BELOW_FLOOR_MARKED",
+      "model_id": "argon-high",
+      "score": 22,
+      "floor": 23
+    },
+    {
+      "task_type": "GEN-DOC",
+      "tier": 8,
+      "code": "REVIEWER_BELOW_NEXT_TIER",
+      "model_id": "opus-high",
+      "floor": 26,
+      "score": 24
+    },
+    {
+      "task_type": "GEN-DOC",
+      "tier": 8,
+      "code": "REVIEWER_CAN_BE_PRODUCER",
+      "model_id": "opus-high"
+    },
+    {
+      "task_type": "GEN-DOC",
+      "tier": 9,
+      "code": "BELOW_FLOOR_MARKED",
+      "model_id": "argon-high",
+      "score": 22,
+      "floor": 26
+    },
+    {
+      "task_type": "GEN-DOC",
+      "tier": 9,
+      "code": "REVIEWER_BELOW_NEXT_TIER",
+      "model_id": "opus-max",
+      "floor": 30,
+      "score": 26
+    },
+    {
+      "task_type": "GEN-DOC",
+      "tier": 9,
+      "code": "REVIEWER_CAN_BE_PRODUCER",
+      "model_id": "opus-max"
+    },
+    {
+      "task_type": "GEN-DOC",
+      "tier": 10,
+      "code": "BELOW_FLOOR_MARKED",
+      "model_id": "opus-max",
+      "score": 26,
+      "floor": 30
+    },
+    {
+      "task_type": "GEN-DOC",
+      "tier": 10,
+      "code": "BELOW_FLOOR_MARKED",
+      "model_id": "argon-high",
+      "score": 22,
+      "floor": 30
+    },
+    {
+      "task_type": "GEN-DOC",
+      "tier": 10,
+      "code": "BELOW_FLOOR_UNMARKED",
+      "model_id": "astra-xhigh",
+      "score": 29,
+      "floor": 30
+    },
+    {
+      "task_type": "GEN-DOC",
+      "tier": 10,
+      "code": "BELOW_FLOOR_MARKED",
+      "model_id": "fable-max",
+      "score": 26,
+      "floor": 30
+    },
+    {
+      "task_type": "GEN-DOC",
+      "tier": 10,
+      "code": "REVIEWER_BELOW_NEXT_TIER",
+      "model_id": "opus-max",
+      "floor": 30,
+      "score": 26
+    },
+    {
+      "task_type": "GEN-DOC",
+      "tier": 10,
+      "code": "REVIEWER_CAN_BE_PRODUCER",
+      "model_id": "opus-max"
+    },
+    {
+      "task_type": "GEN-DOC",
+      "tier": 10,
+      "code": "FALLBACK_REPEATS_UNDERLYING_MODEL",
+      "model_id": null
+    },
+    {
+      "task_type": "GEN-LCR",
+      "tier": 1,
+      "code": "REVIEWER_CAN_BE_PRODUCER",
+      "model_id": "haiku-low"
+    },
+    {
+      "task_type": "GEN-LCR",
+      "tier": 1,
+      "code": "FALLBACK_REPEATS_UNDERLYING_MODEL",
+      "model_id": null
+    },
+    {
+      "task_type": "GEN-LCR",
+      "tier": 2,
+      "code": "REVIEWER_CAN_BE_PRODUCER",
+      "model_id": "luna-high"
+    },
+    {
+      "task_type": "GEN-LCR",
+      "tier": 2,
+      "code": "FALLBACK_REPEATS_UNDERLYING_MODEL",
+      "model_id": null
+    },
+    {
+      "task_type": "GEN-LCR",
+      "tier": 3,
+      "code": "REVIEWER_CAN_BE_PRODUCER",
+      "model_id": "haiku-high"
+    },
+    {
+      "task_type": "GEN-LCR",
+      "tier": 3,
+      "code": "FALLBACK_REPEATS_UNDERLYING_MODEL",
+      "model_id": null
+    },
+    {
+      "task_type": "GEN-LCR",
+      "tier": 4,
+      "code": "REVIEWER_CAN_BE_PRODUCER",
+      "model_id": "haiku-max"
+    },
+    {
+      "task_type": "GEN-LCR",
+      "tier": 5,
+      "code": "REVIEWER_CAN_BE_PRODUCER",
+      "model_id": "argon-low"
+    },
+    {
+      "task_type": "GEN-LCR",
+      "tier": 6,
+      "code": "FALLBACK_REPEATS_UNDERLYING_MODEL",
+      "model_id": null
+    },
+    {
+      "task_type": "GEN-LCR",
+      "tier": 7,
+      "code": "REVIEWER_CAN_BE_PRODUCER",
+      "model_id": "flash38-high"
+    },
+    {
+      "task_type": "GEN-LCR",
+      "tier": 7,
+      "code": "FALLBACK_REPEATS_UNDERLYING_MODEL",
+      "model_id": null
+    },
+    {
+      "task_type": "GEN-LCR",
+      "tier": 8,
+      "code": "REVIEWER_CAN_BE_PRODUCER",
+      "model_id": "opus-high"
+    },
+    {
+      "task_type": "GEN-LCR",
+      "tier": 9,
+      "code": "REVIEWER_CAN_BE_PRODUCER",
+      "model_id": "opus-xhigh"
+    },
+    {
+      "task_type": "GEN-LCR",
+      "tier": 9,
+      "code": "FALLBACK_REPEATS_UNDERLYING_MODEL",
+      "model_id": null
+    },
+    {
+      "task_type": "GEN-LCR",
+      "tier": 10,
+      "code": "BELOW_FLOOR_MARKED",
+      "model_id": "astra-max",
+      "score": 81,
+      "floor": 84
+    },
+    {
+      "task_type": "GEN-LCR",
+      "tier": 10,
+      "code": "BELOW_FLOOR_MARKED",
+      "model_id": "flash38-high",
+      "score": 81,
+      "floor": 84
+    },
+    {
+      "task_type": "GEN-LCR",
+      "tier": 10,
+      "code": "REVIEWER_BELOW_NEXT_TIER",
+      "model_id": "astra-max",
+      "floor": 84,
+      "score": 81
+    },
+    {
+      "task_type": "GEN-LCR",
+      "tier": 10,
+      "code": "REVIEWER_CAN_BE_PRODUCER",
+      "model_id": "astra-max"
+    },
+    {
+      "task_type": "GEN-LCR",
+      "tier": 10,
+      "code": "FALLBACK_REPEATS_UNDERLYING_MODEL",
+      "model_id": null
+    },
+    {
+      "task_type": "GEN-DEFAULT",
+      "tier": 1,
+      "code": "REVIEWER_CAN_BE_PRODUCER",
+      "model_id": "luna-high"
+    },
+    {
+      "task_type": "GEN-DEFAULT",
+      "tier": 1,
+      "code": "FALLBACK_REPEATS_UNDERLYING_MODEL",
+      "model_id": null
+    },
+    {
+      "task_type": "GEN-DEFAULT",
+      "tier": 2,
+      "code": "REVIEWER_CAN_BE_PRODUCER",
+      "model_id": "haiku-med"
+    },
+    {
+      "task_type": "GEN-DEFAULT",
+      "tier": 2,
+      "code": "FALLBACK_REPEATS_UNDERLYING_MODEL",
+      "model_id": null
+    },
+    {
+      "task_type": "GEN-DEFAULT",
+      "tier": 3,
+      "code": "REVIEWER_CAN_BE_PRODUCER",
+      "model_id": "luna-max"
+    },
+    {
+      "task_type": "GEN-DEFAULT",
+      "tier": 3,
+      "code": "FALLBACK_REPEATS_UNDERLYING_MODEL",
+      "model_id": null
+    },
+    {
+      "task_type": "GEN-DEFAULT",
+      "tier": 4,
+      "code": "REVIEWER_CAN_BE_PRODUCER",
+      "model_id": "sol-low"
+    },
+    {
+      "task_type": "GEN-DEFAULT",
+      "tier": 5,
+      "code": "REVIEWER_CAN_BE_PRODUCER",
+      "model_id": "sol-med"
+    },
+    {
+      "task_type": "GEN-DEFAULT",
+      "tier": 6,
+      "code": "BELOW_FLOOR_UNMARKED",
+      "model_id": "opus-low",
+      "score": 42,
+      "floor": 46
+    },
+    {
+      "task_type": "GEN-DEFAULT",
+      "tier": 6,
+      "code": "REVIEWER_CAN_BE_PRODUCER",
+      "model_id": "opus-med"
+    },
+    {
+      "task_type": "GEN-DEFAULT",
+      "tier": 7,
+      "code": "FALLBACK_REPEATS_UNDERLYING_MODEL",
+      "model_id": null
+    },
+    {
+      "task_type": "GEN-DEFAULT",
+      "tier": 8,
+      "code": "BELOW_FLOOR_UNMARKED",
+      "model_id": "opus-med",
+      "score": 51,
+      "floor": 52
+    },
+    {
+      "task_type": "GEN-DEFAULT",
+      "tier": 8,
+      "code": "REVIEWER_CAN_BE_PRODUCER",
+      "model_id": "opus-high"
+    },
+    {
+      "task_type": "GEN-DEFAULT",
+      "tier": 9,
+      "code": "BELOW_FLOOR_MARKED",
+      "model_id": "argon-high",
+      "score": 53,
+      "floor": 54
+    },
+    {
+      "task_type": "GEN-DEFAULT",
+      "tier": 9,
+      "code": "BELOW_FLOOR_MARKED",
+      "model_id": "astra-max",
+      "score": 53,
+      "floor": 54
+    },
+    {
+      "task_type": "GEN-DEFAULT",
+      "tier": 9,
+      "code": "BELOW_FLOOR_UNMARKED",
+      "model_id": "fable-max",
+      "score": 53,
+      "floor": 54
+    },
+    {
+      "task_type": "GEN-DEFAULT",
+      "tier": 9,
+      "code": "REVIEWER_BELOW_NEXT_TIER",
+      "model_id": "astra-max",
+      "floor": 56,
+      "score": 53
+    },
+    {
+      "task_type": "GEN-DEFAULT",
+      "tier": 9,
+      "code": "REVIEWER_CAN_BE_PRODUCER",
+      "model_id": "astra-max"
+    },
+    {
+      "task_type": "GEN-DEFAULT",
+      "tier": 9,
+      "code": "FALLBACK_REPEATS_UNDERLYING_MODEL",
+      "model_id": null
+    },
+    {
+      "task_type": "GEN-DEFAULT",
+      "tier": 10,
+      "code": "BELOW_FLOOR_MARKED",
+      "model_id": "argon-high",
+      "score": 53,
+      "floor": 56
+    },
+    {
+      "task_type": "GEN-DEFAULT",
+      "tier": 10,
+      "code": "BELOW_FLOOR_MARKED",
+      "model_id": "astra-max",
+      "score": 53,
+      "floor": 56
+    },
+    {
+      "task_type": "GEN-DEFAULT",
+      "tier": 10,
+      "code": "BELOW_FLOOR_UNMARKED",
+      "model_id": "fable-max",
+      "score": 53,
+      "floor": 56
+    },
+    {
+      "task_type": "GEN-DEFAULT",
+      "tier": 10,
+      "code": "REVIEWER_BELOW_NEXT_TIER",
+      "model_id": "astra-max",
+      "floor": 56,
+      "score": 53
+    },
+    {
+      "task_type": "GEN-DEFAULT",
+      "tier": 10,
+      "code": "REVIEWER_CAN_BE_PRODUCER",
+      "model_id": "astra-max"
+    }
+  ],
+  "source_provenance": "owner_supplied_benchmark_claims",
+  "benchmark_scores_verified": false,
+  "activation_ready": false,
+  "policy_conflicts": [
+    "per-failure escalation conflicts with ten-cycle quality pivot",
+    "API benchmark cost is not subscription quota usage",
+    "fixed auditor can equal actual fallback producer",
+    "weighted composite scores cannot replace individual task-type floors",
+    "full-jitter label conflicts with additive-jitter formula"
+  ],
+  "benchmark_mismatches": [
+    {
+      "model_id": "luna-low",
+      "task_type": "AGT-PROJ",
+      "supplied": 1060,
+      "observed": 741.27,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-luna"
+    },
+    {
+      "model_id": "luna-low",
+      "task_type": "AGT-DELIV",
+      "supplied": 1120,
+      "observed": 1032.75,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-luna"
+    },
+    {
+      "model_id": "luna-low",
+      "task_type": "AGT-AUTO",
+      "supplied": 26,
+      "observed": 12.049187272690505,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-luna"
+    },
+    {
+      "model_id": "luna-low",
+      "task_type": "COD-TERM",
+      "supplied": 19,
+      "observed": 0,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-luna"
+    },
+    {
+      "model_id": "luna-low",
+      "task_type": "COD-SCI",
+      "supplied": 23,
+      "observed": 46.875,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-luna"
+    },
+    {
+      "model_id": "luna-low",
+      "task_type": "SCI-FRONT",
+      "supplied": 14,
+      "observed": 20.2502316960148,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-luna"
+    },
+    {
+      "model_id": "luna-low",
+      "task_type": "SCI-FORMAL",
+      "supplied": 6,
+      "observed": 2.57142857142857,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-luna"
+    },
+    {
+      "model_id": "luna-low",
+      "task_type": "GEN-FACT",
+      "supplied": 6,
+      "observed": -9.166666666666666,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-luna"
+    },
+    {
+      "model_id": "luna-low",
+      "task_type": "GEN-LCR",
+      "supplied": 42,
+      "observed": 74.0,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-luna"
+    },
+    {
+      "model_id": "luna-med",
+      "task_type": "AGT-PROJ",
+      "supplied": 1190,
+      "observed": 1098.63,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-luna"
+    },
+    {
+      "model_id": "luna-med",
+      "task_type": "AGT-DELIV",
+      "supplied": 1240,
+      "observed": 1261.72,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-luna"
+    },
+    {
+      "model_id": "luna-med",
+      "task_type": "AGT-AUTO",
+      "supplied": 34,
+      "observed": 40.46136879135791,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-luna"
+    },
+    {
+      "model_id": "luna-med",
+      "task_type": "COD-TERM",
+      "supplied": 27,
+      "observed": 2.52525252525253,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-luna"
+    },
+    {
+      "model_id": "luna-med",
+      "task_type": "COD-SCI",
+      "supplied": 31,
+      "observed": 50.925925925925895,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-luna"
+    },
+    {
+      "model_id": "luna-med",
+      "task_type": "SCI-FRONT",
+      "supplied": 21,
+      "observed": 28.2669138090825,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-luna"
+    },
+    {
+      "model_id": "luna-med",
+      "task_type": "SCI-FORMAL",
+      "supplied": 10,
+      "observed": 10.5714285714286,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-luna"
+    },
+    {
+      "model_id": "luna-med",
+      "task_type": "GEN-FACT",
+      "supplied": 16,
+      "observed": -5.05,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-luna"
+    },
+    {
+      "model_id": "luna-med",
+      "task_type": "GEN-DOC",
+      "supplied": 12,
+      "observed": 13.8,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-luna"
+    },
+    {
+      "model_id": "luna-med",
+      "task_type": "GEN-LCR",
+      "supplied": 50,
+      "observed": 78.3333333333333,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-luna"
+    },
+    {
+      "model_id": "luna-high",
+      "task_type": "AGT-PROJ",
+      "supplied": 1260,
+      "observed": 1185.69,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-luna"
+    },
+    {
+      "model_id": "luna-high",
+      "task_type": "AGT-DELIV",
+      "supplied": 1305,
+      "observed": 1339.95,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-luna"
+    },
+    {
+      "model_id": "luna-high",
+      "task_type": "AGT-AUTO",
+      "supplied": 39,
+      "observed": 47.82449139916615,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-luna"
+    },
+    {
+      "model_id": "luna-high",
+      "task_type": "COD-TERM",
+      "supplied": 31,
+      "observed": 4.545454545454549,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-luna"
+    },
+    {
+      "model_id": "luna-high",
+      "task_type": "COD-SCI",
+      "supplied": 35,
+      "observed": 50.3472222222222,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-luna"
+    },
+    {
+      "model_id": "luna-high",
+      "task_type": "SCI-FRONT",
+      "supplied": 25,
+      "observed": 32.9471733086191,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-luna"
+    },
+    {
+      "model_id": "luna-high",
+      "task_type": "SCI-FORMAL",
+      "supplied": 12,
+      "observed": 15.4285714285714,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-luna"
+    },
+    {
+      "model_id": "luna-high",
+      "task_type": "GEN-FACT",
+      "supplied": 20,
+      "observed": -5.5,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-luna"
+    },
+    {
+      "model_id": "luna-high",
+      "task_type": "GEN-DOC",
+      "supplied": 14,
+      "observed": 18.2,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-luna"
+    },
+    {
+      "model_id": "luna-high",
+      "task_type": "GEN-LCR",
+      "supplied": 56,
+      "observed": 79.3333333333333,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-luna"
+    },
+    {
+      "model_id": "luna-xhigh",
+      "task_type": "AGT-PROJ",
+      "supplied": 1300,
+      "observed": 1236.63,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-luna"
+    },
+    {
+      "model_id": "luna-xhigh",
+      "task_type": "AGT-DELIV",
+      "supplied": 1345,
+      "observed": 1363.55,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-luna"
+    },
+    {
+      "model_id": "luna-xhigh",
+      "task_type": "AGT-AUTO",
+      "supplied": 41,
+      "observed": 47.800686767566575,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-luna"
+    },
+    {
+      "model_id": "luna-xhigh",
+      "task_type": "COD-TERM",
+      "supplied": 33,
+      "observed": 8.08080808080808,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-luna"
+    },
+    {
+      "model_id": "luna-xhigh",
+      "task_type": "COD-SCI",
+      "supplied": 37,
+      "observed": 51.73611111111111,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-luna"
+    },
+    {
+      "model_id": "luna-xhigh",
+      "task_type": "SCI-FRONT",
+      "supplied": 27,
+      "observed": 34.3373493975904,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-luna"
+    },
+    {
+      "model_id": "luna-xhigh",
+      "task_type": "SCI-FORMAL",
+      "supplied": 13,
+      "observed": 17.4285714285714,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-luna"
+    },
+    {
+      "model_id": "luna-xhigh",
+      "task_type": "GEN-FACT",
+      "supplied": 22,
+      "observed": -1.8333333333333333,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-luna"
+    },
+    {
+      "model_id": "luna-xhigh",
+      "task_type": "GEN-DOC",
+      "supplied": 15,
+      "observed": 18.6,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-luna"
+    },
+    {
+      "model_id": "luna-xhigh",
+      "task_type": "GEN-LCR",
+      "supplied": 58,
+      "observed": 80.0,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-luna"
+    },
+    {
+      "model_id": "luna-max",
+      "task_type": "AGT-PROJ",
+      "supplied": 1365,
+      "observed": 1336.46,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-luna"
+    },
+    {
+      "model_id": "luna-max",
+      "task_type": "AGT-DELIV",
+      "supplied": 1400,
+      "observed": 1430.2,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-luna"
+    },
+    {
+      "model_id": "luna-max",
+      "task_type": "AGT-AUTO",
+      "supplied": 46,
+      "observed": 53.16814034483175,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-luna"
+    },
+    {
+      "model_id": "luna-max",
+      "task_type": "COD-TERM",
+      "supplied": 37,
+      "observed": 12.6262626262626,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-luna"
+    },
+    {
+      "model_id": "luna-max",
+      "task_type": "COD-SCI",
+      "supplied": 41,
+      "observed": 54.6296296296296,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-luna"
+    },
+    {
+      "model_id": "luna-max",
+      "task_type": "SCI-FRONT",
+      "supplied": 31,
+      "observed": 38.5078776645042,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-luna"
+    },
+    {
+      "model_id": "luna-max",
+      "task_type": "SCI-FORMAL",
+      "supplied": 15,
+      "observed": 19.428571428571402,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-luna"
+    },
+    {
+      "model_id": "luna-max",
+      "task_type": "GEN-FACT",
+      "supplied": 26,
+      "observed": 0.65,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-luna"
+    },
+    {
+      "model_id": "luna-max",
+      "task_type": "GEN-DOC",
+      "supplied": 17,
+      "observed": 22.8,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-luna"
+    },
+    {
+      "model_id": "luna-max",
+      "task_type": "GEN-LCR",
+      "supplied": 63,
+      "observed": 83.3333333333333,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-luna"
+    },
+    {
+      "model_id": "sol-low",
+      "task_type": "AGT-PROJ",
+      "supplied": 1455,
+      "observed": 1116.43,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-1-sol"
+    },
+    {
+      "model_id": "sol-low",
+      "task_type": "AGT-DELIV",
+      "supplied": 1470,
+      "observed": 1316.68,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-1-sol"
+    },
+    {
+      "model_id": "sol-low",
+      "task_type": "AGT-AUTO",
+      "supplied": 52,
+      "observed": 52.57088964747538,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-1-sol"
+    },
+    {
+      "model_id": "sol-low",
+      "task_type": "COD-TERM",
+      "supplied": 43,
+      "observed": 30.808080808080803,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-1-sol"
+    },
+    {
+      "model_id": "sol-low",
+      "task_type": "COD-SCI",
+      "supplied": 45,
+      "observed": 53.2407407407407,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-1-sol"
+    },
+    {
+      "model_id": "sol-low",
+      "task_type": "SCI-FRONT",
+      "supplied": 38,
+      "observed": 47.3586654309546,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-1-sol"
+    },
+    {
+      "model_id": "sol-low",
+      "task_type": "SCI-FORMAL",
+      "supplied": 18,
+      "observed": 24.8571428571429,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-1-sol"
+    },
+    {
+      "model_id": "sol-low",
+      "task_type": "GEN-FACT",
+      "supplied": 30,
+      "observed": 37.63333333333333,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-1-sol"
+    },
+    {
+      "model_id": "sol-low",
+      "task_type": "GEN-DOC",
+      "supplied": 19,
+      "observed": 27.0,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-1-sol"
+    },
+    {
+      "model_id": "sol-low",
+      "task_type": "GEN-LCR",
+      "supplied": 69,
+      "observed": 84.0,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-1-sol"
+    },
+    {
+      "model_id": "sol-med",
+      "task_type": "AGT-PROJ",
+      "supplied": 1525,
+      "observed": 1360.52,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-1-sol"
+    },
+    {
+      "model_id": "sol-med",
+      "task_type": "AGT-DELIV",
+      "supplied": 1515,
+      "observed": 1448.79,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-1-sol"
+    },
+    {
+      "model_id": "sol-med",
+      "task_type": "AGT-AUTO",
+      "supplied": 60,
+      "observed": 62.573509704356866,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-1-sol"
+    },
+    {
+      "model_id": "sol-med",
+      "task_type": "COD-TERM",
+      "supplied": 49,
+      "observed": 47.979797979798,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-1-sol"
+    },
+    {
+      "model_id": "sol-med",
+      "task_type": "COD-SCI",
+      "supplied": 51,
+      "observed": 53.2407407407407,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-1-sol"
+    },
+    {
+      "model_id": "sol-med",
+      "task_type": "SCI-FRONT",
+      "supplied": 46,
+      "observed": 49.8609823911029,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-1-sol"
+    },
+    {
+      "model_id": "sol-med",
+      "task_type": "SCI-FORMAL",
+      "supplied": 22,
+      "observed": 27.7142857142857,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-1-sol"
+    },
+    {
+      "model_id": "sol-med",
+      "task_type": "GEN-FACT",
+      "supplied": 36,
+      "observed": 39.95,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-1-sol"
+    },
+    {
+      "model_id": "sol-med",
+      "task_type": "GEN-DOC",
+      "supplied": 22,
+      "observed": 30.0,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-1-sol"
+    },
+    {
+      "model_id": "sol-med",
+      "task_type": "GEN-LCR",
+      "supplied": 74,
+      "observed": 83.3333333333333,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-1-sol"
+    },
+    {
+      "model_id": "sol-high",
+      "task_type": "AGT-PROJ",
+      "supplied": 1545,
+      "observed": 1464.52,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-1-sol"
+    },
+    {
+      "model_id": "sol-high",
+      "task_type": "AGT-DELIV",
+      "supplied": 1540,
+      "observed": 1509.52,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-1-sol"
+    },
+    {
+      "model_id": "sol-high",
+      "task_type": "AGT-AUTO",
+      "supplied": 63,
+      "observed": 64.49523732184466,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-1-sol"
+    },
+    {
+      "model_id": "sol-high",
+      "task_type": "COD-SCI",
+      "supplied": 54,
+      "observed": 55.787037037037,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-1-sol"
+    },
+    {
+      "model_id": "sol-high",
+      "task_type": "SCI-FRONT",
+      "supplied": 49,
+      "observed": 51.390176088971295,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-1-sol"
+    },
+    {
+      "model_id": "sol-high",
+      "task_type": "SCI-FORMAL",
+      "supplied": 24,
+      "observed": 30.0,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-1-sol"
+    },
+    {
+      "model_id": "sol-high",
+      "task_type": "GEN-FACT",
+      "supplied": 38,
+      "observed": 41.45,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-1-sol"
+    },
+    {
+      "model_id": "sol-high",
+      "task_type": "GEN-DOC",
+      "supplied": 24,
+      "observed": 32.0,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-1-sol"
+    },
+    {
+      "model_id": "sol-high",
+      "task_type": "GEN-LCR",
+      "supplied": 76,
+      "observed": 82.3333333333333,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-1-sol"
+    },
+    {
+      "model_id": "sol-xhigh",
+      "task_type": "AGT-PROJ",
+      "supplied": 1555,
+      "observed": 1503.98,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-1-sol"
+    },
+    {
+      "model_id": "sol-xhigh",
+      "task_type": "AGT-DELIV",
+      "supplied": 1550,
+      "observed": 1538.66,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-1-sol"
+    },
+    {
+      "model_id": "sol-xhigh",
+      "task_type": "AGT-AUTO",
+      "supplied": 65,
+      "observed": 66.57372141364344,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-1-sol"
+    },
+    {
+      "model_id": "sol-xhigh",
+      "task_type": "COD-SCI",
+      "supplied": 55,
+      "observed": 55.671296296296305,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-1-sol"
+    },
+    {
+      "model_id": "sol-xhigh",
+      "task_type": "SCI-FRONT",
+      "supplied": 51,
+      "observed": 52.6413345690454,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-1-sol"
+    },
+    {
+      "model_id": "sol-xhigh",
+      "task_type": "SCI-FORMAL",
+      "supplied": 25,
+      "observed": 31.7142857142857,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-1-sol"
+    },
+    {
+      "model_id": "sol-xhigh",
+      "task_type": "GEN-FACT",
+      "supplied": 39,
+      "observed": 40.86666666666667,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-1-sol"
+    },
+    {
+      "model_id": "sol-xhigh",
+      "task_type": "GEN-DOC",
+      "supplied": 25,
+      "observed": 31.8,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-1-sol"
+    },
+    {
+      "model_id": "sol-xhigh",
+      "task_type": "GEN-LCR",
+      "supplied": 78,
+      "observed": 79.6666666666667,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-1-sol"
+    },
+    {
+      "model_id": "sol-max",
+      "task_type": "AGT-PROJ",
+      "supplied": 1565,
+      "observed": 1561.01,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-1-sol"
+    },
+    {
+      "model_id": "sol-max",
+      "task_type": "AGT-DELIV",
+      "supplied": 1560,
+      "observed": 1593.06,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-1-sol"
+    },
+    {
+      "model_id": "sol-max",
+      "task_type": "AGT-AUTO",
+      "supplied": 66,
+      "observed": 64.86844882398171,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-1-sol"
+    },
+    {
+      "model_id": "sol-max",
+      "task_type": "COD-TERM",
+      "supplied": 55,
+      "observed": 56.0606060606061,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-1-sol"
+    },
+    {
+      "model_id": "sol-max",
+      "task_type": "COD-SCI",
+      "supplied": 56,
+      "observed": 54.1666666666667,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-1-sol"
+    },
+    {
+      "model_id": "sol-max",
+      "task_type": "SCI-FORMAL",
+      "supplied": 27,
+      "observed": 31.7142857142857,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-1-sol"
+    },
+    {
+      "model_id": "sol-max",
+      "task_type": "GEN-FACT",
+      "supplied": 40,
+      "observed": 41.53333333333333,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-1-sol"
+    },
+    {
+      "model_id": "sol-max",
+      "task_type": "GEN-DOC",
+      "supplied": 26,
+      "observed": 31.0,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-1-sol"
+    },
+    {
+      "model_id": "sol-max",
+      "task_type": "GEN-LCR",
+      "supplied": 79,
+      "observed": 83.0,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-1-sol"
+    },
+    {
+      "model_id": "astra-low",
+      "task_type": "AGT-PROJ",
+      "supplied": 1500,
+      "observed": 1257.05,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-astra"
+    },
+    {
+      "model_id": "astra-low",
+      "task_type": "AGT-DELIV",
+      "supplied": 1510,
+      "observed": 1388.98,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-astra"
+    },
+    {
+      "model_id": "astra-low",
+      "task_type": "AGT-AUTO",
+      "supplied": 57,
+      "observed": 59.09672610445402,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-astra"
+    },
+    {
+      "model_id": "astra-low",
+      "task_type": "COD-TERM",
+      "supplied": 48,
+      "observed": 41.9191919191919,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-astra"
+    },
+    {
+      "model_id": "astra-low",
+      "task_type": "COD-SCI",
+      "supplied": 49,
+      "observed": 54.050925925925895,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-astra"
+    },
+    {
+      "model_id": "astra-low",
+      "task_type": "SCI-FRONT",
+      "supplied": 43,
+      "observed": 49.2122335495829,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-astra"
+    },
+    {
+      "model_id": "astra-low",
+      "task_type": "SCI-FORMAL",
+      "supplied": 22,
+      "observed": 26.285714285714302,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-astra"
+    },
+    {
+      "model_id": "astra-low",
+      "task_type": "GEN-FACT",
+      "supplied": 36,
+      "observed": 40.55,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-astra"
+    },
+    {
+      "model_id": "astra-low",
+      "task_type": "GEN-DOC",
+      "supplied": 23,
+      "observed": 30.4,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-astra"
+    },
+    {
+      "model_id": "astra-low",
+      "task_type": "GEN-LCR",
+      "supplied": 73,
+      "observed": 80.0,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-astra"
+    },
+    {
+      "model_id": "astra-med",
+      "task_type": "AGT-PROJ",
+      "supplied": 1535,
+      "observed": 1460.59,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-astra"
+    },
+    {
+      "model_id": "astra-med",
+      "task_type": "AGT-DELIV",
+      "supplied": 1535,
+      "observed": 1485.38,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-astra"
+    },
+    {
+      "model_id": "astra-med",
+      "task_type": "AGT-AUTO",
+      "supplied": 63,
+      "observed": 64.59498850561177,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-astra"
+    },
+    {
+      "model_id": "astra-med",
+      "task_type": "COD-TERM",
+      "supplied": 53,
+      "observed": 49.494949494949495,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-astra"
+    },
+    {
+      "model_id": "astra-med",
+      "task_type": "COD-SCI",
+      "supplied": 53,
+      "observed": 54.1666666666667,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-astra"
+    },
+    {
+      "model_id": "astra-med",
+      "task_type": "SCI-FRONT",
+      "supplied": 50,
+      "observed": 52.73401297497679,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-astra"
+    },
+    {
+      "model_id": "astra-med",
+      "task_type": "SCI-FORMAL",
+      "supplied": 26,
+      "observed": 29.1428571428571,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-astra"
+    },
+    {
+      "model_id": "astra-med",
+      "task_type": "GEN-FACT",
+      "supplied": 39,
+      "observed": 42.21666666666667,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-astra"
+    },
+    {
+      "model_id": "astra-med",
+      "task_type": "GEN-DOC",
+      "supplied": 27,
+      "observed": 30.4,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-astra"
+    },
+    {
+      "model_id": "astra-med",
+      "task_type": "GEN-LCR",
+      "supplied": 77,
+      "observed": 79.6666666666667,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-astra"
+    },
+    {
+      "model_id": "astra-high",
+      "task_type": "AGT-PROJ",
+      "supplied": 1550,
+      "observed": 1505.89,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-astra"
+    },
+    {
+      "model_id": "astra-high",
+      "task_type": "AGT-DELIV",
+      "supplied": 1555,
+      "observed": 1523.9,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-astra"
+    },
+    {
+      "model_id": "astra-high",
+      "task_type": "AGT-AUTO",
+      "supplied": 65,
+      "observed": 66.6122174975011,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-astra"
+    },
+    {
+      "model_id": "astra-high",
+      "task_type": "COD-TERM",
+      "supplied": 56,
+      "observed": 54.040404040404,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-astra"
+    },
+    {
+      "model_id": "astra-high",
+      "task_type": "COD-SCI",
+      "supplied": 54,
+      "observed": 55.4398148148148,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-astra"
+    },
+    {
+      "model_id": "astra-high",
+      "task_type": "SCI-FRONT",
+      "supplied": 52,
+      "observed": 53.058387395736794,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-astra"
+    },
+    {
+      "model_id": "astra-high",
+      "task_type": "SCI-FORMAL",
+      "supplied": 28,
+      "observed": 28.857142857142897,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-astra"
+    },
+    {
+      "model_id": "astra-high",
+      "task_type": "GEN-FACT",
+      "supplied": 41,
+      "observed": 43.733333333333334,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-astra"
+    },
+    {
+      "model_id": "astra-high",
+      "task_type": "GEN-DOC",
+      "supplied": 28,
+      "observed": 31.0,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-astra"
+    },
+    {
+      "model_id": "astra-high",
+      "task_type": "GEN-LCR",
+      "supplied": 79,
+      "observed": 80.0,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-astra"
+    },
+    {
+      "model_id": "astra-xhigh",
+      "task_type": "AGT-PROJ",
+      "supplied": 1560,
+      "observed": 1546.42,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-astra"
+    },
+    {
+      "model_id": "astra-xhigh",
+      "task_type": "AGT-DELIV",
+      "supplied": 1565,
+      "observed": 1554.47,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-astra"
+    },
+    {
+      "model_id": "astra-xhigh",
+      "task_type": "COD-TERM",
+      "supplied": 58,
+      "observed": 59.5959595959596,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-astra"
+    },
+    {
+      "model_id": "astra-xhigh",
+      "task_type": "COD-SCI",
+      "supplied": 55,
+      "observed": 55.671296296296305,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-astra"
+    },
+    {
+      "model_id": "astra-xhigh",
+      "task_type": "SCI-FRONT",
+      "supplied": 54,
+      "observed": 54.587581093605195,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-astra"
+    },
+    {
+      "model_id": "astra-xhigh",
+      "task_type": "SCI-FORMAL",
+      "supplied": 30,
+      "observed": 31.4285714285714,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-astra"
+    },
+    {
+      "model_id": "astra-xhigh",
+      "task_type": "GEN-FACT",
+      "supplied": 42,
+      "observed": 43.416666666666664,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-astra"
+    },
+    {
+      "model_id": "astra-xhigh",
+      "task_type": "GEN-DOC",
+      "supplied": 29,
+      "observed": 32.2,
+      "source": "https://artificialanalysis.ai/models/releases/gpt-6-astra"
+    },
+    {
+      "model_id": "haiku-low",
+      "task_type": "AGT-PROJ",
+      "supplied": 1220,
+      "observed": 1111.54,
+      "source": "https://artificialanalysis.ai/models/releases/claude-haiku-5-5"
+    },
+    {
+      "model_id": "haiku-low",
+      "task_type": "AGT-DELIV",
+      "supplied": 1260,
+      "observed": 1122.23,
+      "source": "https://artificialanalysis.ai/models/releases/claude-haiku-5-5"
+    },
+    {
+      "model_id": "haiku-low",
+      "task_type": "AGT-AUTO",
+      "supplied": 35,
+      "observed": 22.910812181110643,
+      "source": "https://artificialanalysis.ai/models/releases/claude-haiku-5-5"
+    },
+    {
+      "model_id": "haiku-low",
+      "task_type": "COD-TERM",
+      "supplied": 26,
+      "observed": 12.6262626262626,
+      "source": "https://artificialanalysis.ai/models/releases/claude-haiku-5-5"
+    },
+    {
+      "model_id": "haiku-low",
+      "task_type": "COD-SCI",
+      "supplied": 30,
+      "observed": 49.189814814814795,
+      "source": "https://artificialanalysis.ai/models/releases/claude-haiku-5-5"
+    },
+    {
+      "model_id": "haiku-low",
+      "task_type": "SCI-FRONT",
+      "supplied": 19,
+      "observed": 27.0157553290083,
+      "source": "https://artificialanalysis.ai/models/releases/claude-haiku-5-5"
+    },
+    {
+      "model_id": "haiku-low",
+      "task_type": "GEN-FACT",
+      "supplied": 14,
+      "observed": 3.25,
+      "source": "https://artificialanalysis.ai/models/releases/claude-haiku-5-5"
+    },
+    {
+      "model_id": "haiku-low",
+      "task_type": "GEN-LCR",
+      "supplied": 51,
+      "observed": 72.0,
+      "source": "https://artificialanalysis.ai/models/releases/claude-haiku-5-5"
+    },
+    {
+      "model_id": "haiku-med",
+      "task_type": "GEN-DEFAULT",
+      "supplied": 35,
+      "observed": 34.4646519474657,
+      "source": "https://artificialanalysis.ai/models/releases/claude-haiku-5-5"
+    },
+    {
+      "model_id": "haiku-med",
+      "task_type": "AGT-PROJ",
+      "supplied": 1340,
+      "observed": 1371.55,
+      "source": "https://artificialanalysis.ai/models/releases/claude-haiku-5-5"
+    },
+    {
+      "model_id": "haiku-med",
+      "task_type": "AGT-DELIV",
+      "supplied": 1380,
+      "observed": 1274.34,
+      "source": "https://artificialanalysis.ai/models/releases/claude-haiku-5-5"
+    },
+    {
+      "model_id": "haiku-med",
+      "task_type": "AGT-AUTO",
+      "supplied": 43,
+      "observed": 28.589614814293164,
+      "source": "https://artificialanalysis.ai/models/releases/claude-haiku-5-5"
+    },
+    {
+      "model_id": "haiku-med",
+      "task_type": "COD-TERM",
+      "supplied": 33,
+      "observed": 15.151515151515198,
+      "source": "https://artificialanalysis.ai/models/releases/claude-haiku-5-5"
+    },
+    {
+      "model_id": "haiku-med",
+      "task_type": "COD-SCI",
+      "supplied": 37,
+      "observed": 48.9583333333333,
+      "source": "https://artificialanalysis.ai/models/releases/claude-haiku-5-5"
+    },
+    {
+      "model_id": "haiku-med",
+      "task_type": "SCI-FRONT",
+      "supplied": 26,
+      "observed": 33.7812789620019,
+      "source": "https://artificialanalysis.ai/models/releases/claude-haiku-5-5"
+    },
+    {
+      "model_id": "haiku-med",
+      "task_type": "SCI-FORMAL",
+      "supplied": 12,
+      "observed": 12.8571428571429,
+      "source": "https://artificialanalysis.ai/models/releases/claude-haiku-5-5"
+    },
+    {
+      "model_id": "haiku-med",
+      "task_type": "GEN-FACT",
+      "supplied": 22,
+      "observed": 4.466666666666667,
+      "source": "https://artificialanalysis.ai/models/releases/claude-haiku-5-5"
+    },
+    {
+      "model_id": "haiku-med",
+      "task_type": "GEN-DOC",
+      "supplied": 13,
+      "observed": 15.2,
+      "source": "https://artificialanalysis.ai/models/releases/claude-haiku-5-5"
+    },
+    {
+      "model_id": "haiku-med",
+      "task_type": "GEN-LCR",
+      "supplied": 59,
+      "observed": 77.3333333333333,
+      "source": "https://artificialanalysis.ai/models/releases/claude-haiku-5-5"
+    },
+    {
+      "model_id": "haiku-high",
+      "task_type": "GEN-DEFAULT",
+      "supplied": 39,
+      "observed": 37.8240211671094,
+      "source": "https://artificialanalysis.ai/models/releases/claude-haiku-5-5"
+    },
+    {
+      "model_id": "haiku-high",
+      "task_type": "AGT-PROJ",
+      "supplied": 1460,
+      "observed": 1442.29,
+      "source": "https://artificialanalysis.ai/models/releases/claude-haiku-5-5"
+    },
+    {
+      "model_id": "haiku-high",
+      "task_type": "AGT-DELIV",
+      "supplied": 1480,
+      "observed": 1417.77,
+      "source": "https://artificialanalysis.ai/models/releases/claude-haiku-5-5"
+    },
+    {
+      "model_id": "haiku-high",
+      "task_type": "AGT-AUTO",
+      "supplied": 48,
+      "observed": 33.72685311767238,
+      "source": "https://artificialanalysis.ai/models/releases/claude-haiku-5-5"
+    },
+    {
+      "model_id": "haiku-high",
+      "task_type": "COD-TERM",
+      "supplied": 38,
+      "observed": 21.7171717171717,
+      "source": "https://artificialanalysis.ai/models/releases/claude-haiku-5-5"
+    },
+    {
+      "model_id": "haiku-high",
+      "task_type": "COD-SCI",
+      "supplied": 42,
+      "observed": 48.7268518518519,
+      "source": "https://artificialanalysis.ai/models/releases/claude-haiku-5-5"
+    },
+    {
+      "model_id": "haiku-high",
+      "task_type": "SCI-FRONT",
+      "supplied": 32,
+      "observed": 37.25671918443,
+      "source": "https://artificialanalysis.ai/models/releases/claude-haiku-5-5"
+    },
+    {
+      "model_id": "haiku-high",
+      "task_type": "SCI-FORMAL",
+      "supplied": 15,
+      "observed": 18.5714285714286,
+      "source": "https://artificialanalysis.ai/models/releases/claude-haiku-5-5"
+    },
+    {
+      "model_id": "haiku-high",
+      "task_type": "GEN-FACT",
+      "supplied": 28,
+      "observed": 5.75,
+      "source": "https://artificialanalysis.ai/models/releases/claude-haiku-5-5"
+    },
+    {
+      "model_id": "haiku-high",
+      "task_type": "GEN-DOC",
+      "supplied": 15,
+      "observed": 17.2,
+      "source": "https://artificialanalysis.ai/models/releases/claude-haiku-5-5"
+    },
+    {
+      "model_id": "haiku-high",
+      "task_type": "GEN-LCR",
+      "supplied": 65,
+      "observed": 77.3333333333333,
+      "source": "https://artificialanalysis.ai/models/releases/claude-haiku-5-5"
+    },
+    {
+      "model_id": "haiku-max",
+      "task_type": "AGT-DELIV",
+      "supplied": 1560,
+      "observed": 1620.01,
+      "source": "https://artificialanalysis.ai/models/releases/claude-haiku-5-5"
+    },
+    {
+      "model_id": "haiku-max",
+      "task_type": "AGT-AUTO",
+      "supplied": 53,
+      "observed": 35.411015132783625,
+      "source": "https://artificialanalysis.ai/models/releases/claude-haiku-5-5"
+    },
+    {
+      "model_id": "haiku-max",
+      "task_type": "COD-TERM",
+      "supplied": 43,
+      "observed": 32.8282828282828,
+      "source": "https://artificialanalysis.ai/models/releases/claude-haiku-5-5"
+    },
+    {
+      "model_id": "haiku-max",
+      "task_type": "COD-SCI",
+      "supplied": 46,
+      "observed": 54.976851851851805,
+      "source": "https://artificialanalysis.ai/models/releases/claude-haiku-5-5"
+    },
+    {
+      "model_id": "haiku-max",
+      "task_type": "SCI-FRONT",
+      "supplied": 37,
+      "observed": 44.3929564411492,
+      "source": "https://artificialanalysis.ai/models/releases/claude-haiku-5-5"
+    },
+    {
+      "model_id": "haiku-max",
+      "task_type": "SCI-FORMAL",
+      "supplied": 17,
+      "observed": 18.8571428571429,
+      "source": "https://artificialanalysis.ai/models/releases/claude-haiku-5-5"
+    },
+    {
+      "model_id": "haiku-max",
+      "task_type": "GEN-FACT",
+      "supplied": 32,
+      "observed": 10.666666666666666,
+      "source": "https://artificialanalysis.ai/models/releases/claude-haiku-5-5"
+    },
+    {
+      "model_id": "haiku-max",
+      "task_type": "GEN-DOC",
+      "supplied": 17,
+      "observed": 20.8,
+      "source": "https://artificialanalysis.ai/models/releases/claude-haiku-5-5"
+    },
+    {
+      "model_id": "haiku-max",
+      "task_type": "GEN-LCR",
+      "supplied": 70,
+      "observed": 82.6666666666667,
+      "source": "https://artificialanalysis.ai/models/releases/claude-haiku-5-5"
+    },
+    {
+      "model_id": "sonnet-low",
+      "task_type": "AGT-PROJ",
+      "supplied": 1380,
+      "observed": 1271.4,
+      "source": "https://artificialanalysis.ai/models/releases/claude-sonnet-5-5"
+    },
+    {
+      "model_id": "sonnet-low",
+      "task_type": "AGT-DELIV",
+      "supplied": 1420,
+      "observed": 1175.09,
+      "source": "https://artificialanalysis.ai/models/releases/claude-sonnet-5-5"
+    },
+    {
+      "model_id": "sonnet-low",
+      "task_type": "AGT-AUTO",
+      "supplied": 45,
+      "observed": 49.42092641344955,
+      "source": "https://artificialanalysis.ai/models/releases/claude-sonnet-5-5"
+    },
+    {
+      "model_id": "sonnet-low",
+      "task_type": "COD-TERM",
+      "supplied": 37,
+      "observed": 20.7070707070707,
+      "source": "https://artificialanalysis.ai/models/releases/claude-sonnet-5-5"
+    },
+    {
+      "model_id": "sonnet-low",
+      "task_type": "COD-SCI",
+      "supplied": 40,
+      "observed": 49.0740740740741,
+      "source": "https://artificialanalysis.ai/models/releases/claude-sonnet-5-5"
+    },
+    {
+      "model_id": "sonnet-low",
+      "task_type": "SCI-FRONT",
+      "supplied": 28,
+      "observed": 36.2372567191844,
+      "source": "https://artificialanalysis.ai/models/releases/claude-sonnet-5-5"
+    },
+    {
+      "model_id": "sonnet-low",
+      "task_type": "SCI-FORMAL",
+      "supplied": 14,
+      "observed": 11.4285714285714,
+      "source": "https://artificialanalysis.ai/models/releases/claude-sonnet-5-5"
+    },
+    {
+      "model_id": "sonnet-low",
+      "task_type": "GEN-FACT",
+      "supplied": 24,
+      "observed": 19.366666666666667,
+      "source": "https://artificialanalysis.ai/models/releases/claude-sonnet-5-5"
+    },
+    {
+      "model_id": "sonnet-low",
+      "task_type": "GEN-DOC",
+      "supplied": 15,
+      "observed": 16.0,
+      "source": "https://artificialanalysis.ai/models/releases/claude-sonnet-5-5"
+    },
+    {
+      "model_id": "sonnet-low",
+      "task_type": "GEN-LCR",
+      "supplied": 63,
+      "observed": 76.0,
+      "source": "https://artificialanalysis.ai/models/releases/claude-sonnet-5-5"
+    },
+    {
+      "model_id": "sonnet-med",
+      "task_type": "AGT-PROJ",
+      "supplied": 1500,
+      "observed": 1441.57,
+      "source": "https://artificialanalysis.ai/models/releases/claude-sonnet-5-5"
+    },
+    {
+      "model_id": "sonnet-med",
+      "task_type": "AGT-DELIV",
+      "supplied": 1540,
+      "observed": 1323.23,
+      "source": "https://artificialanalysis.ai/models/releases/claude-sonnet-5-5"
+    },
+    {
+      "model_id": "sonnet-med",
+      "task_type": "AGT-AUTO",
+      "supplied": 51,
+      "observed": 54.90962996121462,
+      "source": "https://artificialanalysis.ai/models/releases/claude-sonnet-5-5"
+    },
+    {
+      "model_id": "sonnet-med",
+      "task_type": "COD-TERM",
+      "supplied": 45,
+      "observed": 29.7979797979798,
+      "source": "https://artificialanalysis.ai/models/releases/claude-sonnet-5-5"
+    },
+    {
+      "model_id": "sonnet-med",
+      "task_type": "COD-SCI",
+      "supplied": 46,
+      "observed": 52.8935185185185,
+      "source": "https://artificialanalysis.ai/models/releases/claude-sonnet-5-5"
+    },
+    {
+      "model_id": "sonnet-med",
+      "task_type": "SCI-FRONT",
+      "supplied": 36,
+      "observed": 39.805375347544,
+      "source": "https://artificialanalysis.ai/models/releases/claude-sonnet-5-5"
+    },
+    {
+      "model_id": "sonnet-med",
+      "task_type": "GEN-FACT",
+      "supplied": 30,
+      "observed": 20.1,
+      "source": "https://artificialanalysis.ai/models/releases/claude-sonnet-5-5"
+    },
+    {
+      "model_id": "sonnet-med",
+      "task_type": "GEN-DOC",
+      "supplied": 17,
+      "observed": 20.200000000000003,
+      "source": "https://artificialanalysis.ai/models/releases/claude-sonnet-5-5"
+    },
+    {
+      "model_id": "sonnet-med",
+      "task_type": "GEN-LCR",
+      "supplied": 69,
+      "observed": 76.3333333333333,
+      "source": "https://artificialanalysis.ai/models/releases/claude-sonnet-5-5"
+    },
+    {
+      "model_id": "sonnet-high",
+      "task_type": "AGT-PROJ",
+      "supplied": 1620,
+      "observed": 1638.19,
+      "source": "https://artificialanalysis.ai/models/releases/claude-sonnet-5-5"
+    },
+    {
+      "model_id": "sonnet-high",
+      "task_type": "AGT-DELIV",
+      "supplied": 1650,
+      "observed": 1549.77,
+      "source": "https://artificialanalysis.ai/models/releases/claude-sonnet-5-5"
+    },
+    {
+      "model_id": "sonnet-high",
+      "task_type": "COD-TERM",
+      "supplied": 51,
+      "observed": 43.9393939393939,
+      "source": "https://artificialanalysis.ai/models/releases/claude-sonnet-5-5"
+    },
+    {
+      "model_id": "sonnet-high",
+      "task_type": "COD-SCI",
+      "supplied": 53,
+      "observed": 53.703703703703695,
+      "source": "https://artificialanalysis.ai/models/releases/claude-sonnet-5-5"
+    },
+    {
+      "model_id": "sonnet-high",
+      "task_type": "SCI-FRONT",
+      "supplied": 44,
+      "observed": 45.8294717330862,
+      "source": "https://artificialanalysis.ai/models/releases/claude-sonnet-5-5"
+    },
+    {
+      "model_id": "sonnet-high",
+      "task_type": "SCI-FORMAL",
+      "supplied": 21,
+      "observed": 24.571428571428598,
+      "source": "https://artificialanalysis.ai/models/releases/claude-sonnet-5-5"
+    },
+    {
+      "model_id": "sonnet-high",
+      "task_type": "GEN-FACT",
+      "supplied": 36,
+      "observed": 20.95,
+      "source": "https://artificialanalysis.ai/models/releases/claude-sonnet-5-5"
+    },
+    {
+      "model_id": "sonnet-high",
+      "task_type": "GEN-DOC",
+      "supplied": 20,
+      "observed": 25.2,
+      "source": "https://artificialanalysis.ai/models/releases/claude-sonnet-5-5"
+    },
+    {
+      "model_id": "sonnet-high",
+      "task_type": "GEN-LCR",
+      "supplied": 74,
+      "observed": 78.0,
+      "source": "https://artificialanalysis.ai/models/releases/claude-sonnet-5-5"
+    },
+    {
+      "model_id": "sonnet-xhigh",
+      "task_type": "AGT-PROJ",
+      "supplied": 1695,
+      "observed": 1751.77,
+      "source": "https://artificialanalysis.ai/models/releases/claude-sonnet-5-5"
+    },
+    {
+      "model_id": "sonnet-xhigh",
+      "task_type": "AGT-DELIV",
+      "supplied": 1750,
+      "observed": 1729.54,
+      "source": "https://artificialanalysis.ai/models/releases/claude-sonnet-5-5"
+    },
+    {
+      "model_id": "sonnet-xhigh",
+      "task_type": "COD-TERM",
+      "supplied": 58,
+      "observed": 57.07070707070711,
+      "source": "https://artificialanalysis.ai/models/releases/claude-sonnet-5-5"
+    },
+    {
+      "model_id": "sonnet-xhigh",
+      "task_type": "COD-SCI",
+      "supplied": 60,
+      "observed": 57.2916666666667,
+      "source": "https://artificialanalysis.ai/models/releases/claude-sonnet-5-5"
+    },
+    {
+      "model_id": "sonnet-xhigh",
+      "task_type": "SCI-FRONT",
+      "supplied": 53,
+      "observed": 50.0,
+      "source": "https://artificialanalysis.ai/models/releases/claude-sonnet-5-5"
+    },
+    {
+      "model_id": "sonnet-xhigh",
+      "task_type": "SCI-FORMAL",
+      "supplied": 26,
+      "observed": 31.1428571428571,
+      "source": "https://artificialanalysis.ai/models/releases/claude-sonnet-5-5"
+    },
+    {
+      "model_id": "sonnet-xhigh",
+      "task_type": "GEN-FACT",
+      "supplied": 40,
+      "observed": 23.5,
+      "source": "https://artificialanalysis.ai/models/releases/claude-sonnet-5-5"
+    },
+    {
+      "model_id": "sonnet-xhigh",
+      "task_type": "GEN-DOC",
+      "supplied": 23,
+      "observed": 24.6,
+      "source": "https://artificialanalysis.ai/models/releases/claude-sonnet-5-5"
+    },
+    {
+      "model_id": "sonnet-max",
+      "task_type": "AGT-PROJ",
+      "supplied": 1760,
+      "observed": 1820.41,
+      "source": "https://artificialanalysis.ai/models/releases/claude-sonnet-5-5"
+    },
+    {
+      "model_id": "sonnet-max",
+      "task_type": "AGT-DELIV",
+      "supplied": 1845,
+      "observed": 1837.82,
+      "source": "https://artificialanalysis.ai/models/releases/claude-sonnet-5-5"
+    },
+    {
+      "model_id": "sonnet-max",
+      "task_type": "AGT-AUTO",
+      "supplied": 69,
+      "observed": 71.76882128193995,
+      "source": "https://artificialanalysis.ai/models/releases/claude-sonnet-5-5"
+    },
+    {
+      "model_id": "sonnet-max",
+      "task_type": "COD-SCI",
+      "supplied": 64,
+      "observed": 60.9953703703704,
+      "source": "https://artificialanalysis.ai/models/releases/claude-sonnet-5-5"
+    },
+    {
+      "model_id": "sonnet-max",
+      "task_type": "SCI-FRONT",
+      "supplied": 59,
+      "observed": 54.9582947173309,
+      "source": "https://artificialanalysis.ai/models/releases/claude-sonnet-5-5"
+    },
+    {
+      "model_id": "sonnet-max",
+      "task_type": "SCI-FORMAL",
+      "supplied": 30,
+      "observed": 31.4285714285714,
+      "source": "https://artificialanalysis.ai/models/releases/claude-sonnet-5-5"
+    },
+    {
+      "model_id": "sonnet-max",
+      "task_type": "GEN-FACT",
+      "supplied": 44,
+      "observed": 32.3,
+      "source": "https://artificialanalysis.ai/models/releases/claude-sonnet-5-5"
+    },
+    {
+      "model_id": "sonnet-max",
+      "task_type": "GEN-DOC",
+      "supplied": 25,
+      "observed": 25.8,
+      "source": "https://artificialanalysis.ai/models/releases/claude-sonnet-5-5"
+    },
+    {
+      "model_id": "sonnet-max",
+      "task_type": "GEN-LCR",
+      "supplied": 84,
+      "observed": 82.6666666666667,
+      "source": "https://artificialanalysis.ai/models/releases/claude-sonnet-5-5"
+    },
+    {
+      "model_id": "opus-low",
+      "task_type": "AGT-PROJ",
+      "supplied": 1540,
+      "observed": 1279.29,
+      "source": "https://artificialanalysis.ai/models/releases/claude-opus-5-5"
+    },
+    {
+      "model_id": "opus-low",
+      "task_type": "AGT-DELIV",
+      "supplied": 1580,
+      "observed": 1233.7,
+      "source": "https://artificialanalysis.ai/models/releases/claude-opus-5-5"
+    },
+    {
+      "model_id": "opus-low",
+      "task_type": "AGT-AUTO",
+      "supplied": 52,
+      "observed": 52.92537042934996,
+      "source": "https://artificialanalysis.ai/models/releases/claude-opus-5-5"
+    },
+    {
+      "model_id": "opus-low",
+      "task_type": "COD-TERM",
+      "supplied": 44,
+      "observed": 31.313131313131297,
+      "source": "https://artificialanalysis.ai/models/releases/claude-opus-5-5"
+    },
+    {
+      "model_id": "opus-low",
+      "task_type": "COD-SCI",
+      "supplied": 48,
+      "observed": 58.5648148148148,
+      "source": "https://artificialanalysis.ai/models/releases/claude-opus-5-5"
+    },
+    {
+      "model_id": "opus-low",
+      "task_type": "SCI-FRONT",
+      "supplied": 39,
+      "observed": 48.3317886932345,
+      "source": "https://artificialanalysis.ai/models/releases/claude-opus-5-5"
+    },
+    {
+      "model_id": "opus-low",
+      "task_type": "GEN-FACT",
+      "supplied": 34,
+      "observed": 38.86666666666667,
+      "source": "https://artificialanalysis.ai/models/releases/claude-opus-5-5"
+    },
+    {
+      "model_id": "opus-low",
+      "task_type": "GEN-DOC",
+      "supplied": 18,
+      "observed": 25.6,
+      "source": "https://artificialanalysis.ai/models/releases/claude-opus-5-5"
+    },
+    {
+      "model_id": "opus-low",
+      "task_type": "GEN-LCR",
+      "supplied": 71,
+      "observed": 80.6666666666667,
+      "source": "https://artificialanalysis.ai/models/releases/claude-opus-5-5"
+    },
+    {
+      "model_id": "opus-med",
+      "task_type": "AGT-PROJ",
+      "supplied": 1660,
+      "observed": 1627.4,
+      "source": "https://artificialanalysis.ai/models/releases/claude-opus-5-5"
+    },
+    {
+      "model_id": "opus-med",
+      "task_type": "AGT-DELIV",
+      "supplied": 1710,
+      "observed": 1583.7,
+      "source": "https://artificialanalysis.ai/models/releases/claude-opus-5-5"
+    },
+    {
+      "model_id": "opus-med",
+      "task_type": "AGT-AUTO",
+      "supplied": 63,
+      "observed": 61.21742919892179,
+      "source": "https://artificialanalysis.ai/models/releases/claude-opus-5-5"
+    },
+    {
+      "model_id": "opus-med",
+      "task_type": "COD-TERM",
+      "supplied": 54,
+      "observed": 52.5252525252525,
+      "source": "https://artificialanalysis.ai/models/releases/claude-opus-5-5"
+    },
+    {
+      "model_id": "opus-med",
+      "task_type": "COD-SCI",
+      "supplied": 58,
+      "observed": 59.2592592592593,
+      "source": "https://artificialanalysis.ai/models/releases/claude-opus-5-5"
+    },
+    {
+      "model_id": "opus-med",
+      "task_type": "SCI-FRONT",
+      "supplied": 51,
+      "observed": 54.72659870250231,
+      "source": "https://artificialanalysis.ai/models/releases/claude-opus-5-5"
+    },
+    {
+      "model_id": "opus-med",
+      "task_type": "SCI-FORMAL",
+      "supplied": 25,
+      "observed": 27.7142857142857,
+      "source": "https://artificialanalysis.ai/models/releases/claude-opus-5-5"
+    },
+    {
+      "model_id": "opus-med",
+      "task_type": "GEN-DOC",
+      "supplied": 22,
+      "observed": 25.6,
+      "source": "https://artificialanalysis.ai/models/releases/claude-opus-5-5"
+    },
+    {
+      "model_id": "opus-med",
+      "task_type": "GEN-LCR",
+      "supplied": 78,
+      "observed": 84.3333333333333,
+      "source": "https://artificialanalysis.ai/models/releases/claude-opus-5-5"
+    },
+    {
+      "model_id": "opus-high",
+      "task_type": "AGT-PROJ",
+      "supplied": 1690,
+      "observed": 1687.88,
+      "source": "https://artificialanalysis.ai/models/releases/claude-opus-5-5"
+    },
+    {
+      "model_id": "opus-high",
+      "task_type": "AGT-DELIV",
+      "supplied": 1760,
+      "observed": 1702.54,
+      "source": "https://artificialanalysis.ai/models/releases/claude-opus-5-5"
+    },
+    {
+      "model_id": "opus-high",
+      "task_type": "AGT-AUTO",
+      "supplied": 68,
+      "observed": 63.206774831862134,
+      "source": "https://artificialanalysis.ai/models/releases/claude-opus-5-5"
+    },
+    {
+      "model_id": "opus-high",
+      "task_type": "COD-TERM",
+      "supplied": 58,
+      "observed": 56.565656565656596,
+      "source": "https://artificialanalysis.ai/models/releases/claude-opus-5-5"
+    },
+    {
+      "model_id": "opus-high",
+      "task_type": "COD-SCI",
+      "supplied": 63,
+      "observed": 60.4166666666667,
+      "source": "https://artificialanalysis.ai/models/releases/claude-opus-5-5"
+    },
+    {
+      "model_id": "opus-high",
+      "task_type": "SCI-FRONT",
+      "supplied": 57,
+      "observed": 55.56070435588511,
+      "source": "https://artificialanalysis.ai/models/releases/claude-opus-5-5"
+    },
+    {
+      "model_id": "opus-high",
+      "task_type": "SCI-FORMAL",
+      "supplied": 29,
+      "observed": 30.8571428571429,
+      "source": "https://artificialanalysis.ai/models/releases/claude-opus-5-5"
+    },
+    {
+      "model_id": "opus-high",
+      "task_type": "GEN-FACT",
+      "supplied": 43,
+      "observed": 40.63333333333333,
+      "source": "https://artificialanalysis.ai/models/releases/claude-opus-5-5"
+    },
+    {
+      "model_id": "opus-high",
+      "task_type": "GEN-DOC",
+      "supplied": 24,
+      "observed": 28.799999999999997,
+      "source": "https://artificialanalysis.ai/models/releases/claude-opus-5-5"
+    },
+    {
+      "model_id": "opus-high",
+      "task_type": "GEN-LCR",
+      "supplied": 82,
+      "observed": 82.6666666666667,
+      "source": "https://artificialanalysis.ai/models/releases/claude-opus-5-5"
+    },
+    {
+      "model_id": "opus-xhigh",
+      "task_type": "AGT-PROJ",
+      "supplied": 1765,
+      "observed": 1765.85,
+      "source": "https://artificialanalysis.ai/models/releases/claude-opus-5-5"
+    },
+    {
+      "model_id": "opus-xhigh",
+      "task_type": "AGT-DELIV",
+      "supplied": 1825,
+      "observed": 1835.8,
+      "source": "https://artificialanalysis.ai/models/releases/claude-opus-5-5"
+    },
+    {
+      "model_id": "opus-xhigh",
+      "task_type": "AGT-AUTO",
+      "supplied": 69,
+      "observed": 64.95283516401527,
+      "source": "https://artificialanalysis.ai/models/releases/claude-opus-5-5"
+    },
+    {
+      "model_id": "opus-xhigh",
+      "task_type": "SCI-FRONT",
+      "supplied": 59,
+      "observed": 57.5069508804449,
+      "source": "https://artificialanalysis.ai/models/releases/claude-opus-5-5"
+    },
+    {
+      "model_id": "opus-xhigh",
+      "task_type": "SCI-FORMAL",
+      "supplied": 31,
+      "observed": 31.7142857142857,
+      "source": "https://artificialanalysis.ai/models/releases/claude-opus-5-5"
+    },
+    {
+      "model_id": "opus-xhigh",
+      "task_type": "GEN-FACT",
+      "supplied": 45,
+      "observed": 42.65,
+      "source": "https://artificialanalysis.ai/models/releases/claude-opus-5-5"
+    },
+    {
+      "model_id": "opus-xhigh",
+      "task_type": "GEN-DOC",
+      "supplied": 25,
+      "observed": 26.6,
+      "source": "https://artificialanalysis.ai/models/releases/claude-opus-5-5"
+    },
+    {
+      "model_id": "opus-xhigh",
+      "task_type": "GEN-LCR",
+      "supplied": 84,
+      "observed": 84.6666666666667,
+      "source": "https://artificialanalysis.ai/models/releases/claude-opus-5-5"
+    },
+    {
+      "model_id": "opus-max",
+      "task_type": "AGT-PROJ",
+      "supplied": 1807,
+      "observed": 1804.98,
+      "source": "https://artificialanalysis.ai/models/releases/claude-opus-5-5"
+    },
+    {
+      "model_id": "fable-max",
+      "task_type": "SCI-FORMAL",
+      "supplied": 31,
+      "observed": 29.714285714285698,
+      "source": "https://artificialanalysis.ai/models/releases/claude-fable-5-1"
+    },
+    {
+      "model_id": "fable-max",
+      "task_type": "GEN-FACT",
+      "supplied": 42,
+      "observed": 43.45,
+      "source": "https://artificialanalysis.ai/models/releases/claude-fable-5-1"
+    },
+    {
+      "model_id": "fable-max",
+      "task_type": "GEN-LCR",
+      "supplied": 83,
+      "observed": 85.3333333333333,
+      "source": "https://artificialanalysis.ai/models/releases/claude-fable-5-1"
+    },
+    {
+      "model_id": "flash35-lite",
+      "task_type": "AGT-PROJ",
+      "supplied": 1055,
+      "observed": 650.12,
+      "source": "https://artificialanalysis.ai/models/releases/gemini-4-argon"
+    },
+    {
+      "model_id": "flash35-lite",
+      "task_type": "AGT-DELIV",
+      "supplied": 1110,
+      "observed": 983.18,
+      "source": "https://artificialanalysis.ai/models/releases/gemini-4-argon"
+    },
+    {
+      "model_id": "flash35-lite",
+      "task_type": "AGT-AUTO",
+      "supplied": 27,
+      "observed": 25.011270511840955,
+      "source": "https://artificialanalysis.ai/models/releases/gemini-4-argon"
+    },
+    {
+      "model_id": "flash35-lite",
+      "task_type": "COD-TERM",
+      "supplied": 12,
+      "observed": 1.01010101010101,
+      "source": "https://artificialanalysis.ai/models/releases/gemini-4-argon"
+    },
+    {
+      "model_id": "flash35-lite",
+      "task_type": "COD-SCI",
+      "supplied": 24,
+      "observed": 41.3194444444444,
+      "source": "https://artificialanalysis.ai/models/releases/gemini-4-argon"
+    },
+    {
+      "model_id": "flash35-lite",
+      "task_type": "SCI-FRONT",
+      "supplied": 13,
+      "observed": 18.813716404077798,
+      "source": "https://artificialanalysis.ai/models/releases/gemini-4-argon"
+    },
+    {
+      "model_id": "flash35-lite",
+      "task_type": "SCI-FORMAL",
+      "supplied": 5,
+      "observed": 0,
+      "source": "https://artificialanalysis.ai/models/releases/gemini-4-argon"
+    },
+    {
+      "model_id": "flash35-lite",
+      "task_type": "GEN-FACT",
+      "supplied": 6,
+      "observed": 5.233333333333333,
+      "source": "https://artificialanalysis.ai/models/releases/gemini-4-argon"
+    },
+    {
+      "model_id": "flash35-lite",
+      "task_type": "GEN-DOC",
+      "supplied": 8,
+      "observed": 13.600000000000001,
+      "source": "https://artificialanalysis.ai/models/releases/gemini-4-argon"
+    },
+    {
+      "model_id": "flash35-lite",
+      "task_type": "GEN-LCR",
+      "supplied": 44,
+      "observed": 76.0,
+      "source": "https://artificialanalysis.ai/models/releases/gemini-4-argon"
+    },
+    {
+      "model_id": "flash38-med",
+      "task_type": "AGT-PROJ",
+      "supplied": 1180,
+      "observed": 1181.49,
+      "source": "https://artificialanalysis.ai/models/releases/gemini-3-8-flash"
+    },
+    {
+      "model_id": "flash38-med",
+      "task_type": "AGT-DELIV",
+      "supplied": 1440,
+      "observed": 1422.11,
+      "source": "https://artificialanalysis.ai/models/releases/gemini-3-8-flash"
+    },
+    {
+      "model_id": "flash38-med",
+      "task_type": "AGT-AUTO",
+      "supplied": 52,
+      "observed": 60.8899739211415,
+      "source": "https://artificialanalysis.ai/models/releases/gemini-3-8-flash"
+    },
+    {
+      "model_id": "flash38-med",
+      "task_type": "COD-TERM",
+      "supplied": 16,
+      "observed": 19.6969696969697,
+      "source": "https://artificialanalysis.ai/models/releases/gemini-3-8-flash"
+    },
+    {
+      "model_id": "flash38-med",
+      "task_type": "COD-SCI",
+      "supplied": 48,
+      "observed": 55.0925925925926,
+      "source": "https://artificialanalysis.ai/models/releases/gemini-3-8-flash"
+    },
+    {
+      "model_id": "flash38-med",
+      "task_type": "SCI-FRONT",
+      "supplied": 31,
+      "observed": 42.122335495829496,
+      "source": "https://artificialanalysis.ai/models/releases/gemini-3-8-flash"
+    },
+    {
+      "model_id": "flash38-med",
+      "task_type": "SCI-FORMAL",
+      "supplied": 15,
+      "observed": 12.285714285714299,
+      "source": "https://artificialanalysis.ai/models/releases/gemini-3-8-flash"
+    },
+    {
+      "model_id": "flash38-med",
+      "task_type": "GEN-FACT",
+      "supplied": 28,
+      "observed": 28.583333333333332,
+      "source": "https://artificialanalysis.ai/models/releases/gemini-3-8-flash"
+    },
+    {
+      "model_id": "flash38-med",
+      "task_type": "GEN-DOC",
+      "supplied": 18,
+      "observed": 22.8,
+      "source": "https://artificialanalysis.ai/models/releases/gemini-3-8-flash"
+    },
+    {
+      "model_id": "flash38-med",
+      "task_type": "GEN-LCR",
+      "supplied": 72,
+      "observed": 84.0,
+      "source": "https://artificialanalysis.ai/models/releases/gemini-3-8-flash"
+    },
+    {
+      "model_id": "flash38-high",
+      "task_type": "AGT-DELIV",
+      "supplied": 1485,
+      "observed": 1435.52,
+      "source": "https://artificialanalysis.ai/models/releases/gemini-3-8-flash"
+    },
+    {
+      "model_id": "flash38-high",
+      "task_type": "SCI-FRONT",
+      "supplied": 35,
+      "observed": 47.8220574606117,
+      "source": "https://artificialanalysis.ai/models/releases/gemini-3-8-flash"
+    },
+    {
+      "model_id": "argon-high",
+      "task_type": "AGT-PROJ",
+      "supplied": 1490,
+      "observed": 1487.04,
+      "source": "https://artificialanalysis.ai/models/releases/gemini-4-argon"
+    }
+  ],
+  "observed_models": 34,
+  "missing_published_effort_results": [
+    "flash38-low",
+    "argon-low",
+    "argon-med"
+  ],
+  "corrected_catalog_sha256": "cbaa92c14649dd51f0d91ba8ab550181178574daab11985302b846c17c0305ff",
+  "routing_gaps": [
+    {
+      "task_type": "SCI-FORMAL",
+      "tier": 10,
+      "floor": 32
+    }
+  ],
+  "reviewer_gaps": [
+    {
+      "task_type": "AGT-DELIV",
+      "tier": 9,
+      "producer": "opus-max"
+    },
+    {
+      "task_type": "AGT-DELIV",
+      "tier": 9,
+      "producer": "opus-xhigh"
+    },
+    {
+      "task_type": "AGT-DELIV",
+      "tier": 10,
+      "producer": "opus-max"
+    },
+    {
+      "task_type": "AGT-AUTO",
+      "tier": 9,
+      "producer": "argon-high"
+    },
+    {
+      "task_type": "AGT-AUTO",
+      "tier": 10,
+      "producer": "argon-high"
+    },
+    {
+      "task_type": "COD-TERM",
+      "tier": 9,
+      "producer": "sonnet-max"
+    },
+    {
+      "task_type": "COD-TERM",
+      "tier": 10,
+      "producer": "sonnet-max"
+    },
+    {
+      "task_type": "COD-SCI",
+      "tier": 9,
+      "producer": "opus-max"
+    },
+    {
+      "task_type": "COD-SCI",
+      "tier": 9,
+      "producer": "opus-xhigh"
+    },
+    {
+      "task_type": "COD-SCI",
+      "tier": 10,
+      "producer": "opus-max"
+    },
+    {
+      "task_type": "SCI-FRONT",
+      "tier": 9,
+      "producer": "opus-max"
+    },
+    {
+      "task_type": "SCI-FRONT",
+      "tier": 9,
+      "producer": "opus-xhigh"
+    },
+    {
+      "task_type": "SCI-FRONT",
+      "tier": 10,
+      "producer": "opus-max"
+    },
+    {
+      "task_type": "SCI-FORMAL",
+      "tier": 9,
+      "producer": "sol-xhigh"
+    },
+    {
+      "task_type": "SCI-FORMAL",
+      "tier": 9,
+      "producer": "sol-max"
+    },
+    {
+      "task_type": "SCI-FORMAL",
+      "tier": 9,
+      "producer": "astra-max"
+    },
+    {
+      "task_type": "SCI-FORMAL",
+      "tier": 9,
+      "producer": "opus-xhigh"
+    },
+    {
+      "task_type": "SCI-FORMAL",
+      "tier": 9,
+      "producer": "opus-max"
+    },
+    {
+      "task_type": "GEN-FACT",
+      "tier": 9,
+      "producer": "opus-max"
+    },
+    {
+      "task_type": "GEN-FACT",
+      "tier": 10,
+      "producer": "opus-max"
+    }
+  ]
+}

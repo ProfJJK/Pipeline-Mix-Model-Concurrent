@@ -44,7 +44,7 @@ CREATE TABLE IF NOT EXISTS pipeline_jobs (
     job_id TEXT PRIMARY KEY,
     workflow_id TEXT NOT NULL REFERENCES pipeline_jobs(job_id),
     parent_job_id TEXT REFERENCES pipeline_jobs(job_id),
-    kind TEXT NOT NULL CHECK(kind IN ('MACRO_PLANNING_REQUEST','MANIFEST_GENERATOR','CHAPTER_DRAFT','SYNTHESIS','CODE_REQUEST','CODE_PLAN','CODE_PLAN_REVIEW','CODE_TEST_AUTHOR','CODE_EDIT','CODE_TEST','CODE_REVIEW','CODE_RESEARCH','CODE_INTEGRATE','PREFLIGHT_REQUEST')),
+    kind TEXT NOT NULL CHECK(kind IN ('MACRO_PLANNING_REQUEST','MANIFEST_GENERATOR','CHAPTER_DRAFT','SYNTHESIS','CODE_REQUEST','CODE_PLAN','CODE_PLAN_REVIEW','CODE_TEST_AUTHOR','CODE_EDIT','CODE_TEST','CODE_REVIEW','CODE_RESEARCH','CODE_INTEGRATE','PREFLIGHT_REQUEST','TASK_PLAN')),
     status TEXT NOT NULL CHECK(status IN ('BLOCKED','PENDING','IN_PROGRESS','COMPLETED','FAILED','PENDING_RETRY')),
     chapter_id TEXT,
     payload_json TEXT NOT NULL CHECK(json_valid(payload_json)),
@@ -62,6 +62,7 @@ CREATE TABLE IF NOT EXISTS pipeline_jobs (
 CREATE UNIQUE INDEX IF NOT EXISTS pipeline_unique_chapter ON pipeline_jobs(workflow_id,chapter_id) WHERE kind='CHAPTER_DRAFT';
 CREATE UNIQUE INDEX IF NOT EXISTS pipeline_unique_stage ON pipeline_jobs(workflow_id,kind) WHERE kind IN ('MACRO_PLANNING_REQUEST','MANIFEST_GENERATOR','SYNTHESIS','CODE_REQUEST');
 CREATE UNIQUE INDEX IF NOT EXISTS pipeline_unique_preflight ON pipeline_jobs(workflow_id) WHERE kind='PREFLIGHT_REQUEST';
+CREATE UNIQUE INDEX IF NOT EXISTS pipeline_unique_task_plan ON pipeline_jobs(workflow_id) WHERE kind='TASK_PLAN';
 CREATE INDEX IF NOT EXISTS pipeline_claimable ON pipeline_jobs(status,created_at);
 CREATE TABLE IF NOT EXISTS pipeline_outputs (
     job_id TEXT PRIMARY KEY REFERENCES pipeline_jobs(job_id),
@@ -174,6 +175,10 @@ BEGIN
           AND EXISTS(SELECT 1 FROM pipeline_jobs j JOIN pipeline_outputs o USING(job_id)
             WHERE j.workflow_id=NEW.workflow_id AND j.kind='PREFLIGHT_REQUEST' AND j.status='COMPLETED'
             AND json_type(o.output_json,'$.ready')='true'))
+        AND NOT (COALESCE(json_extract(NEW.payload_json,'$.workflow_type')='planning428',0)
+          AND EXISTS(SELECT 1 FROM pipeline_jobs j JOIN pipeline_outputs o USING(job_id)
+            WHERE j.workflow_id=NEW.workflow_id AND j.kind='TASK_PLAN' AND j.status='COMPLETED'
+            AND j.parent_job_id=NEW.job_id))
         THEN RAISE(ABORT,'root completion requires synthesis') END;
     SELECT CASE WHEN NEW.kind='CODE_REQUEST'
         AND NOT EXISTS(SELECT 1 FROM pipeline_jobs j JOIN pipeline_outputs o USING(job_id)
@@ -335,7 +340,7 @@ class JobStore(CodingStoreMixin):
     def _migrate_coding_schema(conn):
         existing = conn.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='pipeline_jobs'").fetchone()
         required_kinds = ('MACRO_PLANNING_REQUEST', 'MANIFEST_GENERATOR', 'CHAPTER_DRAFT',
-                          'SYNTHESIS', 'PREFLIGHT_REQUEST', *CODING_KINDS)
+                          'SYNTHESIS', 'PREFLIGHT_REQUEST', 'TASK_PLAN', *CODING_KINDS)
         if existing is None or all(repr(kind) in existing[0] for kind in required_kinds):
             return
         # Preserve every child table and FK target name. Renaming the old table
@@ -664,7 +669,7 @@ class JobStore(CodingStoreMixin):
             if isinstance(allowed_kinds,(str,bytes)):
                 raise ValueError('allowed_kinds must be an iterable of executable kinds')
             permitted=tuple(sorted(set(allowed_kinds)))
-            valid={'MANIFEST_GENERATOR','CHAPTER_DRAFT','SYNTHESIS','PREFLIGHT_REQUEST',*CODING_KINDS}-{'CODE_REQUEST'}
+            valid={'MANIFEST_GENERATOR','CHAPTER_DRAFT','SYNTHESIS','PREFLIGHT_REQUEST','TASK_PLAN',*CODING_KINDS}-{'CODE_REQUEST'}
             if not permitted or any(kind not in valid for kind in permitted):
                 raise ValueError('allowed_kinds contains an unsupported execution kind')
             exclusion+=' AND j.kind IN ('+','.join('?' for _ in permitted)+')'
@@ -922,6 +927,9 @@ class JobStore(CodingStoreMixin):
             elif job["kind"] == "PREFLIGHT_REQUEST":
                 if output.get('ready') is not True or set(output) != {'ready'}:
                     raise ValueError('Preflight must return the exact bounded ready:true response')
+            elif job["kind"] == "TASK_PLAN":
+                from .planning_gateway import validate_stage_output
+                validate_stage_output(job['payload'], output, job['route'])
             elif job["kind"] == "CHAPTER_DRAFT":
                 self._chapter(job, output)
                 self._sibling_wbs(conn, job, output)
@@ -966,10 +974,10 @@ class JobStore(CodingStoreMixin):
                 self._event(conn, job, "CHAPTERS_SCATTERED", count=len(chapters))
             elif job["kind"] == "CHAPTER_DRAFT":
                 self._release_synthesis(conn, job["workflow_id"])
-            elif job["kind"] in ("SYNTHESIS", "PREFLIGHT_REQUEST"):
+            elif job["kind"] in ("SYNTHESIS", "PREFLIGHT_REQUEST", "TASK_PLAN"):
                 conn.execute("UPDATE pipeline_jobs SET status='COMPLETED',updated_at=? WHERE job_id=?", (time.time(), job["workflow_id"]))
                 self._event(conn, self._get(conn, job["workflow_id"]), "WORKFLOW_COMPLETED",
-                            **({'synthesis_job_id': job_id} if job['kind'] == 'SYNTHESIS' else {'preflight_job_id': job_id}))
+                            **{({'SYNTHESIS':'synthesis_job_id','TASK_PLAN':'planning_job_id'}.get(job['kind'],'preflight_job_id')):job_id})
             return self._get(conn, job_id)
 
     def _release_synthesis(self, conn: sqlite3.Connection, workflow_id: str) -> None:

@@ -1,0 +1,729 @@
+{
+  "schema": "cochem-public-benchmark-observation/1",
+  "url": "https://artificialanalysis.ai/models/releases/claude-haiku-5-5",
+  "retrieved_utc": "2026-10-14T00:03:21.559809+00:00",
+  "page_sha256": "5fbae80e6c87448ade5cc479515dbd176dfd0da36395be4530d3f8b3fa3843af",
+  "models": {
+    "claude-haiku-5-5": {
+      "name": "Claude Haiku 5.5 (Max)",
+      "slug": "claude-haiku-5-5",
+      "contextWindowTokens": 1000000,
+      "intelligenceIndex": 43.3950199670746,
+      "intelligenceIndexIsEstimated": false,
+      "intelligenceIndexEvaluations": [
+        {
+          "slug": "aa-briefcase",
+          "score": 1577.99,
+          "outputTokensPerTask": 425445.5934065934,
+          "costPerTask": 0.6748641672669411,
+          "timePerTask": 1101.5199440560823
+        },
+        {
+          "slug": "gdpval-aa",
+          "score": 1620.01,
+          "outputTokensPerTask": 222335.57272727272,
+          "costPerTask": 0.22229297310982066,
+          "timePerTask": 575.6483823729903
+        },
+        {
+          "slug": "automationbench-aa",
+          "score": 0.35411015132783624,
+          "outputTokensPerTask": 51000.65905631659,
+          "costPerTask": 0.04231589574649746,
+          "timePerTask": 132.0456574969112
+        },
+        {
+          "slug": "terminalbench-4-0",
+          "score": 0.328282828282828,
+          "outputTokensPerTask": 346825.92424242425,
+          "costPerTask": 0.6518847460144606,
+          "timePerTask": 897.9659881060447
+        },
+        {
+          "slug": "scicode",
+          "score": 0.549768518518518,
+          "outputTokensPerTask": 21078.034722222223,
+          "costPerTask": 0.010939723611111112,
+          "timePerTask": 54.5730781746406
+        },
+        {
+          "slug": "humanitys-last-exam",
+          "score": 0.443929564411492,
+          "outputTokensPerTask": 87630.71918443003,
+          "costPerTask": 0.04385731621872104,
+          "timePerTask": 226.8844392551456
+        },
+        {
+          "slug": "gdp-pdf",
+          "score": 0.208,
+          "outputTokensPerTask": 70227.7,
+          "costPerTask": 0.052690258,
+          "timePerTask": 181.82633308240176
+        },
+        {
+          "slug": "critpt",
+          "score": 0.188571428571429,
+          "outputTokensPerTask": 186183.12857142856,
+          "costPerTask": 0.09352919857142858,
+          "timePerTask": 482.0461947344453
+        },
+        {
+          "slug": "omniscience",
+          "score": 10.666666666666666,
+          "outputTokensPerTask": 12488.488666666666,
+          "costPerTask": 0.006261468933333334,
+          "timePerTask": 32.333909554223375
+        },
+        {
+          "slug": "artificial-analysis-long-context-reasoning",
+          "score": 0.826666666666667,
+          "outputTokensPerTask": 9918.8,
+          "costPerTask": 0.019313008,
+          "timePerTask": 25.680736128019664
+        }
+      ],
+      "intelligenceIndexCostPerTask": {
+        "cost": {
+          "total": 0.21276971216992022,
+          "input": 0.13168761556562894,
+          "nonCacheInput": 0.0025659346062220315,
+          "cacheRead": 0.09543831887163462,
+          "cacheWrite": 0.03368336208777227,
+          "output": 0.0810820966042913,
+          "reasoning": 0.06452327670421702,
+          "answer": 0.016558819900074292
+        }
+      }
+    },
+    "claude-haiku-5-5-high": {
+      "name": "Claude Haiku 5.5 (High)",
+      "slug": "claude-haiku-5-5-high",
+      "contextWindowTokens": 1000000,
+      "intelligenceIndex": 37.8240211671094,
+      "intelligenceIndexIsEstimated": false,
+      "intelligenceIndexEvaluations": [
+        {
+          "slug": "aa-briefcase",
+          "score": 1442.29,
+          "outputTokensPerTask": 156710.6813186813,
+          "costPerTask": 0.22294368661924832,
+          "timePerTask": 541.1241384491279
+        },
+        {
+          "slug": "gdpval-aa",
+          "score": 1417.77,
+          "outputTokensPerTask": 46726.28636363636,
+          "costPerTask": 0.04359841732015027,
+          "timePerTask": 161.34650962324542
+        },
+        {
+          "slug": "automationbench-aa",
+          "score": 0.3372685311767238,
+          "outputTokensPerTask": 21081.709284627093,
+          "costPerTask": 0.0226877278836208,
+          "timePerTask": 72.79543217912679
+        },
+        {
+          "slug": "terminalbench-4-0",
+          "score": 0.217171717171717,
+          "outputTokensPerTask": 166080.0909090909,
+          "costPerTask": 0.3314793370029226,
+          "timePerTask": 573.4768386589955
+        },
+        {
+          "slug": "scicode",
+          "score": 0.487268518518519,
+          "outputTokensPerTask": 2290.934027777778,
+          "costPerTask": 0.0015008180555555555,
+          "timePerTask": 7.910626714104264
+        },
+        {
+          "slug": "humanitys-last-exam",
+          "score": 0.3725671918443,
+          "outputTokensPerTask": 16865.349397590362,
+          "costPerTask": 0.008477391056533827,
+          "timePerTask": 58.23628348507903
+        },
+        {
+          "slug": "gdp-pdf",
+          "score": 0.172,
+          "outputTokensPerTask": 9984.33,
+          "costPerTask": 0.022568573,
+          "timePerTask": 34.47602884359181
+        },
+        {
+          "slug": "critpt",
+          "score": 0.185714285714286,
+          "outputTokensPerTask": 64448.55714285714,
+          "costPerTask": 0.032742587142857146,
+          "timePerTask": 222.54175442768997
+        },
+        {
+          "slug": "omniscience",
+          "score": 5.75,
+          "outputTokensPerTask": 842.7536666666666,
+          "costPerTask": 0.00043867861666666664,
+          "timePerTask": 2.9100400046916275
+        },
+        {
+          "slug": "artificial-analysis-long-context-reasoning",
+          "score": 0.773333333333333,
+          "outputTokensPerTask": 1223.27,
+          "costPerTask": 0.014965243,
+          "timePerTask": 4.223968138422964
+        }
+      ],
+      "intelligenceIndexCostPerTask": {
+        "cost": {
+          "total": 0.07942671568737021,
+          "input": 0.05173280618930581,
+          "nonCacheInput": 0.0025697540645833886,
+          "cacheRead": 0.03500997649418093,
+          "cacheWrite": 0.014153075630541492,
+          "output": 0.02769390949806441,
+          "reasoning": 0.018487598526604167,
+          "answer": 0.009206310971460241
+        }
+      }
+    },
+    "claude-haiku-5-5-medium": {
+      "name": "Claude Haiku 5.5 (Medium)",
+      "slug": "claude-haiku-5-5-medium",
+      "contextWindowTokens": 1000000,
+      "intelligenceIndex": 34.4646519474657,
+      "intelligenceIndexIsEstimated": false,
+      "intelligenceIndexEvaluations": [
+        {
+          "slug": "aa-briefcase",
+          "score": 1371.55,
+          "outputTokensPerTask": 98578.0989010989,
+          "costPerTask": 0.13300242193709352,
+          "timePerTask": 351.3817637155587
+        },
+        {
+          "slug": "gdpval-aa",
+          "score": 1274.34,
+          "outputTokensPerTask": 23182.495454545453,
+          "costPerTask": 0.0207415439572033,
+          "timePerTask": 82.63403566261408
+        },
+        {
+          "slug": "automationbench-aa",
+          "score": 0.2858961481429316,
+          "outputTokensPerTask": 16868.432267884324,
+          "costPerTask": 0.0191398777523888,
+          "timePerTask": 60.127549095385945
+        },
+        {
+          "slug": "terminalbench-4-0",
+          "score": 0.151515151515152,
+          "outputTokensPerTask": 106542.89393939394,
+          "costPerTask": 0.19378303790411755,
+          "timePerTask": 379.77228614789834
+        },
+        {
+          "slug": "scicode",
+          "score": 0.489583333333333,
+          "outputTokensPerTask": 1634.9444444444443,
+          "costPerTask": 0.0011676524305555553,
+          "timePerTask": 5.827761631335731
+        },
+        {
+          "slug": "humanitys-last-exam",
+          "score": 0.337812789620019,
+          "outputTokensPerTask": 6879.672381835033,
+          "costPerTask": 0.0034846164504170525,
+          "timePerTask": 24.522601290371046
+        },
+        {
+          "slug": "gdp-pdf",
+          "score": 0.152,
+          "outputTokensPerTask": 5991.78,
+          "costPerTask": 0.020572298,
+          "timePerTask": 21.3577077227662
+        },
+        {
+          "slug": "critpt",
+          "score": 0.128571428571429,
+          "outputTokensPerTask": 26157.22857142857,
+          "costPerTask": 0.013565408571428572,
+          "timePerTask": 93.2374757861872
+        },
+        {
+          "slug": "omniscience",
+          "score": 4.466666666666667,
+          "outputTokensPerTask": 625.5248333333333,
+          "costPerTask": 0.0003300642,
+          "timePerTask": 2.2296840944870095
+        },
+        {
+          "slug": "artificial-analysis-long-context-reasoning",
+          "score": 0.773333333333333,
+          "outputTokensPerTask": 993.8,
+          "costPerTask": 0.014850508,
+          "timePerTask": 3.5424014124158516
+        }
+      ],
+      "intelligenceIndexCostPerTask": {
+        "cost": {
+          "total": 0.04703084793955566,
+          "input": 0.030624569613193774,
+          "nonCacheInput": 0.0025660919428547157,
+          "cacheRead": 0.019020923618643826,
+          "cacheWrite": 0.009037554051695235,
+          "output": 0.016406278326361896,
+          "reasoning": 0.009845085624171227,
+          "answer": 0.006561192702190671
+        }
+      }
+    },
+    "claude-haiku-5-5-low": {
+      "name": "Claude Haiku 5.5 (Low)",
+      "slug": "claude-haiku-5-5-low",
+      "contextWindowTokens": 1000000,
+      "intelligenceIndex": 29.4523685891139,
+      "intelligenceIndexIsEstimated": false,
+      "intelligenceIndexEvaluations": [
+        {
+          "slug": "aa-briefcase",
+          "score": 1111.54,
+          "outputTokensPerTask": 40205.494505494506,
+          "costPerTask": 0.047208133531405856,
+          "timePerTask": 152.61256916629122
+        },
+        {
+          "slug": "gdpval-aa",
+          "score": 1122.23,
+          "outputTokensPerTask": 12610.34090909091,
+          "costPerTask": 0.01036732378882185,
+          "timePerTask": 47.86650550800079
+        },
+        {
+          "slug": "automationbench-aa",
+          "score": 0.22910812181110643,
+          "outputTokensPerTask": 13000.374429223744,
+          "costPerTask": 0.015280525566503717,
+          "timePerTask": 49.34700010956102
+        },
+        {
+          "slug": "terminalbench-4-0",
+          "score": 0.126262626262626,
+          "outputTokensPerTask": 70285.01515151515,
+          "costPerTask": 0.1185604005507249,
+          "timePerTask": 266.7888274499039
+        },
+        {
+          "slug": "scicode",
+          "score": 0.491898148148148,
+          "outputTokensPerTask": 1200.1979166666667,
+          "costPerTask": 0.0009499020833333334,
+          "timePerTask": 4.555727763664214
+        },
+        {
+          "slug": "humanitys-last-exam",
+          "score": 0.270157553290083,
+          "outputTokensPerTask": 3688.9318813716404,
+          "costPerTask": 0.0018893202965708992,
+          "timePerTask": 14.002498385354507
+        },
+        {
+          "slug": "gdp-pdf",
+          "score": 0.112,
+          "outputTokensPerTask": 3404.58,
+          "costPerTask": 0.019278698,
+          "timePerTask": 12.923151602106659
+        },
+        {
+          "slug": "critpt",
+          "score": 0.0914285714285714,
+          "outputTokensPerTask": 13696.728571428572,
+          "costPerTask": 0.007311545714285715,
+          "timePerTask": 51.99023074255185
+        },
+        {
+          "slug": "omniscience",
+          "score": 3.25,
+          "outputTokensPerTask": 497.99666666666667,
+          "costPerTask": 0.00026630011666666664,
+          "timePerTask": 1.8903025984635722
+        },
+        {
+          "slug": "artificial-analysis-long-context-reasoning",
+          "score": 0.72,
+          "outputTokensPerTask": 830.81,
+          "costPerTask": 0.014769013,
+          "timePerTask": 3.153600027770307
+        }
+      ],
+      "intelligenceIndexCostPerTask": {
+        "cost": {
+          "total": 0.02445936101890973,
+          "input": 0.015816529848763406,
+          "nonCacheInput": 0.002563700358445651,
+          "cacheRead": 0.00840255642245219,
+          "cacheWrite": 0.004850273067865566,
+          "output": 0.00864283117014633,
+          "reasoning": 0.00461568794053133,
+          "answer": 0.0040271432296149975
+        }
+      }
+    },
+    "gpt-6-luna": {
+      "name": "GPT-6 Luna (Max)",
+      "slug": "gpt-6-luna",
+      "contextWindowTokens": 1000000,
+      "intelligenceIndex": 38.1245186869738,
+      "intelligenceIndexIsEstimated": false,
+      "intelligenceIndexEvaluations": [
+        {
+          "slug": "aa-briefcase",
+          "score": 1336.46,
+          "outputTokensPerTask": 110018.61538461539,
+          "costPerTask": 0.16999207407261596,
+          "timePerTask": 810.6965454409656
+        },
+        {
+          "slug": "gdpval-aa",
+          "score": 1430.2,
+          "outputTokensPerTask": 61046.85,
+          "costPerTask": 0.08935398436610914,
+          "timePerTask": 449.837241016336
+        },
+        {
+          "slug": "automationbench-aa",
+          "score": 0.5316814034483175,
+          "outputTokensPerTask": 34034.07305936073,
+          "costPerTask": 0.03639964442044852,
+          "timePerTask": 250.7876086247078
+        },
+        {
+          "slug": "terminalbench-4-0",
+          "score": 0.126262626262626,
+          "outputTokensPerTask": 140973.75757575757,
+          "costPerTask": 0.23621085607736897,
+          "timePerTask": 1038.7963697321743
+        },
+        {
+          "slug": "scicode",
+          "score": 0.546296296296296,
+          "outputTokensPerTask": 6905.854166666667,
+          "costPerTask": 0.0036765802083333337,
+          "timePerTask": 50.887316629678715
+        },
+        {
+          "slug": "humanitys-last-exam",
+          "score": 0.385078776645042,
+          "outputTokensPerTask": 23561.930027803523,
+          "costPerTask": 0.011812253938832253,
+          "timePerTask": 173.6213022740256
+        },
+        {
+          "slug": "gdp-pdf",
+          "score": 0.228,
+          "outputTokensPerTask": 24831.15,
+          "costPerTask": 0.028547064,
+          "timePerTask": 182.973830873547
+        },
+        {
+          "slug": "critpt",
+          "score": 0.194285714285714,
+          "outputTokensPerTask": 52465.07142857143,
+          "costPerTask": 0.02656206857142857,
+          "timePerTask": 386.60050405800746
+        },
+        {
+          "slug": "omniscience",
+          "score": 0.65,
+          "outputTokensPerTask": 5022.047666666666,
+          "costPerTask": 0.0025233736666666665,
+          "timePerTask": 37.00607101964903
+        },
+        {
+          "slug": "artificial-analysis-long-context-reasoning",
+          "score": 0.833333333333333,
+          "outputTokensPerTask": 1508.52,
+          "costPerTask": 0.010187532000000001,
+          "timePerTask": 11.11586387861066
+        }
+      ],
+      "intelligenceIndexCostPerTask": {
+        "cost": {
+          "total": 0.06782295669812205,
+          "input": 0.042817111482851916,
+          "nonCacheInput": 0.0021451124657073345,
+          "cacheRead": 0.02897687860847939,
+          "cacheWrite": 0.011695120408665187,
+          "output": 0.025005845215270134,
+          "reasoning": 0.019444840229640766,
+          "answer": 0.005561004985629364
+        }
+      }
+    },
+    "gpt-6-luna-xhigh": {
+      "name": "GPT-6 Luna (Xhigh)",
+      "slug": "gpt-6-luna-xhigh",
+      "contextWindowTokens": 1000000,
+      "intelligenceIndex": 34.5587320217785,
+      "intelligenceIndexIsEstimated": false,
+      "intelligenceIndexEvaluations": [
+        {
+          "slug": "aa-briefcase",
+          "score": 1236.63,
+          "outputTokensPerTask": 57304,
+          "costPerTask": 0.08249954686550107,
+          "timePerTask": 448.87474960524924
+        },
+        {
+          "slug": "gdpval-aa",
+          "score": 1363.55,
+          "outputTokensPerTask": 32441.754545454547,
+          "costPerTask": 0.04571538846185774,
+          "timePerTask": 254.1233499990553
+        },
+        {
+          "slug": "automationbench-aa",
+          "score": 0.47800686767566575,
+          "outputTokensPerTask": 19994.441400304415,
+          "costPerTask": 0.023298294600704986,
+          "timePerTask": 156.620827116056
+        },
+        {
+          "slug": "terminalbench-4-0",
+          "score": 0.0808080808080808,
+          "outputTokensPerTask": 104249.51515151515,
+          "costPerTask": 0.1981783100252545,
+          "timePerTask": 816.609224663287
+        },
+        {
+          "slug": "scicode",
+          "score": 0.517361111111111,
+          "outputTokensPerTask": 2435.2881944444443,
+          "costPerTask": 0.0014390868055555554,
+          "timePerTask": 19.076144396514543
+        },
+        {
+          "slug": "humanitys-last-exam",
+          "score": 0.343373493975904,
+          "outputTokensPerTask": 10120.584800741428,
+          "costPerTask": 0.00509183609823911,
+          "timePerTask": 79.27675150585473
+        },
+        {
+          "slug": "gdp-pdf",
+          "score": 0.186,
+          "outputTokensPerTask": 9058.29,
+          "costPerTask": 0.020663617,
+          "timePerTask": 70.95556428175578
+        },
+        {
+          "slug": "critpt",
+          "score": 0.174285714285714,
+          "outputTokensPerTask": 17376.842857142856,
+          "costPerTask": 0.00899588,
+          "timePerTask": 136.11660593378758
+        },
+        {
+          "slug": "omniscience",
+          "score": -1.8333333333333333,
+          "outputTokensPerTask": 1901.0533333333333,
+          "costPerTask": 0.0009628764999999999,
+          "timePerTask": 14.891366030054174
+        },
+        {
+          "slug": "artificial-analysis-long-context-reasoning",
+          "score": 0.8,
+          "outputTokensPerTask": 767.77,
+          "costPerTask": 0.009817157000000002,
+          "timePerTask": 6.01411012327974
+        }
+      ],
+      "intelligenceIndexCostPerTask": {
+        "cost": {
+          "total": 0.042183547923951084,
+          "input": 0.028439999861478566,
+          "nonCacheInput": 0.00214300777276303,
+          "cacheRead": 0.018870379054820634,
+          "cacheWrite": 0.007426613033894902,
+          "output": 0.013743548062472534,
+          "reasoning": 0.00937867172901786,
+          "answer": 0.004364876333454675
+        }
+      }
+    },
+    "gpt-6-luna-high": {
+      "name": "GPT-6 Luna (High)",
+      "slug": "gpt-6-luna-high",
+      "contextWindowTokens": 1000000,
+      "intelligenceIndex": 32.9282054150837,
+      "intelligenceIndexIsEstimated": false,
+      "intelligenceIndexEvaluations": [
+        {
+          "slug": "aa-briefcase",
+          "score": 1185.69,
+          "outputTokensPerTask": 42461.681318681316,
+          "costPerTask": 0.06220832086165862,
+          "timePerTask": 320.79753463886857
+        },
+        {
+          "slug": "gdpval-aa",
+          "score": 1339.95,
+          "outputTokensPerTask": 24944.927272727273,
+          "costPerTask": 0.03190170403500649,
+          "timePerTask": 188.45865077217584
+        },
+        {
+          "slug": "automationbench-aa",
+          "score": 0.4782449139916615,
+          "outputTokensPerTask": 16678.185692541858,
+          "costPerTask": 0.020749699267145254,
+          "timePerTask": 126.00350919365899
+        },
+        {
+          "slug": "terminalbench-4-0",
+          "score": 0.0454545454545455,
+          "outputTokensPerTask": 74238.86363636363,
+          "costPerTask": 0.12040055149702272,
+          "timePerTask": 560.8737970170471
+        },
+        {
+          "slug": "scicode",
+          "score": 0.503472222222222,
+          "outputTokensPerTask": 1528.3715277777778,
+          "costPerTask": 0.0009804875000000001,
+          "timePerTask": 11.546830057048217
+        },
+        {
+          "slug": "humanitys-last-exam",
+          "score": 0.329471733086191,
+          "outputTokensPerTask": 6015.005097312326,
+          "costPerTask": 0.0030390533827618165,
+          "timePerTask": 45.443297253730776
+        },
+        {
+          "slug": "gdp-pdf",
+          "score": 0.182,
+          "outputTokensPerTask": 5381.39,
+          "costPerTask": 0.018825166,
+          "timePerTask": 40.65634217293103
+        },
+        {
+          "slug": "critpt",
+          "score": 0.154285714285714,
+          "outputTokensPerTask": 10910.585714285715,
+          "costPerTask": 0.005755518571428571,
+          "timePerTask": 82.42935488918164
+        },
+        {
+          "slug": "omniscience",
+          "score": -5.5,
+          "outputTokensPerTask": 1140.6051666666667,
+          "costPerTask": 0.0005826524166666666,
+          "timePerTask": 8.617259470176485
+        },
+        {
+          "slug": "artificial-analysis-long-context-reasoning",
+          "score": 0.793333333333333,
+          "outputTokensPerTask": 541.35,
+          "costPerTask": 0.009703947000000003,
+          "timePerTask": 4.089893286923307
+        }
+      ],
+      "intelligenceIndexCostPerTask": {
+        "cost": {
+          "total": 0.02903157640372802,
+          "input": 0.01917995936259003,
+          "nonCacheInput": 0.002141771003450248,
+          "cacheRead": 0.011371939658497492,
+          "cacheWrite": 0.005666248700642293,
+          "output": 0.009851617041137984,
+          "reasoning": 0.006372244935631127,
+          "answer": 0.0034793721055068542
+        }
+      }
+    },
+    "gpt-6-luna-medium": {
+      "name": "GPT-6 Luna (Medium)",
+      "slug": "gpt-6-luna-medium",
+      "contextWindowTokens": 1000000,
+      "intelligenceIndex": 29.9251773515762,
+      "intelligenceIndexIsEstimated": false,
+      "intelligenceIndexEvaluations": [
+        {
+          "slug": "aa-briefcase",
+          "score": 1098.63,
+          "outputTokensPerTask": 23238.956043956045,
+          "costPerTask": 0.03312303543894964
+        },
+        {
+          "slug": "gdpval-aa",
+          "score": 1261.72,
+          "outputTokensPerTask": 14669.168181818182,
+          "costPerTask": 0.01693611899300757
+        },
+        {
+          "slug": "automationbench-aa",
+          "score": 0.4046136879135791,
+          "outputTokensPerTask": 12393.817351598174,
+          "costPerTask": 0.01657116888405385
+        },
+        {
+          "slug": "terminalbench-4-0",
+          "score": 0.0252525252525253,
+          "outputTokensPerTask": 45047.681818181816,
+          "costPerTask": 0.07156543103673528
+        },
+        {
+          "slug": "scicode",
+          "score": 0.509259259259259,
+          "outputTokensPerTask": 969.1909722222222,
+          "costPerTask": 0.0006986395833333333
+        },
+        {
+          "slug": "humanitys-last-exam",
+          "score": 0.282669138090825,
+          "outputTokensPerTask": 3167.086654309546,
+          "costPerTask": 0.0016150941612604265
+        },
+        {
+          "slug": "gdp-pdf",
+          "score": 0.138,
+          "outputTokensPerTask": 2594.15,
+          "costPerTask": 0.017431547000000002
+        },
+        {
+          "slug": "critpt",
+          "score": 0.105714285714286,
+          "outputTokensPerTask": 5795.957142857143,
+          "costPerTask": 0.0031839414285714284
+        },
+        {
+          "slug": "omniscience",
+          "score": -5.05,
+          "outputTokensPerTask": 709.1768333333333,
+          "costPerTask": 0.00036693825
+        },
+        {
+          "slug": "artificial-analysis-long-context-reasoning",
+          "score": 0.783333333333333,
+          "outputTokensPerTask": 404.43,
+          "costPerTask": 0.009635487000000002
+        }
+      ],
+      "intelligenceIndexCostPerTask": {
+        "cost": {
+          "total": 0.017476906067835942,
+          "input": 0.011748678179779837,
+          "nonCacheInput": 0.0021401190538470733,
+          "cacheRead": 0.006050474952908773,
+          "cacheWrite": 0.0035580841730239927,
+          "output": 0.005728227888056104,
+          "reasoning": 0.003164558148924762,
+          "answer": 0.0025636697391313414
+        }
+      }
+    }
+  },
+  "host_accepted": false,
+  "source_capture_sha256": "12c8e517359e442ac0b62dcd814f86db0e013a17148c30ed90570044f0d434ca",
+  "projection": "Only matrix model profiles and numeric benchmark fields retained"
+}

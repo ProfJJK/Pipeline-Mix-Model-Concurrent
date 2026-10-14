@@ -30,7 +30,7 @@ SCORING_VERSION = 1
 GEMINI_PRO_MODEL = "gemini-3.1-pro-preview"
 _LEGACY_GEMINI_PRO_MODEL = "gemini-3.1-pro"
 _PROVIDERS = ("codex", "claude", "gemini")
-_KINDS = {"MACRO_PLANNING_REQUEST", "MANIFEST_GENERATOR", "CHAPTER_DRAFT", "SYNTHESIS",
+_KINDS = {"TASK_PLAN", "MACRO_PLANNING_REQUEST", "MANIFEST_GENERATOR", "CHAPTER_DRAFT", "SYNTHESIS",
           "CODE_REQUEST", "CODE_PLAN", "CODE_PLAN_REVIEW", "CODE_TEST_AUTHOR", "CODE_EDIT", "CODE_REVIEW", "CODE_RESEARCH", "REPAIR_REQUEST", "REPAIR_REVIEW", "PREFLIGHT_REQUEST"}
 _TIER_SIZES = {"1-3": 3, "4-6": 3, "7-9": 3, "10": 2}
 _MODEL = re.compile(r"[A-Za-z0-9][A-Za-z0-9._/-]{0,199}\Z")
@@ -356,6 +356,8 @@ class RoutingPolicy:
         digest = hashlib.sha256(f"{seed}\0{cycle}".encode("utf-8")).digest()
         unit = int.from_bytes(digest[:8], "big") / ((1 << 64) - 1)
         base = min(self.backoff_max_seconds, self.backoff_base_seconds * 2 ** min(cycle - 1, 30))
+        if self.as_dict().get('catalog', {}).get('schema') == 'cochem-routing-catalog/3':
+            return max(.001, base * unit)
         factor = 1 + (2 * unit - 1) * self.backoff_jitter_fraction
         return min(self.backoff_max_seconds, max(.001, base * factor))
 

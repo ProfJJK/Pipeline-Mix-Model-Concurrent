@@ -275,6 +275,9 @@ def node_prompt(node: dict, context_xml: str = '') -> str:
                        'or escalate when operator action is required. A test_assumption pivot restarts sealed test authoring '
                        'from the current leaf baseline while retaining prior immutable evidence. '
                        'The controller verifies every quotation and binds your dossier to the three failed attempts.')
+    elif kind == 'TASK_PLAN':
+        from .planning_gateway import prompt_contract
+        contract, instruction, payload = prompt_contract(payload)
     else:
         raise ValueError(f'Unsupported executable node kind: {kind}')
     if kind=='CODE_RESEARCH' and payload.get('planning_evidence', {}).get('external_sources'):
@@ -708,7 +711,7 @@ class NativeRunner:
 
     def route(self, node: dict) -> dict:
         """Validate the durable controller selection; never select or fall back here."""
-        if node['kind'] not in ('MANIFEST_GENERATOR','CHAPTER_DRAFT','SYNTHESIS','PREFLIGHT_REQUEST','CODE_PLAN','CODE_PLAN_REVIEW','CODE_TEST_AUTHOR','CODE_EDIT','CODE_REVIEW','CODE_RESEARCH'):
+        if node['kind'] not in ('TASK_PLAN','MANIFEST_GENERATOR','CHAPTER_DRAFT','SYNTHESIS','PREFLIGHT_REQUEST','CODE_PLAN','CODE_PLAN_REVIEW','CODE_TEST_AUTHOR','CODE_EDIT','CODE_REVIEW','CODE_RESEARCH'):
             raise ValueError('Only native job-board inference nodes are executable')
         selected = node.get('route')
         if not isinstance(selected,dict):

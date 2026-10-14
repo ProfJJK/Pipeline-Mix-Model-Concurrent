@@ -1,0 +1,1165 @@
+PAGE 1
+TL;DR: This specification defines a 10-tier agentic routing and asymmetric auditing matrix
+grounded in the Artificial Analysis Intelligence Index v4.3.2 evaluation suite (October 2026
+baseline), mapping 11 distinct task types across Anthropic, OpenAI, and Google models with 5
+ranked fallback slots per tier. It corrects frontier model hierarchy assumptions based on live
+benchmark telemetry, establishes normalized score floors per task type, resolves composite
+multi-domain tasks via weighted capability-to-cost scoring, and enforces cross-provider
+asymmetric verification.
+1. Corrections to Baseline Assumptions & Routing
+Mechanics
+Direct analysis of the live Artificial Analysis v4.3.2 leaderboards requires three corrections to the
+proposed model hierarchy and ranking logic before constructing the matrix:
+  ●    Frontier Ceiling Correction (Opus 5.5 and Sonnet 5.5 vs. Fable 5.1, and Astra Max
+       vs. Astra Ultra):
+   ○    Anthropic: Claude Fable 5.1 (Max) (Intelligence Index: 53, Cost per Task: $7.63) is no
+        longer Anthropic's top-scoring model. Both Claude Opus 5.5 (Max) (Index: 58, Cost per
+        Task: $5.98) and Claude Sonnet 5.5 (Max) (Index: 56, Cost per Task: $5.46) score higher
+        while costing less per task. In general routing, Fable 5.1 (Max) is Pareto-dominated by
+        Opus 5.5 (Max). However, Fable 5.1 (xHigh/Max) retains a specialized slot in Tiers 9–10
+        for tool-heavy research (Humanity's Last Exam with tools) and long-horizon coding loops
+        with heavy context reuse.
+   ○    OpenAI: OpenAI's reasoning effort schema uses six levels (non-reasoning, low, medium,
+        high, xhigh, max). There is no GPT-6 Astra Ultra endpoint; the top configuration is GPT-6
+        Astra (Max) (Index: 53, Cost per Task: $3.26).
+  ●    Google's Mid-Tier Capability Gap (Gemini 3.8 Flash to Gemini 4 Argon):
+   ○    Google's lineup exhibits a structural gap between Gemini 3.8 Flash (High) (Overall Index:
+        41, Cost per Task: $1.24, Speed: 145 tok/s) and Gemini 4 Argon (High) (Overall Index:
+        53, Cost per Task: $1.99).
+   ○    As anticipated in your requirements, Gemini 3.8 Flash (High) covers a wide span (Tiers
+        3–6) for Coding, Long-Context Extraction, and General tasks (scoring 73.8% on
+        DeepSWE v1.1, within 0.3 points of GPT-6 Astra), but hits a hard ceiling on Scientific
+        Reasoning (HLE, CritPt) and Complex Knowledge Work (AA-Briefcase) above Tier 5.
+        Consequently, Google must elevate Gemini 4 Argon (High) early starting at Tier 6 for
+        those task types, while OpenAI (GPT-6.1 Sol across low/medium/high/xhigh/max) and
+        Anthropic (Claude Sonnet 5.5 and Opus 5.5 across effort levels) smoothly populate Tiers
+        5–8.
+  ●    Resolving the Intra-Tier Ranking Conflict (Capability Floor vs. Cost Optimization):
+   ○    Ranking models inside every tier purely by 1. Capability and 2. Price without an upper tier
+        bound would cause Claude Opus 5.5 (Max) to win Tier 1 through Tier 10, collapsing the
+        matrix.
+   ○    To preserve a true 10-tier progression while honoring both criteria, routing uses a
+        Two-Stage Constrained Lexicographic Rule:
+
+PAGE 2
+    1.  Stage 1 (Hard Floor & Effort Band Gate): A candidate model 𝑚 must achieve a task
+        score 𝑆𝑚,𝑡 greater than or equal to the tier's minimum score floor 𝐹𝑘,𝑡 for task type 𝑡 in tier
+        𝑘, and belong to the tier's designated cost-per-task band (unless a provider lacks any
+        lower-tier model meeting 𝐹𝑘,𝑡, triggering Provider Tier Elevation).
+    2.  Stage 2 (Intra-Band Capability-First, Cost-Second Ordering): Among models within
+        the active tier band that clear 𝐹𝑘,𝑡, candidates are ranked first by Task Capability Score
+        (𝑆𝑚,𝑡) and second by Lowest Cost per Task (𝐶𝑚,𝑡) (with Value Efficiency η𝑚,𝑡                =  𝑆𝑚,𝑡/𝐶𝑚,𝑡
+        used to assign the primary slot when two models fall within the benchmark's $\pm
+        1.5\%$ confidence interval).
+2. Task Type Taxonomy Linked to Artificial Analysis
+v4.3.2 Benchmarks
+Artificial Analysis Intelligence Index v4.3.2 evaluates models across 10 core benchmarks
+divided into four weighted macro-categories: Agents (30%), Coding (20%), Scientific
+Reasoning (20%), and General (30%). Adding a composite fallback yields 11 standardized
+routing task types.
+  Task Type          Linked AA          Macro             Native             Concrete           Provider
+  ID                 v4.3.2             Category          Scoring            Pipeline           Comparati
+                     Benchmark          (Index            Metric &           Task               ve
+                                        Weight)           Scale              Definitions        Advantage
+                                                                                                (Oct 2026)
+
+
+  AGT-PROJ           AA-Briefca         Agents            Crowd-BT           Multi-step         Anthropic
+                     se v1.1            (15%)             Elo                project            (Opus 5.5
+                                                          (500–2500          orchestratio       at 1807
+                                                          scale;             n,                 Elo) leads
+                                                          normalized         repository-w       by a wide
+                                                          via (Elo -         ide                margin;
+                                                          500) / 2000)       synthesis          Haiku 5.5
+                                                                             across             Max (1578
+                                                                             hundreds of        Elo)
+                                                                             files (PDFs,       punches far
+                                                                             Slack logs,        above its
+                                                                             spreadshee         price tier,
+                                                                             ts), and           matching
+                                                                             multi-file         Astra Max
+                                                                             deliverable        (1571 Elo).
+                                                                             creation in
+                                                                             sandboxed
+                                                                             environmen
+
+PAGE 3
+                                                                           ts.
+
+
+AGT-DELIV         GDPval-AA          Agents             Pairwise           Autonomou          Anthropic
+                  v2.1               (10%)              Judge Elo          s                  (Opus 5.5
+                                                        anchored to        generation         at 1866
+                                                        1600 ((Elo -       of polished        Elo, Fable
+                                                        500) / 2000)       professional       5.1 at 1853
+                                                                           artifacts:         Elo) leads;
+                                                                           financial          Google
+                                                                           models,            (Argon
+                                                                           executive          High at
+                                                                           slide decks,       1624 Elo)
+                                                                           legal              beats
+                                                                           memos,             OpenAI
+                                                                           and                (Astra Max
+                                                                           rubric-grade       at 1572
+                                                                           d analytical       Elo) on cost
+                                                                           reports.           and quality.
+
+AGT-AUTO          Automatio          Agents             Objective          Multi-app          Google
+                  nBench-AA          (5%)               Completion         SaaS               (Gemini 4
+                                                        % with             workflow           Argon High
+                                                        zero-credit        execution,         at 78%)
+                                                        guardrail          REST API           dominates
+                                                        gate               schema             both Opus
+                                                        (0–100%)           discovery,         5.5 (70%)
+                                                                           CRM/ERP            and Astra
+                                                                           state              Max (68%)
+                                                                           mutation,          at a third of
+                                                                           and strict         Opus's
+                                                                           policy/guard       per-task
+                                                                           rail               cost.
+                                                                           compliance
+                                                                           across
+                                                                           Finance,
+                                                                           HR, and
+                                                                           Ops.
+
+
+COD-TERM          Terminal-B         Coding             Test Suite         Autonomou          Anthropic
+                  ench 4.0           (10%)              pass@1             s shell/CLI        (Opus 5.5
+                                                        across 66          execution,         at 60%) and
+
+PAGE 4
+                                                        CLI tasks          container          OpenAI
+                                                        (0–100%)           debugging,         (Astra Max
+                                                                           build-syste        at 59%)
+                                                                           m repair, Git      lead
+                                                                           surgery,           closely;
+                                                                           DevOps             Gemini 4
+                                                                           automation,        Argon
+                                                                           and                (57%) and
+                                                                           interactive        Gemini 3.8
+                                                                           test-driven        Flash High
+                                                                           patching.          excel on
+                                                                                              high-speed
+                                                                                              bounded
+                                                                                              tickets.
+
+
+COD-SCI           SciCode            Coding             Scientist-an       Scientific         Anthropic
+                                     (10%)              notated            computing,         (Opus 5.5
+                                                        Python             numerical          at 67%) and
+                                                        subproblem         simulation,        Google
+                                                        pass@1             tensor/matri       (Argon
+                                                        (0–100%)           x pipeline         High at
+                                                                           implementat        62%, Fable
+                                                                           ion,               5.1 at 62%)
+                                                                           physics/che        significantly
+                                                                           mistry data        outperform
+                                                                           processing,        OpenAI
+                                                                           and                (Astra Max
+                                                                           algorithmic        at 56%).
+                                                                           synthesis.
+
+SCI-FRONT         Humanity's         Scientific         Open-Answ          Graduate           Anthropic
+                  Last Exam          Reasoning          er Equality        and                (Opus 5.5
+                  (HLE)              (10%)              Checker            research-le        at 61%,
+                                                        pass@1             vel                Fable 5.1 at
+                                                        (0–100%)           closed-book        65% w/
+                                                                           reasoning          tools)
+                                                                           across             leads;
+                                                                           theoretical        Google
+                                                                           physics,           (Argon
+                                                                           organic            High at
+                                                                           chemistry,         57%) edges
+
+PAGE 5
+                                                                             pure               out OpenAI
+                                                                             mathematic         (Astra Max
+                                                                             s, and             at 55%) on
+                                                                             cross-discip       standard
+                                                                             linary             HLE.
+                                                                             synthesis.
+
+
+SCI-FORM           CritPt             Scientific         Official            Formal             Anthropic
+AL                                    Reasoning          Grading             symbolic           (Opus 5.5
+                                      (10%)              Server              derivations,       at 32%) and
+                                                         Symbolic/N          exact              OpenAI
+                                                         umerical            closed-form        (Astra Max
+                                                         pass@1              mathematic         at 32%) tie
+                                                         (0–100%)            al proofs,         for first;
+                                                                             edge-case          Google
+                                                                             algorithmic        (Argon
+                                                                             verification,      High at
+                                                                             and                27%) trails
+                                                                             constraint-s       on pure
+                                                                             atisfaction        symbolic
+                                                                             problem            manipulatio
+                                                                             solving.           n.
+
+GEN-FACT           AA-Omnisc          General            Accuracy            High-precisi       Anthropic
+                   ience              (15%)              (10%) +             on factual         (Opus 5.5
+                                                         Abstention/         retrieval,         at 46),
+                                                         Anti-Halluci        compliance         OpenAI
+                                                         nation (5%)         verification,      (Astra Max
+                                                         (-100 to            entity             at 43), and
+                                                         +100)               disambiguat        Google
+                                                                             ion, and           (Argon
+                                                                             safety-critic      High at 42)
+                                                                             al Q&A             cluster
+                                                                             where              tightly at the
+                                                                             hallucinatio       top; Sol and
+                                                                             n carries a        Sonnet
+                                                                             severe             dominate
+                                                                             penalty.           mid-tiers.
+
+
+GEN-DOC            GDP.pdf            General            All-Pass &          Dense              OpenAI
+                                      (10%)              Task-Macro          multimodal         (GPT-6
+
+PAGE 6
+                                                         Mean Pass          PDF                 Astra Max
+                                                         across long        parsing,            at 31%)
+                                                         PDFs               complex             holds a
+                                                         (0–100%)           table/chart         decisive
+                                                                            extraction,         5-to-9 point
+                                                                            regulatory          lead over
+                                                                            filing              Anthropic
+                                                                            cross-refere        (Opus 5.5
+                                                                            ncing, and          at 26%) and
+                                                                            multi-page          Google
+                                                                            visual-sema         (Argon
+                                                                            ntic                High at
+                                                                            grounding.          22%).
+
+
+GEN-LCR            AA-LCR             General            Long-Conte         Needle-in-a         Anthropic
+                   v1.1               (5%)               xt Equality        -haystack           (Opus 5.5
+                                                         Checker            reasoning,          at 85%)
+                                                         pass@1 up          multi-docum         leads,
+                                                         to 1M              ent                 followed
+                                                         tokens             contradictio        closely by
+                                                         (0–100%)           n detection,        OpenAI
+                                                                            and global          (Astra Max
+                                                                            state               at 81%) and
+                                                                            tracking            Google
+                                                                            across 100k         (Argon
+                                                                            to 1,000k           High at
+                                                                            token               80%).
+                                                                            contexts.
+
+GEN-DEFA           AA                 Composite          Weighted           Unclassified        Anthropic
+ULT                Intelligenc        Fallback           Composite          tasks,              (Opus 5.5
+                   e Index            (100%)             Score              general             at 58,
+                   v4.3.2                                (0–100             conversatio         Sonnet 5.5
+                                                         scale)             nal routing,        at 56) leads
+                                                                            intent              overall;
+                                                                            classificatio       OpenAI
+                                                                            n, and              (Sol series)
+                                                                            multi-turn          dominates
+                                                                            orchestratio        Tiers 3–7
+                                                                            n prior to          on
+                                                                            specialized         cost-efficien
+
+PAGE 7
+                                                                            task               cy (0. 13–
+                                                                            decompositi        0.72/task).
+                                                                            on.
+
+
+3. Verified Provider Model & Effort Inventory (October
+2026 Baseline)
+Both OpenAI and Anthropic expose multiple model families with selectable reasoning effort
+parameters (low, medium, high, xhigh, max) that overlap in intelligence score but diverge
+sharply in token verbosity, throughput, and cost per task. Including 4th and 5th model choices
+per tier captures these overlapping effort configurations for intra-provider fallback and
+fine-grained cost control.
+  Provide       Model         AA            Weight        Input /       Output        Primar        Key
+  r             & Effort      Index         ed Cost       Output        Speed         y Tier        Structu
+                Variant       Score         / Task        / Cache       (tok/s)       Range         ral &
+                                            (USD)         Read                                      Domain
+                                                          (per                                      Charac
+                                                          1M)                                       teristic
+                                                                                                    s
+
+
+  OpenAI        GPT-6         22            $0.0045       $0.10 /       126           Tier 1        Ultra-lo
+                Luna                                      $0.50 /                                   w-cost
+                (Low)                                     $0.01                                     baselin
+                                                                                                    e;
+                                                                                                    minimal
+                                                                                                    reasoni
+                                                                                                    ng
+                                                                                                    tokens.
+
+  OpenAI        GPT-6         30            $0.02         $0.10 /       128           Tier 2        Fast
+                Luna                                      $0.50 /                                   classific
+                (Mediu                                    $0.01                                     ation,
+                m)                                                                                  routing,
+                                                                                                    and
+                                                                                                    basic
+                                                                                                    extracti
+                                                                                                    on.
+
+PAGE 8
+OpenAI        GPT-6          33            $0.03          $0.10 /       134            Tier 2–3      Overlap
+              Luna                                        $0.50 /                                    s
+              (High)                                      $0.01                                      Gemini
+                                                                                                     3.8
+                                                                                                     Flash
+                                                                                                     Low at
+                                                                                                     1/20th
+                                                                                                     the
+                                                                                                     cost.
+
+
+OpenAI        GPT-6          38            $0.07          $0.10 /       135            Tier 3–4      Best
+              Luna                                        $0.50 /                                    sub-$0.
+              (Max)                                       $0.01                                      10
+                                                                                                     model;
+                                                                                                     overlap
+                                                                                                     s
+                                                                                                     Sonnet
+                                                                                                     5.5 Low
+                                                                                                     and
+                                                                                                     Haiku
+                                                                                                     5.5
+                                                                                                     High.
+
+OpenAI        GPT-6.         42            $0.13          $0.50 /       51             Tier 4–5      Beats
+              1 Sol                                       $2.50 /                                    Gemini
+              (Low)                                       $0.05                                      3.8
+                                                                                                     Flash
+                                                                                                     High
+                                                                                                     (41) on
+                                                                                                     overall
+                                                                                                     index at
+                                                                                                     1/10th
+                                                                                                     the
+                                                                                                     cost.
+
+
+OpenAI        GPT-6.         48            $0.21          $0.50 /       55             Tier 6        Overlap
+              1 Sol                                       $2.50 /                                    s
+              (Mediu                                      $0.05                                      Sonnet
+              m)                                                                                     5.5
+                                                                                                     High
+                                                                                                     (47) at
+
+PAGE 9
+                                                                                                     24% of
+                                                                                                     the cost
+                                                                                                     ($0.21
+                                                                                                     vs
+                                                                                                     $0.88).
+
+
+OpenAI        GPT-6.         50            $0.32          $0.50 /       58             Tier 7        Matche
+              1 Sol                                       $2.50 /                                    s Astra
+              (High)                                      $0.05                                      Medium
+                                                                                                     (50)
+                                                                                                     and
+                                                                                                     Fable
+                                                                                                     5.1
+                                                                                                     Medium
+                                                                                                     (50) for
+                                                                                                     $0.32/ta
+                                                                                                     sk.
+
+OpenAI        GPT-6.         51            $0.39          $0.50 /       61             Tier 7–8      Matche
+              1 Sol                                       $2.50 /                                    s Opus
+              (xHigh)                                     $0.05                                      5.5
+                                                                                                     Medium
+                                                                                                     (51)
+                                                                                                     and
+                                                                                                     Astra
+                                                                                                     High
+                                                                                                     (51) at
+                                                                                                     extreme
+                                                                                                     value.
+
+
+OpenAI        GPT-6.         52            $0.72          $0.50 /       65             Tier 8–9      Matche
+              1 Sol                                       $2.50 /                                    s
+              (Max)                                       $0.05                                      Sonnet
+                                                                                                     5.5
+                                                                                                     xHigh
+                                                                                                     (52)
+                                                                                                     and
+                                                                                                     Astra
+                                                                                                     xHigh
+                                                                                                     (52)
+                                                                                                     under
+
+PAGE 10
+                                                                                                      $1.00/ta
+                                                                                                      sk.
+
+
+OpenAI        GPT-6          46            $0.82          $10.00 /       72            Tier 5–6       High-kn
+              Astra                                       $50.00 /                                    owledg
+              (Low)                                       $1.00                                       e floor
+                                                                                                      (GDP.p
+                                                                                                      df,
+                                                                                                      CritPt),
+                                                                                                      low
+                                                                                                      reasoni
+                                                                                                      ng
+                                                                                                      token
+                                                                                                      burn.
+
+OpenAI        GPT-6          50            $1.54          $10.00 /       68            Tier 7         Strong
+              Astra                                       $50.00 /                                    multimo
+              (Mediu                                      $1.00                                       dal PDF
+              m)                                                                                      and
+                                                                                                      formal
+                                                                                                      math
+                                                                                                      mid-effo
+                                                                                                      rt
+                                                                                                      fallback.
+
+
+OpenAI        GPT-6          51            $2.19          $10.00 /       65            Tier 8         Heavy
+              Astra                                       $50.00 /                                    scientifi
+              (High)                                      $1.00                                       c,
+                                                                                                      cyberse
+                                                                                                      curity,
+                                                                                                      and
+                                                                                                      comput
+                                                                                                      er-use
+                                                                                                      capabilit
+                                                                                                      y.
+
+
+OpenAI        GPT-6          52            $2.98          $10.00 /       64            Tier 9         Near-ce
+              Astra                                       $50.00 /                                    iling
+              (xHigh)                                     $1.00                                       OpenAI
+                                                                                                      perform
+                                                                                                      ance for
+
+PAGE 11
+                                                                                                       formal
+                                                                                                       reasoni
+                                                                                                       ng and
+                                                                                                       GDP.pd
+                                                                                                       f.
+
+
+OpenAI        GPT-6          53             $3.26         $10.00 /       63             Tier           OpenAI
+              Astra                                       $50.00 /                      9–10           frontier
+              (Max)                                       $1.00                                        ceiling;
+                                                                                                       #1 on
+                                                                                                       GDP.pd
+                                                                                                       f (31%)
+                                                                                                       and tied
+                                                                                                       #1 on
+                                                                                                       CritPt
+                                                                                                       (32%).
+
+Anthro        Claude         29             $0.02         $0.10 /        164            Tier 1–2       Ultra-fa
+pic           Haiku                                       $0.50 /                                      st
+              5.5                                         $0.01                                        baselin
+              (Low)                                                                                    e;
+                                                                                                       strong
+                                                                                                       instructi
+                                                                                                       on
+                                                                                                       adheren
+                                                                                                       ce for
+                                                                                                       Tier 1–2
+                                                                                                       tasks.
+
+
+Anthro        Claude         35             $0.06         $0.10 /        185            Tier 3         Balance
+pic           Haiku                                       $0.50 /                                      d
+              5.5                                         $0.01                                        low-late
+              (Mediu                                                                                   ncy
+              m)                                                                                       agent
+                                                                                                       worker.
+
+
+Anthro        Claude         39             $0.11         $0.10 /        210            Tier 4         High-sp
+pic           Haiku                                       $0.50 /                                      eed
+              5.5                                         $0.01                                        alternati
+              (High)                                                                                   ve to
+                                                                                                       GPT-6
+
+PAGE 12
+                                                                                                      Luna
+                                                                                                      Max.
+
+
+Anthro        Claude         43            $0.21          $0.10 /       236            Tier 5         Reache
+pic           Haiku                                       $0.50 /                                     s 1578
+              5.5                                         $0.01                                       Elo on
+              (Max)                                                                                   AA-Bri
+                                                                                                      efcase,
+                                                                                                      matchin
+                                                                                                      g Astra
+                                                                                                      Max at
+                                                                                                      $0.21/ta
+                                                                                                      sk.
+
+Anthro        Claude         36            $0.35          $2.00 /       101            Tier 3–4       0.57s
+pic           Sonnet                                      $10.00 /                                    TTFT;
+              5.5                                         $0.10                                       ideal for
+              (Low)                                                                                   interacti
+                                                                                                      ve
+                                                                                                      low-late
+                                                                                                      ncy
+                                                                                                      coding/
+                                                                                                      chat
+                                                                                                      fallback
+                                                                                                      s.
+
+
+Anthro        Claude         41            $0.48          $2.00 /       99             Tier 4–5       Matche
+pic           Sonnet                                      $10.00 /                                    s
+              5.5                                         $0.10                                       Gemini
+              (Mediu                                                                                  3.8
+              m)                                                                                      Flash
+                                                                                                      High
+                                                                                                      (41) at
+                                                                                                      less
+                                                                                                      than
+                                                                                                      half the
+                                                                                                      per-task
+                                                                                                      cost.
+
+
+Anthro        Claude         47            $0.88          $2.00 /       96             Tier 6         Workho
+              Sonnet                                      $10.00 /                                    rse
+
+PAGE 13
+pic           5.5                                         $0.10                                        agentic
+              (High)                                                                                   coder
+                                                                                                       and
+                                                                                                       general
+                                                                                                       reasone
+                                                                                                       r.
+
+
+Anthro        Claude         52             $2.01         $2.00 /        106            Tier 8         High-thr
+pic           Sonnet                                      $10.00 /                                     oughput
+              5.5                                         $0.10                                        (106
+              (xHigh)                                                                                  tok/s)
+                                                                                                       Tier 8
+                                                                                                       leader
+                                                                                                       for
+                                                                                                       coding
+                                                                                                       and
+                                                                                                       agent
+                                                                                                       workflo
+                                                                                                       ws.
+
+Anthro        Claude         56             $5.46         $2.00 /        136            Tier           #2
+pic           Sonnet                                      $10.00 /                      9–10           overall
+              5.5                                         $0.10                                        model
+              (Max)                                                                                    globally
+                                                                                                       (Index
+                                                                                                       56) at
+                                                                                                       136
+                                                                                                       tok/s;
+                                                                                                       high
+                                                                                                       token
+                                                                                                       verbosit
+                                                                                                       y
+                                                                                                       (420M).
+
+
+Anthro        Claude         42             $0.55         $4.00 /        81             Tier 5         Deep
+pic           Opus                                        $20.00 /                                     world
+              5.5                                         $0.20                                        knowled
+              (Low)                                                                                    ge with
+                                                                                                       minimal
+                                                                                                       reasoni
+                                                                                                       ng
+
+PAGE 14
+                                                                                                      chain
+                                                                                                      overhea
+                                                                                                      d.
+
+
+Anthro        Claude         51            $1.34          $4.00 /        82            Tier 7–8       Bridges
+pic           Opus                                        $20.00 /                                    Sonnet
+              5.5                                         $0.20                                       5.5
+              (Mediu                                                                                  High
+              m)                                                                                      and
+                                                                                                      Sonnet
+                                                                                                      5.5
+                                                                                                      xHigh
+                                                                                                      with
+                                                                                                      superior
+                                                                                                      factual
+                                                                                                      recall.
+
+Anthro        Claude         54            $1.82          $4.00 /        83            Tier 9         Outscor
+pic           Opus                                        $20.00 /                                    es Astra
+              5.5                                         $0.20                                       Max
+              (High)                                                                                  (53)
+                                                                                                      and
+                                                                                                      Argon
+                                                                                                      High
+                                                                                                      (53) at
+                                                                                                      a lower
+                                                                                                      cost
+                                                                                                      ($1.82/t
+                                                                                                      ask).
+
+
+Anthro        Claude         56            $3.46          $4.00 /        82            Tier           Matche
+pic           Opus                                        $20.00 /                     9–10           s
+              5.5                                         $0.20                                       Sonnet
+              (xHigh)                                                                                 5.5 Max
+                                                                                                      (56) at
+                                                                                                      37%
+                                                                                                      lower
+                                                                                                      cost
+                                                                                                      ($3.46
+                                                                                                      vs
+                                                                                                      $5.46).
+
+PAGE 15
+Anthro        Claude         58            $5.98          $4.00 /       95             Tier 10        Global
+pic           Opus                                        $20.00 /                                    #1 on
+              5.5                                         $0.20                                       Index
+              (Max)                                                                                   (58),
+                                                                                                      AA-Brie
+                                                                                                      fcase
+                                                                                                      (1807),
+                                                                                                      GDPval
+                                                                                                      (1866),
+                                                                                                      SciCod
+                                                                                                      e
+                                                                                                      (67%).
+
+
+Anthro        Claude         53            $7.63          $10.00 /      70             Tier 10        Retaine
+pic           Fable                                       $50.00 /                     (Spec)         d as
+              5.1                                         $0.25                                       Choice
+              (Max)                                                                                   5 in Tier
+                                                                                                      10 for
+                                                                                                      tool-ena
+                                                                                                      bled
+                                                                                                      HLE
+                                                                                                      (65%) &
+                                                                                                      cached
+                                                                                                      loops.
+
+Google        Gemini         33            $0.65          $0.75 /       135            Tier 1–2       Fast
+              3.8                                         $3.75 /                                     multimo
+              Flash                                       $0.075                                      dal
+              (Low)                                                                                   ingestio
+                                                                                                      n and
+                                                                                                      lightwei
+                                                                                                      ght
+                                                                                                      coding/
+                                                                                                      search.
+
+
+Google        Gemini         40            $0.93          $0.75 /       140            Tier 3–4       Lowest
+              3.8                                         $3.75 /                                     cost-per
+              Flash                                       $0.075                                      -task
+              (Mediu                                                                                  within
+              m)                                                                                      the 3.8
+                                                                                                      Flash
+
+PAGE 16
+                                                                                              family
+                                                                                              ($0.93/t
+                                                                                              ask).
+
+
+  Google       Gemini       41           $1.24        $0.75 /       145          Tier 4–7     Spans
+               3.8                                    $3.75 /                                 Tiers
+               Flash                                  $0.075                                  4–7 on
+               (High)                                                                         bounde
+                                                                                              d
+                                                                                              coding
+                                                                                              (DeepS
+                                                                                              WE
+                                                                                              73.8%)
+                                                                                              &
+                                                                                              search;
+                                                                                              drops
+                                                                                              off on
+                                                                                              HLE.
+
+  Google       Gemini       53           $1.99        $2.00 /       75           Tier         #1 on
+               4 Argon                                $10.00 /                   6–10         Automa
+               (High)                                 $0.10                                   tionBen
+                                                                                              ch
+                                                                                              (78%),
+                                                                                              #2 on
+                                                                                              SciCod
+                                                                                              e
+                                                                                              (62%),
+                                                                                              #2 on
+                                                                                              GDPval
+                                                                                              (1624).
+
+
+4. The 10-Tier Minimum Score Floors & Cross-Provider
+Routing Matrix
+4.1 Minimum Benchmark Score Floors by Tier (Floor(Tier, TaskType))
+Every task dispatched at Complexity Tier $k \in \{1 \dots 10\}$ must be routed to a model
+configuration whose empirical score on the corresponding Artificial Analysis evaluation is
+greater than or equal to the threshold in the table below.
+
+PAGE 17
+Tie    Co      GE      AG      AG      AG      CO      CO      SC      SC      GE      GE      GE
+r      mp      N-      T-P     T-D     T-A     D-      D-      I-F     I-F     N-      N-      N-
+       lex     DE      RO      ELI     UT      TE      SC      RO      OR      FA      DO      LC
+       ity     FA      J       V       O       RM      I       NT      MA      CT      C       R
+       Cla     UL      (Br     (G      (A      (Te     (Sc     (H      L       (O      (G      (A
+       ssi     T       ief     DP      uto     rm      iCo     LE      (Cr     mn      DP.     A-
+       fic     (A      ca      val     Be      Be      de      %)      itPt    isc     pdf     LC
+       ati     A       se      Elo     nc      nc      %)              %)      ien     %)      R
+       on      Ind     Elo     )       h       h                               ce)             %)
+               ex)     )               %)      %)
+
+
+Tie    Triv    20      10      110     25      18      22      12      5%      5       8%      40
+r 1    ial /           50      0       %       %       %       %                               %
+       Ato
+       mic
+       For
+       ma
+       ttin
+       g &
+       Tag
+       gin
+       g
+
+Tie    Ba      28      115     12      32      24      28      18      8%      12      10      48
+r 2    sic             0       00      %       %       %       %                       %       %
+       Ext
+       rac
+       tion
+       &
+       Sin
+       gle
+       -Tu
+       rn
+       Boi
+       ler
+       plat
+       e
+
+
+Tie    Sta     34      12      13      40      30      34      24      11      18      12      55
+r 3    nd              50      00      %       %       %       %       %               %       %
+       ard
+
+PAGE 18
+        Su
+        m
+        ma
+        riza
+        tion
+        ,
+        Re
+        gex
+        &
+        Si
+        mpl
+        e
+        CR
+        UD
+
+
+Tie     Mul     38      13      13      46      36      40       30      14      24      15      62
+r 4     ti-F            50      80      %       %       %        %       %               %       %
+        ile
+        Se
+        arc
+        h,
+        Uni
+        t
+        Tes
+        t
+        Ge
+        ner
+        atio
+        n &
+        RA
+        G
+
+Tie     Bo      41      14      14      52      42      45       36      17      28      17      68
+r 5     un              50      50      %       %       %        %       %               %       %
+        de
+        d
+        Ag
+        ent
+        Lo
+        ops
+        &
+
+PAGE 19
+        Fe
+        atu
+        re
+        Im
+        ple
+        me
+        nta
+        tion
+
+
+Tie     Mul     46      15      15      58      47      50       42      20      33      19      72
+r 6     ti-T            20      00      %       %       %        %       %               %       %
+        ool
+        Sa
+        aS
+        Wo
+        rkfl
+        ow
+        s &
+        Mo
+        dul
+        e
+        Ref
+        act
+        ori
+        ng
+
+Tie     Cro     50      15      15      63      51      54       47      23      37      21      75
+r 7     ss-             60      50      %       %       %        %       %               %       %
+        Sy
+        ste
+        m
+        De
+        bu
+        ggi
+        ng
+        &
+        Do
+        mai
+        n
+        Sy
+        nth
+
+PAGE 20
+        esi
+        s
+
+
+Tie     Co      52      16      16      67       55      58      52      26      40      23       78
+r 8     mpl             20      00      %        %       %       %       %               %        %
+        ex
+        Arc
+        hite
+        ctu
+        re
+        &
+        Mul
+        ti-A
+        pp
+        Orc
+        hes
+        trat
+        ion
+
+Tie     Fro     54      17      17      70       58      62      56      29      43      26       81
+r 9     ntie            20      20      %        %       %       %       %               %        %
+        r
+        Re
+        sea
+        rch
+        ,
+        Se
+        curi
+        ty
+        Au
+        dits
+        &
+        De
+        ep
+        SW
+        E
+
+
+Tie     Aut     56      18      18      75       60      65      60      32      45      30       84
+r       on              00      40      %        %       %       %       %               %        %
+10      om
+        ous
+
+PAGE 21
+          Mul
+          ti-
+          We
+          ek
+          Pro
+          ject
+          s &
+          No
+          vel
+          Pro
+          ofs
+
+
+4.2 General & Unclassified Task Routing Matrix (GEN-DEFAULT)
+For each tier, Choices 1–3 provide mandatory cross-provider redundancy (one OpenAI, one
+Anthropic, one Google model), ranked by capability within the tier's cost/effort band and then by
+lowest cost per task. Choices 4–5 provide overlapping effort-level alternatives from OpenAI and
+Anthropic (which maintain two concurrent model lines per tier).
+  Tier            Choice 1        Choice 2        Choice 3        Choice 4         Choice 5        Asymme
+                  (Primary        (Provider       (Provider       (Overlap         (Overlap        tric Audit
+                  Route)          Fallback        Fallback        Effort           Effort          Model
+                                  A)              B)              Variant          Variant         (Tier + 1,
+                                                                  A)               B)              Diff
+                                                                                                   Provider)
+
+
+  Tier 1          Claude          $0.02]`         GPT-6           $0.0045]`        Gemini          $0.65]`
+                  Haiku 5.5                       Luna                             3.8 Flash
+                  (Low)                           (Low)                            (Low)
+                  `[29                            `[22                             `[33
+
+  Tier 2          GPT-6           $0.03]`         Gemini          $0.65]`          Claude          $0.02]`
+                  Luna                            3.8 Flash                        Haiku 5.5
+                  (High)                          (Low)                            (Low)
+                  `[33                            `[33                             `[29
+
+
+  Tier 3          Claude          $0.06]`         GPT-6           $0.04]`          Gemini          $0.93]`
+                  Haiku 5.5                       Luna                             3.8 Flash
+                  (Medium                         (xHigh)                          (Medium
+                  ) `[35                          `[35                             ) `[40
+
+PAGE 22
+  Tier 4          Claude          $0.11]`         GPT-6           $0.07]`          Gemini          $0.93]`
+                  Haiku 5.5                       Luna                             3.8 Flash
+                  (High)                          (Max)                            (Medium
+                  `[39                            `[38                             ) `[40
+
+
+  Tier 5          Claude          $0.21]`         GPT-6.1         $0.13]`          Gemini          $1.24]`
+                  Haiku 5.5                       Sol                              3.8 Flash
+                  (Max)                           (Low)                            (High)
+                  `[43                            `[42                             `[41
+
+  Tier 6          GPT-6.1         $0.21]`         Claude          $0.88]`          Gemini 4        $1.99]`
+                  Sol                             Sonnet                           Argon           (Elevated
+                  (Medium                         5.5                              (High)          )
+                  ) `[48                          (High)                           `[53
+                                                  `[47
+
+
+  Tier 7          GPT-6.1         $0.32]`         Claude          $1.34]`          Gemini 4        $1.99]`
+                  Sol                             Opus 5.5                         Argon           (Elevated
+                  (High)                          (Medium                          (High)          )
+                  `[50                            ) `[51                           `[53
+
+
+  Tier 8          GPT-6.1         $0.72]`         Claude          $2.01]`          Gemini 4        $1.99]`
+                  Sol                             Sonnet                           Argon
+                  (Max)                           5.5                              (High)
+                  `[52                            (xHigh)                          `[53
+                                                  `[52
+
+
+  Tier 9          Claude          $1.82]`         Gemini 4        $1.99]`          GPT-6           $2.98]`
+                  Opus 5.5                        Argon                            Astra
+                  (High)                          (High)                           (xHigh)
+                  `[54                            `[53                             `[52
+
+  Tier 10         Claude          $5.98]`         Gemini 4        $1.99]`          GPT-6           $3.26]`
+                  Opus 5.5                        Argon                            Astra
+                  (Max)                           (High)                           (Max)
+                  `[58                            `[53                             `[53
+
+
+4.3 Task-Specific Routing Overrides Across the 10 Tiers
+Because provider rankings shift across specialized benchmarks—such as Gemini 3.8 Flash
+
+PAGE 23
+(High) extending into Tier 6–7 for Coding while dropping out after Tier 4 on Scientific
+Reasoning, or GPT-6 Astra (Max) leading GDP.pdf at Tier 10—the router applies
+domain-specific slot overrides:
+A. Coding Tasks (COD-TERM / Terminal-Bench 4.0 & COD-SCI / SciCode)
+  ●    Gemini 3.8 Flash (High) Persistence: Holds a primary or secondary cross-provider slot
+       from Tier 3 through Tier 6 on COD-TERM due to its 73.8% DeepSWE v1.1 score and
+       145 tok/s throughput, making iterative compile-test-fix loops fast and economical
+       ($1.24/task).
+  ●    Tier 7–8 Takeover by Sol and Sonnet: At Tier 7 (COD-TERM floor: 51%, COD-SCI floor:
+       54%), Gemini 3.8 Flash (High) is outpaced by GPT-6.1 Sol (High/xHigh) (0.               32–0.39/task)
+       and Claude Sonnet 5.5 (High/xHigh) (0.        88–2.01/task), forcing Google's fallback slot to
+       step up to Gemini 4 Argon (High) (62% on SciCode, 57% on Terminal-Bench 4.0).
+  ●    Tier 9–10 Split:
+   ○   For COD-TERM (CLI/SWE Agents): 1. Claude Opus 5.5 (Max) (60%) → 2. GPT-6 Astra
+       (Max) (59%) → 3. Gemini 4 Argon (High) (57%) → 4. Claude Sonnet 5.5 (Max) → 5.
+       Claude Fable 5.1 (Max) (55.8%, $0.25/1M cache reads for long repo loops).
+   ○   For COD-SCI (Scientific Computing): 1. Claude Opus 5.5 (Max) (67%) → 2. Gemini 4
+       Argon (High) (62%, $1.99/task) → 3. GPT-6 Astra (Max) (56%, $3.26/task) → 4. Claude
+       Fable 5.1 (Max) (62%, $7.63/task) → 5. Claude Sonnet 5.5 (Max).
+B. Agentic Workflows (AGT-PROJ / Briefcase, AGT-DELIV / GDPval, AGT-AUTO /
+AutomationBench)
+  ●    Tier 5–6 Haiku 5.5 (Max) Anomaly on AGT-PROJ: Claude Haiku 5.5 (Max) achieves
+       1578 Elo on AA-Briefcase v1.1 for only $0.21/task, matching GPT-6 Astra (Max) (1571
+       Elo, $3.26/task) and beating Gemini 4 Argon (High) (1488 Elo, $1.99/task). Thus, Haiku
+       5.5 (Max) holds Choice 1 in Tiers 5, 6, and 7 for AGT-PROJ.
+  ●    Tier 8–10 Provider Elevation Gap on AGT-PROJ: Neither GPT-6 Astra (Max) (1571 Elo)
+       nor Gemini 4 Argon (High) (1488 Elo) meets the Tier 9 (1720 Elo) or Tier 10 (1800 Elo)
+       floor on AA-Briefcase. In Tiers 9–10 for AGT-PROJ:
+   ○   Choice 1: Claude Opus 5.5 (Max) (1807 Elo, $5.98)
+   ○   Choice 2: Claude Sonnet 5.5 (Max) (1760+ Elo, $5.46)
+   ○   Choice 3: Claude Fable 5.1 (Max) (1745+ Elo, $7.63)
+   ○   Choice 4 (OpenAI Ceiling Fallback): GPT-6 Astra (Max) (1571 Elo, $3.26 — flagged
+       with FLOOR_DEGRADED_WARNING)
+   ○   Choice 5 (Google Ceiling Fallback): Gemini 4 Argon (High) (1488 Elo, $1.99 — flagged
+       with FLOOR_DEGRADED_WARNING)
+  ●    Tier 6–10 Google Dominance on AGT-AUTO (AutomationBench-AA): Because
+       Gemini 4 Argon (High) scores 78% (vs. Opus 5.5 at 70% and Astra Max at 68%), Gemini
+       4 Argon (High) is Choice 1 from Tier 7 through Tier 10 for SaaS API automation
+       (AGT-AUTO), and is the sole model that clears the Tier 10 floor (75%).
+C. Scientific & Formal Reasoning (SCI-FRONT / HLE & SCI-FORMAL / CritPt)
+  ●    Early Demotion of Gemini 3.8 Flash: Gemini 3.8 Flash variants drop below the CritPt
+       and HLE score floors after Tier 4. Starting at Tier 5, Google's slot must elevate directly to
+
+PAGE 24
+       Gemini 4 Argon (High).
+  ●    Tier 10 SCI-FRONT (HLE) Ranking:
+   ○   Without external tools: 1. Claude Opus 5.5 (Max) (61%, $5.98) → 2. Gemini 4 Argon
+       (High) (57%, $1.99) → 3. GPT-6 Astra (Max) (55%, $3.26) → 4. Claude Sonnet 5.5 (Max)
+       → 5. Claude Opus 5.5 (xHigh).
+   ○   With sandbox/search tools enabled: Claude Fable 5.1 (Max) jumps to 65.0% (vs. Astra
+       Max at 57.2%), promoting Fable 5.1 (Max) from Choice 5 to Choice 1 for tool-augmented
+       research tasks.
+  ●    Tier 10 SCI-FORMAL (CritPt) Ranking: 1. GPT-6 Astra (Max) (32%, $3.26 — wins
+       tiebreaker over Opus 5.5 on lower cost/task) → 2. Claude Opus 5.5 (Max) (32%, $5.98) →
+       3. Claude Opus 5.5 (xHigh) (30%, $3.46) → 4. GPT-6 Astra (xHigh) (30%, $2.98) → 5.
+       Gemini 4 Argon (High) (27%, $1.99 — degraded floor fallback).
+D. Document Grounding, Factual Recall & Long Context (GEN-DOC, GEN-FACT,
+GEN-LCR)
+  ●    Tier 8–10 GEN-DOC (GDP.pdf) OpenAI Lead: GPT-6 Astra (Max) achieves 31% on
+       GDP.pdf (vs. Opus 5.5 Max at 26% and Argon High at 22%). For dense PDF extraction at
+       Tiers 8–10: 1. GPT-6 Astra (Max) ($3.26) → 2. GPT-6 Astra (xHigh) ($2.98) → 3. Claude
+       Opus 5.5 (Max) ($5.98) → 4. Claude Sonnet 5.5 (Max) ($5.46) → 5. Gemini 4 Argon (High)
+       ($1.99).
+  ●    Tier 1–6 GEN-LCR (AA-LCR v1.1) Long-Context Efficiency: All top models feature a
+       1,000k token context window, but cache-read pricing dictates cost on multi-turn
+       long-context tasks. Gemini 4 Argon (High) (0.        10/1𝑀𝑐𝑎𝑐ℎ𝑒ℎ𝑖𝑡)𝑎𝑛𝑑𝐶𝑙𝑎𝑢𝑑𝑒𝑆𝑜𝑛𝑛𝑒𝑡5.            5(
+       0.10/1M cache hit) take priority over GPT-6 Astra ($1.00/1M cache hit, 10x more
+       expensive on cached context reads).
+5. Composite Task Resolution Engine
+When an agentic ticket spans multiple task types (e.g., reading a 400-page regulatory PDF,
+writing a Python simulation, and generating an executive briefing), the router resolves a
+                                                                                      𝑛
+Composite Task Vector $\mathbf{w} = \{w_1, w_2, \dots, w_n\}$ where                  ∑  𝑤𝑖  =  1 at target
+                                                                                     𝑖=1
+Complexity Tier 𝑘:
+                                                        ^
+  1.   Metric Normalization to [0,      100] Scale (𝑆𝑚,𝑡):
+       Because the 10 Artificial Analysis evaluations use three different scales, raw benchmark
+                                                               ^
+       scores 𝑆𝑚,𝑡 are converted to normalized scores 𝑆𝑚,𝑡         ∈  [0, 100] using Artificial Analysis's
+       official aggregation formulas:
+       Elo Benchmarks (AA-Briefcase v1.1, GDPval-AA v2.1):
+
+                                        ^                        𝐸𝑙𝑜𝑚,𝑡−500
+                                       𝑆𝑚,𝑡 =  100   ×  𝑐𝑙𝑎𝑚𝑝(     2000    ,0,1)
+   ○
+       Signed Index (AA-Omniscience, scale −               100 to +   100):
+
+PAGE 25
+                                                   ^       𝑆𝑚,𝑡+100
+                                                   𝑆𝑚,𝑡=      2
+   ○
+       Percentage Benchmarks (AutomationBench, Terminal-Bench 4.0, SciCode, HLE,
+       CritPt, GDP.pdf, AA-LCR):
+
+                                                     ^
+                                                     𝑆𝑚,𝑡 = 𝑆𝑚,𝑡
+   ○
+  2.   Conjunctive & Weighted Floor Gate:
+   ○   Composite Score: 𝑆‾       (𝑤)  =  ∑ 𝑤   ·𝑆^
+                               𝑚         𝑡   𝑡   𝑚,𝑡
+   ○   Composite Tier Floor: 𝐹‾      (𝑤)  =  ∑  𝑤  ·𝐹^
+                                    𝑘         𝑡  𝑡    𝑘,𝑡
+   ○   Non-Compensatory Veto: To prevent a model from masking a catastrophic weakness in
+       one required domain with a high score in another, any model 𝑚 must satisfy both
+       𝑆‾ (𝑤)  ≥  𝐹‾(𝑤) and 𝑆^     ≥  𝐹^            for every task component 𝑡 with weight 𝑤         ≥  0.20.
+        𝑚          𝑘            𝑚,𝑡     max (1,𝑘−1),𝑡                                              𝑡
+       Composite Ranking Score (1. Capability, 2. Cost Completion):
+       Qualifying models within Tier 𝑘's effort band are ordered by:
+
+                                     𝑅𝑎𝑛𝑘𝑆𝑐𝑜𝑟𝑒     (𝑤, 𝑘)  = 𝑆‾ (𝑤)  −  λ  · 𝐶
+                                                 𝑚             𝑚         𝑘    𝑚
+  3.
+       where 𝐶𝑚 is the model's expected cost per task (adjusted for the workload's expected
+       cache-hit ratio) and λ𝑘 is the tier cost-sensitivity coefficient (ranging from λ1     =  15. 0 in Tier
+       1 where cost dominates, down to λ10       =  0. 05 in Tier 10 where capability dominates and
+       cost serves purely as a tiebreaker).
+6. Agentic Pipeline Failover, Dynamic Backoff &
+Asymmetric Audit Protocol
+6.1 5-Slot Failover State Machine & Loop-Back Timer Backoff
+When an agent pulls a task (TaskVector w, Tier k) from the task board:
+
+
+
+
+
+     [Task Pulled: (w, Tier k)]
+            │
+            ▼
+
+PAGE 26
+      [Resolve Top 5 Ranked Models: M1, M2, M3 (Cross-Provider), M4, M5 (Effort Overlaps)]
+             │
+             ├──► Try M1 (Primary Preferred) ──► [Success] ──► Dispatch to Asymmetric
+      Auditor
+             │         │ (HTTP 429 / 503 / Timeout / Guardrail Block)
+             ├──► Try M2 (Provider Fallback A - Different Provider)
+             │         │ (Failure)
+             ├──► Try M3 (Provider Fallback B - Third Provider)
+             │         │ (Failure)
+             ├──► Try M4 (Overlap Effort Variant A - e.g., Sol xHigh / Sonnet xHigh)
+             │         │ (Failure)
+             └──► Try M5 (Overlap Effort Variant B - e.g., Astra High / Opus Medium)
+                       │ (All 5 Slots Exhausted)
+                       ▼
+             [Enter Dynamic Exponential Backoff Queue]
+             Wait: T_wait = min(T_max, T_base * (2 ^ attempt) + Uniform(0, Jitter))
+             (Default: T_base = 5s, T_max = 300s, Jitter = 3s)
+                       │
+                       └──► Loop Back to Top Tier + Task Type Selection (M1)
+
+  ●    Execution Failure vs. Availability Failure Distinction:
+   ○    If a model fails due to API availability (HTTP 429 Rate Limit, 502/503/529 Overloaded,
+        or TTFT timeout), the router immediately advances along the same-tier cascade (M1 ->
+        M2 -> M3 -> M4 -> M5) and loops back to M1 with exponential backoff if all five endpoints
+        are unavailable.
+   ○    If a model returns a valid response that fails deterministic verification (unit test failure
+        in COD-TERM/COD-SCI or rubric/schema failure in AGT-AUTO), the router increments
+        the task's complexity tier (k -> min(10, k + 1)) rather than cycling laterally within the same
+        tier.
+6.2 Asymmetric Audit Model Selection Matrix
+Using the same model family to generate and review an output introduces correlated blind spots
+and self-preference bias (where LLM judges rate their own family's formatting higher). The
+matrix deterministically assigns an Asymmetric Auditor (M_audit) using three rules:
+   1.  Strict Provider Orthogonality: 𝑃𝑟𝑜𝑣𝑖𝑑𝑒𝑟(𝑀𝑎𝑢𝑑𝑖𝑡)                 ≠  𝑃𝑟𝑜𝑣𝑖𝑑𝑒𝑟(𝑀𝑒𝑥𝑒𝑐), where 𝑀𝑒𝑥𝑒𝑐 is the
+       model slot (M1–M5) that actually produced the output.
+   2.  Tier Step-Up (k + 1 Verification): For tasks executed at Tiers 1–9, the auditor is selected
+       from Tier     min  (10,  𝑘 +   1) (or a lower-effort variant of a frontier family whose knowledge
+
+       floor exceeds Tier 𝑘, such as GPT-6.1 Sol or Claude Opus 5.5 Low/Medium) to ensure the
+       verifier has strictly higher discrimination capability than the generator without paying Tier
+       10 generation token costs (since auditing requires high input/cache tokens but low output
+       tokens).
+
+PAGE 27
+  3.   Tier 10 Orthogonal Frontier Cross-Audit: At Tier 10, where no k + 1 tier exists, the
+       matrix pairs complementary frontier strengths:
+   ○   Claude Opus 5.5 (Max) output → Audited by GPT-6 Astra (Max) (leverages Astra's #1
+       CritPt formal verification and GDP.pdf grounding) or Gemini 4 Argon (High) (for
+       AutomationBench API compliance and SciCode unit verification).
+   ○   GPT-6 Astra (Max) output → Audited by Claude Opus 5.5 (Max) (leverages Opus's #1
+       AA-Omniscience anti-hallucination score of 46 and AA-Briefcase rubric rigor).
+   ○   Gemini 4 Argon (High) output → Audited by Claude Opus 5.5 (High/Max) or GPT-6
+       Astra (Max).
+7. Interactive Routing Matrix & Composite Task
+Explorer
+Use the interactive matrix below to inspect all 10 complexity tiers, filter by single or composite
+Artificial Analysis v4.3.2 benchmarks, adjust the capability-versus-cost priority slider, and inspect
+the resulting 5-choice failover cascade and asymmetric audit pairing.

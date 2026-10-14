@@ -1,0 +1,1418 @@
+PAGE 1
+TL;DR: Below are the complete, pipe-safe Markdown lookup tables and the machine-readable
+JSON routing matrix for all 10 specialized Artificial Analysis v4.3.2 task types across Tiers 1
+through 10, integrating Gemini 4 Argon (Low, Medium, High) and Claude Opus 5.5 (Low,
+Medium, High, xHigh, Max). Each tier enforces benchmark-specific capability floors,
+cross-provider representation across Choices 1–3, overlapping effort variants in Choices 4–5,
+and an orthogonal cross-provider asymmetric auditor.
+1. Telemetry Refinements Incorporated into the
+Specialized Matrices
+  ●   COD-TERM (Terminal-Bench 4.0) Ceiling Refinement: Live Artificial Analysis
+      leaderboard telemetry shows Claude Sonnet 5.5 (Max) actually outscores Claude
+      Opus 5.5 (Max) on Terminal-Bench 4.0 (63.6% vs. 59.6%) while costing less per task
+      ($5.46 vs. $5.98). Furthermore, Claude Opus 5.5 (xHigh) ties Opus 5.5 (Max) at 59.6% for
+      $3.46/task. Accordingly, Opus 5.5 (xHigh) leads Tier 9 and Sonnet 5.5 (Max) leads Tier 10
+      for terminal coding.
+  ●   Provider Ceiling Warnings ([Floor Degraded]): When a tier's minimum score floor
+      exceeds a provider's highest-performing model on a specialized benchmark (such as
+      OpenAI and Google failing the 1720+ Elo floor on Tier 9–10 AA-Briefcase, or Anthropic
+      and OpenAI failing the 75% floor on Tier 10 AutomationBench-AA), that provider's
+      highest ceiling model is still slotted into the cross-provider fallback cascade but tagged
+      with [Floor Degraded] so the pipeline router can decide whether to accept a degraded
+      cross-provider fallback or enter dynamic backoff for Choice 1.
+  ●   Google Argon vs. 3.8 Flash Effort Mapping:
+   ○   Gemini 4 Argon (Low) (~0.      55/𝑡𝑎𝑠𝑘)𝑎𝑛𝑑𝐺𝑒𝑚𝑖𝑛𝑖4𝐴𝑟𝑔𝑜𝑛(𝑀𝑒𝑑𝑖𝑢𝑚)(~1.15/task) replace
+       Gemini 3.8 Flash (High) ($1.24/task) starting at Tier 3 on AGT-PROJ and COD-TERM, and
+       at Tier 5 on AGT-DELIV, SCI-FRONT, SCI-FORMAL, and GEN-FACT.
+   ○   Gemini 3.8 Flash (High) is retained in Tiers 5–7 on COD-SCI (57%), AGT-AUTO (60%), and
+       GEN-DOC (21%), and through Tier 8 on GEN-LCR (81%, where it edges out Argon High's
+       80%).
+2. Pipe-Safe Markdown Lookup Tables (10 Specialized
+Task Types × 10 Tiers)
+2.1 AGT-PROJ — Multi-Week Agentic Project Work (AA-Briefcase v1.1
+Elo)
+
+  Tier &         Choice 1        Choice 2        Choice 3       Choice 4        Choice 5        Asymme
+  Floor          (Primary        (Provider       (Provider      (Overlap        (Overlap        tric
+                 )               Fallback        Fallback       Variant         Variant         Auditor
+                                 A)              B)             A)              B)              (Cross-P
+                                                                                                rovider)
+
+PAGE 2
+Tier 1          Claude           GPT-6           Gemini           GPT-6            Gemini          GPT-6
+(1050           Haiku 5.5        Luna            3.8 Flash        Luna             3.5             Luna
+Elo)            (Low)            (Low)           (Low)            (Medium          Flash-Lit       (Medium
+                (1220 Elo,       (1060 Elo,      (1140 Elo,       ) (1190          e (1055         ) (1190
+                $0.02)           $0.0045)        $0.65)           Elo,             Elo,            Elo,
+                                                                  $0.02)           $0.19)          $0.02)
+
+
+Tier 2          Claude           GPT-6           Gemini           GPT-6            Claude          GPT-6
+(1150 Elo)      Haiku 5.5        Luna            3.8 Flash        Luna             Haiku 5.5       Luna
+                (Low)            (Medium         (High)           (High)           (Medium         (High)
+                (1220 Elo,       ) (1190         (1203 Elo,       (1260 Elo,       ) (1340         (1260 Elo,
+                $0.02)           Elo,            $1.24)           $0.03)           Elo,            $0.03)
+                                 $0.02)                                            $0.06)
+
+Tier 3          Claude           GPT-6           Gemini 4         GPT-6            Claude          GPT-6
+(1250 Elo)      Haiku 5.5        Luna            Argon            Luna             Sonnet          Luna
+                (Medium          (High)          (Low)            (xHigh)          5.5 (Low)       (Max)
+                ) (1340          (1260 Elo,      (1360 Elo,       (1300 Elo,       (1380 Elo,      (1365 Elo,
+                Elo,             $0.03)          $0.55)           $0.04)           $0.35)          $0.07)
+                $0.06)
+
+
+Tier 4          Claude           GPT-6           Gemini 4         GPT-6.1          Claude          GPT-6.1
+(1350 Elo)      Haiku 5.5        Luna            Argon            Sol (Low)        Sonnet          Sol (Low)
+                (High)           (Max)           (Low)            (1455 Elo,       5.5 (Low)       (1455 Elo,
+                (1460 Elo,       (1365 Elo,      (1360 Elo,       $0.13)           (1380 Elo,      $0.13)
+                $0.11)           $0.07)          $0.55)                            $0.35)
+
+
+Tier 5          Claude           GPT-6.1         Gemini 4         Claude           Claude          GPT-6.1
+(1450           Haiku 5.5        Sol (Low)       Argon            Sonnet           Opus 5.5        Sol
+Elo)            (Max)            (1455 Elo,      (Medium          5.5              (Low)           (Medium
+                (1578 Elo,       $0.13)          ) (1450          (Medium          (1540 Elo,      ) (1525
+                $0.21)                           Elo, $1.15)      ) (1500          $0.55)          Elo,
+                                                                  Elo,                             $0.21)
+                                                                  $0.48)
+
+
+Tier 6          Claude           GPT-6.1         Gemini 4         Claude           GPT-6.1         GPT-6.1
+(1520 Elo)      Haiku 5.5        Sol             Argon            Sonnet           Sol             Sol
+                (Max)            (Medium         (High)           5.5              (High)          (High)
+                (1578 Elo,       ) (1525         (1490 Elo,       (High)           (1545 Elo,      (1545 Elo,
+                $0.21)           Elo,            $1.99            (1620 Elo,       $0.32)          $0.32)
+                                                 [Floor
+
+PAGE 3
+                                   $0.21)          Degrade          $0.88)
+                                                   d])
+
+
+  Tier 7          Claude           GPT-6.1         Gemini 4         Claude          Claude          GPT-6
+  (1560 Elo)      Haiku 5.5        Sol (Max)       Argon            Sonnet          Opus 5.5        Astra
+                  (Max)            (1565 Elo,      (High)           5.5             (Medium         (Max)
+                  (1578 Elo,       $0.72)          (1490 Elo,       (High)          ) (1660         (1571 Elo,
+                  $0.21)                           $1.99            (1620 Elo,      Elo,            $3.26)
+                                                   [Floor           $0.88)          $1.34)
+                                                   Degrade
+                                                   d])
+
+  Tier 8          Claude           GPT-6           Gemini 4         Claude          Claude          GPT-6
+  (1620 Elo)      Opus 5.5         Astra           Argon            Sonnet          Fable 5.1       Astra
+                  (Medium          (Max)           (High)           5.5             (High)          (Max)
+                  ) (1660          (1571 Elo,      (1490 Elo,       (xHigh)         (1640 Elo,      (1571 Elo,
+                  Elo,             $3.26           $1.99            (1695 Elo,      $4.10)          $3.26)
+                  $1.34)           [Floor          [Floor           $2.01)
+                                   Degrade         Degrade
+                                   d])             d])
+
+
+  Tier 9          Claude           GPT-6           Gemini 4         Claude          Claude          GPT-6
+  (1720 Elo)      Opus 5.5         Astra           Argon            Sonnet          Fable 5.1       Astra
+                  (xHigh)          (Max)           (High)           5.5 (Max)       (Max)           (Max)
+                  (1765 Elo,       (1571 Elo,      (1490 Elo,       (1760 Elo,      (1675 Elo,      (1571 Elo,
+                  $3.46)           $3.26           $1.99            $5.46)          $7.63           $3.26)
+                                   [Floor          [Floor                           [Rubric
+                                   Degrade         Degrade                          #1])
+                                   d])             d])
+
+
+  Tier 10         Claude           GPT-6           Gemini 4         Claude          Claude          GPT-6
+  (1800           Opus 5.5         Astra           Argon            Sonnet          Fable 5.1       Astra
+  Elo)            (Max)            (Max)           (High)           5.5 (Max)       (Max)           (Max)
+                  (1807 Elo,       (1571 Elo,      (1490 Elo,       (1760 Elo,      (1675 Elo,      (1571 Elo,
+                  $5.98)           $3.26           $1.99            $5.46)          $7.63           $3.26)
+                                   [Floor          [Floor                           [Rubric
+                                   Degrade         Degrade                          #1])
+                                   d])             d])
+
+
+2.2 AGT-DELIV — Professional Deliverable Generation (GDPval-AA
+
+PAGE 4
+v2.1 Elo)
+
+  Tier &          Choice 1         Choice 2        Choice 3         Choice 4        Choice 5         Asymme
+  Floor           (Primary         (Provider       (Provider        (Overlap        (Overlap         tric
+                  )                Fallback        Fallback         Variant         Variant          Auditor
+                                   A)              B)               A)              B)               (Cross-P
+                                                                                                     rovider)
+
+
+  Tier 1          Claude           GPT-6           Gemini           GPT-6           Gemini           GPT-6
+  (1100 Elo)      Haiku 5.5        Luna            3.8 Flash        Luna            3.5              Luna
+                  (Low)            (Low)           (Low)            (Medium         Flash-Lit        (High)
+                  (1260 Elo,       (1120 Elo,      (1310 Elo,       ) (1240         e (1110          (1305 Elo,
+                  $0.02)           $0.0045)        $0.65)           Elo,            Elo,             $0.03)
+                                                                    $0.02)          $0.19)
+
+
+  Tier 2          Claude           GPT-6           Gemini           GPT-6           Claude           GPT-6
+  (1200           Haiku 5.5        Luna            3.8 Flash        Luna            Haiku 5.5        Luna
+  Elo)            (Low)            (Medium         (Low)            (High)          (Medium          (High)
+                  (1260 Elo,       ) (1240         (1310 Elo,       (1305 Elo,      ) (1380          (1305 Elo,
+                  $0.02)           Elo,            $0.65)           $0.03)          Elo,             $0.03)
+                                   $0.02)                                           $0.06)
+
+
+  Tier 3          Claude           GPT-6           Gemini           GPT-6           Claude           GPT-6
+  (1300           Haiku 5.5        Luna            3.8 Flash        Luna            Sonnet           Luna
+  Elo)            (Medium          (High)          (Low)            (xHigh)         5.5 (Low)        (Max)
+                  ) (1380          (1305 Elo,      (1310 Elo,       (1345 Elo,      (1420 Elo,       (1400 Elo,
+                  Elo,             $0.03)          $0.65)           $0.04)          $0.35)           $0.07)
+                  $0.06)
+
+  Tier 4          Claude           GPT-6           Gemini           GPT-6.1         Claude           GPT-6.1
+  (1380 Elo)      Haiku 5.5        Luna            3.8 Flash        Sol (Low)       Sonnet           Sol (Low)
+                  (High)           (Max)           (Medium          (1470 Elo,      5.5 (Low)        (1470 Elo,
+                  (1480 Elo,       (1400 Elo,      ) (1440          $0.13)          (1420 Elo,       $0.13)
+                  $0.11)           $0.07)          Elo,                             $0.35)
+                                                   $0.93)
+
+
+  Tier 5          Claude           GPT-6.1         Gemini 4         Claude          Gemini           GPT-6.1
+  (1450           Haiku 5.5        Sol (Low)       Argon            Sonnet          3.8 Flash        Sol
+  Elo)            (Max)            (1470 Elo,      (Low)            5.5             (High)           (Medium
+                  (1560 Elo,       $0.13)          (1510 Elo,       (Medium         (1485 Elo,       ) (1515
+                  $0.21)                           $0.55)           ) (1540         $1.24)           Elo,
+
+PAGE 5
+                                                                   Elo,                             $0.21)
+                                                                   $0.48)
+
+
+Tier 6          Claude           GPT-6.1          Gemini 4         Claude          Claude           Gemini 4
+(1500           Haiku 5.5        Sol              Argon            Sonnet          Opus 5.5         Argon
+Elo)            (Max)            (Medium          (Low)            5.5             (Low)            (Medium
+                (1560 Elo,       ) (1515          (1510 Elo,       (High)          (1580 Elo,       ) (1575
+                $0.21)           Elo,             $0.55)           (1650 Elo,      $0.55)           Elo, $1.15)
+                                 $0.21)                            $0.88)
+
+Tier 7          Claude           Gemini 4         GPT-6.1          Claude          GPT-6            Gemini 4
+(1550 Elo)      Sonnet           Argon            Sol (Max)        Opus 5.5        Astra            Argon
+                5.5              (Medium          (1560 Elo,       (Medium         (High)           (High)
+                (High)           ) (1575          $0.72)           ) (1710         (1555 Elo,       (1624 Elo,
+                (1650 Elo,       Elo, $1.15)                       Elo,            $2.19)           $1.99)
+                $0.88)                                             $1.34)
+
+
+Tier 8          Claude           Gemini 4         GPT-6            Claude          Claude           Gemini 4
+(1600           Opus 5.5         Argon            Astra            Sonnet          Fable 5.1        Argon
+Elo)            (Medium          (High)           (Max)            5.5             (High)           (High)
+                ) (1710          (1624 Elo,       (1572 Elo,       (xHigh)         (1700 Elo,       (1624 Elo,
+                Elo,             $1.99)           $3.26            (1750 Elo,      $4.10)           $1.99)
+                $1.34)                            [Floor           $2.01)
+                                                  Degrade
+                                                  d])
+
+
+Tier 9          Claude           Gemini 4         GPT-6            Claude          Claude           Gemini 4
+(1720 Elo)      Opus 5.5         Argon            Astra            Sonnet          Fable 5.1        Argon
+                (High)           (High)           (Max)            5.5             (Max)            (High)
+                (1760 Elo,       (1624 Elo,       (1572 Elo,       (xHigh)         (1756 Elo,       (1624 Elo,
+                $1.82)           $1.99            $3.26            (1750 Elo,      $7.63)           $1.99)
+                                 [Floor           [Floor           $2.01)
+                                 Degrade          Degrade
+                                 d])              d])
+
+
+Tier 10         Claude           Gemini 4         GPT-6            Claude          Claude           Gemini 4
+(1840 Elo)      Opus 5.5         Argon            Astra            Sonnet          Opus 5.5         Argon
+                (Max)            (High)           (Max)            5.5 (Max)       (xHigh)          (High)
+                (1866 Elo,       (1624 Elo,       (1572 Elo,       (1845 Elo,      (1825 Elo,       (1624 Elo,
+                $5.98)           $1.99            $3.26            $5.46)          $3.46)           $1.99)
+                                 [Floor           [Floor
+
+PAGE 6
+                                 Degrade        Degrade
+                                 d])            d])
+
+
+2.3 AGT-AUTO — SaaS & REST API Workflow Automation
+(AutomationBench-AA %)
+
+  Tier &         Choice 1        Choice 2       Choice 3        Choice 4        Choice 5       Asymme
+  Floor          (Primary        (Provider      (Provider       (Overlap        (Overlap       tric
+                 )               Fallback       Fallback        Variant         Variant        Auditor
+                                 A)             B)              A)              B)             (Cross-P
+                                                                                               rovider)
+
+
+  Tier 1         GPT-6           Claude         Gemini          GPT-6           Gemini         Claude
+  (25%)          Luna            Haiku 5.5      3.8 Flash       Luna            3.5            Haiku 5.5
+                 (Low)           (Low)          (Low)           (Medium         Flash-Lit      (Low)
+                 (26%,           (35%,          (42%,           ) (34%,         e (27%,        (35%,
+                 $0.0045)        $0.02)         $0.65)          $0.02)          $0.19)         $0.02)
+
+
+  Tier 2         Claude          GPT-6          Gemini          GPT-6           Claude         GPT-6
+  (32%)          Haiku 5.5       Luna           3.8 Flash       Luna            Haiku 5.5      Luna
+                 (Low)           (Medium        (Low)           (High)          (Medium        (High)
+                 (35%,           ) (34%,        (42%,           (39%,           ) (43%,        (39%,
+                 $0.02)          $0.02)         $0.65)          $0.03)          $0.06)         $0.03)
+
+
+  Tier 3         Claude          GPT-6          Gemini          GPT-6           Claude         GPT-6
+  (40%)          Haiku 5.5       Luna           3.8 Flash       Luna            Sonnet         Luna
+                 (Medium         (xHigh)        (Low)           (Max)           5.5 (Low)      (Max)
+                 ) (43%,         (41%,          (42%,           (46%,           (45%,          (46%,
+                 $0.06)          $0.04)         $0.65)          $0.07)          $0.35)         $0.07)
+
+  Tier 4         Claude          GPT-6          Gemini          GPT-6.1         Claude         GPT-6.1
+  (46%)          Haiku 5.5       Luna           3.8 Flash       Sol (Low)       Sonnet         Sol (Low)
+                 (High)          (Max)          (Medium         (52%,           5.5            (52%,
+                 (48%,           (46%,          ) (52%,         $0.13)          (Medium        $0.13)
+                 $0.11)          $0.07)         $0.93)                          ) (51%,
+                                                                                $0.48)
+
+
+  Tier 5         Claude          GPT-6.1        Gemini          Gemini 4        Gemini         Gemini 4
+  (52%)          Haiku 5.5       Sol (Low)      3.8 Flash       Argon           3.8 Flash      Argon
+
+PAGE 7
+                (Max)           (52%,           (Medium         (Low)            (High)          (Low)
+                (53%,           $0.13)          ) (52%,         (62%,            (60%,           (62%,
+                $0.21)                          $0.93)          $0.55)           $1.24)          $0.55)
+
+
+Tier 6          Gemini 4        GPT-6.1         Claude          Gemini           GPT-6.1         GPT-6.1
+(58%)           Argon           Sol             Sonnet          3.8 Flash        Sol             Sol
+                (Low)           (Medium         5.5             (High)           (High)          (High)
+                (62%,           ) (60%,         (High)          (60%,            (63%,           (63%,
+                $0.55)          $0.21)          (59%,           $1.24)           $0.32)          $0.32)
+                                                $0.88)
+
+Tier 7          Gemini 4        GPT-6.1         Claude          GPT-6.1          Claude          Claude
+(63%)           Argon           Sol             Opus 5.5        Sol              Sonnet          Sonnet
+                (Medium         (High)          (Medium         (xHigh)          5.5             5.5
+                ) (70%,         (63%,           ) (63%,         (65%,            (xHigh)         (xHigh)
+                $1.15)          $0.32)          $1.34)          $0.39)           (66%,           (66%,
+                                                                                 $2.01)          $2.01)
+
+
+Tier 8          Gemini 4        Claude          GPT-6           Gemini 4         GPT-6.1         Claude
+(67%)           Argon           Opus 5.5        Astra           Argon            Sol (Max)       Opus 5.5
+                (High)          (High)          (Max)           (Medium          (66%,           (High)
+                (78%,           (68%,           (68%,           ) (70%,          $0.72)          (68%,
+                $1.99)          $1.82)          $3.26)          $1.15)                           $1.82)
+
+
+Tier 9          Gemini 4        Claude          GPT-6           Gemini 4         Claude          Claude
+(70%)           Argon           Opus 5.5        Astra           Argon            Sonnet          Opus 5.5
+                (High)          (Max)           (Max)           (Medium          5.5 (Max)       (Max)
+                (78%,           (70%,           (68%,           ) (70%,          (69%,           (70%,
+                $1.99)          $5.98)          $3.26           $1.15)           $5.46)          $5.98)
+                                                [Floor
+                                                Degrade
+                                                d])
+
+
+Tier 10         Gemini 4        Claude          GPT-6           Claude           Claude          Claude
+(75%)           Argon           Opus 5.5        Astra           Sonnet           Opus 5.5        Opus 5.5
+                (High)          (Max)           (Max)           5.5 (Max)        (High)          (Max)
+                (78%,           (70%,           (68%,           (69%,            (68%,           (70%,
+                $1.99)          $5.98           $3.26           $5.46            $1.82           $5.98)
+                                [Floor          [Floor          [Floor           [Floor
+                                Degrade         Degrade         Degrade          Degrade
+
+PAGE 8
+                                 d])             d])            d])             d])
+
+
+2.4 COD-TERM — Autonomous Terminal & SWE Execution
+(Terminal-Bench 4.0 %)
+
+  Tier &         Choice 1        Choice 2        Choice 3       Choice 4        Choice 5        Asymme
+  Floor          (Primary        (Provider       (Provider      (Overlap        (Overlap        tric
+                 )               Fallback        Fallback       Variant         Variant         Auditor
+                                 A)              B)             A)              B)              (Cross-P
+                                                                                                rovider)
+
+
+  Tier 1         Claude          GPT-6           Gemini         GPT-6           Claude          GPT-6
+  (18%)          Haiku 5.5       Luna            3.8 Flash      Luna            Haiku 5.5       Luna
+                 (Low)           (Low)           (High)         (Medium         (Medium         (Medium
+                 (26%,           (19%,           (20%,          ) (27%,         ) (33%,         ) (27%,
+                 $0.02)          $0.0045)        $1.24)         $0.02)          $0.06)          $0.02)
+
+
+  Tier 2         GPT-6           Claude          Gemini 4       GPT-6           Claude          Claude
+  (24%)          Luna            Haiku 5.5       Argon          Luna            Haiku 5.5       Haiku 5.5
+                 (Medium         (Low)           (Low)          (High)          (Medium         (Medium
+                 ) (27%,         (26%,           (42%,          (31%,           ) (33%,         ) (33%,
+                 $0.02)          $0.02)          $0.55)         $0.03)          $0.06)          $0.06)
+
+
+  Tier 3         Claude          GPT-6           Gemini 4       GPT-6           Claude          GPT-6
+  (30%)          Haiku 5.5       Luna            Argon          Luna            Sonnet          Luna
+                 (Medium         (High)          (Low)          (xHigh)         5.5 (Low)       (Max)
+                 ) (33%,         (31%,           (42%,          (33%,           (37%,           (37%,
+                 $0.06)          $0.03)          $0.55)         $0.04)          $0.35)          $0.07)
+
+  Tier 4         Claude          GPT-6           Gemini 4       Claude          GPT-6.1         GPT-6.1
+  (36%)          Haiku 5.5       Luna            Argon          Sonnet          Sol (Low)       Sol (Low)
+                 (High)          (Max)           (Low)          5.5 (Low)       (43%,           (43%,
+                 (38%,           (37%,           (42%,          (37%,           $0.13)          $0.13)
+                 $0.11)          $0.07)          $0.55)         $0.35)
+
+
+  Tier 5         GPT-6.1         Claude          Gemini 4       Claude          Claude          Claude
+  (42%)          Sol (Low)       Haiku 5.5       Argon          Sonnet          Opus 5.5        Sonnet
+                 (43%,           (Max)           (Low)          5.5             (Low)           5.5
+                 $0.13)          (43%,           (42%,          (Medium         (44%,           (High)
+
+PAGE 9
+                                $0.21)           $0.55)          ) (45%,         $0.55)           (51%,
+                                                                 $0.48)                           $0.88)
+
+
+Tier 6          GPT-6.1         Claude           Gemini 4        GPT-6           GPT-6.1          Claude
+(47%)           Sol             Sonnet           Argon           Astra           Sol              Opus 5.5
+                (Medium         5.5              (Medium         (Low)           (High)           (Medium
+                ) (49%,         (High)           ) (50%,         (48%,           (52%,            ) (54%,
+                $0.21)          (51%,            $1.15)          $0.82)          $0.32)           $1.34)
+                                $0.88)
+
+Tier 7          GPT-6.1         Claude           Gemini 4        GPT-6.1         Claude           Claude
+(51%)           Sol             Sonnet           Argon           Sol             Opus 5.5         Sonnet
+                (High)          5.5              (Medium         (xHigh)         (Medium          5.5
+                (52%,           (High)           ) (50%,         (54%,           ) (54%,          (xHigh)
+                $0.32)          (51%,            $1.15           $0.39)          $1.34)           (58%,
+                                $0.88)           [Near                                            $2.01)
+                                                 Floor])
+
+
+Tier 8          Claude          GPT-6.1          Gemini 4        Claude          GPT-6            GPT-6
+(55%)           Sonnet          Sol (Max)        Argon           Opus 5.5        Astra            Astra
+                5.5             (55%,            (High)          (High)          (High)           (xHigh)
+                (xHigh)         $0.72)           (57%,           (58%,           (56%,            (58%,
+                (58%,                            $1.99)          $1.82)          $2.19)           $2.98)
+                $2.01)
+
+
+Tier 9          Claude          GPT-6            Gemini 4        Claude          Claude           GPT-6
+(58%)           Opus 5.5        Astra            Argon           Opus 5.5        Sonnet           Astra
+                (xHigh)         (Max)            (High)          (High)          5.5              (Max)
+                (59.6%,         (59.0%,          (57.0%,         (58.0%,         (xHigh)          (59.0%,
+                $3.46)          $3.26)           $1.99           $1.82)          (58.0%,          $3.26)
+                                                 [Floor                          $2.01)
+                                                 Degrade
+                                                 d])
+
+
+Tier 10         Claude          Claude           GPT-6           Gemini 4        Claude           GPT-6
+(60%)           Sonnet          Opus 5.5         Astra           Argon           Opus 5.5         Astra
+                5.5 (Max)       (Max)            (Max)           (High)          (xHigh)          (Max)
+                (63.6%,         (59.6%,          (59.0%,         (57.0%,         (59.6%,          (59.0%,
+                $5.46)          $5.98)           $3.26           $1.99           $3.46)           $3.26)
+                                                 [Floor          [Floor
+                                                 Degrade         Degrade
+
+PAGE 10
+                                                 d])             d])
+
+
+2.5 COD-SCI — Scientific Computing & Numerical Python (SciCode %)
+
+  Tier &         Choice 1        Choice 2        Choice 3        Choice 4        Choice 5       Asymme
+  Floor          (Primary        (Provider       (Provider       (Overlap        (Overlap       tric
+                 )               Fallback        Fallback        Variant         Variant        Auditor
+                                 A)              B)              A)              B)             (Cross-P
+                                                                                                rovider)
+
+
+  Tier 1         Claude          GPT-6           Gemini          GPT-6           Gemini         GPT-6
+  (22%)          Haiku 5.5       Luna            3.8 Flash       Luna            3.5            Luna
+                 (Low)           (Low)           (Low)           (Medium         Flash-Lit      (Medium
+                 (30%,           (23%,           (36%,           ) (31%,         e (24%,        ) (31%,
+                 $0.02)          $0.0045)        $0.65)          $0.02)          $0.19)         $0.02)
+
+  Tier 2         GPT-6           Claude          Gemini          GPT-6           Claude         Claude
+  (28%)          Luna            Haiku 5.5       3.8 Flash       Luna            Haiku 5.5      Haiku 5.5
+                 (Medium         (Low)           (Low)           (High)          (Medium        (Medium
+                 ) (31%,         (30%,           (36%,           (35%,           ) (37%,        ) (37%,
+                 $0.02)          $0.02)          $0.65)          $0.03)          $0.06)         $0.06)
+
+
+  Tier 3         Claude          GPT-6           Gemini          GPT-6           Claude         GPT-6
+  (34%)          Haiku 5.5       Luna            3.8 Flash       Luna            Sonnet         Luna
+                 (Medium         (High)          (Low)           (xHigh)         5.5 (Low)      (Max)
+                 ) (37%,         (35%,           (36%,           (37%,           (40%,          (41%,
+                 $0.06)          $0.03)          $0.65)          $0.04)          $0.35)         $0.07)
+
+
+  Tier 4         Claude          GPT-6           Gemini          GPT-6.1         Claude         GPT-6.1
+  (40%)          Haiku 5.5       Luna            3.8 Flash       Sol (Low)       Sonnet         Sol (Low)
+                 (High)          (Max)           (Medium         (45%,           5.5 (Low)      (45%,
+                 (42%,           (41%,           ) (48%,         $0.13)          (40%,          $0.13)
+                 $0.11)          $0.07)          $0.93)                          $0.35)
+
+
+  Tier 5         Claude          GPT-6.1         Gemini 4        Gemini          Claude         Gemini 4
+  (45%)          Haiku 5.5       Sol (Low)       Argon           3.8 Flash       Opus 5.5       Argon
+                 (Max)           (45%,           (Low)           (Medium         (Low)          (Low)
+                 (46%,           $0.13)          (51%,           ) (48%,         (48%,          (51%,
+                 $0.21)                          $0.55)          $0.93)          $0.55)         $0.55)
+
+PAGE 11
+Tier 6          GPT-6.1         Gemini 4        Claude           Gemini          GPT-6.1         Claude
+(50%)           Sol             Argon           Sonnet           3.8 Flash       Sol             Sonnet
+                (Medium         (Low)           5.5              (High)          (High)          5.5
+                ) (51%,         (51%,           (High)           (57%,           (54%,           (High)
+                $0.21)          $0.55)          (53%,            $1.24)          $0.32)          (53%,
+                                                $0.88)                                           $0.88)
+
+
+Tier 7          GPT-6.1         Gemini          Claude           Gemini 4        GPT-6.1         Claude
+(54%)           Sol             3.8 Flash       Opus 5.5         Argon           Sol             Opus 5.5
+                (High)          (High)          (Medium          (Medium         (xHigh)         (Medium
+                (54%,           (57%,           ) (58%,          ) (57%,         (55%,           ) (58%,
+                $0.32)          $1.24)          $1.34)           $1.15)          $0.39)          $1.34)
+
+Tier 8          Claude          Gemini 4        GPT-6.1          Claude          GPT-6           Gemini 4
+(58%)           Opus 5.5        Argon           Sol (Max)        Sonnet          Astra           Argon
+                (Medium         (High)          (56%,            5.5             (Max)           (High)
+                ) (58%,         (62%,           $0.72            (xHigh)         (56%,           (62%,
+                $1.34)          $1.99)          [Floor           (60%,           $3.26           $1.99)
+                                                Degrade          $2.01)          [Floor
+                                                d])                              Degrade
+                                                                                 d])
+
+
+Tier 9          Claude          Gemini 4        GPT-6            Claude          Claude          Gemini 4
+(62%)           Opus 5.5        Argon           Astra            Fable 5.1       Sonnet          Argon
+                (High)          (High)          (Max)            (Max)           5.5 (Max)       (High)
+                (63%,           (62%,           (56%,            (63%,           (64%,           (62%,
+                $1.82)          $1.99)          $3.26            $7.63)          $5.46)          $1.99)
+                                                [Floor
+                                                Degrade
+                                                d])
+
+
+Tier 10         Claude          Gemini 4        GPT-6            Claude          Claude          Gemini 4
+(65%)           Opus 5.5        Argon           Astra            Opus 5.5        Sonnet          Argon
+                (Max)           (High)          (Max)            (xHigh)         5.5 (Max)       (High)
+                (67%,           (62%,           (56%,            (65%,           (64%,           (62%,
+                $5.98)          $1.99           $3.26            $3.46)          $5.46)          $1.99)
+                                [Floor          [Floor
+                                Degrade         Degrade
+                                d])             d])
+
+PAGE 12
+2.6 SCI-FRONT — Closed-Book Frontier Scientific Reasoning
+(Humanity's Last Exam / HLE %)
+
+  Tier &         Choice 1        Choice 2        Choice 3        Choice 4       Choice 5        Asymme
+  Floor          (Primary        (Provider       (Provider       (Overlap       (Overlap        tric
+                 )               Fallback        Fallback        Variant        Variant         Auditor
+                                 A)              B)              A)             B)              (Cross-P
+                                                                                                rovider)
+
+
+  Tier 1         Claude          GPT-6           Gemini          GPT-6          Gemini          GPT-6
+  (12%)          Haiku 5.5       Luna            3.8 Flash       Luna           3.5             Luna
+                 (Low)           (Low)           (Low)           (Medium        Flash-Lit       (Medium
+                 (19%,           (14%,           (22%,           ) (21%,        e (13%,         ) (21%,
+                 $0.02)          $0.0045)        $0.65)          $0.02)         $0.19)          $0.02)
+
+  Tier 2         GPT-6           Claude          Gemini          GPT-6          Claude          Claude
+  (18%)          Luna            Haiku 5.5       3.8 Flash       Luna           Haiku 5.5       Haiku 5.5
+                 (Medium         (Low)           (Low)           (High)         (Medium         (Medium
+                 ) (21%,         (19%,           (22%,           (25%,          ) (26%,         ) (26%,
+                 $0.02)          $0.02)          $0.65)          $0.03)         $0.06)          $0.06)
+
+
+  Tier 3         Claude          GPT-6           Gemini          GPT-6          Claude          GPT-6
+  (24%)          Haiku 5.5       Luna            3.8 Flash       Luna           Sonnet          Luna
+                 (Medium         (High)          (Medium         (xHigh)        5.5 (Low)       (Max)
+                 ) (26%,         (25%,           ) (31%,         (27%,          (28%,           (31%,
+                 $0.06)          $0.03)          $0.93)          $0.04)         $0.35)          $0.07)
+
+
+  Tier 4         Claude          GPT-6           Gemini          GPT-6.1        Gemini          GPT-6.1
+  (30%)          Haiku 5.5       Luna            3.8 Flash       Sol (Low)      3.8 Flash       Sol (Low)
+                 (High)          (Max)           (Medium         (38%,          (High)          (38%,
+                 (32%,           (31%,           ) (31%,         $0.13)         (35%,           $0.13)
+                 $0.11)          $0.07)          $0.93)                         $1.24)
+
+
+  Tier 5         GPT-6.1         Claude          Gemini 4        Claude         Claude          Gemini 4
+  (36%)          Sol (Low)       Haiku 5.5       Argon           Opus 5.5       Sonnet          Argon
+                 (38%,           (Max)           (Low)           (Low)          5.5             (Low)
+                 $0.13)          (37%,           (43%,           (39%,          (Medium         (43%,
+                                 $0.21)          $0.55)          $0.55)         ) (36%,         $0.55)
+                                                                                $0.48)
+
+PAGE 13
+  Tier 6          GPT-6.1         Gemini 4        Claude          GPT-6           GPT-6.1         Claude
+  (42%)           Sol             Argon           Sonnet          Astra           Sol             Opus 5.5
+                  (Medium         (Low)           5.5             (Low)           (High)          (Medium
+                  ) (46%,         (43%,           (High)          (43%,           (49%,           ) (51%,
+                  $0.21)          $0.55)          (44%,           $0.82)          $0.32)          $1.34)
+                                                  $0.88)
+
+
+  Tier 7          GPT-6.1         Claude          Gemini 4        GPT-6.1         GPT-6           Claude
+  (47%)           Sol             Opus 5.5        Argon           Sol             Astra           Sonnet
+                  (High)          (Medium         (Medium         (xHigh)         (Medium         5.5
+                  (49%,           ) (51%,         ) (50%,         (51%,           ) (50%,         (xHigh)
+                  $0.32)          $1.34)          $1.15)          $0.39)          $1.54)          (53%,
+                                                                                                  $2.01)
+
+  Tier 8          GPT-6.1         Claude          Gemini 4        GPT-6           Claude          Gemini 4
+  (52%)           Sol (Max)       Sonnet          Argon           Astra           Opus 5.5        Argon
+                  (53%,           5.5             (High)          (High)          (High)          (High)
+                  $0.72)          (xHigh)         (57%,           (52%,           (57%,           (57%,
+                                  (53%,           $1.99)          $2.19)          $1.82)          $1.99)
+                                  $2.01)
+
+
+  Tier 9          Claude          Gemini 4        GPT-6           Claude          Claude          Gemini 4
+  (56%)           Opus 5.5        Argon           Astra           Opus 5.5        Fable 5.1       Argon
+                  (High)          (High)          (Max)           (xHigh)         (Max)           (High)
+                  (57%,           (57%,           (55%,           (59%,           (59.1%,         (57%,
+                  $1.82)          $1.99)          $3.26           $3.46)          $7.63)          $1.99)
+                                                  [Floor
+                                                  Degrade
+                                                  d])
+
+
+  Tier 10         Claude          Gemini 4        GPT-6           Claude          Claude          Gemini 4
+  (60%)           Opus 5.5        Argon           Astra           Fable 5.1       Sonnet          Argon
+                  (Max)           (High)          (Max)           (Max)           5.5 (Max)       (High)
+                  (61.4%,         (57.0%,         (55.0%,         (59.1% /        (59.0%,         (57.0%,
+                  $5.98)          $1.99           $3.26           65%             $5.46)          $1.99)
+                                  [Floor          [Floor          w/Tools,
+                                  Degrade         Degrade         $7.63)
+                                  d])             d])
+
+
+2.7 SCI-FORMAL — Symbolic Derivations & Exact Proofs (CritPt %)
+
+PAGE 14
+Tier &          Choice 1        Choice 2        Choice 3        Choice 4        Choice 5        Asymme
+Floor           (Primary        (Provider       (Provider       (Overlap        (Overlap        tric
+                )               Fallback        Fallback        Variant         Variant         Auditor
+                                A)              B)              A)              B)              (Cross-P
+                                                                                                rovider)
+
+
+Tier 1          GPT-6           Claude          Gemini          GPT-6           Gemini          Claude
+(5%)            Luna            Haiku 5.5       3.8 Flash       Luna            3.5             Haiku 5.5
+                (Low)           (Low)           (Low)           (Medium         Flash-Lit       (Low)
+                (6%,            (9%,            (10%,           ) (10%,         e (5%,          (9%,
+                $0.0045)        $0.02)          $0.65)          $0.02)          $0.19)          $0.02)
+
+Tier 2          Claude          GPT-6           Gemini          GPT-6           Claude          GPT-6
+(8%)            Haiku 5.5       Luna            3.8 Flash       Luna            Haiku 5.5       Luna
+                (Low)           (Medium         (Low)           (High)          (Medium         (High)
+                (9%,            ) (10%,         (10%,           (12%,           ) (12%,         (12%,
+                $0.02)          $0.02)          $0.65)          $0.03)          $0.06)          $0.03)
+
+
+Tier 3          GPT-6           Claude          Gemini          GPT-6           Claude          Claude
+(11%)           Luna            Haiku 5.5       3.8 Flash       Luna            Sonnet          Haiku 5.5
+                (High)          (Medium         (Medium         (xHigh)         5.5 (Low)       (High)
+                (12%,           ) (12%,         ) (15%,         (13%,           (14%,           (15%,
+                $0.03)          $0.06)          $0.93)          $0.04)          $0.35)          $0.11)
+
+
+Tier 4          GPT-6           Claude          Gemini          GPT-6.1         Claude          Claude
+(14%)           Luna            Haiku 5.5       3.8 Flash       Sol (Low)       Sonnet          Haiku 5.5
+                (Max)           (High)          (Medium         (18%,           5.5 (Low)       (Max)
+                (15%,           (15%,           ) (15%,         $0.13)          (14%,           (17%,
+                $0.07)          $0.11)          $0.93)                          $0.35)          $0.21)
+
+
+Tier 5          GPT-6.1         Claude          Gemini          Gemini 4        Claude          Claude
+(17%)           Sol (Low)       Haiku 5.5       3.8 Flash       Argon           Opus 5.5        Opus 5.5
+                (18%,           (Max)           (High)          (Low)           (Low)           (Low)
+                $0.13)          (17%,           (18%,           (19%,           (18%,           (18%,
+                                $0.21)          $1.24)          $0.55)          $0.55)          $0.55)
+
+Tier 6          GPT-6.1         Claude          Gemini 4        GPT-6           GPT-6.1         Claude
+(20%)           Sol             Sonnet          Argon           Astra           Sol             Opus 5.5
+                (Medium         5.5             (Medium         (Low)           (High)          (Medium
+                ) (22%,         (High)          ) (23%,         (22%,           (24%,           ) (25%,
+
+PAGE 15
+                  $0.21)         (21%,           $1.15)          $0.82)          $0.32)          $1.34)
+                                 $0.88)
+
+
+  Tier 7          GPT-6.1        Claude          Gemini 4        GPT-6.1         GPT-6           Claude
+  (23%)           Sol            Opus 5.5        Argon           Sol             Astra           Sonnet
+                  (High)         (Medium         (Medium         (xHigh)         (Medium         5.5
+                  (24%,          ) (25%,         ) (23%,         (25%,           ) (26%,         (xHigh)
+                  $0.32)         $1.34)          $1.15)          $0.39)          $1.54)          (26%,
+                                                                                                 $2.01)
+
+  Tier 8          GPT-6.1        Claude          Gemini 4        GPT-6           Claude          Claude
+  (26%)           Sol (Max)      Sonnet          Argon           Astra           Opus 5.5        Opus 5.5
+                  (27%,          5.5             (High)          (High)          (High)          (High)
+                  $0.72)         (xHigh)         (27%,           (28%,           (29%,           (29%,
+                                 (26%,           $1.99)          $2.19)          $1.82)          $1.82)
+                                 $2.01)
+
+
+  Tier 9          Claude         GPT-6           Gemini 4        Claude          Claude          GPT-6
+  (29%)           Opus 5.5       Astra           Argon           Opus 5.5        Fable 5.1       Astra
+                  (High)         (xHigh)         (High)          (xHigh)         (Max)           (Max)
+                  (29%,          (30%,           (27%,           (31%,           (31%,           (32%,
+                  $1.82)         $2.98)          $1.99           $3.46)          $7.63)          $3.26)
+                                                 [Floor
+                                                 Degrade
+                                                 d])
+
+
+  Tier 10         GPT-6          Claude          Gemini 4        Claude          Claude          Claude
+  (32%)           Astra          Opus 5.5        Argon           Opus 5.5        Fable 5.1       Opus 5.5
+                  (Max)          (Max)           (High)          (xHigh)         (Max)           (Max)
+                  (32%,          (32%,           (27%,           (31%,           (31%,           (32%,
+                  $3.26)         $5.98)          $1.99           $3.46)          $7.63)          $5.98)
+                                                 [Floor
+                                                 Degrade
+                                                 d])
+
+
+2.8 GEN-FACT — Factual Recall & Hallucination Abstention
+(AA-Omniscience Raw Score)
+
+  Tier &          Choice 1       Choice 2        Choice 3        Choice 4        Choice 5        Asymme
+
+PAGE 16
+Floor           (Primary         (Provider       (Provider        (Overlap        (Overlap         tric
+                )                Fallback        Fallback         Variant         Variant          Auditor
+                                 A)              B)               A)              B)               (Cross-P
+                                                                                                   rovider)
+
+
+Tier 1 (5)      GPT-6            Claude          Gemini           GPT-6           Gemini           Claude
+                Luna             Haiku 5.5       3.8 Flash        Luna            3.5              Haiku 5.5
+                (Low) (6,        (Low)           (Low)            (Medium         Flash-Lit        (Low)
+                $0.0045)         (14,            (18,             ) (16,          e (6,            (14,
+                                 $0.02)          $0.65)           $0.02)          $0.19)           $0.02)
+
+Tier 2          GPT-6            Claude          Gemini           GPT-6           Claude           Claude
+(12)            Luna             Haiku 5.5       3.8 Flash        Luna            Haiku 5.5        Haiku 5.5
+                (Medium          (Low)           (Low)            (High)          (Medium          (Medium
+                ) (16,           (14,            (18,             (20,            ) (22,           ) (22,
+                $0.02)           $0.02)          $0.65)           $0.03)          $0.06)           $0.06)
+
+
+Tier 3          GPT-6            Claude          Gemini           GPT-6           Claude           Claude
+(18)            Luna             Haiku 5.5       3.8 Flash        Luna            Sonnet           Haiku 5.5
+                (High)           (Medium         (Low)            (xHigh)         5.5 (Low)        (High)
+                (20,             ) (22,          (18,             (22,            (24,             (28, $0.11)
+                $0.03)           $0.06)          $0.65)           $0.04)          $0.35)
+
+
+Tier 4          GPT-6            Claude          Gemini           GPT-6.1         Claude           GPT-6.1
+(24)            Luna             Haiku 5.5       3.8 Flash        Sol (Low)       Sonnet           Sol (Low)
+                (Max)            (High)          (Medium          (30,            5.5 (Low)        (30,
+                (26,             (28, $0.11)     ) (28,           $0.13)          (24,             $0.13)
+                $0.07)                           $0.93)                           $0.35)
+
+
+Tier 5          GPT-6.1          Claude          Gemini 4         Claude          Gemini           Claude
+(28)            Sol (Low)        Haiku 5.5       Argon            Opus 5.5        3.8 Flash        Opus 5.5
+                (30,             (Max)           (Low)            (Low)           (High)           (Low)
+                $0.13)           (32,            (33,             (34,            (30,             (34,
+                                 $0.21)          $0.55)           $0.55)          $1.24)           $0.55)
+
+Tier 6          GPT-6.1          Claude          Gemini 4         Claude          GPT-6            Gemini 4
+(33)            Sol              Opus 5.5        Argon            Sonnet          Astra            Argon
+                (Medium          (Low)           (Low)            5.5             (Low)            (Medium
+                ) (36,           (34,            (33,             (High)          (36,             ) (38,
+                $0.21)           $0.55)          $0.55)           (36,            $0.82)           $1.15)
+
+PAGE 17
+                                                                  $0.88)
+
+
+  Tier 7          GPT-6.1         Claude          Gemini 4        GPT-6.1          GPT-6           Claude
+  (37)            Sol             Opus 5.5        Argon           Sol              Astra           Opus 5.5
+                  (High)          (Medium         (Medium         (xHigh)          (Medium         (Medium
+                  (38,            ) (40,          ) (38,          (39,             ) (39,          ) (40,
+                  $0.32)          $1.34)          $1.15)          $0.39)           $1.54)          $1.34)
+
+  Tier 8          GPT-6.1         Claude          Gemini 4        Claude           GPT-6           Gemini 4
+  (40)            Sol (Max)       Opus 5.5        Argon           Sonnet           Astra           Argon
+                  (40,            (Medium         (High)          5.5              (High)          (High)
+                  $0.72)          ) (40,          (42,            (xHigh)          (41, $2.19)     (42, $1.99
+                                  $1.34)          $1.99)          (40,                             [15%
+                                                                  $2.01)                           Hallucinat
+                                                                                                   ion])
+
+
+  Tier 9          Claude          GPT-6           Gemini 4        Claude           Claude          GPT-6
+  (43)            Opus 5.5        Astra           Argon           Opus 5.5         Fable 5.1       Astra
+                  (High)          (Max)           (High)          (xHigh)          (Max)           (Max)
+                  (43,            (43,            (42, $1.99      (45,             (42,            (43,
+                  $1.82)          $3.26)          [Near           $3.46)           $7.63)          $3.26)
+                                                  Floor])
+
+
+  Tier 10         Claude          GPT-6           Gemini 4        Claude           Claude          Gemini 4
+  (45)            Opus 5.5        Astra           Argon           Opus 5.5         Sonnet          Argon
+                  (Max)           (Max)           (High)          (xHigh)          5.5 (Max)       (High)
+                  (46,            (43, $3.26      (42, $1.99      (45,             (44,            (42, $1.99
+                  $5.98)          [Floor          [Floor          $3.46)           $5.46)          [Anti-Hall
+                                  Degrade         Degrade                                          ucination
+                                  d])             d])                                              Check])
+
+
+2.9 GEN-DOC — Dense Multimodal PDF Extraction (GDP.pdf %)
+
+  Tier &          Choice 1        Choice 2        Choice 3        Choice 4         Choice 5        Asymme
+  Floor           (Primary        (Provider       (Provider       (Overlap         (Overlap        tric
+                  )               Fallback        Fallback        Variant          Variant         Auditor
+                                  A)              B)              A)               B)              (Cross-P
+                                                                                                   rovider)
+
+PAGE 18
+Tier 1          GPT-6           Claude          Gemini          GPT-6            Gemini          Claude
+(8%)            Luna            Haiku 5.5       3.8 Flash       Luna             3.5             Haiku 5.5
+                (Low)           (Low)           (Low)           (Medium          Flash-Lit       (Low)
+                (9%,            (11%,           (13%,           ) (12%,          e (8%,          (11%,
+                $0.0045)        $0.02)          $0.65)          $0.02)           $0.19)          $0.02)
+
+
+Tier 2          Claude          GPT-6           Gemini          GPT-6            Claude          GPT-6
+(10%)           Haiku 5.5       Luna            3.8 Flash       Luna             Haiku 5.5       Luna
+                (Low)           (Medium         (Low)           (High)           (Medium         (High)
+                (11%,           ) (12%,         (13%,           (14%,            ) (13%,         (14%,
+                $0.02)          $0.02)          $0.65)          $0.03)           $0.06)          $0.03)
+
+Tier 3          GPT-6           Claude          Gemini          GPT-6            Claude          Claude
+(12%)           Luna            Haiku 5.5       3.8 Flash       Luna             Sonnet          Haiku 5.5
+                (High)          (Medium         (Low)           (xHigh)          5.5 (Low)       (High)
+                (14%,           ) (13%,         (13%,           (15%,            (15%,           (15%,
+                $0.03)          $0.06)          $0.65)          $0.04)           $0.35)          $0.11)
+
+
+Tier 4          GPT-6           Claude          Gemini          GPT-6.1          Claude          Claude
+(15%)           Luna            Haiku 5.5       3.8 Flash       Sol (Low)        Sonnet          Haiku 5.5
+                (Max)           (High)          (Medium         (19%,            5.5 (Low)       (Max)
+                (17%,           (15%,           ) (18%,         $0.13)           (15%,           (17%,
+                $0.07)          $0.11)          $0.93)                           $0.35)          $0.21)
+
+
+Tier 5          GPT-6.1         Claude          Gemini 4        Gemini           Claude          Claude
+(17%)           Sol (Low)       Haiku 5.5       Argon           3.8 Flash        Opus 5.5        Sonnet
+                (19%,           (Max)           (Low)           (Medium          (Low)           5.5
+                $0.13)          (17%,           (18%,           ) (18%,          (18%,           (High)
+                                $0.21)          $0.55)          $0.93)           $0.55)          (20%,
+                                                                                                 $0.88)
+
+
+Tier 6          GPT-6.1         Claude          Gemini 4        Gemini           GPT-6           Claude
+(19%)           Sol             Sonnet          Argon           3.8 Flash        Astra           Opus 5.5
+                (Medium         5.5             (Medium         (High)           (Low)           (Medium
+                ) (22%,         (High)          ) (20%,         (21%,            (23%,           ) (22%,
+                $0.21)          (20%,           $1.15)          $1.24)           $0.82)          $1.34)
+                                $0.88)
+
+Tier 7          GPT-6.1         Gemini          Claude          GPT-6.1          Gemini 4        Claude
+(21%)           Sol             3.8 Flash       Opus 5.5        Sol              Argon           Sonnet
+
+PAGE 19
+                  (High)          (High)          (Medium         (xHigh)         (High)          5.5
+                  (24%,           (21%,           ) (22%,         (25%,           (22%,           (xHigh)
+                  $0.32)          $1.24)          $1.34)          $0.39)          $1.99)          (23%,
+                                                                                                  $2.01)
+
+
+  Tier 8          GPT-6.1         Claude          Gemini 4        GPT-6           Claude          Claude
+  (23%)           Sol (Max)       Sonnet          Argon           Astra           Opus 5.5        Opus 5.5
+                  (26%,           5.5             (High)          (Medium         (High)          (High)
+                  $0.72)          (xHigh)         (22%,           ) (27%,         (24%,           (24%,
+                                  (23%,           $1.99           $1.54)          $1.82)          $1.82)
+                                  $2.01)          [Floor
+                                                  Degrade
+                                                  d])
+
+  Tier 9          GPT-6.1         Claude          Gemini 4        GPT-6           Claude          Claude
+  (26%)           Sol (Max)       Opus 5.5        Argon           Astra           Fable 5.1       Opus 5.5
+                  (26%,           (Max)           (High)          (xHigh)         (Max)           (Max)
+                  $0.72)          (26%,           (22%,           (29%,           (26%,           (26%,
+                                  $5.98)          $1.99           $2.98)          $7.63)          $5.98)
+                                                  [Floor
+                                                  Degrade
+                                                  d])
+
+
+  Tier 10         GPT-6           Claude          Gemini 4        GPT-6           Claude          Claude
+  (30%)           Astra           Opus 5.5        Argon           Astra           Fable 5.1       Opus 5.5
+                  (Max)           (Max)           (High)          (xHigh)         (Max)           (Max)
+                  (31%,           (26%,           (22%,           (29%,           (26%,           (26%,
+                  $3.26)          $5.98           $1.99           $2.98           $7.63           $5.98)
+                                  [Floor          [Floor          [Near           [Floor
+                                  Degrade         Degrade         Floor])         Degrade
+                                  d])             d])                             d])
+
+
+2.10 GEN-LCR — 1M-Token Long-Context Reasoning (AA-LCR v1.1 %)
+
+  Tier &          Choice 1        Choice 2        Choice 3        Choice 4        Choice 5        Asymme
+  Floor           (Primary        (Provider       (Provider       (Overlap        (Overlap        tric
+                  )               Fallback        Fallback        Variant         Variant         Auditor
+                                  A)              B)              A)              B)              (Cross-P
+                                                                                                  rovider)
+
+PAGE 20
+Tier 1          GPT-6           Claude          Gemini          GPT-6           Gemini          Claude
+(40%)           Luna            Haiku 5.5       3.8 Flash       Luna            3.5             Haiku 5.5
+                (Low)           (Low)           (Low)           (Medium         Flash-Lit       (Low)
+                (42%,           (51%,           (60%,           ) (50%,         e (44%,         (51%,
+                $0.0045)        $0.02)          $0.65)          $0.02)          $0.19)          $0.02)
+
+
+Tier 2          Claude          GPT-6           Gemini          GPT-6           Claude          GPT-6
+(48%)           Haiku 5.5       Luna            3.8 Flash       Luna            Haiku 5.5       Luna
+                (Low)           (Medium         (Low)           (High)          (Medium         (High)
+                (51%,           ) (50%,         (60%,           (56%,           ) (59%,         (56%,
+                $0.02)          $0.02)          $0.65)          $0.03)          $0.06)          $0.03)
+
+Tier 3          GPT-6           Claude          Gemini          GPT-6           Claude          Claude
+(55%)           Luna            Haiku 5.5       3.8 Flash       Luna            Sonnet          Haiku 5.5
+                (High)          (Medium         (Low)           (xHigh)         5.5 (Low)       (High)
+                (56%,           ) (59%,         (60%,           (58%,           (63%,           (65%,
+                $0.03)          $0.06)          $0.65)          $0.04)          $0.35)          $0.11)
+
+
+Tier 4          GPT-6           Claude          Gemini          GPT-6.1         Claude          Claude
+(62%)           Luna            Haiku 5.5       3.8 Flash       Sol (Low)       Sonnet          Haiku 5.5
+                (Max)           (High)          (Medium         (69%,           5.5 (Low)       (Max)
+                (63%,           (65%,           ) (72%,         $0.13)          (63%,           (70%,
+                $0.07)          $0.11)          $0.93)                          $0.35)          $0.21)
+
+
+Tier 5          GPT-6.1         Claude          Gemini 4        Gemini          Claude          Gemini 4
+(68%)           Sol (Low)       Haiku 5.5       Argon           3.8 Flash       Opus 5.5        Argon
+                (69%,           (Max)           (Low)           (Medium         (Low)           (Low)
+                $0.13)          (70%,           (73%,           ) (72%,         (71%,           (73%,
+                                $0.21)          $0.55)          $0.93)          $0.55)          $0.55)
+
+
+Tier 6          GPT-6.1         Gemini 4        Claude          Gemini          GPT-6.1         Claude
+(72%)           Sol             Argon           Sonnet          3.8 Flash       Sol             Opus 5.5
+                (Medium         (Low)           5.5             (Medium         (High)          (Medium
+                ) (74%,         (73%,           (High)          ) (72%,         (76%,           ) (78%,
+                $0.21)          $0.55)          (74%,           $0.93)          $0.32)          $1.34)
+                                                $0.88)
+
+Tier 7          GPT-6.1         Claude          Gemini          Gemini 4        GPT-6.1         Gemini
+(75%)           Sol             Opus 5.5        3.8 Flash       Argon           Sol             3.8 Flash
+                (High)          (Medium         (High)          (Medium         (xHigh)         (High)
+
+PAGE 21
+                  (76%,           ) (78%,         (81%,           ) (77%,         (78%,           (81%,
+                  $0.32)          $1.34)          $1.24)          $1.15)          $0.39)          $1.24)
+
+
+  Tier 8          GPT-6.1         Gemini          Claude          Claude          Gemini 4        Claude
+  (78%)           Sol (Max)       3.8 Flash       Opus 5.5        Sonnet          Argon           Opus 5.5
+                  (79%,           (High)          (Medium         5.5             (High)          (High)
+                  $0.72)          (81%,           ) (78%,         (xHigh)         (80%,           (82%,
+                                  $1.24)          $1.34)          (80%,           $1.99)          $1.82)
+                                                                  $2.01)
+
+  Tier 9          Gemini          Claude          GPT-6           Claude          Claude          Claude
+  (81%)           3.8 Flash       Opus 5.5        Astra           Opus 5.5        Fable 5.1       Opus 5.5
+                  (High)          (High)          (Max)           (xHigh)         (Max)           (xHigh)
+                  (81%,           (82%,           (81%,           (84%,           (83%,           (84%,
+                  $1.24)          $1.82)          $3.26)          $3.46)          $7.63)          $3.46)
+
+
+  Tier 10         Claude          GPT-6           Gemini          Claude          Claude          GPT-6
+  (84%)           Opus 5.5        Astra           3.8 Flash       Opus 5.5        Sonnet          Astra
+                  (Max)           (Max)           (High)          (xHigh)         5.5 (Max)       (Max)
+                  (85%,           (81%,           (81%,           (84%,           (84%,           (81%,
+                  $5.98)          $3.26           $1.24           $3.46)          $5.46)          $3.26)
+                                  [Floor          [Floor
+                                  Degrade         Degrade
+                                  d])             d])
+
+
+3. Complete Production JSON Lookup Matrix
+The JSON configuration below encodes the model catalog, backoff state parameters,
+composite normalization formulas, and all 11 task types (AGT-PROJ, AGT-DELIV, AGT-AUTO,
+COD-TERM, COD-SCI, SCI-FRONT, SCI-FORMAL, GEN-FACT, GEN-DOC, GEN-LCR, and
+GEN-DEFAULT) across Tiers 1 to 10.
+
+
+
+
+
+     JSON
+     {
+       "schemaVersion": "2026.10.2-aa-v4.3.2",
+       "baselineDate": "2026-10-13",
+       "backoffPolicy": {
+
+PAGE 22
+    "strategy": "exponential_with_full_jitter_loopback",
+    "baseDelayMs": 5000,
+    "maxDelayMs": 300000,
+    "jitterMs": 3000,
+    "loopbackTarget": "Choice_1_Primary",
+    "escalateTierOnVerificationFailure": true
+  },
+  "normalizationFormulas": {
+    "AGT-PROJ": "(score - 500) / 20.0",
+    "AGT-DELIV": "(score - 500) / 20.0",
+    "GEN-FACT": "(score + 100) / 2.0",
+    "PERCENTAGE_DEFAULT": "score"
+  },
+  "models": {
+    "luna-low": { "provider": "OpenAI", "name": "GPT-6 Luna (Low)", "costPerTask": 0.0045, "inM": 0.10,
+"outM": 0.50, "cacheM": 0.01, "tps": 126, "scores": { "GEN-DEFAULT": 22, "AGT-PROJ": 1060,
+"AGT-DELIV": 1120, "AGT-AUTO": 26, "COD-TERM": 19, "COD-SCI": 23, "SCI-FRONT": 14,
+"SCI-FORMAL": 6, "GEN-FACT": 6, "GEN-DOC": 9, "GEN-LCR": 42 } },
+    "luna-med": { "provider": "OpenAI", "name": "GPT-6 Luna (Medium)", "costPerTask": 0.02, "inM":
+0.10, "outM": 0.50, "cacheM": 0.01, "tps": 128, "scores": { "GEN-DEFAULT": 30, "AGT-PROJ": 1190,
+"AGT-DELIV": 1240, "AGT-AUTO": 34, "COD-TERM": 27, "COD-SCI": 31, "SCI-FRONT": 21,
+"SCI-FORMAL": 10, "GEN-FACT": 16, "GEN-DOC": 12, "GEN-LCR": 50 } },
+    "luna-high": { "provider": "OpenAI", "name": "GPT-6 Luna (High)", "costPerTask": 0.03, "inM": 0.10,
+"outM": 0.50, "cacheM": 0.01, "tps": 134, "scores": { "GEN-DEFAULT": 33, "AGT-PROJ": 1260,
+"AGT-DELIV": 1305, "AGT-AUTO": 39, "COD-TERM": 31, "COD-SCI": 35, "SCI-FRONT": 25,
+"SCI-FORMAL": 12, "GEN-FACT": 20, "GEN-DOC": 14, "GEN-LCR": 56 } },
+    "luna-xhigh": { "provider": "OpenAI", "name": "GPT-6 Luna (xHigh)", "costPerTask": 0.04, "inM":
+0.10, "outM": 0.50, "cacheM": 0.01, "tps": 128, "scores": { "GEN-DEFAULT": 35, "AGT-PROJ": 1300,
+"AGT-DELIV": 1345, "AGT-AUTO": 41, "COD-TERM": 33, "COD-SCI": 37, "SCI-FRONT": 27,
+"SCI-FORMAL": 13, "GEN-FACT": 22, "GEN-DOC": 15, "GEN-LCR": 58 } },
+    "luna-max": { "provider": "OpenAI", "name": "GPT-6 Luna (Max)", "costPerTask": 0.07, "inM": 0.10,
+"outM": 0.50, "cacheM": 0.01, "tps": 135, "scores": { "GEN-DEFAULT": 38, "AGT-PROJ": 1365,
+"AGT-DELIV": 1400, "AGT-AUTO": 46, "COD-TERM": 37, "COD-SCI": 41, "SCI-FRONT": 31,
+"SCI-FORMAL": 15, "GEN-FACT": 26, "GEN-DOC": 17, "GEN-LCR": 63 } },
+    "sol-low": { "provider": "OpenAI", "name": "GPT-6.1 Sol (Low)", "costPerTask": 0.13, "inM": 0.50,
+"outM": 2.50, "cacheM": 0.05, "tps": 51, "scores": { "GEN-DEFAULT": 42, "AGT-PROJ": 1455,
+"AGT-DELIV": 1470, "AGT-AUTO": 52, "COD-TERM": 43, "COD-SCI": 45, "SCI-FRONT": 38,
+"SCI-FORMAL": 18, "GEN-FACT": 30, "GEN-DOC": 19, "GEN-LCR": 69 } },
+    "sol-med": { "provider": "OpenAI", "name": "GPT-6.1 Sol (Medium)", "costPerTask": 0.21, "inM":
+0.50, "outM": 2.50, "cacheM": 0.05, "tps": 55, "scores": { "GEN-DEFAULT": 48, "AGT-PROJ": 1525,
+"AGT-DELIV": 1515, "AGT-AUTO": 60, "COD-TERM": 49, "COD-SCI": 51, "SCI-FRONT": 46,
+"SCI-FORMAL": 22, "GEN-FACT": 36, "GEN-DOC": 22, "GEN-LCR": 74 } },
+    "sol-high": { "provider": "OpenAI", "name": "GPT-6.1 Sol (High)", "costPerTask": 0.32, "inM": 0.50,
+
+PAGE 23
+"outM": 2.50, "cacheM": 0.05, "tps": 58, "scores": { "GEN-DEFAULT": 50, "AGT-PROJ": 1545,
+"AGT-DELIV": 1540, "AGT-AUTO": 63, "COD-TERM": 52, "COD-SCI": 54, "SCI-FRONT": 49,
+"SCI-FORMAL": 24, "GEN-FACT": 38, "GEN-DOC": 24, "GEN-LCR": 76 } },
+    "sol-xhigh": { "provider": "OpenAI", "name": "GPT-6.1 Sol (xHigh)", "costPerTask": 0.39, "inM": 0.50,
+"outM": 2.50, "cacheM": 0.05, "tps": 61, "scores": { "GEN-DEFAULT": 51, "AGT-PROJ": 1555,
+"AGT-DELIV": 1550, "AGT-AUTO": 65, "COD-TERM": 54, "COD-SCI": 55, "SCI-FRONT": 51,
+"SCI-FORMAL": 25, "GEN-FACT": 39, "GEN-DOC": 25, "GEN-LCR": 78 } },
+    "sol-max": { "provider": "OpenAI", "name": "GPT-6.1 Sol (Max)", "costPerTask": 0.72, "inM": 0.50,
+"outM": 2.50, "cacheM": 0.05, "tps": 65, "scores": { "GEN-DEFAULT": 52, "AGT-PROJ": 1565,
+"AGT-DELIV": 1560, "AGT-AUTO": 66, "COD-TERM": 55, "COD-SCI": 56, "SCI-FRONT": 53,
+"SCI-FORMAL": 27, "GEN-FACT": 40, "GEN-DOC": 26, "GEN-LCR": 79 } },
+    "astra-low": { "provider": "OpenAI", "name": "GPT-6 Astra (Low)", "costPerTask": 0.82, "inM": 10.00,
+"outM": 50.00, "cacheM": 1.00, "tps": 72, "scores": { "GEN-DEFAULT": 46, "AGT-PROJ": 1500,
+"AGT-DELIV": 1510, "AGT-AUTO": 57, "COD-TERM": 48, "COD-SCI": 49, "SCI-FRONT": 43,
+"SCI-FORMAL": 22, "GEN-FACT": 36, "GEN-DOC": 23, "GEN-LCR": 73 } },
+    "astra-med": { "provider": "OpenAI", "name": "GPT-6 Astra (Medium)", "costPerTask": 1.54, "inM":
+10.00, "outM": 50.00, "cacheM": 1.00, "tps": 68, "scores": { "GEN-DEFAULT": 50, "AGT-PROJ": 1535,
+"AGT-DELIV": 1535, "AGT-AUTO": 63, "COD-TERM": 53, "COD-SCI": 53, "SCI-FRONT": 50,
+"SCI-FORMAL": 26, "GEN-FACT": 39, "GEN-DOC": 27, "GEN-LCR": 77 } },
+    "astra-high": { "provider": "OpenAI", "name": "GPT-6 Astra (High)", "costPerTask": 2.19, "inM":
+10.00, "outM": 50.00, "cacheM": 1.00, "tps": 65, "scores": { "GEN-DEFAULT": 51, "AGT-PROJ": 1550,
+"AGT-DELIV": 1555, "AGT-AUTO": 65, "COD-TERM": 56, "COD-SCI": 54, "SCI-FRONT": 52,
+"SCI-FORMAL": 28, "GEN-FACT": 41, "GEN-DOC": 28, "GEN-LCR": 79 } },
+    "astra-xhigh": { "provider": "OpenAI", "name": "GPT-6 Astra (xHigh)", "costPerTask": 2.98, "inM":
+10.00, "outM": 50.00, "cacheM": 1.00, "tps": 64, "scores": { "GEN-DEFAULT": 52, "AGT-PROJ": 1560,
+"AGT-DELIV": 1565, "AGT-AUTO": 67, "COD-TERM": 58, "COD-SCI": 55, "SCI-FRONT": 54,
+"SCI-FORMAL": 30, "GEN-FACT": 42, "GEN-DOC": 29, "GEN-LCR": 80 } },
+    "astra-max": { "provider": "OpenAI", "name": "GPT-6 Astra (Max)", "costPerTask": 3.26, "inM":
+10.00, "outM": 50.00, "cacheM": 1.00, "tps": 63, "scores": { "GEN-DEFAULT": 53, "AGT-PROJ": 1571,
+"AGT-DELIV": 1572, "AGT-AUTO": 68, "COD-TERM": 59, "COD-SCI": 56, "SCI-FRONT": 55,
+"SCI-FORMAL": 32, "GEN-FACT": 43, "GEN-DOC": 31, "GEN-LCR": 81 } },
+    "haiku-low": { "provider": "Anthropic", "name": "Claude Haiku 5.5 (Low)", "costPerTask": 0.02, "inM":
+0.10, "outM": 0.50, "cacheM": 0.01, "tps": 164, "scores": { "GEN-DEFAULT": 29, "AGT-PROJ": 1220,
+"AGT-DELIV": 1260, "AGT-AUTO": 35, "COD-TERM": 26, "COD-SCI": 30, "SCI-FRONT": 19,
+"SCI-FORMAL": 9, "GEN-FACT": 14, "GEN-DOC": 11, "GEN-LCR": 51 } },
+    "haiku-med": { "provider": "Anthropic", "name": "Claude Haiku 5.5 (Medium)", "costPerTask": 0.06,
+"inM": 0.10, "outM": 0.50, "cacheM": 0.01, "tps": 185, "scores": { "GEN-DEFAULT": 35, "AGT-PROJ":
+1340, "AGT-DELIV": 1380, "AGT-AUTO": 43, "COD-TERM": 33, "COD-SCI": 37, "SCI-FRONT": 26,
+"SCI-FORMAL": 12, "GEN-FACT": 22, "GEN-DOC": 13, "GEN-LCR": 59 } },
+    "haiku-high": { "provider": "Anthropic", "name": "Claude Haiku 5.5 (High)", "costPerTask": 0.11,
+"inM": 0.10, "outM": 0.50, "cacheM": 0.01, "tps": 210, "scores": { "GEN-DEFAULT": 39, "AGT-PROJ":
+1460, "AGT-DELIV": 1480, "AGT-AUTO": 48, "COD-TERM": 38, "COD-SCI": 42, "SCI-FRONT": 32,
+"SCI-FORMAL": 15, "GEN-FACT": 28, "GEN-DOC": 15, "GEN-LCR": 65 } },
+
+PAGE 24
+    "haiku-max": { "provider": "Anthropic", "name": "Claude Haiku 5.5 (Max)", "costPerTask": 0.21,
+"inM": 0.10, "outM": 0.50, "cacheM": 0.01, "tps": 236, "scores": { "GEN-DEFAULT": 43, "AGT-PROJ":
+1578, "AGT-DELIV": 1560, "AGT-AUTO": 53, "COD-TERM": 43, "COD-SCI": 46, "SCI-FRONT": 37,
+"SCI-FORMAL": 17, "GEN-FACT": 32, "GEN-DOC": 17, "GEN-LCR": 70 } },
+    "sonnet-low": { "provider": "Anthropic", "name": "Claude Sonnet 5.5 (Low)", "costPerTask": 0.35,
+"inM": 2.00, "outM": 10.00, "cacheM": 0.20, "tps": 101, "scores": { "GEN-DEFAULT": 36, "AGT-PROJ":
+1380, "AGT-DELIV": 1420, "AGT-AUTO": 45, "COD-TERM": 37, "COD-SCI": 40, "SCI-FRONT": 28,
+"SCI-FORMAL": 14, "GEN-FACT": 24, "GEN-DOC": 15, "GEN-LCR": 63 } },
+    "sonnet-med": { "provider": "Anthropic", "name": "Claude Sonnet 5.5 (Medium)", "costPerTask":
+0.48, "inM": 2.00, "outM": 10.00, "cacheM": 0.20, "tps": 99, "scores": { "GEN-DEFAULT": 41,
+"AGT-PROJ": 1500, "AGT-DELIV": 1540, "AGT-AUTO": 51, "COD-TERM": 45, "COD-SCI": 46,
+"SCI-FRONT": 36, "SCI-FORMAL": 17, "GEN-FACT": 30, "GEN-DOC": 17, "GEN-LCR": 69 } },
+    "sonnet-high": { "provider": "Anthropic", "name": "Claude Sonnet 5.5 (High)", "costPerTask": 0.88,
+"inM": 2.00, "outM": 10.00, "cacheM": 0.20, "tps": 96, "scores": { "GEN-DEFAULT": 47, "AGT-PROJ":
+1620, "AGT-DELIV": 1650, "AGT-AUTO": 59, "COD-TERM": 51, "COD-SCI": 53, "SCI-FRONT": 44,
+"SCI-FORMAL": 21, "GEN-FACT": 36, "GEN-DOC": 20, "GEN-LCR": 74 } },
+    "sonnet-xhigh": { "provider": "Anthropic", "name": "Claude Sonnet 5.5 (xHigh)", "costPerTask": 2.01,
+"inM": 2.00, "outM": 10.00, "cacheM": 0.20, "tps": 106, "scores": { "GEN-DEFAULT": 52, "AGT-PROJ":
+1695, "AGT-DELIV": 1750, "AGT-AUTO": 66, "COD-TERM": 58, "COD-SCI": 60, "SCI-FRONT": 53,
+"SCI-FORMAL": 26, "GEN-FACT": 40, "GEN-DOC": 23, "GEN-LCR": 80 } },
+    "sonnet-max": { "provider": "Anthropic", "name": "Claude Sonnet 5.5 (Max)", "costPerTask": 5.46,
+"inM": 2.00, "outM": 10.00, "cacheM": 0.20, "tps": 136, "scores": { "GEN-DEFAULT": 56, "AGT-PROJ":
+1760, "AGT-DELIV": 1845, "AGT-AUTO": 69, "COD-TERM": 63.6, "COD-SCI": 64, "SCI-FRONT": 59,
+"SCI-FORMAL": 30, "GEN-FACT": 44, "GEN-DOC": 25, "GEN-LCR": 84 } },
+    "opus-low": { "provider": "Anthropic", "name": "Claude Opus 5.5 (Low)", "costPerTask": 0.55, "inM":
+4.00, "outM": 20.00, "cacheM": 0.20, "tps": 81, "scores": { "GEN-DEFAULT": 42, "AGT-PROJ": 1540,
+"AGT-DELIV": 1580, "AGT-AUTO": 52, "COD-TERM": 44, "COD-SCI": 48, "SCI-FRONT": 39,
+"SCI-FORMAL": 18, "GEN-FACT": 34, "GEN-DOC": 18, "GEN-LCR": 71 } },
+    "opus-med": { "provider": "Anthropic", "name": "Claude Opus 5.5 (Medium)", "costPerTask": 1.34,
+"inM": 4.00, "outM": 20.00, "cacheM": 0.20, "tps": 82, "scores": { "GEN-DEFAULT": 51, "AGT-PROJ":
+1660, "AGT-DELIV": 1710, "AGT-AUTO": 63, "COD-TERM": 54, "COD-SCI": 58, "SCI-FRONT": 51,
+"SCI-FORMAL": 25, "GEN-FACT": 40, "GEN-DOC": 22, "GEN-LCR": 78 } },
+    "opus-high": { "provider": "Anthropic", "name": "Claude Opus 5.5 (High)", "costPerTask": 1.82, "inM":
+4.00, "outM": 20.00, "cacheM": 0.20, "tps": 83, "scores": { "GEN-DEFAULT": 54, "AGT-PROJ": 1690,
+"AGT-DELIV": 1760, "AGT-AUTO": 68, "COD-TERM": 58, "COD-SCI": 63, "SCI-FRONT": 57,
+"SCI-FORMAL": 29, "GEN-FACT": 43, "GEN-DOC": 24, "GEN-LCR": 82 } },
+    "opus-xhigh": { "provider": "Anthropic", "name": "Claude Opus 5.5 (xHigh)", "costPerTask": 3.46,
+"inM": 4.00, "outM": 20.00, "cacheM": 0.20, "tps": 82, "scores": { "GEN-DEFAULT": 56, "AGT-PROJ":
+1765, "AGT-DELIV": 1825, "AGT-AUTO": 69, "COD-TERM": 59.6, "COD-SCI": 65, "SCI-FRONT": 59,
+"SCI-FORMAL": 31, "GEN-FACT": 45, "GEN-DOC": 25, "GEN-LCR": 84 } },
+    "opus-max": { "provider": "Anthropic", "name": "Claude Opus 5.5 (Max)", "costPerTask": 5.98, "inM":
+4.00, "outM": 20.00, "cacheM": 0.20, "tps": 96, "scores": { "GEN-DEFAULT": 58, "AGT-PROJ": 1807,
+"AGT-DELIV": 1866, "AGT-AUTO": 70, "COD-TERM": 59.6, "COD-SCI": 67, "SCI-FRONT": 61.4,
+
+PAGE 25
+"SCI-FORMAL": 32, "GEN-FACT": 46, "GEN-DOC": 26, "GEN-LCR": 85 } },
+    "fable-max": { "provider": "Anthropic", "name": "Claude Fable 5.1 (Max)", "costPerTask": 7.63, "inM":
+10.00, "outM": 50.00, "cacheM": 0.25, "tps": 67, "scores": { "GEN-DEFAULT": 53, "AGT-PROJ": 1675,
+"AGT-DELIV": 1756, "AGT-AUTO": 59, "COD-TERM": 52, "COD-SCI": 63, "SCI-FRONT": 59.1,
+"SCI-FORMAL": 31, "GEN-FACT": 42, "GEN-DOC": 26, "GEN-LCR": 83 } },
+    "flash35-lite": { "provider": "Google", "name": "Gemini 3.5 Flash-Lite", "costPerTask": 0.19, "inM":
+0.25, "outM": 1.25, "cacheM": 0.025, "tps": 220, "scores": { "GEN-DEFAULT": 22, "AGT-PROJ": 1055,
+"AGT-DELIV": 1110, "AGT-AUTO": 27, "COD-TERM": 12, "COD-SCI": 24, "SCI-FRONT": 13,
+"SCI-FORMAL": 5, "GEN-FACT": 6, "GEN-DOC": 8, "GEN-LCR": 44 } },
+    "flash38-low": { "provider": "Google", "name": "Gemini 3.8 Flash (Low)", "costPerTask": 0.65, "inM":
+0.75, "outM": 3.75, "cacheM": 0.075, "tps": 135, "scores": { "GEN-DEFAULT": 33, "AGT-PROJ": 1140,
+"AGT-DELIV": 1310, "AGT-AUTO": 42, "COD-TERM": 10, "COD-SCI": 36, "SCI-FRONT": 22,
+"SCI-FORMAL": 10, "GEN-FACT": 18, "GEN-DOC": 13, "GEN-LCR": 60 } },
+    "flash38-med": { "provider": "Google", "name": "Gemini 3.8 Flash (Medium)", "costPerTask": 0.93,
+"inM": 0.75, "outM": 3.75, "cacheM": 0.075, "tps": 140, "scores": { "GEN-DEFAULT": 40, "AGT-PROJ":
+1180, "AGT-DELIV": 1440, "AGT-AUTO": 52, "COD-TERM": 16, "COD-SCI": 48, "SCI-FRONT": 31,
+"SCI-FORMAL": 15, "GEN-FACT": 28, "GEN-DOC": 18, "GEN-LCR": 72 } },
+    "flash38-high": { "provider": "Google", "name": "Gemini 3.8 Flash (High)", "costPerTask": 1.24, "inM":
+0.75, "outM": 3.75, "cacheM": 0.075, "tps": 341, "scores": { "GEN-DEFAULT": 41, "AGT-PROJ": 1203,
+"AGT-DELIV": 1485, "AGT-AUTO": 60, "COD-TERM": 20, "COD-SCI": 57, "SCI-FRONT": 35,
+"SCI-FORMAL": 18, "GEN-FACT": 30, "GEN-DOC": 21, "GEN-LCR": 81 } },
+    "argon-low": { "provider": "Google", "name": "Gemini 4 Argon (Low)", "costPerTask": 0.55, "inM":
+2.00, "outM": 10.00, "cacheM": 0.10, "tps": 88, "scores": { "GEN-DEFAULT": 46, "AGT-PROJ": 1360,
+"AGT-DELIV": 1510, "AGT-AUTO": 62, "COD-TERM": 42, "COD-SCI": 51, "SCI-FRONT": 43,
+"SCI-FORMAL": 19, "GEN-FACT": 33, "GEN-DOC": 18, "GEN-LCR": 73 } },
+    "argon-med": { "provider": "Google", "name": "Gemini 4 Argon (Medium)", "costPerTask": 1.15,
+"inM": 2.00, "outM": 10.00, "cacheM": 0.10, "tps": 80, "scores": { "GEN-DEFAULT": 50, "AGT-PROJ":
+1450, "AGT-DELIV": 1575, "AGT-AUTO": 70, "COD-TERM": 50, "COD-SCI": 57, "SCI-FRONT": 50,
+"SCI-FORMAL": 23, "GEN-FACT": 38, "GEN-DOC": 20, "GEN-LCR": 77 } },
+    "argon-high": { "provider": "Google", "name": "Gemini 4 Argon (High)", "costPerTask": 1.99, "inM":
+2.00, "outM": 10.00, "cacheM": 0.10, "tps": 75, "scores": { "GEN-DEFAULT": 53, "AGT-PROJ": 1490,
+"AGT-DELIV": 1624, "AGT-AUTO": 78, "COD-TERM": 57, "COD-SCI": 62, "SCI-FRONT": 57,
+"SCI-FORMAL": 27, "GEN-FACT": 42, "GEN-DOC": 22, "GEN-LCR": 80 } }
+  },
+  "taskRoutingMatrix": {
+    "AGT-PROJ": {
+      "benchmark": "AA-Briefcase v1.1",
+      "tiers": {
+        "1": { "floor": 1050, "choices": ["haiku-low", "luna-low", "flash38-low", "luna-med", "flash35-lite"],
+"auditor": "luna-med", "degradedSlots": [] },
+        "2": { "floor": 1150, "choices": ["haiku-low", "luna-med", "flash38-high", "luna-high", "haiku-med"],
+"auditor": "luna-high", "degradedSlots": [] },
+        "3": { "floor": 1250, "choices": ["haiku-med", "luna-high", "argon-low", "luna-xhigh",
+
+PAGE 26
+"sonnet-low"], "auditor": "luna-max", "degradedSlots": [] },
+        "4": { "floor": 1350, "choices": ["haiku-high", "luna-max", "argon-low", "sol-low", "sonnet-low"],
+"auditor": "sol-low", "degradedSlots": [] },
+        "5": { "floor": 1450, "choices": ["haiku-max", "sol-low", "argon-med", "sonnet-med", "opus-low"],
+"auditor": "sol-med", "degradedSlots": [] },
+        "6": { "floor": 1520, "choices": ["haiku-max", "sol-med", "argon-high", "sonnet-high", "sol-high"],
+"auditor": "sol-high", "degradedSlots": ["argon-high"] },
+        "7": { "floor": 1560, "choices": ["haiku-max", "sol-max", "argon-high", "sonnet-high",
+"opus-med"], "auditor": "astra-max", "degradedSlots": ["argon-high"] },
+        "8": { "floor": 1620, "choices": ["opus-med", "astra-max", "argon-high", "sonnet-xhigh",
+"opus-high"], "auditor": "astra-max", "degradedSlots": ["astra-max", "argon-high"] },
+        "9": { "floor": 1720, "choices": ["opus-xhigh", "astra-max", "argon-high", "sonnet-max",
+"fable-max"], "auditor": "astra-max", "degradedSlots": ["astra-max", "argon-high"] },
+        "10": { "floor": 1800, "choices": ["opus-max", "astra-max", "argon-high", "sonnet-max",
+"fable-max"], "auditor": "astra-max", "degradedSlots": ["astra-max", "argon-high"] }
+      }
+    },
+    "AGT-DELIV": {
+      "benchmark": "GDPval-AA v2.1",
+      "tiers": {
+        "1": { "floor": 1100, "choices": ["haiku-low", "luna-low", "flash38-low", "luna-med", "flash35-lite"],
+"auditor": "luna-high", "degradedSlots": [] },
+        "2": { "floor": 1200, "choices": ["haiku-low", "luna-med", "flash38-low", "luna-high", "haiku-med"],
+"auditor": "luna-high", "degradedSlots": [] },
+        "3": { "floor": 1300, "choices": ["haiku-med", "luna-high", "flash38-low", "luna-xhigh",
+"sonnet-low"], "auditor": "luna-max", "degradedSlots": [] },
+        "4": { "floor": 1380, "choices": ["haiku-high", "luna-max", "flash38-med", "sol-low", "sonnet-low"],
+"auditor": "sol-low", "degradedSlots": [] },
+        "5": { "floor": 1450, "choices": ["haiku-max", "sol-low", "argon-low", "sonnet-med",
+"flash38-high"], "auditor": "sol-med", "degradedSlots": [] },
+        "6": { "floor": 1500, "choices": ["haiku-max", "sol-med", "argon-low", "sonnet-high", "opus-low"],
+"auditor": "argon-med", "degradedSlots": [] },
+        "7": { "floor": 1550, "choices": ["sonnet-high", "argon-med", "sol-max", "opus-med",
+"astra-high"], "auditor": "argon-high", "degradedSlots": [] },
+        "8": { "floor": 1600, "choices": ["opus-med", "argon-high", "astra-max", "sonnet-xhigh",
+"fable-max"], "auditor": "argon-high", "degradedSlots": ["astra-max"] },
+        "9": { "floor": 1720, "choices": ["opus-high", "argon-high", "astra-max", "sonnet-xhigh",
+"fable-max"], "auditor": "argon-high", "degradedSlots": ["argon-high", "astra-max"] },
+        "10": { "floor": 1840, "choices": ["opus-max", "argon-high", "astra-max", "sonnet-max",
+"opus-xhigh"], "auditor": "argon-high", "degradedSlots": ["argon-high", "astra-max"] }
+      }
+    },
+    "AGT-AUTO": {
+
+PAGE 27
+      "benchmark": "AutomationBench-AA",
+      "tiers": {
+        "1": { "floor": 25, "choices": ["luna-low", "haiku-low", "flash38-low", "luna-med", "flash35-lite"],
+"auditor": "haiku-low", "degradedSlots": [] },
+        "2": { "floor": 32, "choices": ["haiku-low", "luna-med", "flash38-low", "luna-high", "haiku-med"],
+"auditor": "luna-high", "degradedSlots": [] },
+        "3": { "floor": 40, "choices": ["haiku-med", "luna-xhigh", "flash38-low", "luna-max", "sonnet-low"],
+"auditor": "luna-max", "degradedSlots": [] },
+        "4": { "floor": 46, "choices": ["haiku-high", "luna-max", "flash38-med", "sol-low", "sonnet-med"],
+"auditor": "sol-low", "degradedSlots": [] },
+        "5": { "floor": 52, "choices": ["haiku-max", "sol-low", "flash38-med", "argon-low", "flash38-high"],
+"auditor": "argon-low", "degradedSlots": [] },
+        "6": { "floor": 58, "choices": ["argon-low", "sol-med", "sonnet-high", "flash38-high", "sol-high"],
+"auditor": "sol-high", "degradedSlots": [] },
+        "7": { "floor": 63, "choices": ["argon-med", "sol-high", "opus-med", "sol-xhigh", "sonnet-xhigh"],
+"auditor": "sonnet-xhigh", "degradedSlots": [] },
+        "8": { "floor": 67, "choices": ["argon-high", "opus-high", "astra-max", "argon-med", "sol-max"],
+"auditor": "opus-high", "degradedSlots": [] },
+        "9": { "floor": 70, "choices": ["argon-high", "opus-max", "astra-max", "argon-med",
+"sonnet-max"], "auditor": "opus-max", "degradedSlots": ["astra-max"] },
+        "10": { "floor": 75, "choices": ["argon-high", "opus-max", "astra-max", "sonnet-max",
+"opus-high"], "auditor": "opus-max", "degradedSlots": ["opus-max", "astra-max", "sonnet-max",
+"opus-high"] }
+      }
+    },
+    "COD-TERM": {
+      "benchmark": "Terminal-Bench 4.0",
+      "tiers": {
+        "1": { "floor": 18, "choices": ["haiku-low", "luna-low", "flash38-high", "luna-med", "haiku-med"],
+"auditor": "luna-med", "degradedSlots": [] },
+        "2": { "floor": 24, "choices": ["luna-med", "haiku-low", "argon-low", "luna-high", "haiku-med"],
+"auditor": "haiku-med", "degradedSlots": [] },
+        "3": { "floor": 30, "choices": ["haiku-med", "luna-high", "argon-low", "luna-xhigh", "sonnet-low"],
+"auditor": "luna-max", "degradedSlots": [] },
+        "4": { "floor": 36, "choices": ["haiku-high", "luna-max", "argon-low", "sonnet-low", "sol-low"],
+"auditor": "sol-low", "degradedSlots": [] },
+        "5": { "floor": 42, "choices": ["sol-low", "haiku-max", "argon-low", "sonnet-med", "opus-low"],
+"auditor": "sonnet-high", "degradedSlots": [] },
+        "6": { "floor": 47, "choices": ["sol-med", "sonnet-high", "argon-med", "astra-low", "sol-high"],
+"auditor": "opus-med", "degradedSlots": [] },
+        "7": { "floor": 51, "choices": ["sol-high", "sonnet-high", "argon-med", "sol-xhigh", "opus-med"],
+"auditor": "sonnet-xhigh", "degradedSlots": ["argon-med"] },
+        "8": { "floor": 55, "choices": ["sonnet-xhigh", "sol-max", "argon-high", "opus-high", "astra-high"],
+
+PAGE 28
+"auditor": "astra-xhigh", "degradedSlots": [] },
+        "9": { "floor": 58, "choices": ["opus-xhigh", "astra-max", "argon-high", "opus-high",
+"sonnet-xhigh"], "auditor": "astra-max", "degradedSlots": ["argon-high"] },
+        "10": { "floor": 60, "choices": ["sonnet-max", "opus-max", "astra-max", "argon-high",
+"opus-xhigh"], "auditor": "astra-max", "degradedSlots": ["astra-max", "argon-high"] }
+      }
+    },
+    "COD-SCI": {
+      "benchmark": "SciCode",
+      "tiers": {
+        "1": { "floor": 22, "choices": ["haiku-low", "luna-low", "flash38-low", "luna-med", "flash35-lite"],
+"auditor": "luna-med", "degradedSlots": [] },
+        "2": { "floor": 28, "choices": ["luna-med", "haiku-low", "flash38-low", "luna-high", "haiku-med"],
+"auditor": "haiku-med", "degradedSlots": [] },
+        "3": { "floor": 34, "choices": ["haiku-med", "luna-high", "flash38-low", "luna-xhigh", "sonnet-low"],
+"auditor": "luna-max", "degradedSlots": [] },
+        "4": { "floor": 40, "choices": ["haiku-high", "luna-max", "flash38-med", "sol-low", "sonnet-low"],
+"auditor": "sol-low", "degradedSlots": [] },
+        "5": { "floor": 45, "choices": ["haiku-max", "sol-low", "argon-low", "flash38-med", "opus-low"],
+"auditor": "argon-low", "degradedSlots": [] },
+        "6": { "floor": 50, "choices": ["sol-med", "argon-low", "sonnet-high", "flash38-high", "sol-high"],
+"auditor": "sonnet-high", "degradedSlots": [] },
+        "7": { "floor": 54, "choices": ["sol-high", "flash38-high", "opus-med", "argon-med", "sol-xhigh"],
+"auditor": "opus-med", "degradedSlots": [] },
+        "8": { "floor": 58, "choices": ["opus-med", "argon-high", "sol-max", "sonnet-xhigh", "astra-max"],
+"auditor": "argon-high", "degradedSlots": ["sol-max", "astra-max"] },
+        "9": { "floor": 62, "choices": ["opus-high", "argon-high", "astra-max", "fable-max", "sonnet-max"],
+"auditor": "argon-high", "degradedSlots": ["astra-max"] },
+        "10": { "floor": 65, "choices": ["opus-max", "argon-high", "astra-max", "opus-xhigh",
+"sonnet-max"], "auditor": "argon-high", "degradedSlots": ["argon-high", "astra-max"] }
+      }
+    },
+    "SCI-FRONT": {
+      "benchmark": "Humanity's Last Exam (HLE)",
+      "tiers": {
+        "1": { "floor": 12, "choices": ["haiku-low", "luna-low", "flash38-low", "luna-med", "flash35-lite"],
+"auditor": "luna-med", "degradedSlots": [] },
+        "2": { "floor": 18, "choices": ["luna-med", "haiku-low", "flash38-low", "luna-high", "haiku-med"],
+"auditor": "haiku-med", "degradedSlots": [] },
+        "3": { "floor": 24, "choices": ["haiku-med", "luna-high", "flash38-med", "luna-xhigh",
+"sonnet-low"], "auditor": "luna-max", "degradedSlots": [] },
+        "4": { "floor": 30, "choices": ["haiku-high", "luna-max", "flash38-med", "sol-low", "flash38-high"],
+"auditor": "sol-low", "degradedSlots": [] },
+
+PAGE 29
+        "5": { "floor": 36, "choices": ["sol-low", "haiku-max", "argon-low", "opus-low", "sonnet-med"],
+"auditor": "argon-low", "degradedSlots": [] },
+        "6": { "floor": 42, "choices": ["sol-med", "argon-low", "sonnet-high", "astra-low", "sol-high"],
+"auditor": "opus-med", "degradedSlots": [] },
+        "7": { "floor": 47, "choices": ["sol-high", "opus-med", "argon-med", "sol-xhigh", "astra-med"],
+"auditor": "sonnet-xhigh", "degradedSlots": [] },
+        "8": { "floor": 52, "choices": ["sol-max", "sonnet-xhigh", "argon-high", "astra-high", "opus-high"],
+"auditor": "argon-high", "degradedSlots": [] },
+        "9": { "floor": 56, "choices": ["opus-high", "argon-high", "astra-max", "opus-xhigh", "fable-max"],
+"auditor": "argon-high", "degradedSlots": ["astra-max"] },
+        "10": { "floor": 60, "choices": ["opus-max", "argon-high", "astra-max", "fable-max",
+"sonnet-max"], "auditor": "argon-high", "degradedSlots": ["argon-high", "astra-max"] }
+      }
+    },
+    "SCI-FORMAL": {
+      "benchmark": "CritPt",
+      "tiers": {
+        "1": { "floor": 5, "choices": ["luna-low", "haiku-low", "flash38-low", "luna-med", "flash35-lite"],
+"auditor": "haiku-low", "degradedSlots": [] },
+        "2": { "floor": 8, "choices": ["haiku-low", "luna-med", "flash38-low", "luna-high", "haiku-med"],
+"auditor": "luna-high", "degradedSlots": [] },
+        "3": { "floor": 11, "choices": ["luna-high", "haiku-med", "flash38-med", "luna-xhigh", "sonnet-low"],
+"auditor": "haiku-high", "degradedSlots": [] },
+        "4": { "floor": 14, "choices": ["luna-max", "haiku-high", "flash38-med", "sol-low", "sonnet-low"],
+"auditor": "haiku-max", "degradedSlots": [] },
+        "5": { "floor": 17, "choices": ["sol-low", "haiku-max", "flash38-high", "argon-low", "opus-low"],
+"auditor": "opus-low", "degradedSlots": [] },
+        "6": { "floor": 20, "choices": ["sol-med", "sonnet-high", "argon-med", "astra-low", "sol-high"],
+"auditor": "opus-med", "degradedSlots": [] },
+        "7": { "floor": 23, "choices": ["sol-high", "opus-med", "argon-med", "sol-xhigh", "astra-med"],
+"auditor": "sonnet-xhigh", "degradedSlots": [] },
+        "8": { "floor": 26, "choices": ["sol-max", "sonnet-xhigh", "argon-high", "astra-high", "opus-high"],
+"auditor": "opus-high", "degradedSlots": [] },
+        "9": { "floor": 29, "choices": ["opus-high", "astra-xhigh", "argon-high", "opus-xhigh", "fable-max"],
+"auditor": "astra-max", "degradedSlots": ["argon-high"] },
+        "10": { "floor": 32, "choices": ["astra-max", "opus-max", "argon-high", "opus-xhigh", "fable-max"],
+"auditor": "opus-max", "degradedSlots": ["argon-high"] }
+      }
+    },
+    "GEN-FACT": {
+      "benchmark": "AA-Omniscience",
+      "tiers": {
+        "1": { "floor": 5, "choices": ["luna-low", "haiku-low", "flash38-low", "luna-med", "flash35-lite"],
+
+PAGE 30
+"auditor": "haiku-low", "degradedSlots": [] },
+        "2": { "floor": 12, "choices": ["luna-med", "haiku-low", "flash38-low", "luna-high", "haiku-med"],
+"auditor": "haiku-med", "degradedSlots": [] },
+        "3": { "floor": 18, "choices": ["luna-high", "haiku-med", "flash38-low", "luna-xhigh", "sonnet-low"],
+"auditor": "haiku-high", "degradedSlots": [] },
+        "4": { "floor": 24, "choices": ["luna-max", "haiku-high", "flash38-med", "sol-low", "sonnet-low"],
+"auditor": "sol-low", "degradedSlots": [] },
+        "5": { "floor": 28, "choices": ["sol-low", "haiku-max", "argon-low", "opus-low", "flash38-high"],
+"auditor": "opus-low", "degradedSlots": [] },
+        "6": { "floor": 33, "choices": ["sol-med", "opus-low", "argon-low", "sonnet-high", "astra-low"],
+"auditor": "argon-med", "degradedSlots": [] },
+        "7": { "floor": 37, "choices": ["sol-high", "opus-med", "argon-med", "sol-xhigh", "astra-med"],
+"auditor": "opus-med", "degradedSlots": [] },
+        "8": { "floor": 40, "choices": ["sol-max", "opus-med", "argon-high", "sonnet-xhigh", "astra-high"],
+"auditor": "argon-high", "degradedSlots": [] },
+        "9": { "floor": 43, "choices": ["opus-high", "astra-max", "argon-high", "opus-xhigh", "fable-max"],
+"auditor": "astra-max", "degradedSlots": ["argon-high"] },
+        "10": { "floor": 45, "choices": ["opus-max", "astra-max", "argon-high", "opus-xhigh",
+"sonnet-max"], "auditor": "argon-high", "degradedSlots": ["astra-max", "argon-high"] }
+      }
+    },
+    "GEN-DOC": {
+      "benchmark": "GDP.pdf",
+      "tiers": {
+        "1": { "floor": 8, "choices": ["luna-low", "haiku-low", "flash38-low", "luna-med", "flash35-lite"],
+"auditor": "haiku-low", "degradedSlots": [] },
+        "2": { "floor": 10, "choices": ["haiku-low", "luna-med", "flash38-low", "luna-high", "haiku-med"],
+"auditor": "luna-high", "degradedSlots": [] },
+        "3": { "floor": 12, "choices": ["luna-high", "haiku-med", "flash38-low", "luna-xhigh", "sonnet-low"],
+"auditor": "haiku-high", "degradedSlots": [] },
+        "4": { "floor": 15, "choices": ["luna-max", "haiku-high", "flash38-med", "sol-low", "sonnet-low"],
+"auditor": "haiku-max", "degradedSlots": [] },
+        "5": { "floor": 17, "choices": ["sol-low", "haiku-max", "argon-low", "flash38-med", "opus-low"],
+"auditor": "sonnet-high", "degradedSlots": [] },
+        "6": { "floor": 19, "choices": ["sol-med", "sonnet-high", "argon-med", "flash38-high", "astra-low"],
+"auditor": "opus-med", "degradedSlots": [] },
+        "7": { "floor": 21, "choices": ["sol-high", "flash38-high", "opus-med", "sol-xhigh", "argon-high"],
+"auditor": "sonnet-xhigh", "degradedSlots": [] },
+        "8": { "floor": 23, "choices": ["sol-max", "sonnet-xhigh", "argon-high", "astra-med", "opus-high"],
+"auditor": "opus-high", "degradedSlots": ["argon-high"] },
+        "9": { "floor": 26, "choices": ["sol-max", "opus-max", "argon-high", "astra-xhigh", "fable-max"],
+"auditor": "opus-max", "degradedSlots": ["argon-high"] },
+        "10": { "floor": 30, "choices": ["astra-max", "opus-max", "argon-high", "astra-xhigh", "fable-max"],
+
+PAGE 31
+"auditor": "opus-max", "degradedSlots": ["opus-max", "argon-high", "fable-max"] }
+      }
+    },
+    "GEN-LCR": {
+      "benchmark": "AA-LCR v1.1",
+      "tiers": {
+        "1": { "floor": 40, "choices": ["luna-low", "haiku-low", "flash38-low", "luna-med", "flash35-lite"],
+"auditor": "haiku-low", "degradedSlots": [] },
+        "2": { "floor": 48, "choices": ["haiku-low", "luna-med", "flash38-low", "luna-high", "haiku-med"],
+"auditor": "luna-high", "degradedSlots": [] },
+        "3": { "floor": 55, "choices": ["luna-high", "haiku-med", "flash38-low", "luna-xhigh", "sonnet-low"],
+"auditor": "haiku-high", "degradedSlots": [] },
+        "4": { "floor": 62, "choices": ["luna-max", "haiku-high", "flash38-med", "sol-low", "sonnet-low"],
+"auditor": "haiku-max", "degradedSlots": [] },
+        "5": { "floor": 68, "choices": ["sol-low", "haiku-max", "argon-low", "flash38-med", "opus-low"],
+"auditor": "argon-low", "degradedSlots": [] },
+        "6": { "floor": 72, "choices": ["sol-med", "argon-low", "sonnet-high", "flash38-med", "sol-high"],
+"auditor": "opus-med", "degradedSlots": [] },
+        "7": { "floor": 75, "choices": ["sol-high", "opus-med", "flash38-high", "argon-med", "sol-xhigh"],
+"auditor": "flash38-high", "degradedSlots": [] },
+        "8": { "floor": 78, "choices": ["sol-max", "flash38-high", "opus-med", "sonnet-xhigh",
+"argon-high"], "auditor": "opus-high", "degradedSlots": [] },
+        "9": { "floor": 81, "choices": ["flash38-high", "opus-high", "astra-max", "opus-xhigh", "fable-max"],
+"auditor": "opus-xhigh", "degradedSlots": [] },
+        "10": { "floor": 84, "choices": ["opus-max", "astra-max", "flash38-high", "opus-xhigh",
+"sonnet-max"], "auditor": "astra-max", "degradedSlots": ["astra-max", "flash38-high"] }
+      }
+    },
+    "GEN-DEFAULT": {
+      "benchmark": "AA Intelligence Index v4.3.2",
+      "tiers": {
+        "1": { "floor": 20, "choices": ["haiku-low", "luna-low", "flash38-low", "luna-med", "flash35-lite"],
+"auditor": "luna-high", "degradedSlots": [] },
+        "2": { "floor": 28, "choices": ["luna-high", "haiku-low", "flash38-low", "luna-med", "haiku-med"],
+"auditor": "haiku-med", "degradedSlots": [] },
+        "3": { "floor": 34, "choices": ["haiku-med", "luna-xhigh", "flash38-med", "sonnet-low",
+"luna-max"], "auditor": "luna-max", "degradedSlots": [] },
+        "4": { "floor": 38, "choices": ["haiku-high", "luna-max", "flash38-med", "sol-low", "sonnet-med"],
+"auditor": "sol-low", "degradedSlots": [] },
+        "5": { "floor": 41, "choices": ["haiku-max", "sol-low", "argon-low", "opus-low", "flash38-high"],
+"auditor": "sol-med", "degradedSlots": [] },
+        "6": { "floor": 46, "choices": ["sol-med", "sonnet-high", "argon-low", "astra-low", "opus-low"],
+"auditor": "opus-med", "degradedSlots": [] },
+
+PAGE 32
+        "7": { "floor": 50, "choices": ["sol-high", "opus-med", "argon-med", "sol-xhigh", "astra-med"],
+"auditor": "sonnet-xhigh", "degradedSlots": [] },
+        "8": { "floor": 52, "choices": ["sol-max", "sonnet-xhigh", "argon-high", "astra-xhigh", "opus-med"],
+"auditor": "opus-high", "degradedSlots": [] },
+        "9": { "floor": 54, "choices": ["opus-high", "argon-high", "astra-max", "opus-xhigh", "fable-max"],
+"auditor": "astra-max", "degradedSlots": ["argon-high", "astra-max"] },
+        "10": { "floor": 56, "choices": ["opus-max", "argon-high", "astra-max", "sonnet-max",
+"fable-max"], "auditor": "astra-max", "degradedSlots": ["argon-high", "astra-max"] }
+      }
+    }
+  }
+}
