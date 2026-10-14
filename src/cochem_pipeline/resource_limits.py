@@ -71,7 +71,7 @@ class ResourceLimits:
 
     @property
     def node_options(self) -> str:
-        return f"--max-old-space-size={self.node_heap_mb}"
+        return node_heap_options(self)
 
     @classmethod
     def swarm_default(cls, **overrides) -> ResourceLimits:

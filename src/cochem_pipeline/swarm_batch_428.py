@@ -82,11 +82,13 @@ def normalize_file_target(path: str) -> str:
     raw = _text(path, "Microtask file target", 512).strip().replace("\\", "/")
     while raw.startswith("./"):
         raw = raw[2:]
-    raw = raw.lstrip("/")
-    raw = re.sub(r"/+", "/", raw)
-    if not raw or raw in (".", "..") or any(part == ".." for part in raw.split("/")):
+    if raw.startswith("/") or ":" in raw:
         raise ValueError(f"Invalid microtask file target path: {path}")
-    return raw
+    raw = re.sub(r"/+", "/", raw).rstrip("/")
+    parts = [part for part in raw.split("/") if part and part != "."]
+    if not parts or any(part == ".." for part in raw.split("/")):
+        raise ValueError(f"Invalid microtask file target path: {path}")
+    return "/".join(parts)
 
 
 def extract_microtask_files(node: Mapping[str, Any]) -> list[str]:
@@ -116,16 +118,43 @@ def resolve_microtask_route_tier(
     """Resolve the candidate profiles and primary `(provider, model, reasoning_effort)` tier for `node`."""
     mt_id = str(node.get("microtask_id") or node.get("id") or "")
     _id(mt_id)
-    options = five_model_options(dict(catalog), list(node["task_types"]), int(node["complexity"]))
+    effective_complexity = max(
+        int(node["complexity"]),
+        int(node.get("effective_complexity") or node["complexity"]),
+    )
+    options = five_model_options(dict(catalog), list(node["task_types"]), effective_complexity)
     candidates = [opt["model_id"] for opt in options if opt["meets_floor"]]
     if not candidates:
         raise ValueError(f"No eligible profiles meet the floor for microtask {mt_id}")
     models_map = catalog.get("models") or {}
     explicit_primary = node.get("routed_profile_id")
+    pivot_model = node.get("pivot_model")
+    if isinstance(pivot_model, str) and pivot_model:
+        if pivot_model in models_map:
+            explicit_primary = pivot_model
+        else:
+            matching_candidates = [
+                cid
+                for cid in candidates
+                if models_map.get(cid, {}).get("model") == pivot_model
+                or models_map.get(cid, {}).get("family") == pivot_model
+            ]
+            if matching_candidates:
+                explicit_primary = matching_candidates[0]
+            else:
+                matching_all = [
+                    cid
+                    for cid, spec in models_map.items()
+                    if spec.get("model") == pivot_model or spec.get("family") == pivot_model
+                ]
+                if matching_all:
+                    explicit_primary = matching_all[0]
     if isinstance(explicit_primary, str) and explicit_primary in models_map:
         primary_id = explicit_primary
         if primary_id not in candidates:
             candidates = [primary_id, *candidates]
+        else:
+            candidates = [primary_id, *[c for c in candidates if c != primary_id]]
     else:
         primary_id = candidates[0]
     if primary_id not in models_map:
@@ -157,6 +186,7 @@ def pack_conflict_colored_wave(
     active_locked_files: Mapping[str, str] | set[str] | None = None,
     task_id: str = "task428",
     plan_generation_sha256: str = "0" * 64,
+    batch_seq_offset: int = 0,
 ) -> dict[str, Any]:
     """Pack dependency-ready microtasks into conflict-free provider slot batches (Case B vs. Case C).
 
@@ -230,7 +260,7 @@ def pack_conflict_colored_wave(
                 break
 
         if target_batch is None:
-            batch_seq = len(all_batches) + 1
+            batch_seq = int(batch_seq_offset) + len(all_batches) + 1
             slot_index = ((batch_seq - 1) % MAX_OS_SLOTS) + 1
             slot_id = f"slot{slot_index}"
             batch_identity = digest(
@@ -274,6 +304,8 @@ def pack_conflict_colored_wave(
             "candidate_profiles": list(route_info["candidate_profiles"]),
             "provider_family": provider_family,
             "model": route_info["model"],
+            "family": route_info["family"],
+            "pivot_model": node.get("pivot_model"),
             "reasoning_effort": route_info["reasoning_effort"],
             "max_nesting_depth": int(swarm_prof["max_nesting_depth"]),
             "deliverables": list(node["deliverables"]),
@@ -318,9 +350,46 @@ def pack_conflict_colored_wave(
     }
 
 
+def normalize_swarm_batch_outputs(output: Mapping[str, Any] | list[Any]) -> dict[str, Any]:
+    """Normalize a mapping or list of per-microtask subagent outputs into `{microtask_id: output}`."""
+    if isinstance(output, Mapping):
+        raw = output.get("subagent_outputs") if "subagent_outputs" in output else output
+    elif isinstance(output, list):
+        raw = output
+    else:
+        raise ValueError("Swarm batch output must be a JSON object or list of subagent outputs")
+
+    if isinstance(raw, Mapping):
+        if not raw:
+            raise ValueError("Swarm batch output requires a non-empty subagent_outputs mapping")
+        return dict(raw)
+
+    if isinstance(raw, list):
+        if not raw:
+            raise ValueError("Swarm batch output requires a non-empty subagent_outputs list")
+        normalized: dict[str, Any] = {}
+        for item in raw:
+            if not isinstance(item, Mapping):
+                raise ValueError("Each subagent output list entry must be a mapping")
+            mt_id = item.get("microtask_id") or item.get("id")
+            if not isinstance(mt_id, str) or not mt_id.strip():
+                raise ValueError("Each subagent output list entry requires microtask_id")
+            if mt_id in normalized:
+                raise ValueError(f"Duplicate microtask_id in swarm batch output list: {mt_id}")
+            if "output" in item:
+                normalized[mt_id] = item["output"]
+            else:
+                normalized[mt_id] = {k: v for k, v in item.items() if k not in ("microtask_id", "id")}
+        return normalized
+
+    raise ValueError("Swarm batch output requires a non-empty subagent_outputs mapping or list")
+
+
 def validate_swarm_batch_stage_output(
     batch_descriptor: Mapping[str, Any],
-    output: Mapping[str, Any],
+    output: Mapping[str, Any] | list[Any],
+    *,
+    allow_partial_failures: bool = False,
 ) -> dict[str, Any]:
     """Validate the outer `MICROTASK_SWARM_BATCH` stage envelope before per-microtask commit."""
     if not isinstance(batch_descriptor, Mapping):
@@ -328,18 +397,15 @@ def validate_swarm_batch_stage_output(
     expected_ids = set(batch_descriptor.get("microtask_ids") or [])
     if not expected_ids:
         raise ValueError("Swarm batch descriptor has no microtask_ids")
-    if not isinstance(output, Mapping):
-        raise ValueError("Swarm batch output must be a JSON object")
 
-    raw_map = output.get("subagent_outputs") if "subagent_outputs" in output else output
-    if not isinstance(raw_map, Mapping) or not raw_map:
-        raise ValueError("Swarm batch output requires a non-empty subagent_outputs mapping")
+    raw_map = normalize_swarm_batch_outputs(output)
     unknown = set(raw_map.keys()) - expected_ids
     if unknown:
         raise ValueError(f"Swarm batch output contains unknown microtask IDs: {sorted(unknown)}")
-    for mt_id, mt_out in raw_map.items():
-        if not isinstance(mt_out, Mapping):
-            raise ValueError(f"Subagent output for {mt_id} must be a mapping")
+    if not allow_partial_failures:
+        for mt_id, mt_out in raw_map.items():
+            if not isinstance(mt_out, Mapping):
+                raise ValueError(f"Subagent output for {mt_id} must be a mapping")
     return {
         "batch_id": batch_descriptor.get("batch_id"),
         "provider_family": batch_descriptor.get("provider_family"),
@@ -393,7 +459,7 @@ class SwarmBatchRuntime:
         self,
         task_id: str,
         batch_id: str,
-        subagent_outputs: Mapping[str, Any],
+        subagent_outputs: Mapping[str, Any] | list[Any],
     ) -> dict[str, Any]:
         return self.board.complete_swarm_batch(task_id, batch_id, subagent_outputs)
 

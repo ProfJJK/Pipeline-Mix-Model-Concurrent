@@ -59,7 +59,9 @@ authority: ready microtasks with disjoint file footprints (Case B) pack by
 provider family (`claude` $\le 20$ / depth $3$, `codex` $\le 20$ / depth $2$,
 `gemini`/Agy $\le 64$ / depth $2$ per slot across the 4 OS slots), while each
 spawned subagent executes at its own microtask's exact routed `(model, reasoning_effort)`
-tier (`candidate_profiles[0]`). Overlapping file footprints (Case C) admit at
-most one microtask per shared file group into `microtask428_file_locks` across
-all 4 slots and hold remaining tasks in `WAITING_ON_FILE_LOCK` until lock release.
+tier (`candidate_profiles[0]`, honoring `AttemptLedger` 10/20/30 upward floor and
+model pivots). Overlapping file footprints (Case C) admit at most one microtask
+per shared file group into `microtask428_file_locks` across all 4 slots (preserving
+in-flight `DISPATCHED` batches across wave transitions) and hold remaining tasks in
+`WAITING_ON_FILE_LOCK` until lock release.
 

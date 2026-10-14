@@ -65,11 +65,13 @@ or full SRS acceptance before that sitting completes.
   `src/cochem_pipeline/resource_limits.py`, `src/cochem_pipeline/inference_policy.py`,
   `src/cochem_pipeline/planning_gateway.py`, `src/cochem_pipeline/worker.py`,
   `pipeline_tests/test_swarm_batch_428.py`): 4 Layer-2 OS execution slots (`6144 MiB` RAM,
-  `4096 MiB` V8 heap, `96` processes, `0x08000200` creation flags) paired with Layer-1
-  intra-slot subagent swarms (`claude` 20/depth 3, `codex` 20/depth 2, `gemini`/Agy 64/depth 2),
-  Case B disjoint provider wave packing with exact per-subagent routed `(model, reasoning_effort)`,
-  Case C global cross-slot file locking (`microtask428_file_locks` + `WAITING_ON_FILE_LOCK`),
-  and partial-batch per-microtask commit with individual `AttemptLedger` failure isolation.
+  `4096 MiB` V8 heap with `--max-old-space-size=4096 --max-semi-space-size=16`, `96` processes,
+  `0x08000200` creation flags) paired with Layer-1 intra-slot subagent swarms (`claude` 20/depth 3,
+  `codex` 20/depth 2, `gemini`/Agy 64/depth 2), Case B disjoint provider wave packing with exact
+  per-subagent routed `(model, reasoning_effort)` and `10/20/30` `AttemptLedger` pivot escalation,
+  Case C global cross-slot and in-flight same-task file locking (`microtask428_file_locks` +
+  `WAITING_ON_FILE_LOCK`), `JobStore.complete` auto-commit, and partial-batch per-microtask commit
+  with individual `AttemptLedger` failure isolation.
 
 ## Remaining owner action (`P428-28`)
 

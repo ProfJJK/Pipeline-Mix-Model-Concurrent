@@ -77,7 +77,8 @@ def validate_stage_output(payload, output, route):
         validate_microtask_execution_output(payload['microtask_node'], output)
     elif stage == 'MICROTASK_SWARM_BATCH':
         from .swarm_batch_428 import validate_swarm_batch_stage_output
-        validate_swarm_batch_stage_output(payload['microtask_batch'], output)
+        batch_desc = payload.get('swarm_batch') or payload.get('microtask_batch')
+        validate_swarm_batch_stage_output(batch_desc, output)
     else:
         raise ValueError('Unsupported planning output stage')
     return matches[0]
@@ -181,7 +182,7 @@ def prompt_contract(payload):
             release_criteria_results=[dict(criterion='Criterion',passed=True,evidence='Exact verification')]
         )
     elif stage == 'MICROTASK_SWARM_BATCH':
-        batch_meta = payload.get('microtask_batch') or {}
+        batch_meta = payload.get('swarm_batch') or payload.get('microtask_batch') or {}
         contract = dict(
             batch_id=batch_meta.get('batch_id', 'swbatch428-1'),
             provider_family=batch_meta.get('provider_family', 'claude'),

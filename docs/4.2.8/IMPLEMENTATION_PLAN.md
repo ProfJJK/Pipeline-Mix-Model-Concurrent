@@ -77,7 +77,8 @@ its tests and the remaining exact-host-result verification.
 
 - **Layer-2 OS Execution Slots (`slot1`..`slot4`):** 4 isolated Windows worker slots
   with per-slot `ResourceLimits.swarm_default()` (`memory_limit_mb=6144`, `node_heap_mb=4096`,
-  `max_processes=96`, `swarm_mode=True`, `SWARM_CREATION_FLAGS=0x08000200`; `4 x 6 GiB = 24 GiB`
+  `node_options="--max-old-space-size=4096 --max-semi-space-size=16"`, `max_processes=96`,
+  `swarm_mode=True`, `SWARM_CREATION_FLAGS=0x08000200`; `4 x 6 GiB = 24 GiB`
   bounded within the 63.7 GiB host RAM envelope).
 - **Layer-1 Intra-Slot Native Subagent Swarms:**
   - `claude`: up to `20` subagents per slot (`80` across 4 slots), `max_nesting_depth = 3`.
@@ -85,14 +86,18 @@ its tests and the remaining exact-host-result verification.
   - `gemini` (Agy): up to `64` subagents per slot (`256` across 4 slots), `max_nesting_depth = 2`.
 - **Conflict-Colored Wave Packing (`swarm_batch_428.py`, `microtask_board_428.py`):**
   - **Case B (Disjoint Files):** Ready microtasks with disjoint file footprints pack by
-    provider family up to `max_agents_per_slot`, overflowing into additional batches when
-    needed, with each subagent executing at its microtask's exact routed `(model, reasoning_effort)` tier.
+    provider family up to `max_agents_per_slot` with monotonically increasing `batch_seq` across
+    waves, overflowing into additional batches when needed, with each subagent executing at its
+    microtask's exact routed `(model, reasoning_effort)` tier (including post-pivot `AttemptLedger`
+    floor and model escalations).
   - **Case C (Shared / Overlapping Files):** At most 1 representative microtask from any
     overlapping file group is admitted and locks its file footprint globally across all
-    4 slots in `microtask428_file_locks`; conflicting ready tasks are held in
+    4 slots in `microtask428_file_locks` (preserving active locks held by in-flight `DISPATCHED`
+    batches in the same or other tasks); conflicting ready tasks are held in
     `WAITING_ON_FILE_LOCK` (`job_id=None`) until the active lock holder completes.
 - **Partial-Batch Per-Microtask Commit & Failure Isolation:**
-  In a batch of $N$ microtasks where $k$ succeed and $N-k$ fail validation, the $k$
+  In a batch of $N$ microtasks where $k$ succeed and $N-k$ fail validation (supporting both
+  mapping and list `subagent_outputs`, as well as `JobStore.complete` auto-commit), the $k$
   valid microtasks commit `COMPLETED` immediately (releasing their file locks and
   unlocking downstream dependents), while only the $N-k$ failed microtasks record
   individual `AttemptLedger` quality failures (`10/20/30` accounting), release their

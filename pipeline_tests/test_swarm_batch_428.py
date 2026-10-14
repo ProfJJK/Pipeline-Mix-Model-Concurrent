@@ -555,7 +555,7 @@ def test_per_slot_resource_limits_and_swarm_cli_policies() -> None:
     assert swarm_limits.max_processes == 96
     assert swarm_limits.swarm_mode is True
     assert swarm_limits.creation_flags == 0x08000200
-    assert swarm_limits.node_options == "--max-old-space-size=4096"
+    assert swarm_limits.node_options == "--max-old-space-size=4096 --max-semi-space-size=16"
     assert swarm_limits.as_dict()["swarm_mode"] is True
 
     # Layer-1 Swarm CLI / Config helpers
@@ -744,16 +744,21 @@ def test_partial_batch_commit_and_attempt_ledger_failure_isolation(tmp_path: Pat
 
 def test_file_target_normalization_and_traversal_rejection() -> None:
     assert normalize_file_target("./src\\cochem_pipeline//worker.py") == "src/cochem_pipeline/worker.py"
+    assert normalize_file_target("src/./cochem_pipeline/./shared.py") == "src/cochem_pipeline/shared.py"
     with pytest.raises(ValueError, match="Invalid microtask file target"):
         normalize_file_target("../outside/secret.py")
     with pytest.raises(ValueError, match="Invalid microtask file target"):
         normalize_file_target("src/../../secret.py")
+    with pytest.raises(ValueError, match="Invalid microtask file target"):
+        normalize_file_target("/etc/passwd")
+    with pytest.raises(ValueError, match="Invalid microtask file target"):
+        normalize_file_target("C:/Windows/System32/cmd.exe")
     node = _make_synthetic_node(
         "mt-norm",
         complexity=3,
         task_types=["COD-TERM"],
         deliverables=["./a\\b.py"],
-        file_targets=["a/b.py", "c/d.py"],
+        file_targets=["a/./b.py", "c/d.py"],
     )
     assert extract_microtask_files(node) == ["a/b.py", "c/d.py"]
 
@@ -880,4 +885,389 @@ def test_cross_task_file_lock_and_10_failure_pivot_hold(tmp_path: Path) -> None:
     node_b1_after = {n["microtask_id"]: n for n in snap_b2["nodes"]}["mt-b1"]
     assert node_b1_after["status"] == "DISPATCHED"
     assert node_b1_after["job_id"] is not None
+
+
+def test_planning_gateway_and_jobstore_complete_for_swarm_batch_and_list_or_none_outputs(tmp_path: Path) -> None:
+    """Verify planning_gateway.validate_stage_output, JobStore.complete auto-commit, list-shaped subagent_outputs, and partial-None subagent isolation."""
+    from cochem_pipeline.planning_gateway import prompt_contract, validate_stage_output
+    from pipeline_tests.test_planning_gateway_428 import accepted_receipt
+
+    catalog, store, journal, broker, ledger = _make_env(tmp_path)
+    mt_rows: list[dict[str, Any]] = [
+        {
+            "id": "mt-gw-1",
+            "wbs_ids": ["wbs-impl"],
+            "role": "implementation",
+            "complexity": 4,
+            "task_types": ["COD-TERM"],
+            "deliverables": ["gw_1.py"],
+            "audit_metrics": ["unit test passes"],
+            "release_criteria": ["mt-gw-1 verified"],
+            "depends_on": [],
+            "prompt": "Implement gw_1.py",
+        },
+        {
+            "id": "mt-gw-2",
+            "wbs_ids": ["wbs-impl"],
+            "role": "implementation",
+            "complexity": 4,
+            "task_types": ["COD-TERM"],
+            "deliverables": ["gw_2.py"],
+            "audit_metrics": ["unit test passes"],
+            "release_criteria": ["mt-gw-2 verified"],
+            "depends_on": [],
+            "prompt": "Implement gw_2.py",
+        },
+        {
+            "id": "mt-asm",
+            "wbs_ids": ["wbs-asm"],
+            "role": "assembly",
+            "complexity": 5,
+            "task_types": ["AGT-PROJ"],
+            "deliverables": ["assembly.py"],
+            "audit_metrics": ["clean imports"],
+            "release_criteria": ["assembly verified"],
+            "depends_on": ["mt-gw-1", "mt-gw-2"],
+            "prompt": "Assemble gw modules",
+        },
+        {
+            "id": "mt-test",
+            "wbs_ids": ["wbs-test"],
+            "role": "final_test",
+            "complexity": 5,
+            "task_types": ["COD-SCI"],
+            "deliverables": ["final_test.py"],
+            "audit_metrics": ["100% coverage"],
+            "release_criteria": ["final test verified"],
+            "depends_on": ["mt-gw-1", "mt-gw-2", "mt-asm"],
+            "prompt": "Verify gw modules",
+        },
+    ]
+    _advance_journal_with_custom_microtasks(journal, task_id="task428-gw", mt_rows=mt_rows)
+    runtime = SwarmBatchRuntime(journal, store, owner_broker=broker, attempt_ledger=ledger)
+    snap1 = runtime.dispatch_batches("task428-gw")
+    by_id1 = {n["microtask_id"]: n for n in snap1["nodes"]}
+    batch1 = snap1["batches"][0]
+
+    with store._connection() as conn:
+        job_row = store._get(conn, batch1["job_id"])
+    contract, _instruction, _task_state = prompt_contract(job_row["payload"])
+    assert contract["batch_id"] == batch1["batch_id"]
+    assert contract["provider_family"] == "codex"
+
+    # Validate list-shaped subagent_outputs via validate_stage_output
+    valid_list_payload = {
+        "batch_id": batch1["batch_id"],
+        "provider_family": "codex",
+        "subagent_outputs": [
+            {"microtask_id": "mt-gw-1", **_valid_microtask_output(by_id1["mt-gw-1"])},
+            {"microtask_id": "mt-gw-2", **_valid_microtask_output(by_id1["mt-gw-2"])},
+        ],
+    }
+    validate_stage_output(
+        job_row["payload"],
+        valid_list_payload,
+        {
+            "provider": batch1["provider_family"],
+            "model": by_id1["mt-gw-1"]["routed_model"],
+            "reasoning_effort": by_id1["mt-gw-1"]["routed_effort"],
+        },
+    )
+
+    # Partial batch where mt-gw-1 succeeds and mt-gw-2 is None isolates failure to mt-gw-2
+    snap2 = runtime.complete_batch(
+        "task428-gw",
+        batch1["batch_id"],
+        {
+            "batch_id": batch1["batch_id"],
+            "provider_family": "codex",
+            "subagent_outputs": {
+                "mt-gw-1": _valid_microtask_output(by_id1["mt-gw-1"]),
+                "mt-gw-2": None,
+            },
+        },
+    )
+    by_id2 = {n["microtask_id"]: n for n in snap2["nodes"]}
+    assert by_id2["mt-gw-1"]["status"] == "COMPLETED"
+    assert by_id2["mt-gw-2"]["status"] == "PENDING_RETRY"
+
+    # Re-dispatch mt-gw-2 in Wave 2, then complete it via native Worker/JobStore.complete path with list-shaped subagent_outputs
+    snap3 = runtime.dispatch_batches("task428-gw")
+    by_id3 = {n["microtask_id"]: n for n in snap3["nodes"]}
+    batch2_id = by_id3["mt-gw-2"]["batch_id"]
+    batch2_job_id = by_id3["mt-gw-2"]["job_id"]
+    assert batch2_id != batch1["batch_id"]
+    assert batch2_job_id != batch1["job_id"]
+
+    claimed = store.claim(
+        "worker-slot1",
+        worker_slot="slot1",
+        max_workers=4,
+        allowed_kinds=["TASK_PLAN"],
+        requires_cleanup=True,
+    )
+    assert claimed is not None
+    assert claimed["job_id"] == batch2_job_id
+    batch2_output = {
+        "batch_id": batch2_id,
+        "provider_family": "codex",
+        "subagent_outputs": [
+            {"microtask_id": "mt-gw-2", **_valid_microtask_output(by_id3["mt-gw-2"])}
+        ],
+    }
+    store.clear_execution_quarantine(claimed["job_id"], claimed["attempt_id"], claimed["fencing_token"])
+    store.complete(
+        claimed["job_id"],
+        claimed["attempt_id"],
+        claimed["fencing_token"],
+        batch2_output,
+        accepted_receipt(claimed, batch2_output),
+    )
+    # Next dispatch_batches auto-commits batch2 from JobStore and dispatches mt-asm
+    snap4 = runtime.dispatch_batches("task428-gw")
+    by_id4 = {n["microtask_id"]: n for n in snap4["nodes"]}
+    assert by_id4["mt-gw-2"]["status"] == "COMPLETED"
+    assert by_id4["mt-asm"]["status"] == "DISPATCHED"
+
+
+def test_same_task_in_flight_batch_preservation_and_retry_wave_batch_id_non_collision(tmp_path: Path) -> None:
+    """Verify an in-flight DISPATCHED batch in the same task keeps its file locks when another batch completes and unlocks an earlier-sorting conflicting task."""
+    catalog, store, journal, broker, ledger = _make_env(tmp_path)
+    mt_rows: list[dict[str, Any]] = [
+        {
+            "id": "mt-1-claude",
+            "wbs_ids": ["wbs-impl"],
+            "role": "implementation",
+            "complexity": 3,
+            "task_types": ["AGT-PROJ"],
+            "deliverables": ["doc_fast.md"],
+            "audit_metrics": ["complete"],
+            "release_criteria": ["mt-1-claude verified"],
+            "depends_on": [],
+            "prompt": "Fast Claude task",
+        },
+        {
+            "id": "mt-2-unlocked-early",
+            "wbs_ids": ["wbs-impl"],
+            "role": "implementation",
+            "complexity": 4,
+            "task_types": ["COD-TERM"],
+            "deliverables": ["early_mod.py"],
+            "shared_files": ["src/cochem_pipeline/contested.py"],
+            "audit_metrics": ["unit test passes"],
+            "release_criteria": ["mt-2-unlocked-early verified"],
+            "depends_on": ["mt-1-claude"],
+            "prompt": "Newly unlocked Codex task sorting before mt-9-in-flight",
+        },
+        {
+            "id": "mt-9-in-flight",
+            "wbs_ids": ["wbs-impl"],
+            "role": "implementation",
+            "complexity": 4,
+            "task_types": ["COD-TERM"],
+            "deliverables": ["inflight_mod.py"],
+            "shared_files": ["src/cochem_pipeline/contested.py"],
+            "audit_metrics": ["unit test passes"],
+            "release_criteria": ["mt-9-in-flight verified"],
+            "depends_on": [],
+            "prompt": "Long-running Codex task already holding contested.py",
+        },
+        {
+            "id": "mt-asm",
+            "wbs_ids": ["wbs-asm"],
+            "role": "assembly",
+            "complexity": 5,
+            "task_types": ["AGT-PROJ"],
+            "deliverables": ["assembly.py"],
+            "audit_metrics": ["clean imports"],
+            "release_criteria": ["assembly verified"],
+            "depends_on": ["mt-1-claude", "mt-2-unlocked-early", "mt-9-in-flight"],
+            "prompt": "Assemble all",
+        },
+        {
+            "id": "mt-test",
+            "wbs_ids": ["wbs-test"],
+            "role": "final_test",
+            "complexity": 5,
+            "task_types": ["COD-SCI"],
+            "deliverables": ["final_test.py"],
+            "audit_metrics": ["100% coverage"],
+            "release_criteria": ["final test verified"],
+            "depends_on": ["mt-1-claude", "mt-2-unlocked-early", "mt-9-in-flight", "mt-asm"],
+            "prompt": "Verify all",
+        },
+    ]
+    _advance_journal_with_custom_microtasks(journal, task_id="task428-inflight", mt_rows=mt_rows)
+    runtime = SwarmBatchRuntime(journal, store, owner_broker=broker, attempt_ledger=ledger)
+
+    snap1 = runtime.dispatch_batches("task428-inflight")
+    by_id1 = {n["microtask_id"]: n for n in snap1["nodes"]}
+    assert by_id1["mt-1-claude"]["status"] == "DISPATCHED"
+    assert by_id1["mt-9-in-flight"]["status"] == "DISPATCHED"
+    assert by_id1["mt-2-unlocked-early"]["status"] == "WAITING_ON_DEPENDENCIES"
+    inflight_batch_id = by_id1["mt-9-in-flight"]["batch_id"]
+    inflight_job_id = by_id1["mt-9-in-flight"]["job_id"]
+
+    # Complete mt-1-claude while mt-9-in-flight is still DISPATCHED holding src/cochem_pipeline/contested.py
+    snap2 = runtime.complete_batch(
+        "task428-inflight",
+        by_id1["mt-1-claude"]["batch_id"],
+        {"mt-1-claude": _valid_microtask_output(by_id1["mt-1-claude"])},
+    )
+    by_id2 = {n["microtask_id"]: n for n in snap2["nodes"]}
+    assert by_id2["mt-1-claude"]["status"] == "COMPLETED"
+    # mt-9-in-flight must remain DISPATCHED with its original batch_id and job_id!
+    assert by_id2["mt-9-in-flight"]["status"] == "DISPATCHED"
+    assert by_id2["mt-9-in-flight"]["batch_id"] == inflight_batch_id
+    assert by_id2["mt-9-in-flight"]["job_id"] == inflight_job_id
+    # mt-2-unlocked-early must wait on the file lock held by mt-9-in-flight!
+    assert by_id2["mt-2-unlocked-early"]["status"] == "WAITING_ON_FILE_LOCK"
+    assert by_id2["mt-2-unlocked-early"]["job_id"] is None
+    locks = {r["file_path"]: r["microtask_id"] for r in runtime.active_file_locks("task428-inflight")}
+    assert locks["src/cochem_pipeline/contested.py"] == "mt-9-in-flight"
+
+
+def test_attempt_ledger_10_20_30_pivot_model_and_floor_escalation(tmp_path: Path) -> None:
+    """Verify full 10 -> PIVOT_RESEARCH -> pivot -> 20 -> PIVOT_RESEARCH -> pivot -> 30 (LOCKED) lifecycle through SwarmBatchRuntime."""
+    catalog, store, journal, broker, ledger = _make_env(tmp_path)
+    mt_rows: list[dict[str, Any]] = [
+        {
+            "id": "mt-esc-1",
+            "wbs_ids": ["wbs-impl"],
+            "role": "implementation",
+            "complexity": 4,
+            "task_types": ["COD-TERM"],
+            "deliverables": ["esc_1.py"],
+            "audit_metrics": ["unit test passes"],
+            "release_criteria": ["mt-esc-1 verified"],
+            "depends_on": [],
+            "prompt": "Implement esc_1.py",
+        },
+        {
+            "id": "mt-asm",
+            "wbs_ids": ["wbs-asm"],
+            "role": "assembly",
+            "complexity": 5,
+            "task_types": ["AGT-PROJ"],
+            "deliverables": ["assembly.py"],
+            "audit_metrics": ["clean imports"],
+            "release_criteria": ["assembly verified"],
+            "depends_on": ["mt-esc-1"],
+            "prompt": "Assemble esc_1",
+        },
+        {
+            "id": "mt-test",
+            "wbs_ids": ["wbs-test"],
+            "role": "final_test",
+            "complexity": 5,
+            "task_types": ["COD-SCI"],
+            "deliverables": ["final_test.py"],
+            "audit_metrics": ["100% coverage"],
+            "release_criteria": ["final test verified"],
+            "depends_on": ["mt-esc-1", "mt-asm"],
+            "prompt": "Verify esc_1",
+        },
+    ]
+    _advance_journal_with_custom_microtasks(journal, task_id="task428-esc", mt_rows=mt_rows)
+    runtime = SwarmBatchRuntime(journal, store, owner_broker=broker, attempt_ledger=ledger)
+    lineage_id = "task428-esc.mt.mt-esc-1"
+    pivot_research = {
+        kind: {
+            "query": f"Pivot research {kind}",
+            "status": "found",
+            "receipt_sha256": digest(f"pivot-{kind}"),
+            "sources": [{"id": f"{kind}-s1", "sha256": digest(f"{kind}-body")}],
+        }
+        for kind in ("internet", "wiki_rag", "papers")
+    }
+
+    # Attempts 1..10 on initial model gpt-6.1-sol -> HELD in PIVOT_RESEARCH at 10 failures
+    for attempt in range(1, 11):
+        snap = runtime.dispatch_batches("task428-esc")
+        node = {n["microtask_id"]: n for n in snap["nodes"]}["mt-esc-1"]
+        assert node["status"] == "DISPATCHED"
+        assert node["routed_model"] == "gpt-6.1-sol"
+        bad_out = _valid_microtask_output(node)
+        bad_out["deliverables"][0]["sha256"] = f"{attempt:064x}"
+        snap_after = runtime.complete_batch("task428-esc", node["batch_id"], {"mt-esc-1": bad_out})
+        node_after = {n["microtask_id"]: n for n in snap_after["nodes"]}["mt-esc-1"]
+        if attempt < 10:
+            assert node_after["status"] == "PENDING_RETRY"
+        else:
+            assert node_after["status"] == "HELD"
+
+    lstate_10 = ledger.status(lineage_id)
+    assert lstate_10["failures"] == 10
+    assert lstate_10["stage"] == "PIVOT_RESEARCH"
+
+    # Pivot at 10 failures to claude-sonnet-5-5 (floor escalates from 4 -> 5)
+    ledger.pivot(
+        lineage_id,
+        pivot_research,
+        {
+            "strategy": "pivot",
+            "task_types": ["COD-TERM"],
+            "complexity": 5,
+            "rationale": "Escalate to Claude Sonnet 5.5 after 10 Codex failures",
+            "next_model": "claude-sonnet-5-5",
+            "children": [],
+        },
+        digest("pivot-10-evidence"),
+    )
+
+    # Attempts 11..20 now route to claude-sonnet-5-5 (provider_family=claude)
+    for attempt in range(11, 21):
+        snap = runtime.dispatch_batches("task428-esc")
+        node = {n["microtask_id"]: n for n in snap["nodes"]}["mt-esc-1"]
+        assert node["status"] == "DISPATCHED"
+        assert node["provider_family"] == "claude"
+        assert node["routed_model"] == "claude-sonnet-5-5"
+        bad_out = _valid_microtask_output(node)
+        bad_out["deliverables"][0]["sha256"] = f"{attempt:064x}"
+        snap_after = runtime.complete_batch("task428-esc", node["batch_id"], {"mt-esc-1": bad_out})
+        node_after = {n["microtask_id"]: n for n in snap_after["nodes"]}["mt-esc-1"]
+        if attempt < 20:
+            assert node_after["status"] == "PENDING_RETRY"
+        else:
+            assert node_after["status"] == "HELD"
+
+    lstate_20 = ledger.status(lineage_id)
+    assert lstate_20["failures"] == 20
+    assert lstate_20["stage"] == "PIVOT_RESEARCH"
+
+    # Pivot at 20 failures to gemini-3.8-flash (floor escalates from 5 -> 6)
+    ledger.pivot(
+        lineage_id,
+        pivot_research,
+        {
+            "strategy": "pivot",
+            "task_types": ["COD-TERM"],
+            "complexity": 6,
+            "rationale": "Escalate to Gemini 3.8 Flash after 20 failures",
+            "next_model": "gemini-3.8-flash",
+            "children": [],
+        },
+        digest("pivot-20-evidence"),
+    )
+
+    # Attempts 21..30 route to gemini-3.8-flash -> attempt 30 transitions to LOCKED
+    for attempt in range(21, 31):
+        snap = runtime.dispatch_batches("task428-esc")
+        node = {n["microtask_id"]: n for n in snap["nodes"]}["mt-esc-1"]
+        assert node["status"] == "DISPATCHED"
+        assert node["provider_family"] == "gemini"
+        assert node["routed_model"] == "gemini-3.8-flash"
+        bad_out = _valid_microtask_output(node)
+        bad_out["deliverables"][0]["sha256"] = f"{attempt:064x}"
+        snap_after = runtime.complete_batch("task428-esc", node["batch_id"], {"mt-esc-1": bad_out})
+        node_after = {n["microtask_id"]: n for n in snap_after["nodes"]}["mt-esc-1"]
+        if attempt < 30:
+            assert node_after["status"] == "PENDING_RETRY"
+        else:
+            assert node_after["status"] == "HELD"
+
+    lstate_30 = ledger.status(lineage_id)
+    assert lstate_30["failures"] == 30
+    assert lstate_30["stage"] == "LOCKED"
+
 
