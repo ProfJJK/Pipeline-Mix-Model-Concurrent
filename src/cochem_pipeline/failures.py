@@ -104,7 +104,7 @@ _CODES = {
 _HTTP_CODES = {401: 'auth', 408: 'timeout', 429: 'quota', 500: 'provider', 502: 'provider',
                503: 'busy', 504: 'provider', 529: 'busy'}
 _CODE_FIELDS = ('code', 'type', 'status', 'status_code', 'http_status',
-                'http_status_code', 'error_type')
+                'http_status_code', 'api_error_status', 'api_error_code', 'error_type')
 
 
 def _category(value: Any) -> str | None:
@@ -236,6 +236,10 @@ _NATIVE_DIAGNOSTICS = (
 # A leading status decides alone; an unmapped status keeps the 'code' fallback.
 _CLAUDE_RESULT_API_STATUS = r'^(?:(?:failed to authenticate\.\s*)?api error:\s*|(?:api error:\s*)?request failed with status code )([0-9]{3})\b'
 _CLAUDE_RESULT_AUTH = r'^(?:invalid api key|oauth token has expired|failed to authenticate|please run /login)\b'
+_CLAUDE_ENVELOPE_HTTP_STATUS = re.compile(
+    r'(?i)(?:http(?:/\d(?:\.\d)?)?|status(?:[_ ]code)?)[\s:="]{1,8}([0-9]{3})\b'
+)
+_CLAUDE_ENVELOPE_IDENTITY_KEYS = ('session_id', 'usage', 'duration_ms', 'terminal_reason', 'uuid')
 
 
 def _claude_result_category(record: dict) -> str | None:
@@ -244,15 +248,25 @@ def _claude_result_category(record: dict) -> str | None:
     subtype = record.get('subtype')
     failed = record.get('is_error') is True or ('is_error' not in record and
                                                 isinstance(subtype, str) and subtype.startswith('error_'))
-    if record.get('type') != 'result' or not failed or not isinstance(record.get('result'), str):
+    if record.get('type') != 'result' or not failed:
         return None
-    text = record['result'][:4096].strip().casefold()
-    status = re.match(_CLAUDE_RESULT_API_STATUS, text)
-    if status:
-        return _HTTP_CODES.get(int(status.group(1)))
-    for category, pattern in (*_NATIVE_DIAGNOSTICS, ('auth', _CLAUDE_RESULT_AUTH)):
-        if re.match(pattern, text):
-            return category
+    raw_result = record.get('result')
+    if isinstance(raw_result, str):
+        text = raw_result[:4096].strip().casefold()
+        status = re.match(_CLAUDE_RESULT_API_STATUS, text)
+        if status:
+            return _HTTP_CODES.get(int(status.group(1)))
+        for category, pattern in (*_NATIVE_DIAGNOSTICS, ('auth', _CLAUDE_RESULT_AUTH)):
+            if re.match(pattern, text):
+                return category
+    if record.get('is_error') is True and any(k in record for k in _CLAUDE_ENVELOPE_IDENTITY_KEYS):
+        combined = _ANSI.sub(
+            '',
+            ((raw_result[:4096] if isinstance(raw_result, str) else '') + '\n' + json.dumps(record, ensure_ascii=False)),
+        )
+        env_status = _CLAUDE_ENVELOPE_HTTP_STATUS.search(combined)
+        if env_status:
+            return _HTTP_CODES.get(int(env_status.group(1)))
     return None
 
 

@@ -40,6 +40,10 @@ def _create_r4_board(db_path: Path) -> tuple[list[str], str]:
     wf_id = wf['workflow_id']
     store.close()
     with sqlite3.connect(db_path) as conn:
+        conn.execute('DROP TRIGGER IF EXISTS pipeline_routing_amendments_job_insert_guard')
+        conn.execute('DROP TRIGGER IF EXISTS pipeline_routing_amendments_no_update')
+        conn.execute('DROP TRIGGER IF EXISTS pipeline_routing_amendments_no_delete')
+        conn.execute('DROP TABLE IF EXISTS pipeline_routing_amendments')
         conn.execute("UPDATE pipeline_jobs SET status = 'FAILED' WHERE workflow_id = ?", (wf_id,))
         conn.execute('CREATE TABLE owner_budget (account TEXT PRIMARY KEY, remaining INTEGER NOT NULL)')
         conn.execute("INSERT INTO owner_budget VALUES ('primary', 72)")

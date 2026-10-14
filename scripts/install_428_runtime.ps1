@@ -31,7 +31,7 @@ function Import-R6CopyFunctions {
 
 function Set-428Constants {
     $script:programFiles='C:\Program Files';$script:base='C:\Program Files\CoChem'
-    $script:targetRoot=Join-Path $script:base 'Pipeline4.2.8-windows-20261014-r2'
+    $script:targetRoot=Join-Path $script:base 'Pipeline4.2.8-windows-20261014-r3'
     $script:python=Join-Path $script:base 'Toolchain4.2.7-windows-20261006\Python312\python.exe'
     $script:uv=Join-Path $script:base 'Toolchain4.2.7-windows-20261006\uv\uv.exe'
     $script:pythonPin='d8e3f0adf246db00358c0c4ed349cf714898178f9558fb0e944f79f5c07f8eaa'
@@ -50,7 +50,7 @@ function Assert-428Relative {
 function Get-428InstallFiles {
     param($Inventory)
     if($Inventory.schema -cne 'cochem-428-install-bundle/1' -or $Inventory.host -cne 'AETHERDESK' -or
-        $Inventory.revision -cne 'windows-20261014-428-v2' -or $Inventory.version -cne '4.2.8' -or
+        $Inventory.revision -cne 'windows-20261014-428-v3' -or $Inventory.version -cne '4.2.8' -or
         [string]$Inventory.source_commit -cnotmatch '^[a-f0-9]{40}$' -or
         [string]$Inventory.source_test_evidence_sha256 -cnotmatch '^[a-f0-9]{64}$'){
         throw 'Unexpected 4.2.8 install manifest.'}
@@ -263,7 +263,7 @@ function Invoke-428InstallerMain {
     try{
         foreach($pin in @([pscustomobject]@{path=$script:python;hash=$script:pythonPin},[pscustomobject]@{path=$script:uv;hash=$script:uvPin})){
             Assert-ProtectedPath $pin.path;$held.Add((Open-VerifiedFile $pin.path $pin.hash (Get-Item -LiteralPath $pin.path).Length))}
-        if(-not $ApplyRequested){@{schema='cochem-428-offline-install/1';status='READ_ONLY_PLAN';version='4.2.8';revision='windows-20261014-428-v2';source_commit=$inventory.source_commit;files=$files.Count;target_root=$script:targetRoot;activation_ready=$false}|ConvertTo-Json;return}
+        if(-not $ApplyRequested){@{schema='cochem-428-offline-install/1';status='READ_ONLY_PLAN';version='4.2.8';revision='windows-20261014-428-v3';source_commit=$inventory.source_commit;files=$files.Count;target_root=$script:targetRoot;activation_ready=$false}|ConvertTo-Json;return}
         Invoke-428Installation $inventory $files ([IO.Path]::GetFullPath($ManifestPath)) $ManifestHash
     }finally{foreach($stream in $held){$stream.Dispose()}}
 }

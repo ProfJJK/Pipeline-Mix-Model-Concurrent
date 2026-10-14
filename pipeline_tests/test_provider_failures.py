@@ -254,6 +254,61 @@ def test_result_text_reclassification_is_claude_only(provider,record):
     assert parse_native_failure(provider,json.dumps(record),'',1).category == 'code'
 
 
+@pytest.mark.parametrize(('record','category','scope'), [
+    (
+        {
+            'type': 'result',
+            'subtype': 'success',
+            'is_error': True,
+            'api_error_status': 429,
+            'result': 'Opaque error',
+            'session_id': 's-1',
+        },
+        'quota',
+        'pool',
+    ),
+    (
+        {
+            'type': 'result',
+            'subtype': 'error_during_execution',
+            'is_error': True,
+            'api_error_code': 'rate_limit_error',
+            'result': 'Opaque error',
+            'session_id': 's-2',
+        },
+        'quota',
+        'pool',
+    ),
+    (
+        {
+            'type': 'result',
+            'subtype': 'success',
+            'is_error': True,
+            'result': 'HTTP 429 Too Many Requests',
+            'session_id': 's-3',
+            'duration_ms': 412,
+        },
+        'quota',
+        'pool',
+    ),
+    (
+        {
+            'type': 'result',
+            'subtype': 'error_during_execution',
+            'is_error': True,
+            'errors': ['Request failed (status_code: 429)'],
+            'session_id': 's-4',
+        },
+        'quota',
+        'pool',
+    ),
+])
+def test_claude_verified_envelope_http_status_and_api_error_fields(record, category, scope):
+    failure = parse_native_failure('claude', json.dumps(record), '', 1)
+    assert isinstance(failure, ProviderFailure)
+    assert (failure.category, failure.hold_scope) == (category, scope)
+
+
 # AG-1: agy reports its own failures as one 'AGY_ERROR: {...}' stderr line and
 # exits nonzero (3 per its changelog). Protocol fixtures, not host evidence.
 AGY_QUOTA = '{"error":{"code":429,"status":"RESOURCE_EXHAUSTED","message":"MODEL_CAPACITY_EXHAUSTED"}}'

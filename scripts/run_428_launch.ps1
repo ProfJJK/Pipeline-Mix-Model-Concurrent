@@ -236,7 +236,7 @@ function Assert-428PortFree {
 }
 
 function Assert-428PrivateReceipt {
-    param([string]$Path,[string]$PrivateRoot=$(if(Get-Variable -Name Migration428 -Scope Script -ErrorAction SilentlyContinue){$script:Migration428}else{'C:\Program Files\CoChem\Migration4.2.8-windows-20261014-v2'}))
+    param([string]$Path,[string]$PrivateRoot=$(if(Get-Variable -Name Migration428 -Scope Script -ErrorAction SilentlyContinue){$script:Migration428}else{'C:\Program Files\CoChem\Migration4.2.8-windows-20261014-v3'}))
     $full=Get-LocalPath $Path
     $root=Get-LocalPath $PrivateRoot
     if(-not $full.StartsWith($root+'\',[StringComparison]::OrdinalIgnoreCase)){throw '4.2.8 private receipt must reside under the protected migration root.'}
@@ -371,11 +371,11 @@ function Invoke-428Launch {
     param([string]$ManifestPath,[string]$ManifestHash,[bool]$ApplyRequested,[string]$Directory)
     $pins=[Collections.Generic.List[IO.Stream]]::new();$processes=$null;$mutex=$null;$locked=$false;$ownerMutex=$null;$ownerLocked=$false;$awake=$null
     $stopped=$false;$stopRequested=$false;$migrationRequested=$false;$migrated=$false;$startRequested=$false;$phase='package'
-    $script:Root428='C:\Program Files\CoChem\Pipeline4.2.8-windows-20261014-r2'
+    $script:Root428='C:\Program Files\CoChem\Pipeline4.2.8-windows-20261014-r3'
     $oldR7='C:\Program Files\CoChem\Pipeline4.2.7-windows-20261012-r7-v1'
     $oldR6='C:\Program Files\CoChem\Pipeline4.2.7-windows-20261012-r6-v1'
     $oldR4='C:\Program Files\CoChem\Pipeline4.2.7-windows-20261009-r4'
-    $script:Migration428='C:\Program Files\CoChem\Migration4.2.8-windows-20261014-v2'
+    $script:Migration428='C:\Program Files\CoChem\Migration4.2.8-windows-20261014-v3'
     $script:Sitting428=$null
     $startedUtc=[DateTime]::UtcNow
     $authority='C:\Program Files\CoChem\RoutingCatalog4.2.8';$folder=$null;$original=$null;$originalSddl=$null;$old=$null
@@ -448,7 +448,11 @@ function Invoke-428Launch {
             $task.Definition.Principal.UserId -notin @('SYSTEM','S-1-5-18') -or $task.Definition.Principal.LogonType -ne 5 -or
             $task.Definition.Principal.RunLevel -ne 1 -or $task.Definition.Settings.RestartCount -ne 0 -or
             $task.Definition.Settings.MultipleInstances -ne 2 -or -not $triggerValid -or
-            -not $task.Enabled -or $task.GetInstances(0).Count -ne 1){throw 'Live Warden definition differs from verified baseline.'}
+            -not $task.Enabled){throw 'Live Warden definition differs from verified baseline.'}
+        if($old -ceq $oldR4 -and $oldTriggerCount -eq 0 -and $task.GetInstances(0).Count -eq 0){
+            Assert-428PortFree;$null=$task.Run($null);$null=Wait-428Health $old $true;$task=$folder.GetTask('CoChem-4.2.7-Warden')
+        }
+        if($task.GetInstances(0).Count -ne 1){throw 'Live Warden definition differs from verified baseline.'}
         $expectedOldArgs=$action.Arguments
         $allowOldPaused=($old -ceq $oldR4)
         $health=Get-428Health;Assert-428Health $health $old $allowOldPaused
@@ -481,7 +485,18 @@ function Invoke-428Launch {
         $deadline=[DateTime]::UtcNow.AddMinutes(30);$idle=$false
         do{
             try{$first=Get-428Health;Assert-428Health $first $old $allowOldPaused;Start-Sleep -Seconds 5;$second=Get-428Health;Assert-428Health $second $old $allowOldPaused
-                $operator=Invoke-RestMethod -Uri 'http://127.0.0.1:47824/operator' -Headers $script:Headers428 -TimeoutSec 10
+                $operator=if($old -ceq $oldR4){
+                    $inFlight=0
+                    if($null -ne $second.routing -and $null -ne $second.routing.counts){
+                        foreach($state in @('IN_PROGRESS','PENDING','PENDING_RETRY','CLAIMED','RUNNING','QUEUED','ACTIVE')){
+                            $prop=$second.routing.counts.PSObject.Properties[$state]
+                            if($null -ne $prop){$inFlight+=[int]$prop.Value}
+                        }
+                    }
+                    [pscustomobject]@{window=[pscustomobject]@{jobs_truncated=$false};queue=if($inFlight -gt 0){@([pscustomobject]@{status='IN_PROGRESS'})}else{@()}}
+                }else{
+                    Invoke-RestMethod -Uri 'http://127.0.0.1:47824/operator' -Headers $script:Headers428 -TimeoutSec 10
+                }
                 Assert-428Idle $first $second $operator;$idle=$true;break}catch{Start-Sleep -Seconds 10}
         }while([DateTime]::UtcNow -lt $deadline)
         if(-not $idle){throw 'Previous controller did not become idle within the unattended bound.'}

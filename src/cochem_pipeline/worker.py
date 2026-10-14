@@ -29,6 +29,10 @@ NATIVE_FAILURE_KEYS = frozenset({'schema', 'category', 'exit_code', 'stdout_byte
                                  'api_status', 'started_at', 'finished_at'})
 _CLAUDE_RESULT_SUBTYPE = re.compile(r'success|error_[a-z0-9_]{1,64}')
 _CLAUDE_RESULT_API_STATUS = re.compile(r'^(?:(?:failed to authenticate\.\s*)?api error:\s*|(?:api error:\s*)?request failed with status code )([0-9]{3})\b')
+_CLAUDE_ENVELOPE_HTTP_STATUS = re.compile(
+    r'(?i)(?:http(?:/\d(?:\.\d)?)?|status(?:[_ ]code)?)[\s:="]{1,8}([0-9]{3})\b'
+)
+_CLAUDE_ENVELOPE_IDENTITY_KEYS = ('session_id', 'usage', 'duration_ms', 'terminal_reason', 'uuid')
 
 
 class NativeOutputLimitError(ProviderFailure):
@@ -629,11 +633,29 @@ def _failure_envelope(provider, stdout, stderr):
                 subtype = value
             if record.get('is_error') is True or (isinstance(value, str) and value.startswith('error_')):
                 envelope = 'claude_result_is_error' if envelope == 'none' else envelope
+                raw_api_status = record.get('api_error_status')
+                if api_status is None and type(raw_api_status) is int and 100 <= raw_api_status <= 599:
+                    api_status = raw_api_status
                 text = record.get('result')
                 status = (_CLAUDE_RESULT_API_STATUS.match(text[:4096].strip().casefold())
                           if isinstance(text, str) else None)
                 if api_status is None and status is not None:
                     api_status = int(status.group(1))
+                if (
+                    api_status is None
+                    and record.get('is_error') is True
+                    and any(k in record for k in _CLAUDE_ENVELOPE_IDENTITY_KEYS)
+                ):
+                    combined = (
+                        (text[:4096] if isinstance(text, str) else '')
+                        + '\n'
+                        + json.dumps(record, ensure_ascii=False)
+                        + '\n'
+                        + (stdout if isinstance(stdout, str) else '')
+                    )
+                    env_status = _CLAUDE_ENVELOPE_HTTP_STATUS.search(combined)
+                    if env_status is not None and 100 <= int(env_status.group(1)) <= 599:
+                        api_status = int(env_status.group(1))
         elif provider == 'claude' and kind == 'error' and isinstance(error, dict):
             envelope = 'claude_error_record' if envelope == 'none' else envelope
         elif provider == 'codex' and kind in ('error', 'turn.failed'):

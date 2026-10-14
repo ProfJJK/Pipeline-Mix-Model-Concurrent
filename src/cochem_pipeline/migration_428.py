@@ -35,11 +35,14 @@ CORE_REQUIRED_TABLES: dict[str, set[str]] = {
     'pipeline_events': {'id', 'workflow_id', 'job_id', 'timestamp', 'event', 'details_json'},
     'pipeline_routing_workflows': {'workflow_id', 'policy_json'},
     'pipeline_routing_jobs': {'job_id', 'policy_json', 'score_json', 'candidates_json', 'state'},
-    'pipeline_routing_amendments': {'job_id', 'previous_candidates_sha256', 'candidates_json', 'specification'},
     'pipeline_route_reservations': {'reservation_id', 'job_id', 'attempt_id', 'fencing_token', 'provider', 'model'},
     'pipeline_route_holds': {'scope', 'resource_key', 'until_at', 'reason'},
     'pipeline_execution_cleanup': {'job_id', 'attempt_id', 'fencing_token', 'worker_slot', 'quarantined', 'cleared_at'},
     'pipeline_execution_owner_stops': {'job_id', 'attempt_id', 'fencing_token', 'containment_id', 'boot_id'},
+}
+
+OPTIONAL_R6_TABLES: dict[str, set[str]] = {
+    'pipeline_routing_amendments': {'job_id', 'previous_candidates_sha256', 'candidates_json', 'specification'},
 }
 
 R7_CATALOG_TABLES = frozenset({
@@ -115,6 +118,31 @@ SCHEMA_428_STATEMENTS = (
     BEGIN
         SELECT RAISE(ABORT, '4.2.8 task catalog bindings cannot be deleted');
     END
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS pipeline_routing_amendments (
+        job_id TEXT PRIMARY KEY REFERENCES pipeline_routing_jobs(job_id),
+        previous_candidates_sha256 TEXT NOT NULL CHECK(length(previous_candidates_sha256)=64),
+        candidates_json TEXT NOT NULL CHECK(json_valid(candidates_json)),
+        specification TEXT NOT NULL CHECK(specification='COCHEM-4.2.7'),
+        reason TEXT NOT NULL, created_at REAL NOT NULL
+    )
+    """,
+    """
+    CREATE TRIGGER IF NOT EXISTS pipeline_routing_amendment_owner BEFORE INSERT ON pipeline_routing_amendments
+    BEGIN
+        SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM pipeline_jobs j WHERE j.job_id=NEW.job_id
+            AND j.kind='SYNTHESIS' AND j.status IN ('PENDING','PENDING_RETRY'))
+        THEN RAISE(ABORT,'routing amendment requires an undispatched synthesis attempt') END;
+    END
+    """,
+    """
+    CREATE TRIGGER IF NOT EXISTS pipeline_routing_amendment_no_update BEFORE UPDATE ON pipeline_routing_amendments
+    BEGIN SELECT RAISE(ABORT,'routing amendments are immutable'); END
+    """,
+    """
+    CREATE TRIGGER IF NOT EXISTS pipeline_routing_amendment_no_delete BEFORE DELETE ON pipeline_routing_amendments
+    BEGIN SELECT RAISE(ABORT,'routing amendments are immutable'); END
     """,
 )
 
@@ -212,6 +240,15 @@ def detect_source_state(conn: sqlite3.Connection) -> str:
             raise IncompatibleSchemaHoldError(
                 f'Incompatible schema: table {req_table} missing columns {sorted(missing_cols)}'
             )
+    for opt_table, opt_cols in OPTIONAL_R6_TABLES.items():
+        if opt_table in existing_tables:
+            quoted = '"' + opt_table.replace('"', '""') + '"'
+            actual_cols = {r[1] for r in conn.execute('PRAGMA table_info(' + quoted + ')')}
+            missing_cols = opt_cols - actual_cols
+            if missing_cols:
+                raise IncompatibleSchemaHoldError(
+                    f'Incompatible schema: table {opt_table} missing columns {sorted(missing_cols)}'
+                )
 
     present_catalog = existing_tables & R7_CATALOG_TABLES
     if present_catalog and present_catalog != R7_CATALOG_TABLES:
@@ -247,7 +284,10 @@ def detect_source_state(conn: sqlite3.Connection) -> str:
 
     has_r6_activity = (
         conn.execute('SELECT 1 FROM pipeline_execution_owner_stops LIMIT 1').fetchone() is not None
-        or conn.execute('SELECT 1 FROM pipeline_routing_amendments LIMIT 1').fetchone() is not None
+        or (
+            'pipeline_routing_amendments' in existing_tables
+            and conn.execute('SELECT 1 FROM pipeline_routing_amendments LIMIT 1').fetchone() is not None
+        )
     )
     return 'R6' if has_r6_activity else 'R4'
 
@@ -276,9 +316,19 @@ def verify_historical_policy_replay(conn: sqlite3.Connection) -> dict[str, Any]:
         if not isinstance(raw_score, dict) or not isinstance(raw_candidates, list) or not raw_candidates:
             raise IncompatibleSchemaHoldError(f'Job {job_id} has malformed routing score or candidate capture')
 
-    amend_rows = conn.execute(
-        'SELECT job_id, specification, candidates_json FROM pipeline_routing_amendments ORDER BY job_id'
-    ).fetchall()
+    has_amend_table = (
+        conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='pipeline_routing_amendments'"
+        ).fetchone()
+        is not None
+    )
+    amend_rows = (
+        conn.execute(
+            'SELECT job_id, specification, candidates_json FROM pipeline_routing_amendments ORDER BY job_id'
+        ).fetchall()
+        if has_amend_table
+        else []
+    )
     for job_id, specification, candidates_json in amend_rows:
         if specification != 'COCHEM-4.2.7':
             raise IncompatibleSchemaHoldError(
