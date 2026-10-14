@@ -35,8 +35,21 @@ MCP tools; Codex and Antigravity agents must follow them by reading this file.
 
 ## Never — rule only, not detectable by a hook
 - Run a second Claude / Codex / Antigravity session doing pipeline work on this host at the same
-  time as another one. One live engineering session per host.
+  time as another one. One live engineering session per host, except for the owner-managed
+  4.2.8 source-engineering swarm explicitly authorized below.
 - Have several agents or subagents each run a test suite or build at the same time.
+
+## Owner-authorized 4.2.8 source-engineering handoff
+The owner's latest instruction delegates remaining 4.2.8 coding, testing and release
+preparation to an owner-managed Gemini 4 swarm. Use isolated worktrees outside Google
+Drive and one integrator for shared files and merges. Keep at most four heavy activities
+in total on AETHERDESK, and serialize all test suites/builds using the same host lock.
+Additional lanes can run on separate hosts. This scoped source-work exception does not
+authorize agents to spawn native/headless CLIs, bypass hooks, run deployment or SYSTEM
+probes, elevate, or change protected state or host lifecycle. Only the owner runs the
+reviewed final deployment command once 4.2.8 is ready. Start with
+[PIPELINE_4.2.8_AGENT_HANDOFF.md](PIPELINE_4.2.8_AGENT_HANDOFF.md),
+[tasks/plan.md](tasks/plan.md) and [tasks/todo.md](tasks/todo.md).
 
 The hook scans whole command texts (heredoc bodies included) and the command- and path-like
 fields of MCP tool calls. If a harmless command is denied only because it *mentions* a blocked
@@ -77,6 +90,14 @@ This is the preferred interface, not a claim that all three adapters have been
 implemented or accepted on this host. Reuse verified sessions before asking for input.
 
 ## Current handoff
+4.2.8 coding is handed over at implementation baseline
+`c33c7ea2a9d7c655b6998081080b4eae2273ee1b` on `feature/4.2.8-task-routing`.
+The root handoff and task list above are the current remaining-work authority.
+Planning source is integrated, but execution materialization, research/approval/repair
+adapters and the fresh 4.2.8 release package remain incomplete. No 4.2.8 launch command
+exists yet. The following R6 notes describe preserved host evidence, not instructions
+to repeat an old launch.
+
 The v3 native diagnostic is now received: target-23 is Claude Fable 5.1 High,
 with a failed result and HTTP 429 indicator. The owner reports likely exhausted
 Fable quota. The additional HTTP-client status prefix is repaired in source and

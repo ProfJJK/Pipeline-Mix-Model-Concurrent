@@ -1,5 +1,9 @@
 # Getting 4.2.8 running
 
+For the implementable coding sequence, dependencies and acceptance tests, use the
+[current handoff](../../PIPELINE_4.2.8_AGENT_HANDOFF.md) and
+[remaining task list](../../tasks/todo.md). This page summarizes the release path.
+
 Status: source integration is incomplete. There is no reviewed 4.2.8 launch
 command. Last verified host evidence is the R4 v11 restoration, with admission
 capacity zero; this is not proof of a functioning R6 or 4.2.8 installation.

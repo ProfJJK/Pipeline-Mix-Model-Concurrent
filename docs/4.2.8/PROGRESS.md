@@ -1,7 +1,12 @@
 # 4.2.8 source progress
 
+Current coding handoff: [root handoff](../../PIPELINE_4.2.8_AGENT_HANDOFF.md),
+[implementation plan](../../tasks/plan.md) and [remaining tasks](../../tasks/todo.md).
+These assign the remaining work from source checkpoint `c33c7ea`; they do not
+report that work as completed or authorize an old deployment command.
+
 This branch is an implementation checkpoint, not a deployed or launch-ready
-release. The running host remains on the last verified R4 restoration v11.
+release. Last verified host evidence is the R4 restoration v11; this is not a fresh live check.
 The R6 native failure and tested source repair are documented separately in
 `../R6_NATIVE_LATEST_2026-10-13.md`; no spent package has been modified.
 

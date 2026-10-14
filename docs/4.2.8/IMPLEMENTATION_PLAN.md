@@ -1,5 +1,10 @@
 # Pipeline 4.2.8 implementation and acceptance
 
+This document retains the initial requirements and sequence. The current detailed
+coding plan is [tasks/plan.md](../../tasks/plan.md), with the authoritative remaining
+checklist in [tasks/todo.md](../../tasks/todo.md) and entry point in the
+[root handoff](../../PIPELINE_4.2.8_AGENT_HANDOFF.md).
+
 Owner request: 2026-10-13. Source baseline: 4554b67. Implementation branch:
 `feature/4.2.8-task-routing`, outside Google Drive. The supplied Drive PDFs/JSON
 are reference inputs, not executable authority. Delivered 4.2.7 bundles remain immutable.
