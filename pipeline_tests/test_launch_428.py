@@ -598,23 +598,23 @@ $restoreStatus=Restore-428BeforeStart $fakeScheduler $fakeFolder $r4Xml 'SDDL' $
     }
 
 
-def test_assert_428_private_receipt_validates_programdata_private_acl(tmp_path: Path) -> None:
-    priv_root = tmp_path / "ProgramData" / "CoChemPipeline427" / "private"
-    mig_dir = priv_root / "migration-428-20261014-v2"
+def test_assert_428_private_receipt_and_migration_directory_creation_order(tmp_path: Path) -> None:
+    mig_dir = tmp_path / "CoChem" / "Migration4.2.8-windows-20261014-v2"
     mig_dir.mkdir(parents=True)
     receipt = mig_dir / "migration-428.json"
     receipt.write_text('{"status":"MIGRATION_428_VERIFIED"}', encoding="utf-8")
     outside = tmp_path / "outside.json"
     outside.write_text("{}", encoding="utf-8")
 
-    esc_priv = str(priv_root).replace("'", "''")
+    esc_mig = str(mig_dir).replace("'", "''")
     esc_receipt = str(receipt).replace("'", "''")
     esc_outside = str(outside).replace("'", "''")
+    esc_scripts = str(ROOT / "scripts").replace("'", "''")
 
     row = run_ps_428(
         f"""
-function Get-LocalPath {{param([string]$Path) [IO.Path]::GetFullPath($Path).TrimEnd('\\')}}
-function Assert-NoReparseAncestors {{param([string]$Path)}}
+foreach($fn in @(Import-428Installer '{esc_scripts}\\install_428_runtime.ps1')){{. ([scriptblock]::Create($fn))}}
+foreach($fn in @(Import-R6CopyFunctions '{esc_scripts}')){{. ([scriptblock]::Create($fn))}}
 $script:untrusted=$false
 function Get-Acl {{
     param([string]$LiteralPath)
@@ -630,12 +630,23 @@ function Get-Acl {{
     }}
     $acl
 }}
-$ok=$false;try{{Assert-428PrivateReceipt '{esc_receipt}' '{esc_priv}';$ok=$true}}catch{{}}
-$outsideHeld=$false;try{{Assert-428PrivateReceipt '{esc_outside}' '{esc_priv}'}}catch{{$outsideHeld=$true}}
+$script:Migration428='{esc_mig}'
+$ok=$false;try{{Assert-428PrivateReceipt '{esc_receipt}';$ok=$true}}catch{{}}
+$outsideHeld=$false;try{{Assert-428PrivateReceipt '{esc_outside}'}}catch{{$outsideHeld=$true}}
 $script:untrusted=$true
-$untrustedHeld=$false;try{{Assert-428PrivateReceipt '{esc_receipt}' '{esc_priv}'}}catch{{$untrustedHeld=$true}}
+$untrustedHeld=$false;try{{Assert-428PrivateReceipt '{esc_receipt}'}}catch{{$untrustedHeld=$true}}
 @{{ok=$ok;outside_held=$outsideHeld;untrusted_held=$untrustedHeld}}|ConvertTo-Json -Compress
 """
     )
     assert row == {"ok": True, "outside_held": True, "untrusted_held": True}
+
+    script_text = LAUNCH_SCRIPT.read_text(encoding="utf-8")
+    assert "$script:Migration428='C:\\Program Files\\CoChem\\Migration4.2.8-windows-20261014-v2'" in script_text
+    assert '--state-root "C:\\ProgramData\\CoChemPipeline427\\private"' in script_text
+    assert (
+        "Assert-ProtectedPath (Split-Path -Parent $script:Migration428)\n"
+        "        $null=[IO.Directory]::CreateDirectory($script:Migration428,(New-428PayloadAcl 'source/knowledge/control' $true))\n"
+        "        Assert-NoReparseAncestors $script:Migration428;Assert-ProtectedPath $script:Migration428"
+    ) in script_text
+    assert prior_428.AGENT_HOLD_ROOT_NAME == Path(prior_428.AGENT_HOLD_REL).parts[0]
 

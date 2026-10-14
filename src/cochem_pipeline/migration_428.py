@@ -640,6 +640,10 @@ def main(argv: list[str] | None = None) -> int:
             pyproject_path=pyproject if pyproject.is_file() else None,
         )
         win.validate_private_directory(config.private_root)
+        if args.state_root is not None and Path(args.state_root).resolve() != config.job_db.parent.resolve():
+            raise ValueError(
+                f'--state-root {Path(args.state_root).resolve()} disagrees with candidate config job_db parent {config.job_db.parent.resolve()}'
+            )
 
         task_catalog: dict[str, Any] | None = None
         routing_cand_path = candidate_root / 'source' / 'docs' / '4.2.8' / 'routing-candidate.json'

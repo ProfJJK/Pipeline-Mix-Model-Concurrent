@@ -236,10 +236,10 @@ function Assert-428PortFree {
 }
 
 function Assert-428PrivateReceipt {
-    param([string]$Path,[string]$PrivateRoot='C:\ProgramData\CoChemPipeline427\private')
+    param([string]$Path,[string]$PrivateRoot=$(if(Get-Variable -Name Migration428 -Scope Script -ErrorAction SilentlyContinue){$script:Migration428}else{'C:\Program Files\CoChem\Migration4.2.8-windows-20261014-v2'}))
     $full=Get-LocalPath $Path
     $root=Get-LocalPath $PrivateRoot
-    if(-not $full.StartsWith($root+'\',[StringComparison]::OrdinalIgnoreCase)){throw '4.2.8 private receipt must reside under ProgramData private root.'}
+    if(-not $full.StartsWith($root+'\',[StringComparison]::OrdinalIgnoreCase)){throw '4.2.8 private receipt must reside under the protected migration root.'}
     Assert-NoReparseAncestors $full
     $item=Get-Item -LiteralPath $full -Force
     if($item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)){throw '4.2.8 private receipt must be a regular file.'}
@@ -255,7 +255,7 @@ function Assert-428PrivateReceipt {
         if($cur.FullName.TrimEnd('\') -ieq $root.TrimEnd('\')){return}
         $cur=if($cur -is [IO.DirectoryInfo]){$cur.Parent}else{$cur.Directory}
     }
-    throw 'Private receipt ancestry did not reach ProgramData private root.'
+    throw 'Private receipt ancestry did not reach the protected migration root.'
 }
 
 function Invoke-428Migration {
@@ -266,7 +266,7 @@ function Invoke-428Migration {
     $definition.Settings.Enabled=$false;$definition.Settings.AllowDemandStart=$true;$definition.Settings.MultipleInstances=2
     $definition.Settings.RestartCount=0;$definition.Settings.ExecutionTimeLimit='PT15M'
     $action=$definition.Actions.Create(0);$action.Path=Join-Path $script:Root428 '.venv\Scripts\python.exe'
-    $action.Arguments='-I -B -m cochem_pipeline.migration_428 --state-root "C:\ProgramData\CoChemPipeline427\state" --evidence-root "'+$script:Migration428+'" --candidate-config "'+(Join-Path $script:Root428 'pipeline.json')+'"'+$(if($Rollback){' --rollback'}else{''})
+    $action.Arguments='-I -B -m cochem_pipeline.migration_428 --state-root "C:\ProgramData\CoChemPipeline427\private" --evidence-root "'+$script:Migration428+'" --candidate-config "'+(Join-Path $script:Root428 'pipeline.json')+'"'+$(if($Rollback){' --rollback'}else{''})
     $action.WorkingDirectory=$script:Root428
     $task=$Folder.RegisterTaskDefinition($name,$definition,18,'SYSTEM',$null,5,'O:BAG:BAD:P(A;;FA;;;SY)(A;;FA;;;BA)')
     Assert-428TaskAcl $task
@@ -375,7 +375,7 @@ function Invoke-428Launch {
     $oldR7='C:\Program Files\CoChem\Pipeline4.2.7-windows-20261012-r7-v1'
     $oldR6='C:\Program Files\CoChem\Pipeline4.2.7-windows-20261012-r6-v1'
     $oldR4='C:\Program Files\CoChem\Pipeline4.2.7-windows-20261009-r4'
-    $script:Migration428='C:\ProgramData\CoChemPipeline427\private\migration-428-20261014-v2'
+    $script:Migration428='C:\Program Files\CoChem\Migration4.2.8-windows-20261014-v2'
     $script:Sitting428=$null
     $startedUtc=[DateTime]::UtcNow
     $authority='C:\Program Files\CoChem\RoutingCatalog4.2.8';$folder=$null;$original=$null;$originalSddl=$null;$old=$null
@@ -510,8 +510,9 @@ function Invoke-428Launch {
         Assert-428WardenTask $task $original $originalSddl $old $expectedOldArgs $false $false $oldTriggerCount
         Assert-428PortFree;$stopped=$true
         $phase='migration';Write-428Status $phase
-        Assert-NoReparseAncestors $script:Migration428
+        Assert-ProtectedPath (Split-Path -Parent $script:Migration428)
         $null=[IO.Directory]::CreateDirectory($script:Migration428,(New-428PayloadAcl 'source/knowledge/control' $true))
+        Assert-NoReparseAncestors $script:Migration428;Assert-ProtectedPath $script:Migration428
         $migrationRequested=$true;$migration=Invoke-428Migration $scheduler $folder $false;$migrated=$true
         New-ProtectedDirectory $authority
         foreach($copy in @([pscustomobject]@{name='proposal.json';leaf=($manifest.proposal_sha256+'.json')},
@@ -550,8 +551,8 @@ function Invoke-428Launch {
                 $catalog.policy_digest -ceq $manifest.catalog_policy_digest){break}
             if($catalog.status -ceq 'HELD'){throw '4.2.8 catalog control probe held. Preserve the running controller and evidence.'}
         }while([DateTime]::UtcNow -lt $deadline)
-        if($catalog.request_id -cne $manifest.request_id -or $catalog.policy_digest -cne $manifest.catalog_policy_digest -or
-            $catalog.status -cnotin @('PUBLISHED_IN_CALLER_TRANSACTION','ALREADY_PUBLISHED')){throw 'Catalog publication exceeded its unattended bound.'}
+        if($catalog.status -cnotin @('PUBLISHED_IN_CALLER_TRANSACTION','ALREADY_PUBLISHED') -or
+            $catalog.request_id -cne $manifest.request_id -or $catalog.policy_digest -cne $manifest.catalog_policy_digest){throw 'Catalog publication exceeded its unattended bound.'}
         $record=@{schema='cochem-428-owner-sitting/1';status='R428_RUNNING_CATALOG_PUBLICATION_VERIFIED';version='4.2.8';
             source_commit=$manifest.source_commit;launch_manifest_sha256=$ManifestHash;request_id=$manifest.request_id;
             native_control_probe_verified=$true;backup_preserved=$true;full_srs_acceptance=$false;late_prompt=$false}

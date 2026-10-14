@@ -36,7 +36,7 @@ COCHEM_PROGRAM_FILES = Path(r"C:\Program Files\CoChem")
 NATIVE_HOLD_ROOT_NAME = "R6Acceptance4.2.7-windows-20261012-v1-native-47e4889af6284a9fad018142a14d5371"
 AUTH_HOLD_ROOT_NAME = "R6Acceptance4.2.7-windows-20261012-v1-auth-e8dabf56c1734ddd9b9cf6aeff09a4b9"
 KNOWLEDGE_HOLD_ROOT_NAME = "R6Acceptance4.2.7-windows-20261012-v1-knowledge-7f2f4f954df6492e9d3257ca3fa58f44"
-AGENT_HOLD_ROOT_NAME = "R6Acceptance4.2.7-windows-20261012-v1-agent-38c3b4be2c8c448595cd01d6d5391d68c"
+AGENT_HOLD_ROOT_NAME = "R6Acceptance4.2.7-windows-20261012-v1-agent-38c3b4be2c8c448595cd01d6d591d68c"
 AGENT_HOLD_REL = r"R6Acceptance4.2.7-windows-20261012-v1-agent-38c3b4be2c8c448595cd01d6d591d68c\result.json"
 R4_V11_ROOT_NAME = "WardenRetarget4.2.7-windows-20261011-r4-v11"
 

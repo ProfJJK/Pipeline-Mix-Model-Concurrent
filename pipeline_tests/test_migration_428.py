@@ -386,3 +386,19 @@ def test_migration_428_cli_entrypoint_and_rollback_receipt(tmp_path: Path, monke
         assert detect_source_state(conn) == 'R4'
         assert snapshot(conn, orig_tables)[1] == orig_digest
 
+    bad_ev = tmp_path / 'migration-428-bad-state-root'
+    bad_ev.mkdir(parents=True)
+    with pytest.raises(ValueError, match='disagrees with candidate config job_db parent'):
+        mig_mod.main(
+            [
+                '--state-root',
+                str(tmp_path / 'wrong-state'),
+                '--evidence-root',
+                str(bad_ev),
+                '--candidate-config',
+                str(cfg_path),
+            ]
+        )
+    assert (bad_ev / 'migration-held.json').is_file()
+
+
