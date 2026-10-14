@@ -735,9 +735,24 @@ class NativeRunner:
         if (not isinstance(node.get('worker_slot'),str) or not node['worker_slot']
                 or selected.get('worker_slot') != node['worker_slot']):
             raise ValueError('Selected route is not bound to the assigned isolated worker slot')
-        if not self.config.routing.is_enabled(target):
+        if not self._is_route_target_enabled(node, target):
             raise ProviderFailure('configuration')
         return dict(selected)
+
+    def _is_route_target_enabled(self, node: dict, target) -> bool:
+        if self.config.routing.is_enabled(target):
+            return True
+        if node.get('kind') == 'TASK_PLAN' and self.config.routing.as_dict().get('catalog', {}).get('schema') != 'cochem-routing-catalog/3':
+            raw_tc = node.get('payload', {}).get('task_catalog')
+            if isinstance(raw_tc, dict) and raw_tc.get('schema') == 'cochem-task-routing/1' and raw_tc.get('host_accepted') is True:
+                plan_cfg = getattr(self.config, 'task_planning', None)
+                if plan_cfg is not None:
+                    from .task_routing import digest as task_digest
+                    if task_digest(raw_tc) != plan_cfg.catalog_sha256:
+                        return False
+                from .task_catalog_428 import classify_target_status
+                return classify_target_status(target.as_dict() if hasattr(target, 'as_dict') else target, self.config.routing, raw_tc) is None
+        return False
 
     @contextmanager
     def _managed(self,job_id,process):

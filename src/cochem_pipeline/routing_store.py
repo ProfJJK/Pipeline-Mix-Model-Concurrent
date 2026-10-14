@@ -392,7 +392,41 @@ def _candidate_unavailability(conn, job, state, target, current_policy, now):
     # The immutable old candidate list is never upgraded in place. Skip a
     # retired identity before allocating a reservation or consuming an attempt;
     # an unchanged later candidate may still execute with its original digest.
-    if current_policy is not None and not any(
+    task_catalog = None
+    if isinstance(job, dict) and job.get('kind') == 'TASK_PLAN':
+        if conn is not None:
+            from .catalog_journal import active_task_catalog
+            try:
+                task_catalog = active_task_catalog(conn)
+            except ValueError:
+                task_catalog = None
+        if task_catalog is None:
+            raw_tc = job.get('payload', {}).get('task_catalog')
+            if isinstance(raw_tc, dict) and raw_tc.get('schema') == 'cochem-task-routing/1' and raw_tc.get('host_accepted') is True:
+                task_catalog = raw_tc
+    if task_catalog is not None and current_policy is not None:
+        from .task_catalog_428 import classify_target_status, build_admission_policy_view
+        status = classify_target_status(target, current_policy, task_catalog)
+        if status is not None:
+            return status
+        current_policy = build_admission_policy_view(current_policy, task_catalog)
+    elif current_policy is not None and isinstance(job, dict) and job.get('kind') == 'TASK_PLAN':
+        raw_tc = job.get('payload', {}).get('task_catalog')
+        if isinstance(raw_tc, dict) and raw_tc.get('schema') == 'cochem-task-routing/1':
+            allowed_428 = {
+                (m.get('provider'), m.get('model'), m.get('effort'))
+                for m in raw_tc.get('models', {}).values()
+                if m.get('score_evidence') == 'PUBLISHER_OBSERVED' and m.get('native_acceptance') != 'RETIRED'
+            }
+            if (provider, target['model'], target.get('reasoning_effort')) not in allowed_428:
+                return 'retired_target'
+            extra_limits = (raw_tc.get('model_limits') or state['policy'].get('model_limits') or {})
+            merged_limits = dict(current_policy.get('model_limits') or {})
+            for k, lim in extra_limits.items():
+                if k not in merged_limits or merged_limits[k] is None:
+                    merged_limits[k] = lim
+            current_policy = {**current_policy, 'model_limits': merged_limits}
+    elif current_policy is not None and not any(
             (provider, target['model'], target.get('reasoning_effort')) ==
             (entry['provider'], entry['model'], entry.get('reasoning_effort'))
             for targets in current_policy['tiers'].values() for entry in targets):
@@ -439,6 +473,25 @@ def _candidate_unavailability(conn, job, state, target, current_policy, now):
             counts.append((count + route_occupancy(conn,providers=pool_providers), pool_limit))
         if held or any(count >= limit for count, limit in counts):
             reason = 'busy' if not held else 'quota_pool_hold'
+        if reason is None and conn is not None:
+            from pathlib import Path
+            db_row = conn.execute("PRAGMA database_list").fetchone()
+            db_file = db_row[2] if db_row and len(db_row) > 2 else ''
+            if db_file and db_file not in (':memory:', ''):
+                repair_db = Path(db_file).parent / 'repair428.db'
+                if repair_db.exists():
+                    try:
+                        with sqlite3.connect(repair_db, timeout=1) as rconn:
+                            if rconn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='repair428_incidents'").fetchone():
+                                pool_candidates = tuple({pool, current_pool, {'claude': 'anthropic', 'codex': 'openai', 'gemini': 'google'}.get(provider, provider)})
+                                placeholders_rp = ','.join('?' for _ in pool_candidates)
+                                if rconn.execute(
+                                    f"SELECT 1 FROM repair428_incidents WHERE state IN ('PENDING','RETRY_WAIT','REWORK_REQUIRED') AND quota_pool IN ({placeholders_rp}) LIMIT 1",
+                                    pool_candidates,
+                                ).fetchone():
+                                    reason = 'repair_priority_hold'
+                    except sqlite3.Error:
+                        pass
     threshold = policy.get('backlog_threshold', 0)
     if reason is None and threshold:
         # Only earlier eligible jobs count as backlog. Including later

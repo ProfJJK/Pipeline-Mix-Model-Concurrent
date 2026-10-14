@@ -67,11 +67,27 @@ class PlanningController:
         research_runtime=None,
         execution_runtime=None,
         release_runtime=None,
+        attempt_ledger=None,
+        attempt_runtime=None,
+        dossier_store=None,
+        pivot_runtime=None,
+        fracture_runtime=None,
+        decision_store=None,
+        repair_queue=None,
+        audit_runtime=None,
     ):
         self.journal, self.store, self.clock = journal, store, clock
         self.research_runtime = research_runtime
         self.execution_runtime = execution_runtime
         self.release_runtime = release_runtime
+        self.attempt_ledger = attempt_ledger
+        self.attempt_runtime = attempt_runtime
+        self.dossier_store = dossier_store
+        self.pivot_runtime = pivot_runtime
+        self.fracture_runtime = fracture_runtime
+        self.decision_store = decision_store
+        self.repair_queue = repair_queue
+        self.audit_runtime = audit_runtime
         self.gateway = PlanningGateway(journal, store)
         self.journal.model_result = self.gateway.model_result
         if research_runtime is not None and self.journal.search_result is None:
@@ -90,13 +106,22 @@ class PlanningController:
     @classmethod
     def from_runtime(cls, runtime):
         spec = runtime.config.task_planning
-        journal = PlanningJournal(runtime.config.private_root / 'planning428.db', spec.read_catalog(),
+        catalog = spec.read_catalog()
+        journal = PlanningJournal(runtime.config.private_root / 'planning428.db', catalog,
                                   flash_context_limit=spec.flash_context_limit)
+        from .attempt_runtime_428 import AttemptAccountingRuntime
+        from .completion_audit_428 import CompletionAuditRuntime
+        from .failure_dossier_428 import FailureDossierStore
+        from .fracture_runtime_428 import FractureRuntime
+        from .pivot_runtime_428 import PivotRuntime
+        from .repair_queue_428 import RepairQueue
         from .research_evidence_428 import ResearchEvidenceStore
         from .research_runtime_428 import ResearchRuntime
         from .research_search_428 import ResearchSearchClient
+        from .task_decisions_428 import LockedTaskDecisionStore
         from .task_execution_428 import SimpleTaskExecutionRuntime
         from .task_release_428 import TaskReleaseRuntime
+        from .workflow_428 import AttemptLedger
         ev_store = ResearchEvidenceStore(runtime.config.private_root / 'research428.db')
         res_runtime = ResearchRuntime(
             ev_store,
@@ -106,12 +131,39 @@ class PlanningController:
         )
         exec_runtime = SimpleTaskExecutionRuntime(journal, runtime.store)
         rel_runtime = TaskReleaseRuntime(journal, runtime.store)
+        ledger = AttemptLedger(runtime.config.private_root / 'attempts428.db')
+        att_runtime = AttemptAccountingRuntime(ledger, store=runtime.store)
+        dos_store = FailureDossierStore(ledger)
+        piv_runtime = PivotRuntime(ledger, catalog, dossier_store=dos_store)
+        frac_runtime = FractureRuntime(ledger, catalog, dossier_store=dos_store, job_store=runtime.store)
+        dec_store = LockedTaskDecisionStore(ledger, dossier_store=dos_store)
+        rep_queue = RepairQueue(
+            runtime.config.private_root / 'repair428.db',
+            catalog,
+            profiles={
+                'repair_claude': {'provider': 'claude', 'quota_pool': 'anthropic'},
+                'repair_codex': {'provider': 'codex', 'quota_pool': 'openai'},
+                'repair_agy': {'provider': 'gemini', 'quota_pool': 'google'},
+            },
+            normal_profile_ids={'slot1', 'slot2', 'slot3', 'slot4', 'slot5', 'slot6'},
+            verify_reservation=lambda _: None,
+            verify_commit=lambda c, t: None,
+        )
+        aud_runtime = CompletionAuditRuntime(runtime.config.private_root / 'audit428.db', catalog, rep_queue)
         return cls(
             journal,
             runtime.store,
             research_runtime=res_runtime,
             execution_runtime=exec_runtime,
             release_runtime=rel_runtime,
+            attempt_ledger=ledger,
+            attempt_runtime=att_runtime,
+            dossier_store=dos_store,
+            pivot_runtime=piv_runtime,
+            fracture_runtime=frac_runtime,
+            decision_store=dec_store,
+            repair_queue=rep_queue,
+            audit_runtime=aud_runtime,
         )
 
     def has_task(self, task_id) -> bool:
@@ -128,8 +180,32 @@ class PlanningController:
         current = self.task_status(task_id)
         job_id = (current.get('controller') or {}).get('job_id')
         state = self.journal.cancel(task_id)
+        cancelled_jobs = set()
+        if job_id:
+            cancelled_jobs.add(job_id)
+        if self.release_runtime is not None and hasattr(self.release_runtime, 'board'):
+            try:
+                snap = self.release_runtime.board.snapshot(task_id)
+                for node in (snap or {}).get('nodes') or ():
+                    if node.get('job_id'):
+                        cancelled_jobs.add(node['job_id'])
+            except Exception:
+                pass
+        for jid in cancelled_jobs:
+            try:
+                job = self.store.get(jid)
+                self.store.cancel_workflow(job['workflow_id'])
+            except (ValueError, KeyError):
+                pass
         self._record(task_id, state['journal_version'], 'CANCELLED', job_id=job_id, delay=3600)
         return self.task_status(task_id)
+
+    def notify_job_changed(self, job_id):
+        if not isinstance(job_id, str) or not job_id:
+            return
+        now = self.clock()
+        with self.journal._write() as conn:
+            conn.execute('UPDATE planning428_progress SET next_check_at=? WHERE job_id=?', (now, job_id))
 
     def task_status(self, task_id):
         _id(task_id)
@@ -147,6 +223,15 @@ class PlanningController:
             rel = self.release_runtime.get_release(task_id)
             if rel is not None:
                 result['release'] = rel
+        if self.decision_store is not None and self.attempt_ledger is not None:
+            try:
+                lstate = self.attempt_ledger.status(task_id)
+                if lstate.get('stage') == 'LOCKED':
+                    packets = self.decision_store.status_projection(task_id)
+                    if packets:
+                        result['locked_decision'] = packets[0]
+            except (ValueError, KeyError):
+                pass
         return result
 
     def status(self):
@@ -215,6 +300,10 @@ class PlanningController:
         if not self._lock.acquire(blocking=False):
             return 0
         try:
+            if self.attempt_runtime is not None and hasattr(self.attempt_runtime, 'reconcile_outbox'):
+                self.attempt_runtime.reconcile_outbox()
+            if self.fracture_runtime is not None and hasattr(self.fracture_runtime, 'reconcile_partial_fractures'):
+                self.fracture_runtime.reconcile_partial_fractures()
             with self.journal._write() as conn:
                 row = conn.execute('SELECT task_id FROM planning428_cursor WHERE singleton=1').fetchone()
                 cursor = row[0] if row else ''

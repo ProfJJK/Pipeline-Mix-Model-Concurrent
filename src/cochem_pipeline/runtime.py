@@ -371,6 +371,11 @@ class Runtime:
             if hasattr(self,'admission'):
                 # Refill prepared capacity as soon as execution releases a seat.
                 self.admission.request_maintenance()
+            if node.get('kind')=='TASK_PLAN' and getattr(self,'task_planning',None) is not None and hasattr(self.task_planning,'notify_job_changed'):
+                try:
+                    self.task_planning.notify_job_changed(job_id)
+                except Exception as exc:
+                    LOG.error('Task planning progress notification failed: %s',type(exc).__name__)
 
     def _record_failure(self,node,slot,exc):
         """Report one finished dispatch; durable scheduling owns all retry budgets."""
@@ -639,11 +644,26 @@ class Runtime:
                 'source_root':str(Path(__file__).resolve().parents[2])}
 
     def cancel(self,workflow_id):
+        planner = getattr(self, 'task_planning', None)
+        tracked_job_id = None
+        is_task_plan = False
+        if planner is not None and hasattr(planner, 'has_task') and planner.has_task(workflow_id):
+            is_task_plan = True
+            try:
+                tracked_job_id = (planner.task_status(workflow_id).get('controller') or {}).get('job_id')
+                planner.cancel(workflow_id)
+            except Exception as exc:
+                LOG.error('Task planning cancellation failed: %s', type(exc).__name__)
         with self.lock:
-            jobs = self.store.cancel_workflow(workflow_id)
+            try:
+                jobs = self.store.cancel_workflow(workflow_id)
+            except ValueError:
+                if not is_task_plan:
+                    raise
+                jobs = [self.store.get(tracked_job_id)] if tracked_job_id else []
             ids = {node['job_id'] for node in jobs}
             for job_id,active in self.active.items():
-                if active['node']['workflow_id']==workflow_id:
+                if active['node']['workflow_id']==workflow_id or job_id==tracked_job_id:
                     active['tripped'] = True
                     active.get('cancel_event',threading.Event()).set()
                     ids.add(job_id)

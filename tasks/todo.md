@@ -102,7 +102,7 @@ Before P428-00, the external R6 runner is valid only for its hardcoded -r6 check
 
 ## P428-06 — Durable research request, receipt and content store
 
-- [ ] Completed; commit/evidence: pending.
+- [x] Completed; commit/evidence: `5d710c9` (`src/cochem_pipeline/research_evidence_428.py`, `src/cochem_pipeline/planning_journal.py`, `pipeline_tests/test_research_evidence_428.py`; verified with `scripts/run_source_tests_428.py` -> `16 passed in 0.82s` across `test_research_evidence_428.py` and `test_planning_journal_428.py`).
 - **Lane / size:** Q / M. **Depends on:** P428-01.
 - **Files:** proposed `research_evidence_428.py`, `planning_journal.py`,
   proposed `pipeline_tests/test_research_evidence_428.py`.
@@ -116,7 +116,7 @@ Before P428-00, the external R6 runner is valid only for its hardcoded -r6 check
 
 ## P428-07 — Real internet and scholarly search adapters
 
-- [ ] Completed; commit/evidence: pending.
+- [x] Completed; commit/evidence: `553dd67` (`src/cochem_pipeline/research_search_428.py`, `docs/4.2.8/RESEARCH_SETUP.md`, `pipeline_tests/test_research_search_428.py`; verified with `scripts/run_source_tests_428.py` -> `8 passed in 0.11s`).
 - **Lane / size:** Q / M. **Depends on:** P428-01, P428-06.
 - **Files:** proposed `research_search_428.py`, proposed
   `pipeline_tests/test_research_search_428.py`, proposed `docs/4.2.8/RESEARCH_SETUP.md`.
@@ -131,7 +131,7 @@ Before P428-00, the external R6 runner is valid only for its hardcoded -r6 check
 
 ## P428-08 — Wiki research and nonblocking planner evidence consumption
 
-- [ ] Completed; commit/evidence: pending.
+- [x] Completed; commit/evidence: `2ff6708` (`src/cochem_pipeline/research_runtime_428.py`, `src/cochem_pipeline/planning_gateway.py`, `src/cochem_pipeline/planning_runtime.py`, `pipeline_tests/test_research_runtime_428.py`; verified with `scripts/run_source_tests_428.py` -> `26 passed in 3.44s` across `test_research_runtime_428.py`, `test_planning_gateway_428.py`, `test_planning_runtime_428.py`).
 - **Lane / size:** Q / M. **Depends on:** P428-06, P428-07.
 - **Files:** proposed `research_runtime_428.py`, `planning_gateway.py`,
   `planning_runtime.py`, proposed `pipeline_tests/test_research_runtime_428.py`.
@@ -145,7 +145,7 @@ Before P428-00, the external R6 runner is valid only for its hardcoded -r6 check
 
 ## P428-09 — Human SRS approval authority
 
-- [ ] Completed; commit/evidence: pending.
+- [x] Completed; commit/evidence: `0de0fcb` (`src/cochem_pipeline/owner_approval_428.py`, `src/cochem_pipeline/planning_journal.py`, `pipeline_tests/test_owner_approval_428.py`; verified with `scripts/run_source_tests_428.py` -> `15 passed in 0.67s` across `test_owner_approval_428.py` and `test_planning_journal_428.py`).
 - **Lane / size:** H / M. **Depends on:** P428-01.
 - **Files:** proposed `owner_approval_428.py`, `planning_journal.py`,
   proposed `pipeline_tests/test_owner_approval_428.py`.
@@ -160,7 +160,7 @@ Before P428-00, the external R6 runner is valid only for its hardcoded -r6 check
 
 ## P428-10 — User-facing intake, approval and progress tools
 
-- [ ] Completed; commit/evidence: pending.
+- [x] Completed; commit/evidence: `ab08132` (`src/cochem_pipeline/owner_ui_428.py`, `src/cochem_pipeline/server.py`, `src/cochem_pipeline/service.py`, `src/cochem_pipeline/planning_journal.py`, `src/cochem_pipeline/planning_runtime.py`, `pipeline_tests/test_task_interface_428.py`; verified with `scripts/run_source_tests_428.py` -> `73 passed, 10 deselected in 37.54s` across `test_task_interface_428.py`, `test_planning_runtime_428.py`, and `test_service.py -k "not coding"`).
 - **Lane / size:** H / M. **Depends on:** P428-09; shared hooks reserved by C.
 - **Files:** `server.py`, `service.py`, proposed `owner_ui_428.py`,
   proposed `pipeline_tests/test_task_interface_428.py`.
@@ -174,7 +174,7 @@ Before P428-00, the external R6 runner is valid only for its hardcoded -r6 check
 
 ## P428-11 — Execute a simple approved-for-dispatch task
 
-- [ ] Completed; commit/evidence: pending.
+- [x] Completed; commit/evidence: `14fd020` (`src/cochem_pipeline/task_execution_428.py`, `src/cochem_pipeline/planning_gateway.py`, `src/cochem_pipeline/planning_runtime.py`, `pipeline_tests/test_task_execution_428.py`). Verified via `python.exe -I scripts/run_source_tests_428.py --timeout-seconds 120 -- pipeline_tests/test_task_execution_428.py pipeline_tests/test_planning_gateway_428.py pipeline_tests/test_planning_runtime_428.py --tb=short` -> `19 passed in 2.83s`. Host-only native execution acceptance deferred to `P428-28`.
 - **Lane / size:** E / M. **Depends on:** P428-01, P428-03.
 - **Files:** proposed `task_execution_428.py`, `planning_runtime.py`,
   proposed `pipeline_tests/test_task_execution_428.py`; shared store hooks via C.
@@ -188,7 +188,7 @@ Before P428-00, the external R6 runner is valid only for its hardcoded -r6 check
 
 ## P428-12 — Materialize the reassessed microtask dependency graph
 
-- [ ] Completed; commit/evidence: pending.
+- [x] Completed; commit/evidence: `64b6470` (`src/cochem_pipeline/microtask_board_428.py`, `src/cochem_pipeline/workflow_428.py`, `src/cochem_pipeline/planning_gateway.py`, `pipeline_tests/test_microtask_board_428.py`). Verified via `python.exe -I scripts/run_source_tests_428.py --timeout-seconds 120 -- pipeline_tests/test_microtask_board_428.py pipeline_tests/test_workflow_428.py --tb=short` -> `16 passed in 1.11s`. Host-only native execution acceptance deferred to `P428-28`.
 - **Lane / size:** E / M. **Depends on:** P428-11, P428-09.
 - **Files:** proposed `microtask_board_428.py`, `workflow_428.py`,
   proposed `pipeline_tests/test_microtask_board_428.py`; shared schema hooks via C.
@@ -203,7 +203,7 @@ Before P428-00, the external R6 runner is valid only for its hardcoded -r6 check
 
 ## P428-13 — Stage code and non-code fragment artifacts safely
 
-- [ ] Completed; commit/evidence: pending.
+- [x] Completed; commit/evidence: `730a3b3` (`src/cochem_pipeline/task_artifacts_428.py`, `src/cochem_pipeline/coding.py`, `pipeline_tests/test_task_artifacts_428.py`). Verified via `python.exe -I scripts/run_source_tests_428.py --timeout-seconds 120 -- pipeline_tests/test_task_artifacts_428.py --tb=short` -> `5 passed in 0.19s`. Host-only native execution acceptance deferred to `P428-28`.
 - **Lane / size:** E / M. **Depends on:** P428-12.
 - **Files:** proposed `task_artifacts_428.py`, `coding.py`,
   proposed `pipeline_tests/test_task_artifacts_428.py`.
@@ -217,7 +217,7 @@ Before P428-00, the external R6 runner is valid only for its hardcoded -r6 check
 
 ## P428-14 — Assembly, final testing and truthful root completion
 
-- [ ] Completed; commit/evidence: pending.
+- [x] Completed; commit/evidence: `a34e9c8` (`src/cochem_pipeline/task_release_428.py`, `src/cochem_pipeline/microtask_board_428.py`, `src/cochem_pipeline/planning_runtime.py`, `pipeline_tests/test_task_release_428.py`). Verified via `python.exe -I scripts/run_source_tests_428.py --timeout-seconds 120 -- pipeline_tests/test_task_release_428.py pipeline_tests/test_microtask_board_428.py pipeline_tests/test_task_artifacts_428.py pipeline_tests/test_task_execution_428.py --tb=short` -> `14 passed in 2.53s`. Host-only native execution acceptance deferred to `P428-28`.
 - **Lane / size:** E / M. **Depends on:** P428-12, P428-13.
 - **Files:** proposed `task_release_428.py`, `planning_runtime.py`,
   proposed `pipeline_tests/test_task_release_428.py`; completion triggers via C.
@@ -231,7 +231,7 @@ Before P428-00, the external R6 runner is valid only for its hardcoded -r6 check
 
 ## P428-15 — Bind actual outcomes to quality attempt accounting
 
-- [ ] Completed; commit/evidence: pending.
+- [x] Completed; commit/evidence: `a2e44be` (`src/cochem_pipeline/attempt_runtime_428.py`, `src/cochem_pipeline/workflow_428.py`, `pipeline_tests/test_attempt_runtime_428.py`); verified via `python -I scripts/run_source_tests_428.py --timeout-seconds 120 -- pipeline_tests/test_attempt_runtime_428.py pipeline_tests/test_workflow_428.py --tb=short` -> `15 passed in 0.86s`. Exclusions: none. Host-only live CLI execution deferred to P428-28.
 - **Lane / size:** F / M. **Depends on:** P428-01, P428-11, P428-12.
 - **Files:** proposed `attempt_runtime_428.py`, `workflow_428.py`,
   proposed `pipeline_tests/test_attempt_runtime_428.py`; runtime/store hooks via C.
@@ -245,7 +245,7 @@ Before P428-00, the external R6 runner is valid only for its hardcoded -r6 check
 
 ## P428-16 — Researched failure dossier and higher-model pivot
 
-- [ ] Completed; commit/evidence: pending.
+- [x] Completed; commit/evidence: `8aa9cb2` (`src/cochem_pipeline/failure_dossier_428.py`, `src/cochem_pipeline/pivot_runtime_428.py`, `pipeline_tests/test_pivot_runtime_428.py`); verified via `python -I scripts/run_source_tests_428.py --timeout-seconds 120 -- pipeline_tests/test_pivot_runtime_428.py pipeline_tests/test_workflow_428.py --tb=short` -> `15 passed in 1.02s`. Exclusions: none. Host-only live CLI execution deferred to P428-28.
 - **Lane / size:** F / M. **Depends on:** P428-08, P428-15, P428-03.
 - **Files:** proposed `failure_dossier_428.py`, proposed `pivot_runtime_428.py`,
   proposed `pipeline_tests/test_pivot_runtime_428.py`.
@@ -259,7 +259,7 @@ Before P428-00, the external R6 runner is valid only for its hardcoded -r6 check
 
 ## P428-17 — Fracture and reassessment without resetting budgets
 
-- [ ] Completed; commit/evidence: pending.
+- [x] Completed; commit/evidence: `21b4442` (`src/cochem_pipeline/fracture_runtime_428.py`, `src/cochem_pipeline/workflow_428.py`, `pipeline_tests/test_fracture_runtime_428.py`); verified via `python -I scripts/run_source_tests_428.py --timeout-seconds 120 -- pipeline_tests/test_fracture_runtime_428.py pipeline_tests/test_workflow_428.py --tb=short` -> `14 passed in 0.99s`. Exclusions: none. Host-only live CLI execution deferred to P428-28.
 - **Lane / size:** F / M. **Depends on:** P428-12, P428-15, P428-16.
 - **Files:** proposed `fracture_runtime_428.py`, `workflow_428.py`,
   proposed `pipeline_tests/test_fracture_runtime_428.py`.
@@ -273,7 +273,7 @@ Before P428-00, the external R6 runner is valid only for its hardcoded -r6 check
 
 ## P428-18 — Locked-task decisions on the next status request
 
-- [ ] Completed; commit/evidence: pending.
+- [x] Completed; commit/evidence: `07051a4` (`src/cochem_pipeline/task_decisions_428.py`, `src/cochem_pipeline/operator_views.py`, `pipeline_tests/test_task_decisions_428.py`); verified via `python -I scripts/run_source_tests_428.py --timeout-seconds 120 -- pipeline_tests/test_task_decisions_428.py --tb=short` -> `2 passed in 1.42s`. Exclusions: none. Host-only live CLI execution deferred to P428-28.
 - **Lane / size:** F / S. **Depends on:** P428-10, P428-16, P428-17.
 - **Files:** proposed `task_decisions_428.py`, `operator_views.py`,
   proposed `pipeline_tests/test_task_decisions_428.py`.
@@ -287,7 +287,7 @@ Before P428-00, the external R6 runner is valid only for its hardcoded -r6 check
 
 ## P428-19 — Execute completion spot checks and open grounded incidents
 
-- [ ] Completed; commit/evidence: pending.
+- [x] Completed; commit/evidence: `a0eaffc` (`src/cochem_pipeline/completion_audit_428.py`, `src/cochem_pipeline/repair_queue_428.py`, `pipeline_tests/test_completion_audit_428.py`); verified via `python -I scripts/run_source_tests_428.py --timeout-seconds 120 -- pipeline_tests/test_completion_audit_428.py pipeline_tests/test_repair_queue_428.py --tb=short` -> `16 passed in 0.30s`. Exclusions: none. Host-only live CLI execution deferred to P428-28.
 - **Lane / size:** A / M. **Depends on:** P428-01, P428-14.
 - **Files:** proposed `completion_audit_428.py`, `repair_queue_428.py`,
   proposed `pipeline_tests/test_completion_audit_428.py`.
@@ -301,7 +301,7 @@ Before P428-00, the external R6 runner is valid only for its hardcoded -r6 check
 
 ## P428-20 — Independent repair admission and supervisor recovery
 
-- [ ] Completed; commit/evidence: pending.
+- [x] Completed; commit/evidence: `42fba4c` (`src/cochem_supervisor/repair_admission_428.py`, `src/cochem_pipeline/repair_queue_428.py`, `pipeline_tests/test_repair_admission_428.py`); verified via `python -I scripts/run_source_tests_428.py --timeout-seconds 120 -- pipeline_tests/test_repair_admission_428.py pipeline_tests/test_repair_queue_428.py --tb=short` -> `16 passed in 0.35s`. Exclusions: none. Host-only live CLI execution deferred to P428-28.
 - **Lane / size:** O / M. **Depends on:** P428-01, P428-03.
 - **Files:** proposed `src/cochem_supervisor/repair_admission_428.py`,
   `repair_queue_428.py`, proposed `pipeline_tests/test_repair_admission_428.py`.
@@ -315,7 +315,7 @@ Before P428-00, the external R6 runner is valid only for its hardcoded -r6 check
 
 ## P428-21 — Isolated direct repository repair execution
 
-- [ ] Completed; commit/evidence: pending.
+- [x] Completed; commit/evidence: `f503d2c` (`src/cochem_supervisor/repair_executor_428.py`, `src/cochem_pipeline/repair_queue_428.py`, `pipeline_tests/test_repair_executor_428.py`); verified via `python -I scripts/run_source_tests_428.py --timeout-seconds 120 -- pipeline_tests/test_repair_executor_428.py pipeline_tests/test_repair_queue_428.py --tb=short` -> `16 passed in 0.37s`. Exclusions: none. Host-only live CLI execution deferred to P428-28.
 - **Lane / size:** O / M. **Depends on:** P428-20, P428-19.
 - **Files:** proposed `src/cochem_supervisor/repair_executor_428.py`,
   `repair_queue_428.py`, proposed `pipeline_tests/test_repair_executor_428.py`.
@@ -334,7 +334,7 @@ Before P428-00, the external R6 runner is valid only for its hardcoded -r6 check
 
 ## P428-22 — Versioned 4.2.8 configuration and database migration
 
-- [ ] Completed; commit/evidence: pending.
+- [x] Completed; commit/evidence: `f27a22e` (`pyproject.toml`, `src/cochem/__init__.py`, `src/cochem_pipeline/__init__.py`, `src/cochem_mcp/__init__.py`, `src/cochem_supervisor/__init__.py`, `src/cochem_pipeline/config.py`, `src/cochem_pipeline/migration_428.py`, `pipeline_tests/test_migration_428.py`); verified via `python.exe -I scripts/run_source_tests_428.py --timeout-seconds 120 -- pipeline_tests/test_migration_428.py pipeline_tests/test_r7_migration.py pipeline_tests/test_config.py pipeline_tests/test_deployment_revision.py pipeline_tests/test_build_r6_application.py pipeline_tests/test_prepare_r6_install_bundle.py --tb=short` -> `171 passed, 1 skipped in 7.31s`. Host-only live SYSTEM database migration deferred to `P428-28`.
 - **Lane / size:** D / M. **Depends on:** P428-01, P428-03, P428-15, P428-20.
 - **Files:** proposed `migration_428.py`, `config.py`, version metadata,
   proposed `pipeline_tests/test_migration_428.py`.
@@ -348,7 +348,7 @@ Before P428-00, the external R6 runner is valid only for its hardcoded -r6 check
 
 ## P428-23 — Assemble shared controller, routing and tool integration
 
-- [ ] Completed; commit/evidence: pending.
+- [x] Completed; commit/evidence: wired `PlanningController` (`src/cochem_pipeline/planning_runtime.py`), `Runtime` (`src/cochem_pipeline/runtime.py`), `JointAdmission` (`src/cochem_pipeline/admission.py`), `routing_store` (`src/cochem_pipeline/routing_store.py`), `NativeRunner` (`src/cochem_pipeline/worker.py`), and `task_catalog_428` (`src/cochem_pipeline/task_catalog_428.py`) with `pipeline_tests/test_runtime_428.py`; verified via `python -I scripts/run_source_tests_428.py --timeout-seconds 120 -- pipeline_tests/test_runtime_428.py pipeline_tests/test_planning_runtime_428.py pipeline_tests/test_planning_gateway_428.py pipeline_tests/test_task_catalog_428.py --tb=short` (`30 passed in 7.03s`; exclusions: live native provider execution and SYSTEM host acceptance remain deferred to `P428-28`).
 - **Lane / size:** C / M. **Depends on:** P428-03, P428-08, P428-10, P428-14,
   P428-18, P428-19, P428-21, P428-22.
 - **Files:** `runtime.py`, `store.py`, `routing_store.py`, `admission.py`,
@@ -437,9 +437,9 @@ Before P428-00, the external R6 runner is valid only for its hardcoded -r6 check
 
 ## Checkpoint ledger
 
-- [ ] Contracts/verification/catalog/native preparation reviewed (00–05).
-- [ ] Real workflow adapters and artifact paths integrated (06–14).
-- [ ] Failure/audit/independent repair source integration verified (15–21).
+- [x] Contracts/verification/catalog/native preparation reviewed (00–05).
+- [x] Real workflow adapters and artifact paths integrated (06–14).
+- [x] Failure/audit/independent repair source integration verified (15–21).
 - [ ] Versioned migration and merged controller regression complete (22–24).
 - [ ] Offline package and single owner command reviewed/delivered (25–27).
 - [ ] Physical owner-run acceptance reviewed; final status accurate (28).

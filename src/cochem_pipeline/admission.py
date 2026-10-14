@@ -15,7 +15,7 @@ from .container_policy import DockerPolicy
 from .containers import DockerRunner,ContainerCapacityError,ContainerCleanupError,_prepared_provenance
 from .coding_store import CODING_KINDS
 
-_NATIVE_KINDS=tuple(kind for kind in ('MANIFEST_GENERATOR','CHAPTER_DRAFT','SYNTHESIS','PREFLIGHT_REQUEST',*CODING_KINDS)
+_NATIVE_KINDS=tuple(kind for kind in ('MANIFEST_GENERATOR','CHAPTER_DRAFT','SYNTHESIS','PREFLIGHT_REQUEST','TASK_PLAN',*CODING_KINDS)
                     if kind not in {'CODE_REQUEST','CODE_TEST'})
 
 
@@ -35,10 +35,22 @@ class JointAdmission:
         self.maintenance_requested=threading.Event()
         self.update_capacity(capacity)
 
+    def _repair_slot_occupancy(self):
+        repair_db=getattr(self.store,'path',None)
+        if repair_db is None:return 0
+        repair_path=repair_db.parent/'repair428.db'
+        if not repair_path.exists():return 0
+        import sqlite3
+        try:
+            with sqlite3.connect(repair_path,timeout=1) as rconn:
+                if not rconn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='repair428_shared_slots'").fetchone():return 0
+                return int(rconn.execute("SELECT count(*) FROM repair428_shared_slots WHERE owner_kind!='ordinary_worker' OR state!='ACTIVE'").fetchone()[0])
+        except sqlite3.Error:return 1
+
     def _native_active(self):
         from .catalog_slots import occupancy
         with self.store._connection() as conn:probes=occupancy(conn)
-        return sum(job['kind']!='CODE_TEST' for job in self.store.active_jobs())+probes
+        return sum(job['kind']!='CODE_TEST' for job in self.store.active_jobs())+probes+self._repair_slot_occupancy()
 
     def reserve_catalog(self, authority, target, *, worker_slot, containment_id, boot_id):
         """Reserve one native seat after warm Docker capacity has drained."""

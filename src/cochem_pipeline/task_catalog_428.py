@@ -386,6 +386,9 @@ def active_accepted_target_set(
         if m.get("native_acceptance") != "ACCEPTED"
     }
     accepted = set(tier_targets) - unaccepted
+    for m in task_catalog.get("models", {}).values():
+        if m.get("native_acceptance") == "ACCEPTED" and not m.get("retired") and m.get("effort") is not None:
+            accepted.add((m.get("provider"), m.get("model"), m.get("effort")))
     for entry in task_catalog.get("accepted_targets", []):
         accepted.add((entry["provider"], entry["model"], entry.get("reasoning_effort")))
     return accepted - retired
