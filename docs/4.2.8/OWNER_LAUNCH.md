@@ -24,7 +24,7 @@ authority publication, and Warden cutover in one sitting:
    `routing-candidate.json`, `proposal.json`, `pointer.json`) and every frozen
    source/wheel file so no bytes can be modified during the sitting.
 2. **Front-Loaded Input Window (`front_loaded_input`, strictly $\le 20$ minutes):**
-   - Verifies the existing completed baseline (`R6`/`R7`) and reuses already
+   - Verifies the existing completed baseline (`R6`/`R7` sitting receipt or the live `AETHERDESK` `R4` v11 running + `R6` stopped runtime + canonical target-23 `R6Acceptance4.2.7-windows-20261012-v1-native-47e4889af6284a9fad018142a14d5371` hold baseline) and reuses already
      verified worker profiles (`slot1`..`slot5` across `codex`, `claude`, `gemini`).
    - Front-loads any newly required dedicated repair-profile sign-ins
      (`repair_claude`, `repair_codex`, `repair_agy`) and owner approval broker
@@ -47,7 +47,7 @@ authority publication, and Warden cutover in one sitting:
 5. **Controller Quiescence & Stop (`idle` $\rightarrow$ `stop`):**
    Confirms two consecutive idle observations of the live controller on
    `127.0.0.1:47824`, verifies process and parent process ownership (`S-1-5-18`),
-   disables the logon trigger, stops `CoChem-4.2.7-Warden`, and verifies port `47824`
+   disables the logon trigger (or preserves 0-trigger R4 task state), stops `CoChem-4.2.7-Warden`, and verifies port `47824`
    is free.
 6. **Versioned SYSTEM State Migration (`migration`):**
    Runs `cochem_pipeline.migration_428` as a one-shot `SYSTEM` scheduled task
@@ -58,8 +58,8 @@ authority publication, and Warden cutover in one sitting:
    Copies `proposal.json` and `pointer.json` to
    `C:\Program Files\CoChem\RoutingCatalog4.2.8`, retargets `CoChem-4.2.7-Warden`
    to `C:\Program Files\CoChem\Pipeline4.2.8-windows-20261014-r1`, starts the
-   4.2.8 controller, verifies `SYSTEM` process identity and health, re-enables the
-   logon trigger, and waits for catalog publication (`PUBLISHED_IN_CALLER_TRANSACTION`
+   4.2.8 controller, verifies `SYSTEM` process identity and health, ensures and re-enables the
+   `AETHERDESK\ansac` `PT1M` logon trigger, and waits for catalog publication (`PUBLISHED_IN_CALLER_TRANSACTION`
    or `ALREADY_PUBLISHED`).
 
 ---
@@ -85,18 +85,18 @@ authority publication, and Warden cutover in one sitting:
 
 ## 3. Read-Only Plan vs Owner Execution Commands
 
-- **Frozen source commit (`P428-26`):** `4cc3460db29e620a9826bb16c95277548f1f21d5` (`4cc3460`)
-- **Immutable release bundle:** `C:\Users\ansac\CoChem427\r428-bundle-4cc3460`
-- **Launch manifest SHA-256:** `555f84da26adb24c0108912facdc10a8fb67b9d0a6bb4d47d11eee194af8617f`
-- **Install manifest SHA-256:** `69c792f3417084dbd5c9ba249570d1e951f2143737dba6c83683d05f91b564ac`
+- **Frozen source commit (`P428-26`):** `b8627018b81ec48363df09f0563a945509936f54` (`b862701`)
+- **Immutable release bundle:** `C:\Users\ansac\CoChem427\r428-bundle-b862701`
+- **Launch manifest SHA-256:** `225cd82270a1636c0fbd4b5899a4e05a6d0ee2d26dc6f8004ddd8fefbca9dff9`
+- **Install manifest SHA-256:** `649eab6d9245b688f28319e0b70addf1832d59e64f22e6b61c81eb94ae0c3662`
 
 ### A. Read-Only Plan (Safe in Engineering / Non-Admin Sessions)
 
 ```powershell
 & "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive `
-  -File "C:\Users\ansac\CoChem427\r428-bundle-4cc3460\run_428_launch.ps1" `
-  -LaunchManifest "C:\Users\ansac\CoChem427\r428-bundle-4cc3460\launch-manifest.json" `
-  -LaunchManifestSha256 "555f84da26adb24c0108912facdc10a8fb67b9d0a6bb4d47d11eee194af8617f"
+  -File "C:\Users\ansac\CoChem427\r428-bundle-b862701\run_428_launch.ps1" `
+  -LaunchManifest "C:\Users\ansac\CoChem427\r428-bundle-b862701\launch-manifest.json" `
+  -LaunchManifestSha256 "225cd82270a1636c0fbd4b5899a4e05a6d0ee2d26dc6f8004ddd8fefbca9dff9"
 ```
 
 ### B. Single Owner Sitting Command (`P428-28`, 64-bit Administrator Windows PowerShell 5.1 as `AETHERDESK\ansac`)
@@ -105,9 +105,9 @@ See `docs/4.2.8/RELEASE_REVIEW.md` for the complete independent release-package 
 
 ```powershell
 & "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile `
-  -File "C:\Users\ansac\CoChem427\r428-bundle-4cc3460\run_428_launch.ps1" `
-  -LaunchManifest "C:\Users\ansac\CoChem427\r428-bundle-4cc3460\launch-manifest.json" `
-  -LaunchManifestSha256 "555f84da26adb24c0108912facdc10a8fb67b9d0a6bb4d47d11eee194af8617f" `
+  -File "C:\Users\ansac\CoChem427\r428-bundle-b862701\run_428_launch.ps1" `
+  -LaunchManifest "C:\Users\ansac\CoChem427\r428-bundle-b862701\launch-manifest.json" `
+  -LaunchManifestSha256 "225cd82270a1636c0fbd4b5899a4e05a6d0ee2d26dc6f8004ddd8fefbca9dff9" `
   -Apply
 ```
 
