@@ -159,6 +159,18 @@ class ResearchRuntime:
         remaining = float(row["next_run_at"]) - now
         return max(1.0, remaining) if remaining > 0 else default
 
+    def has_due_work(self) -> bool:
+        """Return True if at least one non-cancelled research request is due for collection."""
+        now = float(self.clock())
+        with self._write() as conn:
+            row = conn.execute(
+                "SELECT 1 FROM research428_queue "
+                "WHERE cancelled=0 AND status IN ('PENDING', 'BACKOFF') AND next_run_at<=? "
+                "LIMIT 1",
+                (now,),
+            ).fetchone()
+            return row is not None
+
     def collect_wiki_rag(self, query: str) -> dict[str, Any]:
         """Collect bounded verified excerpts from the local registered KnowledgeService."""
         query_text = _text(query, "Research query", 2000)

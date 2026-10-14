@@ -185,7 +185,7 @@ class Runtime:
         self.last_capacity = 0
         self.heartbeat = Heartbeat(config.private_root,__version__)
         self.pool = ThreadPoolExecutor(max_workers=min(getattr(config,'max_execution_slots',4),len(config.workers)),thread_name_prefix='pipeline')
-        self.task_planning = None
+        self.owner_approval_broker = None; self.task_planning = None
         if getattr(config, 'task_planning', None) is not None:
             from .planning_runtime import PlanningController
             self.task_planning = PlanningController.from_runtime(self)
@@ -540,6 +540,7 @@ class Runtime:
             return
         try:
             planner.step()
+            if hasattr(planner, 'kick_research_worker'): planner.kick_research_worker()
             self.components['task_planning'] = {'required':False, 'checked_at':time.time(),
                 'state':'healthy', 'evidence':planner.status()}
         except Exception as error:
@@ -692,6 +693,7 @@ class Runtime:
             for job_id in ids:
                 self.runner.terminate(job_id)
             self.pool.shutdown(wait=True)
+            if getattr(self,'task_planning',None) is not None and hasattr(self.task_planning,'close'):self.task_planning.close()
             if getattr(self,'catalog',None) is not None:self.catalog.close()
             if getattr(self,'objectives',None) is not None:
                 try:

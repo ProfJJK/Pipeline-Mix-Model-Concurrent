@@ -56,21 +56,25 @@ function Assert-428TaskAcl {
 function Get-428InvariantDefinition {
     param([string]$Xml)
     $doc=[xml]$Xml;$ns=[Xml.XmlNamespaceManager]::new($doc.NameTable);$ns.AddNamespace('t',$doc.DocumentElement.NamespaceURI)
-    foreach($xpath in @('/t:Task/t:Settings/t:Enabled','/t:Task/t:Triggers/t:LogonTrigger/t:Enabled',
+    foreach($xpath in @('/t:Task/t:RegistrationInfo/t:Description','/t:Task/t:Settings/t:Enabled',
+        '/t:Task/t:Triggers/t:LogonTrigger','/t:Task/t:Triggers/t:LogonTrigger/t:Enabled',
         '/t:Task/t:Actions/t:Exec/t:Command','/t:Task/t:Actions/t:Exec/t:Arguments','/t:Task/t:Actions/t:Exec/t:WorkingDirectory')){
-        foreach($node in @($doc.SelectNodes($xpath,$ns))){$null=$node.ParentNode.RemoveChild($node)}}
+        foreach($node in @($doc.SelectNodes($xpath,$ns))){if($null -ne $node.ParentNode){$null=$node.ParentNode.RemoveChild($node)}}}
+    foreach($tr in @($doc.SelectNodes('/t:Task/t:Triggers',$ns))){if(-not $tr.HasChildNodes){$tr.IsEmpty=$true}}
     $doc.OuterXml
 }
 
 function Assert-428WardenTask {
-    param($Task,[string]$OriginalXml,[string]$Sddl,[string]$Root,[string]$Arguments,[bool]$Enabled,[bool]$TriggerEnabled)
+    param($Task,[string]$OriginalXml,[string]$Sddl,[string]$Root,[string]$Arguments,[bool]$Enabled,[bool]$TriggerEnabled,[int]$ExpectedTriggers=1)
     Assert-428TaskAcl $Task
     $d=$Task.Definition
+    $triggerOk=if($ExpectedTriggers -eq 0){$d.Triggers.Count -eq 0}else{
+        $d.Triggers.Count -eq 1 -and [bool]$d.Triggers.Item(1).Enabled -eq $TriggerEnabled}
     if($Task.GetSecurityDescriptor(7) -cne $Sddl -or (Get-428InvariantDefinition $Task.Xml) -cne (Get-428InvariantDefinition $OriginalXml) -or
         $d.Actions.Count -ne 1 -or $d.Actions.Item(1).Type -ne 0 -or $d.Actions.Item(1).Path -cne (Join-Path $Root '.venv\Scripts\python.exe') -or
         $d.Actions.Item(1).Arguments -cne $Arguments -or $d.Actions.Item(1).WorkingDirectory -cne $Root -or
-        [bool]$Task.Enabled -ne $Enabled -or [bool]$d.Settings.Enabled -ne $Enabled -or
-        $d.Triggers.Count -ne 1 -or [bool]$d.Triggers.Item(1).Enabled -ne $TriggerEnabled){throw 'Warden task readback differs outside the reviewed change.'}
+        [bool]$Task.Enabled -ne $Enabled -or [bool]$d.Settings.Enabled -ne $Enabled -or -not $triggerOk){
+        throw 'Warden task readback differs outside the reviewed change.'}
 }
 
 function Assert-428InputWindow {
@@ -93,12 +97,47 @@ function Assert-428InputWindow {
 }
 
 function Get-428CompletedBaseline {
-    param([string]$CandidatePin)
-    @(Get-ChildItem -LiteralPath 'C:\Program Files\CoChem' -Directory -Filter 'R*Sitting*'|ForEach-Object{
+    param([string]$CandidatePin,[string]$CoChemRoot='C:\Program Files\CoChem')
+    $sitting=@(Get-ChildItem -LiteralPath $CoChemRoot -Directory -Filter 'R*Sitting*' -ErrorAction SilentlyContinue|ForEach-Object{
         foreach($leaf in @('r7-complete.json','r6-complete.json')){
             $path=Join-Path $_.FullName $leaf
             if(Test-Path -LiteralPath $path){Assert-ProtectedPath $path;Get-Content -LiteralPath $path -Raw|ConvertFrom-Json}}}|
         Where-Object{($_.status -ceq 'R7_RUNNING_CATALOG_PUBLICATION_VERIFIED' -or ($_.status -ceq 'WARDEN_R6_RUNNING_HEALTH_VERIFIED' -and $_.candidate_sha256 -ceq $CandidatePin))})
+    if($sitting.Count -ge 1){return $sitting}
+    $r4Receipt=Join-Path $CoChemRoot 'WardenRetarget4.2.7-windows-20261011-r4-v11\start-receipt.json'
+    $r6Install=Join-Path $CoChemRoot 'Pipeline4.2.7-windows-20261012-r6-v1\install-after.json'
+    $r6Cfg=Join-Path $CoChemRoot 'Pipeline4.2.7-windows-20261012-r6-v1\pipeline.json'
+    if(-not (Test-Path -LiteralPath $r4Receipt) -or -not (Test-Path -LiteralPath $r6Install) -or -not (Test-Path -LiteralPath $r6Cfg)){return @()}
+    Assert-ProtectedPath $r4Receipt;Assert-ProtectedPath $r6Install;Assert-ProtectedPath $r6Cfg
+    try{$cfgStream=Open-428Pin $r6Cfg $CandidatePin;$cfgStream.Dispose()}catch{return @()}
+    $r4=Get-Content -LiteralPath $r4Receipt -Raw|ConvertFrom-Json
+    $r6=Get-Content -LiteralPath $r6Install -Raw|ConvertFrom-Json
+    $pinnedHold=Join-Path $CoChemRoot 'R6Acceptance4.2.7-windows-20261012-v1-native-47e4889af6284a9fad018142a14d5371'
+    $holdDirs=if(Test-Path -LiteralPath $pinnedHold){@(Get-Item -LiteralPath $pinnedHold)}else{
+        @(Get-ChildItem -LiteralPath $CoChemRoot -Directory -Filter 'R6Acceptance4.2.7-windows-20261012-v1-native-*' -ErrorAction SilentlyContinue)}
+    $holds=@($holdDirs|ForEach-Object{
+        $hp=Join-Path $_.FullName 'held.json'
+        $nhp=Join-Path $_.FullName 'native\native-held.json'
+        if(Test-Path -LiteralPath $nhp){
+            Assert-ProtectedPath $hp;Assert-ProtectedPath $nhp
+            $hdoc=Get-Content -LiteralPath $hp -Raw|ConvertFrom-Json
+            $nhdoc=Get-Content -LiteralPath $nhp -Raw|ConvertFrom-Json
+            if($hdoc.phase -ceq 'native' -and $nhdoc.phase -ceq 'target-23' -and $nhdoc.completed -eq 23){$nhdoc}
+        }elseif(Test-Path -LiteralPath $hp){
+            Assert-ProtectedPath $hp
+            $hdoc=Get-Content -LiteralPath $hp -Raw|ConvertFrom-Json
+            if($hdoc.status -ceq 'HELD' -and $hdoc.phase -ceq 'target-23'){$hdoc}
+        }})
+    if($r4.status -ceq 'WARDEN_R4_RESTARTED_HEALTH_VERIFIED' -and
+        $r6.status -cin @('STOPPED_RUNTIME_INSTALLED','R6_RUNTIME_INSTALLED_INERT') -and $holds.Count -eq 1){
+        return @([pscustomobject]@{
+            status='R4_RUNNING_R6_TARGET23_HOLD_BASELINE_VERIFIED';
+            candidate_sha256=$CandidatePin;
+            r4_root=[string]$r4.runtime_root;
+            r6_hold_phase='target-23'
+        })
+    }
+    return @()
 }
 
 function Invoke-428FrontLoadedInput {
@@ -147,9 +186,10 @@ function Get-428Health {
 }
 
 function Assert-428Health {
-    param($Health,[string]$Root)
-    if($Health.service_identity -cne 'SYSTEM' -or $Health.source_root -cne (Join-Path $Root '.venv\Lib') -or
-        $Health.admission_capacity -lt 1 -or $Health.components.warden_controller.admission_ready -ne $true){
+    param($Health,[string]$Root,[bool]$AllowPausedAdmission=$false)
+    if($Health.service_identity -cne 'SYSTEM' -or $Health.source_root -cne (Join-Path $Root '.venv\Lib')){
+        throw 'Controller identity or admission readiness differs.'}
+    if(-not $AllowPausedAdmission -and ($Health.admission_capacity -lt 1 -or $Health.components.warden_controller.admission_ready -ne $true)){
         throw 'Controller identity or admission readiness differs.'}
 }
 
@@ -233,12 +273,12 @@ function Invoke-428Migration {
 }
 
 function Wait-428Health {
-    param([string]$Root)
+    param([string]$Root,[bool]$AllowPausedAdmission=$false)
     $deadline=[DateTime]::UtcNow.AddMinutes(20);$first=$null
     do{
         Start-Sleep -Seconds 5
         try{
-            $row=Get-428Health;Assert-428Health $row $Root
+            $row=Get-428Health;Assert-428Health $row $Root $AllowPausedAdmission
             if($null -ne $first -and $row.pid -eq $first.pid -and $row.instance_id -ceq $first.instance_id){return $row}
             $first=$row
         }catch{$first=$null}
@@ -253,17 +293,30 @@ function Restore-428BeforeStart {
     if($Migrated){$null=Invoke-428Migration $Scheduler $Folder $true}
     $definition=$Scheduler.NewTask(0);$definition.XmlText=$OriginalXml
     $arguments=$definition.Actions.Item(1).Arguments
-    $definition.Triggers.Item(1).Enabled=$false;$definition.Settings.Enabled=$true
+    $triggerCount=if($null -ne $definition.Triggers.PSObject.Properties['Count']){[int]$definition.Triggers.Count}else{1}
+    if($triggerCount -ge 1){$definition.Triggers.Item(1).Enabled=$false}
+    $definition.Settings.Enabled=$true
     $null=$Folder.RegisterTaskDefinition('CoChem-4.2.7-Warden',$definition,20,'SYSTEM',$null,5,$Sddl)
     $task=$Folder.GetTask('CoChem-4.2.7-Warden')
-    Assert-428WardenTask $task $OriginalXml $Sddl $OldRoot $arguments $true $false
-    $instance=$task.Run($null);$health=Wait-428Health $OldRoot;$proof=Open-428ProcessProof $health $OldRoot
+    if($triggerCount -eq 0){
+        Assert-428WardenTask $task $OriginalXml $Sddl $OldRoot $arguments $true $false 0
+    }else{
+        Assert-428WardenTask $task $OriginalXml $Sddl $OldRoot $arguments $true $false
+    }
+    $allowPaused=($OldRoot -ceq 'C:\Program Files\CoChem\Pipeline4.2.7-windows-20261009-r4')
+    $instance=$task.Run($null)
+    $health=if($allowPaused){Wait-428Health $OldRoot $true}else{Wait-428Health $OldRoot}
+    $proof=Open-428ProcessProof $health $OldRoot
     try{
         $task=$Folder.GetTask('CoChem-4.2.7-Warden')
         if($task.GetInstances(0).Count -ne 1 -or $task.GetInstances(0).Item(1).InstanceGuid -cne $instance.InstanceGuid){throw 'Restored previous runtime instance differs.'}
-        $definition=$task.Definition;$definition.Triggers.Item(1).Enabled=$true
-        $null=$Folder.RegisterTaskDefinition('CoChem-4.2.7-Warden',$definition,20,'SYSTEM',$null,5,$Sddl)
-        Assert-428WardenTask ($Folder.GetTask('CoChem-4.2.7-Warden')) $OriginalXml $Sddl $OldRoot $arguments $true $true
+        if($triggerCount -ge 1){
+            $definition=$task.Definition;$definition.Triggers.Item(1).Enabled=$true
+            $null=$Folder.RegisterTaskDefinition('CoChem-4.2.7-Warden',$definition,20,'SYSTEM',$null,5,$Sddl)
+            Assert-428WardenTask ($Folder.GetTask('CoChem-4.2.7-Warden')) $OriginalXml $Sddl $OldRoot $arguments $true $true
+        }else{
+            Assert-428WardenTask ($Folder.GetTask('CoChem-4.2.7-Warden')) $OriginalXml $Sddl $OldRoot $arguments $true $false 0
+        }
     }finally{foreach($p in $proof){$p.Dispose()}}
     'PREVIOUS_RUNTIME_RESTORED_HEALTH_VERIFIED'
 }
@@ -294,6 +347,7 @@ function Invoke-428Launch {
     $script:Root428='C:\Program Files\CoChem\Pipeline4.2.8-windows-20261014-r1'
     $oldR7='C:\Program Files\CoChem\Pipeline4.2.7-windows-20261012-r7-v1'
     $oldR6='C:\Program Files\CoChem\Pipeline4.2.7-windows-20261012-r6-v1'
+    $oldR4='C:\Program Files\CoChem\Pipeline4.2.7-windows-20261009-r4'
     $script:Migration428='C:\ProgramData\CoChemPipeline427\private\migration-428-20261014-v1'
     $script:Sitting428=$null
     $startedUtc=[DateTime]::UtcNow
@@ -346,24 +400,32 @@ function Invoke-428Launch {
         if(-not $locked){throw 'Another deployment sitting is active.'}
         $pins.Add((Open-VerifiedFile $script:python $script:pythonPin (Get-Item -LiteralPath $script:python).Length))
         $phase='preconditions'
-        $old=if(Test-Path -LiteralPath (Join-Path $oldR7 'pipeline.json')){$oldR7}else{$oldR6}
+        $scheduler=New-Object -ComObject 'Schedule.Service';$scheduler.Connect();$folder=$scheduler.GetFolder('\')
+        $task=$folder.GetTask('CoChem-4.2.7-Warden');Assert-428TaskAcl $task
+        $action=$task.Definition.Actions.Item(1)
+        $old=[string]$action.WorkingDirectory
+        if($old -cnotin @($oldR7,$oldR6,$oldR4)){throw 'Live Warden working directory is not a recognized baseline root.'}
         Assert-ProtectedPath (Join-Path $old 'pipeline.json')
         $oldCfg=Get-Content -LiteralPath (Join-Path $old 'pipeline.json') -Raw|ConvertFrom-Json
         $script:targetRoot=$old;$null=Assert-428Tree;Assert-428Interpreter;$script:targetRoot=$script:Root428
         $token=[IO.File]::ReadAllText([string]$oldCfg.token_file).Trim();$script:Headers428=@{Authorization='Bearer '+$token}
-        $scheduler=New-Object -ComObject 'Schedule.Service';$scheduler.Connect();$folder=$scheduler.GetFolder('\')
-        $task=$folder.GetTask('CoChem-4.2.7-Warden');Assert-428TaskAcl $task
-        $action=$task.Definition.Actions.Item(1)
+        $oldTriggerCount=[int]$task.Definition.Triggers.Count
+        $triggerValid=if($old -ceq $oldR4){
+            $oldTriggerCount -eq 0 -or ($oldTriggerCount -eq 1 -and [int]$task.Definition.Triggers.Item(1).Type -eq 9 -and [bool]$task.Definition.Triggers.Item(1).Enabled)
+        }else{
+            $oldTriggerCount -eq 1 -and [int]$task.Definition.Triggers.Item(1).Type -eq 9 -and [bool]$task.Definition.Triggers.Item(1).Enabled
+        }
         if($task.Definition.Actions.Count -ne 1 -or $action.Path -cne (Join-Path $old '.venv\Scripts\python.exe') -or
             $action.WorkingDirectory -cne $old -or
             $task.Definition.Principal.UserId -notin @('SYSTEM','S-1-5-18') -or $task.Definition.Principal.LogonType -ne 5 -or
             $task.Definition.Principal.RunLevel -ne 1 -or $task.Definition.Settings.RestartCount -ne 0 -or
-            $task.Definition.Settings.MultipleInstances -ne 2 -or $task.Definition.Triggers.Count -ne 1 -or
-            $task.Definition.Triggers.Item(1).Type -ne 9 -or -not $task.Enabled -or $task.GetInstances(0).Count -ne 1){throw 'Live Warden definition differs from verified baseline.'}
+            $task.Definition.Settings.MultipleInstances -ne 2 -or -not $triggerValid -or
+            -not $task.Enabled -or $task.GetInstances(0).Count -ne 1){throw 'Live Warden definition differs from verified baseline.'}
         $expectedOldArgs=$action.Arguments
-        $health=Get-428Health;Assert-428Health $health $old
+        $allowOldPaused=($old -ceq $oldR4)
+        $health=Get-428Health;Assert-428Health $health $old $allowOldPaused
         $original=$task.Xml;$originalSddl=$task.GetSecurityDescriptor(7)
-        Assert-428WardenTask $task $original $originalSddl $old $expectedOldArgs $true $true
+        Assert-428WardenTask $task $original $originalSddl $old $expectedOldArgs $true ($oldTriggerCount -ge 1) $oldTriggerCount
         $script:Sitting428='C:\Program Files\CoChem\R428Sitting-windows-20261014-'+[Guid]::NewGuid().ToString('N')
         New-ProtectedDirectory $script:Sitting428
         Write-Host ('Sanitized status reports: '+$script:Sitting428+'\status-*.json')
@@ -390,7 +452,7 @@ function Invoke-428Launch {
         $phase='idle';Write-428Status $phase
         $deadline=[DateTime]::UtcNow.AddMinutes(30);$idle=$false
         do{
-            try{$first=Get-428Health;Assert-428Health $first $old;Start-Sleep -Seconds 5;$second=Get-428Health;Assert-428Health $second $old
+            try{$first=Get-428Health;Assert-428Health $first $old $allowOldPaused;Start-Sleep -Seconds 5;$second=Get-428Health;Assert-428Health $second $old $allowOldPaused
                 $operator=Invoke-RestMethod -Uri 'http://127.0.0.1:47824/operator' -Headers $script:Headers428 -TimeoutSec 10
                 Assert-428Idle $first $second $operator;$idle=$true;break}catch{Start-Sleep -Seconds 10}
         }while([DateTime]::UtcNow -lt $deadline)
@@ -400,10 +462,12 @@ function Invoke-428Launch {
         if($task.Xml -cne $original -or $task.GetSecurityDescriptor(7) -cne $originalSddl){throw 'Warden changed during installation.'}
         Write-428InstallRecord 'warden-task-before.xml.json' @{xml=$original;sddl=$originalSddl;pid=$second.pid;instance_id=$second.instance_id}
         $phase='stop';Write-428Status $phase;$stopRequested=$true
-        $definition=$task.Definition;$definition.Triggers.Item(1).Enabled=$false
-        $null=$folder.RegisterTaskDefinition('CoChem-4.2.7-Warden',$definition,20,'SYSTEM',$null,5,$originalSddl)
-        $task=$folder.GetTask('CoChem-4.2.7-Warden')
-        Assert-428WardenTask $task $original $originalSddl $old $expectedOldArgs $true $false
+        if($oldTriggerCount -ge 1){
+            $definition=$task.Definition;$definition.Triggers.Item(1).Enabled=$false
+            $null=$folder.RegisterTaskDefinition('CoChem-4.2.7-Warden',$definition,20,'SYSTEM',$null,5,$originalSddl)
+            $task=$folder.GetTask('CoChem-4.2.7-Warden')
+            Assert-428WardenTask $task $original $originalSddl $old $expectedOldArgs $true $false $oldTriggerCount
+        }
         try{$task.Stop(0)}catch{
             $cause=$_.Exception;while($cause.InnerException){$cause=$cause.InnerException}
             if($cause.HResult -ne -2147216629){throw}
@@ -415,7 +479,7 @@ function Invoke-428Launch {
         }while([DateTime]::UtcNow -lt $deadline)
         if(-not $gone -or $task.GetInstances(0).Count){throw 'Owned native processes did not exit; preserve running state.'}
         $task.Enabled=$false
-        Assert-428WardenTask $task $original $originalSddl $old $expectedOldArgs $false $false
+        Assert-428WardenTask $task $original $originalSddl $old $expectedOldArgs $false $false $oldTriggerCount
         Assert-428PortFree;$stopped=$true
         $phase='migration';Write-428Status $phase
         Assert-NoReparseAncestors $script:Migration428
@@ -431,11 +495,16 @@ function Invoke-428Launch {
         $task=$folder.GetTask('CoChem-4.2.7-Warden');$definition=$task.Definition
         $action=$definition.Actions.Item(1);$action.Path=Join-Path $script:Root428 '.venv\Scripts\python.exe';$action.WorkingDirectory=$script:Root428
         $action.Arguments='-I -B -m cochem_pipeline daemon --config "'+(Join-Path $script:Root428 'pipeline.json')+'" --queue-launch-output-root "'+(Join-Path $oldCfg.private_root 'queue-launch-428')+'" --docker-wait-seconds 900'
-        $definition.Settings.Enabled=$true;$definition.Triggers.Item(1).Enabled=$false
+        $definition.Settings.Enabled=$true
+        if($definition.Triggers.Count -eq 0){
+            $trigger=$definition.Triggers.Create(9);$trigger.UserId='AETHERDESK\ansac';$trigger.Delay='PT1M';$trigger.Enabled=$false
+        }else{
+            $definition.Triggers.Item(1).Enabled=$false
+        }
         $null=$folder.RegisterTaskDefinition('CoChem-4.2.7-Warden',$definition,20,'SYSTEM',$null,5,$originalSddl)
         $task=$folder.GetTask('CoChem-4.2.7-Warden')
         $newArguments=$action.Arguments
-        Assert-428WardenTask $task $original $originalSddl $script:Root428 $newArguments $true $false
+        Assert-428WardenTask $task $original $originalSddl $script:Root428 $newArguments $true $false 1
         $startRequested=$true;$instance=$task.Run($null)
         $health=Wait-428Health $script:Root428;$proof=Open-428ProcessProof $health $script:Root428
         try{
@@ -443,7 +512,7 @@ function Invoke-428Launch {
             if($task.GetInstances(0).Count -ne 1 -or $task.GetInstances(0).Item(1).InstanceGuid -cne $instance.InstanceGuid){throw '4.2.8 task instance differs.'}
             $definition=$task.Definition;$definition.Triggers.Item(1).Enabled=$true
             $null=$folder.RegisterTaskDefinition('CoChem-4.2.7-Warden',$definition,20,'SYSTEM',$null,5,$originalSddl)
-            Assert-428WardenTask ($folder.GetTask('CoChem-4.2.7-Warden')) $original $originalSddl $script:Root428 $newArguments $true $true
+            Assert-428WardenTask ($folder.GetTask('CoChem-4.2.7-Warden')) $original $originalSddl $script:Root428 $newArguments $true $true 1
         }finally{foreach($p in $proof){$p.Dispose()}}
         $phase='catalog_publication';Write-428Status $phase;$deadline=[DateTime]::UtcNow.AddMinutes(30)
         do{

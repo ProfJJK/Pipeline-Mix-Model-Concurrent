@@ -230,4 +230,3 @@ def publish_task_catalog(conn, plan, native_receipts, *, request_id: str,
         if updated.rowcount != 1:
             raise ValueError('Task catalog generation compare-and-swap failed')
     return {'status': 'PUBLISHED_IN_CALLER_TRANSACTION', 'catalog_sha256': sha, 'catalog': catalog}
-

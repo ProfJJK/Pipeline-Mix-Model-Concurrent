@@ -75,6 +75,7 @@ class PlanningController:
         decision_store=None,
         repair_queue=None,
         audit_runtime=None,
+        owner_approval_broker=None,
     ):
         self.journal, self.store, self.clock = journal, store, clock
         self.research_runtime = research_runtime
@@ -88,10 +89,14 @@ class PlanningController:
         self.decision_store = decision_store
         self.repair_queue = repair_queue
         self.audit_runtime = audit_runtime
+        self.owner_approval_broker = owner_approval_broker
+        self._research_thread = None
         self.gateway = PlanningGateway(journal, store)
         self.journal.model_result = self.gateway.model_result
         if research_runtime is not None and self.journal.search_result is None:
             self.journal.search_result = research_runtime.evidence_store.load_for_journal
+        if owner_approval_broker is not None and self.journal.owner_receipt is None:
+            self.journal.owner_receipt = owner_approval_broker.load_for_journal
         self._lock = threading.Lock()
         with journal._write() as conn:
             conn.executescript('''
@@ -105,14 +110,12 @@ class PlanningController:
 
     @classmethod
     def from_runtime(cls, runtime):
-        spec = runtime.config.task_planning
-        catalog = spec.read_catalog()
-        journal = PlanningJournal(runtime.config.private_root / 'planning428.db', catalog,
-                                  flash_context_limit=spec.flash_context_limit)
+        import secrets
         from .attempt_runtime_428 import AttemptAccountingRuntime
         from .completion_audit_428 import CompletionAuditRuntime
         from .failure_dossier_428 import FailureDossierStore
         from .fracture_runtime_428 import FractureRuntime
+        from .owner_approval_428 import OwnerApprovalBroker
         from .pivot_runtime_428 import PivotRuntime
         from .repair_queue_428 import RepairQueue
         from .research_evidence_428 import ResearchEvidenceStore
@@ -122,6 +125,40 @@ class PlanningController:
         from .task_execution_428 import SimpleTaskExecutionRuntime
         from .task_release_428 import TaskReleaseRuntime
         from .workflow_428 import AttemptLedger
+
+        spec = runtime.config.task_planning
+        catalog = spec.read_catalog()
+        secret_file = runtime.config.private_root / 'owner_approval.secret'
+        shared_tokens = set()
+        token_file = getattr(runtime.config, 'token_file', None)
+        if token_file is not None:
+            try:
+                tok = Path(token_file).read_text(encoding='utf-8').strip()
+                if tok:
+                    shared_tokens.add(tok)
+            except OSError:
+                pass
+        if secret_file.is_file():
+            owner_secret = secret_file.read_text(encoding='utf-8').strip()
+        else:
+            owner_secret = 'owner428-' + secrets.token_hex(32)
+            try:
+                with secret_file.open('x', encoding='utf-8') as out:
+                    out.write(owner_secret + '\n')
+            except FileExistsError:
+                owner_secret = secret_file.read_text(encoding='utf-8').strip()
+        owner_broker = OwnerApprovalBroker(
+            runtime.config.private_root / 'owner428.db',
+            owner_secret=owner_secret,
+            shared_agent_tokens=shared_tokens,
+        )
+        runtime.owner_approval_broker = owner_broker
+        journal = PlanningJournal(
+            runtime.config.private_root / 'planning428.db',
+            catalog,
+            flash_context_limit=spec.flash_context_limit,
+            owner_receipt=owner_broker.load_for_journal,
+        )
         ev_store = ResearchEvidenceStore(runtime.config.private_root / 'research428.db')
         res_runtime = ResearchRuntime(
             ev_store,
@@ -130,7 +167,7 @@ class PlanningController:
             knowledge_authority=getattr(runtime, 'knowledge_authority', None),
         )
         exec_runtime = SimpleTaskExecutionRuntime(journal, runtime.store)
-        rel_runtime = TaskReleaseRuntime(journal, runtime.store)
+        rel_runtime = TaskReleaseRuntime(journal, runtime.store, owner_broker=owner_broker)
         ledger = AttemptLedger(runtime.config.private_root / 'attempts428.db')
         att_runtime = AttemptAccountingRuntime(ledger, store=runtime.store)
         dos_store = FailureDossierStore(ledger)
@@ -164,7 +201,39 @@ class PlanningController:
             decision_store=dec_store,
             repair_queue=rep_queue,
             audit_runtime=aud_runtime,
+            owner_approval_broker=owner_broker,
         )
+
+    def kick_research_worker(self) -> bool:
+        if self.research_runtime is None or not hasattr(self.research_runtime, 'has_due_work'):
+            return False
+        if self._research_thread is not None and self._research_thread.is_alive():
+            return False
+        if not self.research_runtime.has_due_work():
+            return False
+
+        def _worker():
+            try:
+                count = self.research_runtime.step_worker()
+                if count > 0:
+                    now = self.clock()
+                    with self.journal._write() as conn:
+                        conn.execute(
+                            "UPDATE planning428_progress SET next_check_at=? WHERE status='WAITING_FOR_RESEARCH'",
+                            (now,),
+                        )
+            except Exception:
+                pass
+
+        self._research_thread = threading.Thread(target=_worker, name='research-428', daemon=True)
+        self._research_thread.start()
+        return True
+
+    def close(self) -> None:
+        thread = self._research_thread
+        if thread is not None and thread.is_alive():
+            thread.join(timeout=10)
+
 
     def has_task(self, task_id) -> bool:
         return self.journal.has_task(task_id)

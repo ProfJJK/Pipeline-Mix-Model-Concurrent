@@ -680,3 +680,66 @@ def test_owner_approval_gate_cancellation_shutdown_restart_and_locked_decision_p
         assert st_locked["locked_decision"]["failures"] == 30
     finally:
         env.store.close()
+
+
+def test_planning_controller_from_runtime_wires_owner_broker_and_out_of_band_research_worker(
+    tmp_path: Path,
+):
+    catalog = _load_catalog()
+    store = JobStore(
+        tmp_path / "jobs.db",
+        routing_policy=load_routing_policy({"policy_version": 3}),
+    )
+    try:
+        private_root = tmp_path / "private"
+        private_root.mkdir(parents=True)
+        token_file = tmp_path / "controller.token"
+        token_file.write_text("controller-bearer-token\n", encoding="utf-8")
+        rt = SimpleNamespace(
+            config=SimpleNamespace(
+                private_root=private_root,
+                token_file=token_file,
+                task_planning=SimpleNamespace(
+                    enabled=True,
+                    flash_context_limit=100000,
+                    read_catalog=lambda: catalog,
+                ),
+            ),
+            store=store,
+        )
+        controller = PlanningController.from_runtime(rt)
+        try:
+            assert getattr(rt, "owner_approval_broker", None) is not None
+            assert controller.release_runtime is not None
+            assert controller.release_runtime.board.owner_broker is rt.owner_approval_broker
+            assert controller.journal.owner_receipt is not None
+            assert (private_root / "owner_approval.secret").read_text(
+                encoding="utf-8"
+            ).strip() != "controller-bearer-token"
+
+            # Verify out-of-band research worker runs via kick_research_worker()
+            assert controller.research_runtime is not None
+            controller.research_runtime.enqueue(
+                {
+                    "schema": "cochem-planning-intent/4.2.8",
+                    "action": "controller_research",
+                    "task_id": "task-oob",
+                    "srs_sha256": "a" * 64,
+                    "query": "Out of band research test",
+                    "channels": ["internet", "wiki_rag", "papers"],
+                }
+            )
+            assert controller.research_runtime.has_due_work() is True
+            called = threading.Event()
+
+            def _fake_step_worker(*, limit: int = 4) -> int:
+                called.set()
+                return 1
+
+            controller.research_runtime.step_worker = _fake_step_worker  # type: ignore[method-assign]
+            assert controller.kick_research_worker() is True
+            assert called.wait(timeout=5.0) is True
+        finally:
+            controller.close()
+    finally:
+        store.close()

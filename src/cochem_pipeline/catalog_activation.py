@@ -120,4 +120,3 @@ def compile_task_catalog_change(
         retired_profile_ids=retired_profile_ids,
         model_limits=model_limits,
     )
-

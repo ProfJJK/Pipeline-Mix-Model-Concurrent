@@ -200,4 +200,3 @@ def test_gap_resolution_packet_matches_preserved_artifact_and_exposes_floor_delt
     ]
     assert len(changed_rows) == len(packet['calibration_changes']) == 7
     assert packet['default_runtime_policy'] == 'hold_strict_supplied_floors'
-

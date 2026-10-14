@@ -310,6 +310,3 @@ class RepairQueue:
                     (json.dumps(result, sort_keys=True), incident_id),
                 )
         return self.get_incident(incident_id)
-
-
-

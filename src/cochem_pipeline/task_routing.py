@@ -557,4 +557,3 @@ def build_gap_resolution_packet(owner_raw, observations):
             ),
         ],
     )
-

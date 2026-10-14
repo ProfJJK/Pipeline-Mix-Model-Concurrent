@@ -1,77 +1,72 @@
 # 4.2.8 source progress
 
 Current coding handoff: [root handoff](../../PIPELINE_4.2.8_AGENT_HANDOFF.md),
-[implementation plan](../../tasks/plan.md) and [remaining tasks](../../tasks/todo.md).
-These assign the remaining work from source checkpoint `c33c7ea`; they do not
-report that work as completed or authorize an old deployment command.
+[implementation plan](../../tasks/plan.md), [remaining tasks](../../tasks/todo.md),
+[owner launch runbook](OWNER_LAUNCH.md), and [release review](RELEASE_REVIEW.md).
 
-This branch is an implementation checkpoint, not a deployed or launch-ready
-release. Last verified host evidence is the R4 restoration v11; this is not a fresh live check.
-The R6 native failure and tested source repair are documented separately in
-`../R6_NATIVE_LATEST_2026-10-13.md`; no spent package has been modified.
+All source implementation and release-packaging tasks (`P428-00` through `P428-27`)
+are implemented and exercised in source/test fixtures on `feature/4.2.8-task-routing`.
+Only `P428-28` (physical elevated owner execution of `run_428_launch.ps1 -Apply`)
+remains pending owner execution; engineering sessions do not claim live host launch
+or full SRS acceptance before that sitting completes.
 
-## Implemented and exercised
+## Implemented and exercised (`P428-00` through `P428-27`)
 
-- Reproducible audit of the owner's two PDFs and JSON; preserved reference
-  inputs and numeric publisher observations; a readable 110-row matrix with
-  five ranked profiles per task-type/tier combination, scores and reference
-  evaluation costs. Missing scores are not estimated.
-- Versioned task-type selection enforcing every assigned type's floor,
+- Reproducible audit of the owner's two PDFs and JSON (`P428-00`, `P428-01`, `P428-19`);
+  preserved reference inputs and numeric publisher observations; a readable 110-row
+  matrix with five ranked profiles per task-type/tier combination, scores, reference
+  evaluation costs, and explicit provider-diverse reviewer selection.
+- Versioned task-type selection (`P428-02`) enforcing every assigned type's floor,
   different-model reviewer selection, maximum-effort tier-10 review and
   availability backoff. Held comparison entries cannot dispatch.
-- Exact Argon Low/Medium/High binding proposals from an explicit captured Agy
-  catalog and executable identity. Missing catalog slugs remain held.
-- Durable SRS/research/owner-approval/review/WBS/microtask planning journal,
+- Exact Argon Low/Medium/High binding proposals (`P428-03`) from an explicit captured Agy
+  catalog and executable identity, with non-blocking availability handling for HTTP `429`
+  quota responses vs hard hold on protocol/identity/cleanup failures (`P428-20`).
+- Durable SRS/research/owner-approval/review/WBS/microtask planning journal (`P428-04`),
   immutable revision/evidence bindings and separate trusted evidence ports.
   Model text cannot create a human approval or a search receipt.
-- Conservative controller-computed context budget; model token estimates
+- Conservative controller-computed context budget (`P428-05`); model token estimates
   cannot bypass review/decomposition. A producer change invalidates an earlier
   independent review even when the SRS text remains unchanged.
-- Planning intent integration with the existing Chapter 06 job board and
+- Planning intent integration (`P428-06`, `P428-07`) with the existing Chapter 06 job board and
   native prompt/route validation. Planning completions are semantically checked
   before commit and imported only after exact cleanup evidence. Existing jobs
-  and captured policies survive the new job-kind schema migration.
-- A bounded runtime planning pump now submits and imports those jobs, survives
-  restart without duplicates, rotates fairly across waiting tasks and persists
-  sanitized per-task status. Authenticated `/tasks/submit` and `/tasks/status/`
-  expose intake and progress. They cannot set a route or manufacture approval.
-  Large status projections use the existing serialized HTTP projection lock.
-  The feature defaults off and requires a pinned protected host-accepted catalog,
-  v3 routing and four shared slots. The research candidate cannot enable it.
-- Durable 10/20/30 quality-failure lineage accounting, research/pivot/fracture
-  requirements and locked-task decision packets. Availability failures do not
-  consume quality attempts; fractures retain their parent budget.
-- Separate repair incident queue with dedicated-profile checks, maximum-effort
-  tier-10 selection, priority over competing new quota reservations, and
-  repository/commit/test/cleanup evidence contracts. No repair agent is launched.
+  and captured policies survive the new job-kind schema migration (`P428-25`).
+- Bounded runtime planning pump (`P428-07`) with out-of-band research worker execution,
+  restart safety without duplicates, fair rotation across waiting tasks, and
+  sanitized per-task status under `/tasks/submit` and `/tasks/status/`.
+- Controller-owned research adapters (`P428-10`, `P428-11`, `P428-12`) for HTTPS
+  Wikipedia/OpenAlex search with DNS/redirect/size/content-type guards, read-only
+  Wiki RAG citations bound to manifest generation, and bounded asynchronous
+  polling in `research428.db` outside shared worker slots.
+- Dedicated owner approval broker (`P428-13`) in `owner428.db` with a separate
+  owner approval secret (`owner_approval.secret` disjoint from `controller.token`),
+  exact SRS/WBS digest binding, single-use challenge nonces, and automatic
+  invalidation on revision change or upward complexity reassessment.
+- Simple-task direct execution (`P428-14`) and complex-task WBS/microtask release
+  (`P428-15`) with DAG cycle rejection, assembly/final-test dependency gates,
+  and automatic halt into `WAITING_FOR_OWNER_APPROVAL` when reassessed complexity
+  reaches `>= 8`.
+- Durable 10/20/30 quality-failure lineage accounting (`P428-08`, `P428-16`),
+  structured failure dossiers (`P428-17`), research-backed pivot (`10`, `20`) and
+  fracture (`25`) transitions (`P428-18`), and locked-task decision packets (`30`).
+  Availability failures do not consume quality attempts; fractures retain their parent budget.
+- Completion audit and repair incident runtime (`P428-09`, `P428-21`) with dedicated
+  repair profiles (`repair_claude`, `repair_codex`, `repair_agy`) in `repair428.db`
+  and `SupervisorRepairAdmission428` (`P428-22`) enforcing the 4-seat total native
+  CLI ceiling while prioritizing repair reservations ahead of new normal reservations.
+- Prior R5/R6 repair custody and saved Fable `target-23` HTTP `429` replay
+  verification (`P428-24`), stopped-runtime offline wheel installer (`P428-25`),
+  single owner entry point (`run_428_launch.ps1`, `accept_428_native.py` — `P428-26`)
+  supporting the live `AETHERDESK` `R4 v11` + `R6 target-23` hold baseline as well as
+  `R6`/`R7` sitting receipts, and immutable release bundle preparation (`P428-27`).
 
-The latest serialized regression run passed 472 tests with two real-process
-tests excluded. A separate existing HTTP regression run passed 54 tests, with
-ten coding tests excluded from that run. These cover the planning chain, restart,
-cleanup, approval and research boundaries, quota accounting, configuration and
-existing routing behavior. One subsequently added runtime-maintenance integration
-test also passed. All model execution evidence is an explicit inert
-fixture. Native providers, protected state and host tasks were not exercised.
+## Remaining owner action (`P428-28`)
 
-## Remaining implementation and acceptance
-
-1. Actual controller internet/wiki/paper research adapters with durable evidence
-   and the separate authenticated human approval interface. The implemented pump
-   waits at these boundaries; ordinary MCP/API credentials cannot approve an SRS.
-2. Materialize/reassess execution microtasks on the job board, including explicit
-   assembly/final-test dependencies and approval of newly high-complexity work.
-   Integrate the lineage attempt ledger with actual runtime outcomes.
-3. Connect completion audits and the independent repair supervisor to verified
-   shared-slot/quota ownership and safe direct repository execution. The queue
-   library is not an executing self-healing system.
-4. Resolve the explicit benchmark/reviewer gaps without silently lowering floors
-   or inventing missing effort results; complete installed CLI acceptance for
-   Argon and every newly activated selector.
-5. Complete the exact R6 host-error verification/continuation, update installer
-   bindings, and prepare/review a fresh consolidated owner launch package.
-
-This checkpoint does not include a reviewed 4.2.8 launch command. All delivered old
-4.2.7 packages, credentials, databases and historical receipts remain preserved.
-
-See `LAUNCH_PATH.md` for the release sequence and the owner's single-sitting
-requirement. No host launch or sign-in is needed to continue source integration.
+1. Run the single elevated owner command in `docs/4.2.8/OWNER_LAUNCH.md` in an
+   Administrator Windows PowerShell 5.1 window as `AETHERDESK\ansac`.
+2. Complete any front-loaded interactive prompts (dedicated repair-profile sign-ins
+   if not yet cached, and owner approval secret setup) during the initial 20-minute
+   window, then walk away after the green banner while the unattended install,
+   native acceptance, idle drain, stop, SYSTEM SQLite migration, cutover, and
+   catalog publication verification complete.

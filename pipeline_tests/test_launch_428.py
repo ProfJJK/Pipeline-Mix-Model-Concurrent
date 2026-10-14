@@ -473,3 +473,126 @@ def test_packaged_read_only_launch_plan_and_tamper_detection_428(tmp_path: Path)
         timeout=60,
     )
     assert proc_tamper.returncode != 0
+
+
+def test_r4_v11_and_r6_target23_hold_baseline_and_zero_trigger_warden_support(
+    tmp_path: Path,
+) -> None:
+    cochem_root = tmp_path / "CoChem"
+    r4_retarget = cochem_root / "WardenRetarget4.2.7-windows-20261011-r4-v11"
+    r6_root = cochem_root / "Pipeline4.2.7-windows-20261012-r6-v1"
+    r6_hold = (
+        cochem_root
+        / "R6Acceptance4.2.7-windows-20261012-v1-native-47e4889af6284a9fad018142a14d5371"
+    )
+    r6_sibling_a = cochem_root / "R6Acceptance4.2.7-windows-20261012-v1-native-54220"
+    r6_sibling_b = cochem_root / "R6Acceptance4.2.7-windows-20261012-v1-native-f271d"
+    r4_retarget.mkdir(parents=True)
+    r6_root.mkdir(parents=True)
+    r6_hold.mkdir(parents=True)
+    r6_sibling_a.mkdir(parents=True)
+    r6_sibling_b.mkdir(parents=True)
+
+    (r4_retarget / "start-receipt.json").write_text(
+        json.dumps(
+            {
+                "status": "WARDEN_R4_RESTARTED_HEALTH_VERIFIED",
+                "runtime_root": r"C:\Program Files\CoChem\Pipeline4.2.7-windows-20261009-r4",
+            }
+        ),
+        encoding="utf-8",
+    )
+    (r6_root / "install-after.json").write_text(
+        json.dumps({"status": "STOPPED_RUNTIME_INSTALLED"}),
+        encoding="utf-8",
+    )
+    cfg_bytes = b'{"version":"4.2.7-r6"}\n'
+    (r6_root / "pipeline.json").write_bytes(cfg_bytes)
+    cfg_pin = hashlib.sha256(cfg_bytes).hexdigest()
+    (r6_hold / "held.json").write_text(
+        json.dumps({"status": "HELD", "phase": "native"}),
+        encoding="utf-8",
+    )
+    (r6_hold / "native").mkdir(parents=True)
+    (r6_hold / "native" / "native-held.json").write_text(
+        json.dumps({"phase": "target-23", "completed": 23}),
+        encoding="utf-8",
+    )
+
+    escaped_root = str(cochem_root).replace("'", "''")
+    row = run_ps_428(
+        f"""
+function Assert-ProtectedPath {{param([string]$Path)}}
+$ok=@(Get-428CompletedBaseline '{cfg_pin}' '{escaped_root}')
+$bad=@(Get-428CompletedBaseline ('b'*64) '{escaped_root}')
+$r4Xml='<Task xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task"><RegistrationInfo><Description>r4</Description></RegistrationInfo><Triggers /><Settings><Enabled>true</Enabled><MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy></Settings><Actions><Exec><Command>old</Command><Arguments>old</Arguments><WorkingDirectory>old</WorkingDirectory></Exec></Actions></Task>'
+$r428Xml='<Task xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task"><RegistrationInfo><Description>428</Description></RegistrationInfo><Triggers><LogonTrigger><Enabled>false</Enabled><UserId>AETHERDESK\\ansac</UserId><Delay>PT1M</Delay></LogonTrigger></Triggers><Settings><Enabled>true</Enabled><MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy></Settings><Actions><Exec><Command>new</Command><Arguments>new</Arguments><WorkingDirectory>new</WorkingDirectory></Exec></Actions></Task>'
+$bootXml='<Task xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task"><RegistrationInfo><Description>428</Description></RegistrationInfo><Triggers><BootTrigger><Enabled>true</Enabled></BootTrigger></Triggers><Settings><Enabled>true</Enabled><MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy></Settings><Actions><Exec><Command>new</Command><Arguments>new</Arguments><WorkingDirectory>new</WorkingDirectory></Exec></Actions></Task>'
+$r4Health=[pscustomobject]@{{
+    service_identity='SYSTEM';
+    source_root='C:\\Program Files\\CoChem\\Pipeline4.2.7-windows-20261009-r4\\.venv\\Lib';
+    admission_capacity=0;
+    components=[pscustomobject]@{{warden_controller=[pscustomobject]@{{admission_ready=$false}}}}
+}}
+$pausedAllowed=$false;try{{Assert-428Health $r4Health 'C:\\Program Files\\CoChem\\Pipeline4.2.7-windows-20261009-r4' $true;$pausedAllowed=$true}}catch{{}}
+$pausedRejected=$false;try{{Assert-428Health $r4Health 'C:\\Program Files\\CoChem\\Pipeline4.2.7-windows-20261009-r4' $false}}catch{{$pausedRejected=$true}}
+$script:events=[Collections.Generic.List[string]]::new()
+function Assert-428PortFree {{$script:events.Add('port')}}
+function Invoke-428Migration {{param($S,$F,$Rollback) $script:events.Add('rollback:'+$Rollback);@{{status='PRE_CUTOVER_DATABASE_RESTORED'}}}}
+function Assert-428TaskAcl {{param($Task)}}
+function Wait-428Health {{param($Root,[bool]$AllowPausedAdmission=$false) $script:events.Add('wait:'+$AllowPausedAdmission);@{{pid=42;instance_id='inst-r4'}}}}
+function Open-428ProcessProof {{param($Health,$Root) $script:events.Add('proof');@()}}
+$r4Root='C:\\Program Files\\CoChem\\Pipeline4.2.7-windows-20261009-r4'
+$fakeAction=[pscustomobject]@{{Type=0;Path=($r4Root+'\\.venv\\Scripts\\python.exe');Arguments='daemon';WorkingDirectory=$r4Root}}
+$fakeActions=[pscustomobject]@{{Count=1}}
+$fakeActions|Add-Member -MemberType ScriptMethod -Name Item -Value {{param($i) $fakeAction}}
+$fakeTriggers=[pscustomobject]@{{Count=0}}
+$fakeDef=[pscustomobject]@{{
+    XmlText=$r4Xml;
+    Actions=$fakeActions;
+    Triggers=$fakeTriggers;
+    Settings=[pscustomobject]@{{Enabled=$true}}
+}}
+$fakeInstances=[pscustomobject]@{{Count=1}}
+$fakeInstances|Add-Member -MemberType ScriptMethod -Name Item -Value {{param($i)[pscustomobject]@{{InstanceGuid='g-r4'}}}}
+$fakeTask=[pscustomobject]@{{Definition=$fakeDef;Xml=$r4Xml;Enabled=$true}}
+$fakeTask|Add-Member -MemberType ScriptMethod -Name GetSecurityDescriptor -Value {{param($flags) 'SDDL'}}
+$fakeTask|Add-Member -MemberType ScriptMethod -Name Run -Value {{param($x) $script:events.Add('run-r4');[pscustomobject]@{{InstanceGuid='g-r4'}}}}
+$fakeTask|Add-Member -MemberType ScriptMethod -Name GetInstances -Value {{param($x) $fakeInstances}}
+$fakeScheduler=[pscustomobject]@{{}}
+$fakeScheduler|Add-Member -MemberType ScriptMethod -Name NewTask -Value {{param($x) $fakeDef}}
+$fakeFolder=[pscustomobject]@{{}}
+$fakeFolder|Add-Member -MemberType ScriptMethod -Name RegisterTaskDefinition -Value {{param($n,$d,$f,$u,$p,$l,$s) $script:events.Add('register-r4');$fakeTask}}
+$fakeFolder|Add-Member -MemberType ScriptMethod -Name GetTask -Value {{param($n) $fakeTask}}
+$restoreStatus=Restore-428BeforeStart $fakeScheduler $fakeFolder $r4Xml 'SDDL' $r4Root $true $true
+@{{
+    ok_count=$ok.Count;
+    ok_status=$ok[0].status;
+    bad_count=$bad.Count;
+    cutover_xml_invariant=((Get-428InvariantDefinition $r4Xml) -ceq (Get-428InvariantDefinition $r428Xml));
+    boot_trigger_rejected=((Get-428InvariantDefinition $r4Xml) -cne (Get-428InvariantDefinition $bootXml));
+    paused_allowed=$pausedAllowed;
+    paused_rejected=$pausedRejected;
+    restore_status=$restoreStatus;
+    events=@($script:events)
+}}|ConvertTo-Json -Compress
+"""
+    )
+    assert row == {
+        "ok_count": 1,
+        "ok_status": "R4_RUNNING_R6_TARGET23_HOLD_BASELINE_VERIFIED",
+        "bad_count": 0,
+        "cutover_xml_invariant": True,
+        "boot_trigger_rejected": True,
+        "paused_allowed": True,
+        "paused_rejected": True,
+        "restore_status": "PREVIOUS_RUNTIME_RESTORED_HEALTH_VERIFIED",
+        "events": [
+            "port",
+            "rollback:True",
+            "register-r4",
+            "run-r4",
+            "wait:True",
+            "proof",
+        ],
+    }
