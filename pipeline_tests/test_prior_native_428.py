@@ -260,3 +260,59 @@ def test_replay_rejects_wrong_hash_missing_file_and_permission_error_with_saniti
     proj_missing = sanitize_replay_error(exc_missing.value)
     assert proj_missing["code"] == "PROTECTED_READ_FILE_MISSING"
     assert "Missing private log" not in json.dumps(proj_missing)
+
+
+def test_default_protected_reader_allows_elevated_admin_without_require_system_and_enforces_acl_and_hash(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from cochem_pipeline import windows as win
+    from scripts.verify_prior_native_428 import _default_protected_reader
+
+    monkeypatch.setattr(
+        win,
+        "require_system",
+        lambda: (_ for _ in ()).throw(win.WindowsIsolationError("must not require SYSTEM")),
+    )
+    prog_files = tmp_path / "Program Files"
+    cochem_dir = prog_files / "CoChem"
+    cochem_dir.mkdir(parents=True)
+    target = cochem_dir / "result.json"
+    payload = b'{"status":"ALL_SESSIONS_VERIFIED"}'
+    target.write_bytes(payload)
+    digest = _sha256(payload)
+
+    monkeypatch.setenv("ProgramFiles", str(prog_files))
+    monkeypatch.setattr(
+        win,
+        "_acl",
+        lambda p: (win.ADMIN_SID, True, [(win.SYSTEM_SID, win.FULL_CONTROL, 0), (win.ADMIN_SID, win.FULL_CONTROL, 0)]),
+    )
+
+    assert _default_protected_reader(target, digest, 4096) == payload
+
+    # Wrong hash raises PriorNativeReplayError("PROTECTED_READ_HASH_OR_BOUND_MISMATCH")
+    with pytest.raises(PriorNativeReplayError, match="PROTECTED_READ_HASH_OR_BOUND_MISMATCH"):
+        _default_protected_reader(target, "0" * 64, 4096)
+
+    # Untrusted writer ACE raises PriorNativeReplayError wrapping ValueError("Untrusted code writes...")
+    monkeypatch.setattr(
+        win,
+        "_acl",
+        lambda p: (win.ADMIN_SID, True, [("S-1-5-32-545", 0x500D0116, 0)]),
+    )
+    with pytest.raises(PriorNativeReplayError, match="PROTECTED_READ_HASH_OR_BOUND_MISMATCH") as exc_acl:
+        _default_protected_reader(target, digest, 4096)
+    assert "Untrusted code writes" in str(exc_acl.value.__cause__)
+
+    # Path outside ProgramFiles/SystemRoot raises PriorNativeReplayError wrapping ValueError
+    outside = tmp_path / "outside.json"
+    outside.write_bytes(payload)
+    monkeypatch.setattr(
+        win,
+        "_acl",
+        lambda p: (win.SYSTEM_SID, True, [(win.SYSTEM_SID, win.FULL_CONTROL, 0)]),
+    )
+    with pytest.raises(PriorNativeReplayError, match="PROTECTED_READ_HASH_OR_BOUND_MISMATCH") as exc_out:
+        _default_protected_reader(outside, digest, 4096)
+    assert "protected Program Files/Windows paths" in str(exc_out.value.__cause__)
+

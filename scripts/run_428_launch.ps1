@@ -235,6 +235,29 @@ function Assert-428PortFree {
     try{$socket.ExclusiveAddressUse=$true;$socket.Bind([Net.IPEndPoint]::new([Net.IPAddress]::Loopback,47824))}finally{$socket.Dispose()}
 }
 
+function Assert-428PrivateReceipt {
+    param([string]$Path,[string]$PrivateRoot='C:\ProgramData\CoChemPipeline427\private')
+    $full=Get-LocalPath $Path
+    $root=Get-LocalPath $PrivateRoot
+    if(-not $full.StartsWith($root+'\',[StringComparison]::OrdinalIgnoreCase)){throw '4.2.8 private receipt must reside under ProgramData private root.'}
+    Assert-NoReparseAncestors $full
+    $item=Get-Item -LiteralPath $full -Force
+    if($item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)){throw '4.2.8 private receipt must be a regular file.'}
+    $cur=$item
+    while($null -ne $cur){
+        $acl=Get-Acl -LiteralPath $cur.FullName
+        $owner=$acl.GetOwner([Security.Principal.SecurityIdentifier]).Value
+        if($owner -notin @('S-1-5-18','S-1-5-32-544')){throw ('Untrusted owner on 4.2.8 private receipt path: '+$cur.FullName)}
+        foreach($rule in @($acl.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier]))){
+            if($rule.AccessControlType -eq [Security.AccessControl.AccessControlType]::Allow -and
+                $rule.IdentityReference.Value -notin @('S-1-5-18','S-1-5-32-544')){
+                throw ('Untrusted principal granted access on 4.2.8 private receipt path: '+$cur.FullName)}}
+        if($cur.FullName.TrimEnd('\') -ieq $root.TrimEnd('\')){return}
+        $cur=if($cur -is [IO.DirectoryInfo]){$cur.Parent}else{$cur.Directory}
+    }
+    throw 'Private receipt ancestry did not reach ProgramData private root.'
+}
+
 function Invoke-428Migration {
     param($Scheduler,$Folder,[bool]$Rollback)
     Assert-428PortFree
@@ -263,12 +286,16 @@ function Invoke-428Migration {
         if($finished){break}
     }while([DateTime]::UtcNow -lt $deadline)
     if(-not $finished -or [int]$task.LastTaskResult -ne 0 -or -not (Test-Path -LiteralPath $receipt)){
+        $held=Join-Path $script:Migration428 $(if($Rollback){'rollback-held.json'}else{'migration-held.json'})
+        if(Test-Path -LiteralPath $held){Get-Content -LiteralPath $held -Raw|Write-Host}
         throw 'SYSTEM 4.2.8 migration held; preserve its task and private evidence.'}
     $task.Enabled=$false
     $result=Get-Content -LiteralPath $receipt -Raw|ConvertFrom-Json
     $expected=if($Rollback){'PRE_CUTOVER_DATABASE_RESTORED'}else{'MIGRATION_428_VERIFIED'}
-    Assert-ProtectedPath $receipt
+    Assert-428PrivateReceipt $receipt
     if($result.status -cne $expected -or $result.backup_preserved -ne $true){throw 'SYSTEM 4.2.8 migration receipt differs.'}
+    if(-not $Rollback -and ($result.original_rows_preserved -ne $true -or $result.baseline_digest -cne $script:BaselineDigest428)){
+        throw 'SYSTEM 4.2.8 migration baseline or preservation differs.'}
     return $result
 }
 
@@ -344,11 +371,11 @@ function Invoke-428Launch {
     param([string]$ManifestPath,[string]$ManifestHash,[bool]$ApplyRequested,[string]$Directory)
     $pins=[Collections.Generic.List[IO.Stream]]::new();$processes=$null;$mutex=$null;$locked=$false;$ownerMutex=$null;$ownerLocked=$false;$awake=$null
     $stopped=$false;$stopRequested=$false;$migrationRequested=$false;$migrated=$false;$startRequested=$false;$phase='package'
-    $script:Root428='C:\Program Files\CoChem\Pipeline4.2.8-windows-20261014-r1'
+    $script:Root428='C:\Program Files\CoChem\Pipeline4.2.8-windows-20261014-r2'
     $oldR7='C:\Program Files\CoChem\Pipeline4.2.7-windows-20261012-r7-v1'
     $oldR6='C:\Program Files\CoChem\Pipeline4.2.7-windows-20261012-r6-v1'
     $oldR4='C:\Program Files\CoChem\Pipeline4.2.7-windows-20261009-r4'
-    $script:Migration428='C:\ProgramData\CoChemPipeline427\private\migration-428-20261014-v1'
+    $script:Migration428='C:\ProgramData\CoChemPipeline427\private\migration-428-20261014-v2'
     $script:Sitting428=$null
     $startedUtc=[DateTime]::UtcNow
     $authority='C:\Program Files\CoChem\RoutingCatalog4.2.8';$folder=$null;$original=$null;$originalSddl=$null;$old=$null
@@ -398,6 +425,7 @@ function Invoke-428Launch {
         $mutex=[Threading.Mutex]::new($false,'Global\CoChem428-Launch')
         try{$locked=$mutex.WaitOne(0)}catch [Threading.AbandonedMutexException]{$locked=$true;throw 'Earlier 4.2.8 deployment was interrupted; preserve evidence.'}
         if(-not $locked){throw 'Another deployment sitting is active.'}
+        $script:BaselineDigest428=$manifest.baseline_policy_digest
         $pins.Add((Open-VerifiedFile $script:python $script:pythonPin (Get-Item -LiteralPath $script:python).Length))
         $phase='preconditions'
         $scheduler=New-Object -ComObject 'Schedule.Service';$scheduler.Connect();$folder=$scheduler.GetFolder('\')

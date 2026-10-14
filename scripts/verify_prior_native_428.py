@@ -241,17 +241,52 @@ def inventory_r5_r6_source_repairs() -> dict[str, Any]:
 
 
 def _default_protected_reader(path: Path, expected_sha256: str, max_bytes: int) -> bytes:
-    """Read a protected host file under SYSTEM using cochem_pipeline.windows."""
+    """Read a protected host file under SYSTEM or elevated Administrator using cochem_pipeline.windows."""
+    import os
     from cochem_pipeline import windows as win
-    from cochem_pipeline.r6_host_acceptance import read_bound
 
     try:
-        return read_bound(win, path, expected_sha256, max_bytes)
+        path = Path(path)
+        if not path.is_absolute():
+            raise ValueError("Acceptance input path must be absolute")
+        for current in (path, *path.parents):
+            info = current.lstat()
+            if current.is_symlink() or getattr(info, "st_file_attributes", 0) & 0x400:
+                raise ValueError("Acceptance input traverses a redirected path")
+        resolved = path.resolve(strict=True)
+        bases = [
+            Path(os.environ[key]).resolve()
+            for key in ("ProgramFiles", "SystemRoot")
+            if key in os.environ
+        ]
+        base = next((entry for entry in bases if resolved == entry or entry in resolved.parents), None)
+        if base is None:
+            raise ValueError("Acceptance input must reside under protected Program Files/Windows paths")
+        trusted = {win.SYSTEM_SID, win.ADMIN_SID, win.TRUSTED_INSTALLER_SID}
+        current = resolved
+        while True:
+            owner, _, rules = win._acl(current)
+            if owner not in trusted or any(
+                sid not in trusted and not flags & 8 and mask & 0x500D0116
+                for sid, mask, flags in rules
+            ):
+                raise ValueError(f"Untrusted code writes or path replacement are possible: {current}")
+            if current == base:
+                break
+            current = current.parent
+        info = resolved.stat()
+        if info.st_nlink != 1 or not 0 <= info.st_size <= max_bytes:
+            raise ValueError("Acceptance input exceeds bounds or has alternate links")
+        with resolved.open("rb") as stream:
+            data = stream.read(max_bytes + 1)
+        if len(data) != info.st_size or (expected_sha256 and hashlib.sha256(data).hexdigest() != expected_sha256):
+            raise ValueError("Acceptance input differs from the pinned bytes")
+        return data
     except PermissionError as exc:
         raise PriorNativeReplayError("PROTECTED_READ_PERMISSION_DENIED") from exc
     except FileNotFoundError as exc:
         raise PriorNativeReplayError("PROTECTED_READ_FILE_MISSING") from exc
-    except ValueError as exc:
+    except (ValueError, win.WindowsIsolationError) as exc:
         raise PriorNativeReplayError("PROTECTED_READ_HASH_OR_BOUND_MISMATCH") from exc
 
 

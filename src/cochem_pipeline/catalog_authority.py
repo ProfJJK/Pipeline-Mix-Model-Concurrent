@@ -16,7 +16,7 @@ import stat
 from .catalog_activation import CatalogChange, decode_proposal
 from .routing import _strict_json
 
-AUTHORITY_ROOT = Path(r'C:\Program Files\CoChem\RoutingCatalog4.2.7')
+AUTHORITY_ROOT = Path(r'C:\Program Files\CoChem\RoutingCatalog4.2.8')
 
 
 @dataclass(frozen=True)
@@ -86,6 +86,8 @@ class _WindowsCustody:
         handle = self.api['kernel32'].CreateFileW(str(path), 0x20000 if directory else 0x80000000,
             3 if directory else 1, None, 3, 0x02200000, None)
         if handle in (None, 0, ctypes.c_void_p(-1).value):
+            if ctypes.get_last_error() in (2, 3):
+                raise FileNotFoundError(str(path))
             raise self.win.WindowsIsolationError('Catalog authority path cannot be retained')
         return handle
 

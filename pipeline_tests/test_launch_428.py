@@ -596,3 +596,46 @@ $restoreStatus=Restore-428BeforeStart $fakeScheduler $fakeFolder $r4Xml 'SDDL' $
             "proof",
         ],
     }
+
+
+def test_assert_428_private_receipt_validates_programdata_private_acl(tmp_path: Path) -> None:
+    priv_root = tmp_path / "ProgramData" / "CoChemPipeline427" / "private"
+    mig_dir = priv_root / "migration-428-20261014-v2"
+    mig_dir.mkdir(parents=True)
+    receipt = mig_dir / "migration-428.json"
+    receipt.write_text('{"status":"MIGRATION_428_VERIFIED"}', encoding="utf-8")
+    outside = tmp_path / "outside.json"
+    outside.write_text("{}", encoding="utf-8")
+
+    esc_priv = str(priv_root).replace("'", "''")
+    esc_receipt = str(receipt).replace("'", "''")
+    esc_outside = str(outside).replace("'", "''")
+
+    row = run_ps_428(
+        f"""
+function Get-LocalPath {{param([string]$Path) [IO.Path]::GetFullPath($Path).TrimEnd('\\')}}
+function Assert-NoReparseAncestors {{param([string]$Path)}}
+$script:untrusted=$false
+function Get-Acl {{
+    param([string]$LiteralPath)
+    $acl=[pscustomobject]@{{}}
+    $acl|Add-Member -MemberType ScriptMethod -Name GetOwner -Value {{param($t)[pscustomobject]@{{Value='S-1-5-18'}}}}
+    $acl|Add-Member -MemberType ScriptMethod -Name GetAccessRules -Value {{
+        param($a,$b,$t)
+        $sid=if($script:untrusted){{'S-1-5-32-545'}}else{{'S-1-5-18'}}
+        @([pscustomobject]@{{
+            AccessControlType=[Security.AccessControl.AccessControlType]::Allow;
+            IdentityReference=[pscustomobject]@{{Value=$sid}}
+        }})
+    }}
+    $acl
+}}
+$ok=$false;try{{Assert-428PrivateReceipt '{esc_receipt}' '{esc_priv}';$ok=$true}}catch{{}}
+$outsideHeld=$false;try{{Assert-428PrivateReceipt '{esc_outside}' '{esc_priv}'}}catch{{$outsideHeld=$true}}
+$script:untrusted=$true
+$untrustedHeld=$false;try{{Assert-428PrivateReceipt '{esc_receipt}' '{esc_priv}'}}catch{{$untrustedHeld=$true}}
+@{{ok=$ok;outside_held=$outsideHeld;untrusted_held=$untrustedHeld}}|ConvertTo-Json -Compress
+"""
+    )
+    assert row == {"ok": True, "outside_held": True, "untrusted_held": True}
+

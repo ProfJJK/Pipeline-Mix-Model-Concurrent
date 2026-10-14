@@ -115,3 +115,20 @@ def test_windows_metadata_rejects_reparse_links_and_wrong_object_types(mode,attr
     win=SimpleNamespace(_api=lambda:{},WindowsIsolationError=ValueError)
     path=SimpleNamespace(lstat=lambda:SimpleNamespace(st_mode=mode,st_file_attributes=attributes,st_nlink=links,st_size=1))
     with pytest.raises(ValueError):_WindowsCustody(win).inspect(path,directory)
+
+
+def test_authority_root_is_428_and_missing_path_raises_file_not_found(monkeypatch):
+    import ctypes
+    from pathlib import Path
+    from cochem_pipeline.catalog_authority import AUTHORITY_ROOT, _WindowsCustody
+
+    assert AUTHORITY_ROOT == Path(r'C:\Program Files\CoChem\RoutingCatalog4.2.8')
+
+    win = SimpleNamespace(
+        _api=lambda: {'kernel32': SimpleNamespace(CreateFileW=lambda *a: ctypes.c_void_p(-1).value)},
+        WindowsIsolationError=ValueError,
+    )
+    monkeypatch.setattr(ctypes, 'get_last_error', lambda: 2)
+    with pytest.raises(FileNotFoundError):
+        _WindowsCustody(win).acquire('missing-authority', True)
+

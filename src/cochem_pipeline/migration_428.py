@@ -345,7 +345,7 @@ def migrate_428(
             raise ValueError('task_catalog must be a cochem-task-routing/1 mapping')
         raw_catalog = json.dumps(task_catalog, sort_keys=True, separators=(',', ':'), ensure_ascii=False).encode('utf-8')
         catalog_sha256 = hashlib.sha256(raw_catalog).hexdigest()
-        profiles = task_catalog.get('profiles') or {}
+        profiles = task_catalog.get('profiles') or task_catalog.get('models') or {}
         if isinstance(profiles, dict):
             accepted_profiles = sorted(
                 pid for pid, pdata in profiles.items()
@@ -592,8 +592,97 @@ def rollback_428(
         )
         raise
 
-    return {
+    result = {
+        'schema': MIGRATION_SCHEMA_VERSION,
         'status': 'PRE_CUTOVER_DATABASE_RESTORED',
         'source_state': receipt.get('source_state'),
         'backup_preserved': True,
     }
+    if ev_dir is not None:
+        ev_dir.mkdir(parents=True, exist_ok=True)
+        rollback_file = ev_dir / 'rollback-428.json'
+        if not rollback_file.exists():
+            with rollback_file.open('x', encoding='utf-8') as out:
+                json.dump(result, out, indent=2, sort_keys=True)
+                out.flush()
+                os.fsync(out.fileno())
+    return result
+
+
+def main(argv: list[str] | None = None) -> int:
+    """SYSTEM CLI entrypoint for 4.2.8 migration and pre-cutover rollback."""
+    import argparse
+
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--state-root', type=Path)
+    parser.add_argument('--evidence-root', type=Path, required=True)
+    parser.add_argument('--candidate-config', type=Path, required=True)
+    parser.add_argument('--rollback', action='store_true')
+    args = parser.parse_args(argv)
+
+    from . import windows as win
+    from .__main__ import service_lock
+    from .config import load_config
+
+    evidence_dir = Path(args.evidence_root)
+    candidate_config = Path(args.candidate_config)
+    candidate_root = candidate_config.parent
+
+    try:
+        win.require_system()
+        win.validate_code_path(candidate_root)
+        win.validate_code_path(candidate_config)
+        win.validate_private_directory(evidence_dir)
+        config = load_config(candidate_config)
+        pyproject = candidate_root / 'source' / 'pyproject.toml'
+        verify_version_alignment(
+            config,
+            pyproject_path=pyproject if pyproject.is_file() else None,
+        )
+        win.validate_private_directory(config.private_root)
+
+        task_catalog: dict[str, Any] | None = None
+        routing_cand_path = candidate_root / 'source' / 'docs' / '4.2.8' / 'routing-candidate.json'
+        if routing_cand_path.is_file():
+            win.validate_code_path(routing_cand_path)
+            task_catalog = json.loads(routing_cand_path.read_text(encoding='utf-8'))
+
+        receipt_path = evidence_dir / 'migration-428.json'
+        backup_path = evidence_dir / 'job-board-before.db'
+        with service_lock(config.private_root / 'warden.lock'):
+            if args.rollback:
+                receipt = json.loads(receipt_path.read_text(encoding='utf-8'))
+                rollback_428(config.job_db, backup_path, receipt, evidence_dir=evidence_dir)
+            else:
+                if receipt_path.exists():
+                    raise ValueError('Preserve earlier 4.2.8 migration receipt')
+                migrate_428(
+                    config.job_db,
+                    backup_path,
+                    config.routing,
+                    task_catalog=task_catalog,
+                    known_slots=set(config.slot_roots),
+                    evidence_dir=evidence_dir,
+                )
+        return 0
+    except Exception as exc:
+        _write_hold_receipt(
+            evidence_dir,
+            'rollback-held.json' if args.rollback else 'migration-held.json',
+            {
+                'schema': MIGRATION_SCHEMA_VERSION,
+                'status': (
+                    'ROLLBACK_HELD_PRESERVE_EVIDENCE'
+                    if args.rollback
+                    else 'MIGRATION_HELD_PRESERVE_EVIDENCE'
+                ),
+                'error_type': type(exc).__name__,
+                'reason': str(exc),
+                'automatic_retry': False,
+            },
+        )
+        raise
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())

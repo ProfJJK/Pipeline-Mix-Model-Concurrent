@@ -305,3 +305,84 @@ def test_partial_migration_and_incompatible_schema_hold_with_evidence(tmp_path: 
         migrate_428(db_incompat, bk_incompat, baseline, evidence_dir=ev_incompat)
     held2 = json.loads((ev_incompat / 'migration-held.json').read_text(encoding='utf-8'))
     assert held2['status'] == 'MIGRATION_HELD_INCOMPATIBLE_SCHEMA'
+
+
+def test_migration_428_cli_entrypoint_and_rollback_receipt(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    from contextlib import nullcontext
+    from cochem_pipeline import __main__ as main_mod
+    from cochem_pipeline import migration_428 as mig_mod
+    from cochem_pipeline import windows as win
+
+    monkeypatch.setattr(win, 'require_system', lambda: None)
+    monkeypatch.setattr(win, 'validate_code_path', lambda p: None)
+    monkeypatch.setattr(win, 'validate_private_directory', lambda p: None)
+    monkeypatch.setattr(main_mod, 'service_lock', lambda p: nullcontext())
+
+    cand_root = tmp_path / 'Pipeline4.2.8-windows-20261014-r2'
+    (cand_root / 'source' / 'docs' / '4.2.8').mkdir(parents=True)
+    (cand_root / 'source' / 'pyproject.toml').write_text('version = "4.2.8"\n', encoding='utf-8')
+    (cand_root / 'source' / 'docs' / '4.2.8' / 'routing-candidate.json').write_text(
+        json.dumps(
+            {
+                'schema': 'cochem-task-routing/1',
+                'models': {
+                    'luna-low': {'host_accepted': True},
+                    'argon-high': {'host_accepted': False},
+                },
+            }
+        ),
+        encoding='utf-8',
+    )
+
+    raw_cfg = config_document(tmp_path, slots=4)
+    raw_cfg['routing'] = {'policy_version': 3}
+    cfg_path = write_config(cand_root, raw_cfg)
+    cfg = load_config(cfg_path)
+    cfg.job_db.parent.mkdir(parents=True, exist_ok=True)
+    orig_tables, orig_digest = _create_r4_board(cfg.job_db)
+
+    ev_dir = tmp_path / 'migration-428-ev'
+    ev_dir.mkdir(parents=True)
+
+    rc = mig_mod.main(
+        [
+            '--state-root',
+            str(cfg.job_db.parent),
+            '--evidence-root',
+            str(ev_dir),
+            '--candidate-config',
+            str(cfg_path),
+        ]
+    )
+    assert rc == 0
+    receipt = json.loads((ev_dir / 'migration-428.json').read_text(encoding='utf-8'))
+    assert receipt['status'] == 'MIGRATION_428_VERIFIED'
+    assert receipt['original_digest'] == orig_digest
+    assert (ev_dir / 'job-board-before.db').is_file()
+
+    with sqlite3.connect(cfg.job_db) as conn:
+        accepted = json.loads(
+            conn.execute('SELECT accepted_profiles_json FROM pipeline_428_task_catalog_bindings').fetchone()[0]
+        )
+        assert accepted == ['luna-low']
+
+    # Rollback via CLI writes rollback-428.json and restores pre-migration board
+    rc_rb = mig_mod.main(
+        [
+            '--state-root',
+            str(cfg.job_db.parent),
+            '--evidence-root',
+            str(ev_dir),
+            '--candidate-config',
+            str(cfg_path),
+            '--rollback',
+        ]
+    )
+    assert rc_rb == 0
+    rb_receipt = json.loads((ev_dir / 'rollback-428.json').read_text(encoding='utf-8'))
+    assert rb_receipt['status'] == 'PRE_CUTOVER_DATABASE_RESTORED'
+    assert rb_receipt['backup_preserved'] is True
+    with sqlite3.connect(cfg.job_db) as conn:
+        assert detect_source_state(conn) == 'R4'
+        assert snapshot(conn, orig_tables)[1] == orig_digest
+

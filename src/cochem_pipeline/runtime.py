@@ -116,6 +116,12 @@ class Runtime:
         self.store = JobStore(config.job_db,max_attempts=config.max_attempts,routing_policy=config.routing,
                               cleanup_boot_id=self.boot_id,governing_requirements=self.canonical_authority,
                               catalog_enabled=getattr(config,'catalog_activation',False))
+        with self.store._connection() as conn:
+            if conn.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='pipeline_428_migration_state'"
+            ).fetchone() is not None:
+                from .migration_428 import mark_cutover_428
+                mark_cutover_428(config.job_db)
         self.store.recover_execution_quarantines_after_boot(self.boot_id)
         previous_cleanup = self.store.quarantine_unclosed_executions('Warden restarted before native cleanup was confirmed')
         execution_policy = effective_execution_policy(getattr(config,'hardware',None),
