@@ -88,18 +88,18 @@ authority publication, and Warden cutover in one sitting:
 
 ## 3. Read-Only Plan vs Owner Execution Commands
 
-- **Frozen source commit (`P428-SWARM` two-staged concurrency & provider batching):** `49d65d415e90ec2f8cfaf4302dc9cfacb4e9b09c` (`49d65d4`)
-- **Immutable release bundle:** `C:\Users\ansac\CoChem427\r428-bundle-49d65d4` (prior bundles `r428-bundle-4a87f33`, `r428-bundle-4cc3460`, `r428-bundle-b862701`, and `r428-bundle-491e4a3` preserved intact)
-- **Launch manifest SHA-256:** `7c019a1387f08ce5830d2d1bf3b221cd145eb130010f39a2b9544ca4acdbc72a`
-- **Install manifest SHA-256:** `4a7a415a098e7b56eddc22e1421c68dd1a2bf5c9abb587a17b1dee574c5c422d`
+- **Frozen source commit (`P428-SWARM` two-staged concurrency & provider batching):** `4ddf611462f596acaa808d1adc2a1790d218c11d` (`4ddf611`)
+- **Immutable release bundle:** `C:\Users\ansac\CoChem427\r428-bundle-4ddf611` (prior bundles `r428-bundle-49d65d4`, `r428-bundle-4a87f33`, `r428-bundle-4cc3460`, `r428-bundle-b862701`, and `r428-bundle-491e4a3` preserved intact)
+- **Launch manifest SHA-256:** `e57c5875cbce89ecf92300e3e8deebb3f84b24f20e2963133d564294fd2fa987`
+- **Install manifest SHA-256:** `5a32f6300aaf531675c5d432d81646550b83369158f9b84cee839e9085fb36dc`
 
 ### A. Read-Only Plan (Safe in Engineering / Non-Admin Sessions)
 
 ```powershell
 & "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive `
-  -File "C:\Users\ansac\CoChem427\r428-bundle-49d65d4\run_428_launch.ps1" `
-  -LaunchManifest "C:\Users\ansac\CoChem427\r428-bundle-49d65d4\launch-manifest.json" `
-  -LaunchManifestSha256 "7c019a1387f08ce5830d2d1bf3b221cd145eb130010f39a2b9544ca4acdbc72a"
+  -File "C:\Users\ansac\CoChem427\r428-bundle-4ddf611\run_428_launch.ps1" `
+  -LaunchManifest "C:\Users\ansac\CoChem427\r428-bundle-4ddf611\launch-manifest.json" `
+  -LaunchManifestSha256 "e57c5875cbce89ecf92300e3e8deebb3f84b24f20e2963133d564294fd2fa987"
 ```
 
 ### B. Single Owner Sitting Command (`P428-28`, 64-bit Administrator Windows PowerShell 5.1 as `AETHERDESK\ansac`)
@@ -108,9 +108,9 @@ See `docs/4.2.8/RELEASE_REVIEW.md` for the complete independent release-package 
 
 ```powershell
 & "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile `
-  -File "C:\Users\ansac\CoChem427\r428-bundle-49d65d4\run_428_launch.ps1" `
-  -LaunchManifest "C:\Users\ansac\CoChem427\r428-bundle-49d65d4\launch-manifest.json" `
-  -LaunchManifestSha256 "7c019a1387f08ce5830d2d1bf3b221cd145eb130010f39a2b9544ca4acdbc72a" `
+  -File "C:\Users\ansac\CoChem427\r428-bundle-4ddf611\run_428_launch.ps1" `
+  -LaunchManifest "C:\Users\ansac\CoChem427\r428-bundle-4ddf611\launch-manifest.json" `
+  -LaunchManifestSha256 "e57c5875cbce89ecf92300e3e8deebb3f84b24f20e2963133d564294fd2fa987" `
   -Apply
 ```
 
