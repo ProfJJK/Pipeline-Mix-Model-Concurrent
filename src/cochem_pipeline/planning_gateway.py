@@ -75,6 +75,9 @@ def validate_stage_output(payload, output, route):
     elif stage == 'MICROTASK_EXECUTION':
         from .microtask_board_428 import validate_microtask_execution_output
         validate_microtask_execution_output(payload['microtask_node'], output)
+    elif stage == 'MICROTASK_SWARM_BATCH':
+        from .swarm_batch_428 import validate_swarm_batch_stage_output
+        validate_swarm_batch_stage_output(payload['microtask_batch'], output)
     else:
         raise ValueError('Unsupported planning output stage')
     return matches[0]
@@ -176,6 +179,20 @@ def prompt_contract(payload):
             deliverables=[dict(name='artifact.txt',content='Deliverable content',sha256='0'*64)],
             requirement_evidence=[dict(requirement_id='R1',deliverable_name='artifact.txt',verification_evidence='Exact check')],
             release_criteria_results=[dict(criterion='Criterion',passed=True,evidence='Exact verification')]
+        )
+    elif stage == 'MICROTASK_SWARM_BATCH':
+        batch_meta = payload.get('microtask_batch') or {}
+        contract = dict(
+            batch_id=batch_meta.get('batch_id', 'swbatch428-1'),
+            provider_family=batch_meta.get('provider_family', 'claude'),
+            subagent_outputs={
+                'M1': dict(
+                    artifact_text='Complete verified deliverable summary',
+                    deliverables=[dict(name='artifact.txt', content='Deliverable content', sha256='0' * 64)],
+                    requirement_evidence=[dict(requirement_id='R1', deliverable_name='artifact.txt', verification_evidence='Exact check')],
+                    release_criteria_results=[dict(criterion='Criterion', passed=True, evidence='Exact verification')],
+                )
+            },
         )
     else:
         raise ValueError('Stage is not a native planning request')

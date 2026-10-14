@@ -20,11 +20,19 @@ from copy import deepcopy
 import hashlib
 import json
 import time
-from typing import Any
+from typing import Any, Mapping
 
 from . import routing_store as routes
+from .attempt_runtime_428 import AttemptAccountingRuntime
+from .swarm_batch_428 import (
+    extract_microtask_files,
+    pack_conflict_colored_wave,
+    resolve_microtask_route_tier,
+    validate_swarm_batch_stage_output,
+)
 from .task_routing import digest, five_model_options
 from .workflow_428 import (
+    AttemptLedger,
     _id,
     _sha,
     _stage,
@@ -141,13 +149,37 @@ def validate_microtask_execution_output(
 
 
 class MicrotaskBoardRuntime:
-    """Materializes and coordinates reassessed WBS microtask DAGs on `JobStore` (`P428-12`)."""
+    """Materializes and coordinates reassessed WBS microtask DAGs on `JobStore` (`P428-12`, `P428-SWARM`)."""
 
-    def __init__(self, journal, store, *, owner_broker=None, clock=time.time):
+    def __init__(
+        self,
+        journal,
+        store,
+        *,
+        owner_broker=None,
+        attempt_ledger: AttemptLedger | AttemptAccountingRuntime | None = None,
+        clock=time.time,
+        swarm_batch_mode: bool = False,
+    ):
         self.journal = journal
         self.store = store
         self.owner_broker = owner_broker
         self.clock = clock
+        self.swarm_batch_mode = bool(swarm_batch_mode)
+        if isinstance(attempt_ledger, AttemptAccountingRuntime):
+            self.attempt_accounting: AttemptAccountingRuntime | None = attempt_ledger
+            self.attempt_ledger: AttemptLedger | None = attempt_ledger.ledger
+        elif isinstance(attempt_ledger, AttemptLedger):
+            self.attempt_accounting = AttemptAccountingRuntime(
+                attempt_ledger,
+                store=store,
+                clock=clock,
+            )
+            self.attempt_ledger = attempt_ledger
+        else:
+            self.attempt_accounting = None
+            self.attempt_ledger = None
+
         with self.journal._write() as conn:
             conn.executescript(
                 """
@@ -174,6 +206,34 @@ class MicrotaskBoardRuntime:
                     job_id TEXT,
                     output_json TEXT,
                     artifact_sha256 TEXT,
+                    updated_at REAL NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS microtask428_file_locks(
+                    file_path TEXT PRIMARY KEY,
+                    task_id TEXT NOT NULL,
+                    microtask_id TEXT NOT NULL,
+                    node_key TEXT NOT NULL,
+                    plan_generation_sha256 TEXT NOT NULL,
+                    batch_id TEXT,
+                    slot_id TEXT,
+                    provider_family TEXT,
+                    acquired_at REAL NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS microtask428_batches(
+                    batch_id TEXT PRIMARY KEY,
+                    task_id TEXT NOT NULL,
+                    plan_generation_sha256 TEXT NOT NULL,
+                    provider_family TEXT NOT NULL,
+                    slot_index INTEGER NOT NULL,
+                    slot_id TEXT NOT NULL,
+                    max_agents_per_slot INTEGER NOT NULL,
+                    max_nesting_depth INTEGER NOT NULL,
+                    microtask_ids_json TEXT NOT NULL,
+                    subagents_json TEXT NOT NULL,
+                    locked_files_json TEXT NOT NULL,
+                    batch_json TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    job_id TEXT,
                     updated_at REAL NOT NULL
                 );
                 """
@@ -336,12 +396,125 @@ class MicrotaskBoardRuntime:
             )
             return self.store._get(conn, job_id)
 
+    def _submit_board_job_for_swarm_batch(
+        self,
+        task_id: str,
+        gen_sha: str,
+        batch: dict[str, Any],
+        state: dict[str, Any],
+        catalog: dict[str, Any],
+        limit: int | None,
+        predecessor_outputs_by_mt: dict[str, dict[str, Any]],
+    ) -> dict[str, Any]:
+        from .planning_gateway import prompt_contract, scoped_policy
+
+        pred_hashes_by_mt = {
+            mt_id: {
+                dep: out["artifact_sha256"]
+                for dep, out in sorted(pred_map.items())
+            }
+            for mt_id, pred_map in sorted(predecessor_outputs_by_mt.items())
+        }
+        candidates = list(batch["candidate_profiles"])
+        intent = {
+            "schema": "cochem-planning-intent/4.2.8",
+            "action": "model_stage",
+            "stage": "MICROTASK_SWARM_BATCH",
+            "task_id": task_id,
+            "batch_id": batch["batch_id"],
+            "provider_family": batch["provider_family"],
+            "slot_id": batch["slot_id"],
+            "microtask_ids": list(batch["microtask_ids"]),
+            "plan_generation_sha256": gen_sha,
+            "predecessor_artifact_hashes_by_microtask": pred_hashes_by_mt,
+            "version": state.get("journal_version", 0),
+            "state_sha256": digest(state),
+            "catalog_sha256": digest(catalog),
+            "srs_sha256": state["srs_sha256"],
+            "complexity": int(batch["complexity"]),
+            "task_types": list(batch["task_types"]),
+            "candidate_profiles": candidates,
+            "task": state,
+            "execution_authorized": True,
+        }
+        policy = scoped_policy(self.store.routing_policy, intent, catalog)
+        identity = digest(
+            {
+                "gen": gen_sha,
+                "batch_id": batch["batch_id"],
+                "microtask_ids": batch["microtask_ids"],
+                "candidates": candidates,
+                "pred_hashes_by_mt": pred_hashes_by_mt,
+            }
+        )
+        root_id = "mtswb428-" + identity[:38]
+        job_id = "mt428-batch-" + identity[:38]
+        payload = {
+            "workflow_type": "planning428",
+            "execution_role": f"swarm_batch_{batch['provider_family']}",
+            "planning_intent": intent,
+            "swarm_batch": batch,
+            "predecessor_outputs_by_microtask": predecessor_outputs_by_mt,
+            "predecessor_artifact_hashes_by_microtask": pred_hashes_by_mt,
+            "task_catalog": catalog,
+            "flash_context_limit": limit,
+        }
+        prompt_contract(payload)
+        with self.store._write() as conn:
+            existing = conn.execute(
+                "SELECT job_id FROM pipeline_jobs WHERE job_id=?",
+                (job_id,),
+            ).fetchone()
+            if existing:
+                prior = self.store._get(conn, job_id)
+                if prior["payload"] != payload:
+                    raise ValueError("Existing swarm batch job has different immutable input")
+                return prior
+            self.store._insert(
+                conn,
+                root_id,
+                root_id,
+                None,
+                "MACRO_PLANNING_REQUEST",
+                "IN_PROGRESS",
+                {
+                    "workflow_type": "planning428",
+                    "execution_role": f"swarm_batch_{batch['provider_family']}",
+                    "intent_sha256": identity,
+                },
+            )
+            routes.capture_workflow(conn, root_id, policy)
+            self.store._insert(
+                conn,
+                job_id,
+                root_id,
+                root_id,
+                "TASK_PLAN",
+                "PENDING",
+                payload,
+                max_attempts=10,
+            )
+            self.store._event(
+                conn,
+                self.store._get(conn, root_id),
+                "MICROTASK_SWARM_BATCH_SUBMITTED",
+                task_id=task_id,
+                batch_id=batch["batch_id"],
+                provider_family=batch["provider_family"],
+                slot_id=batch["slot_id"],
+                microtask_ids=list(batch["microtask_ids"]),
+                intent_sha256=identity,
+            )
+            return self.store._get(conn, job_id)
+
     def _check_board_completion(self, job_id: str, node: dict[str, Any]) -> dict[str, Any] | None:
         from .planning_gateway import validate_stage_output
 
         with self.store._connection() as conn:
             job = self.store._get(conn, job_id)
             if job["status"] != "COMPLETED":
+                return None
+            if (job["payload"].get("planning_intent") or {}).get("stage") == "MICROTASK_SWARM_BATCH":
                 return None
             cleanup = conn.execute(
                 "SELECT cleared_at FROM pipeline_execution_cleanup "
@@ -358,13 +531,105 @@ class MicrotaskBoardRuntime:
             )
             return {"profile_id": profile_id, "validated": validated}
 
-    def materialize(self, task_id: str) -> dict[str, Any]:
-        """Compile, reconcile, and dispatch ready microtask nodes for `task_id`."""
+    def _release_node_file_locks(self, conn, node_key: str) -> None:
+        conn.execute("DELETE FROM microtask428_file_locks WHERE node_key=?", (node_key,))
+
+    def _acquire_node_file_locks(
+        self,
+        conn,
+        *,
+        task_id: str,
+        microtask_id: str,
+        node_key: str,
+        gen_sha: str,
+        batch_id: str | None,
+        slot_id: str | None,
+        provider_family: str | None,
+        locked_files: list[str],
+        now: float,
+    ) -> None:
+        self._release_node_file_locks(conn, node_key)
+        for fpath in locked_files:
+            conn.execute(
+                "INSERT INTO microtask428_file_locks VALUES(?,?,?,?,?,?,?,?,?) "
+                "ON CONFLICT(file_path) DO UPDATE SET "
+                "task_id=excluded.task_id,microtask_id=excluded.microtask_id,node_key=excluded.node_key,"
+                "plan_generation_sha256=excluded.plan_generation_sha256,batch_id=excluded.batch_id,"
+                "slot_id=excluded.slot_id,provider_family=excluded.provider_family,acquired_at=excluded.acquired_at",
+                (
+                    fpath,
+                    task_id,
+                    microtask_id,
+                    node_key,
+                    gen_sha,
+                    batch_id,
+                    slot_id,
+                    provider_family,
+                    now,
+                ),
+            )
+
+    def _upsert_node_row(
+        self,
+        conn,
+        *,
+        node_key: str,
+        task_id: str,
+        mt_id: str,
+        gen_sha: str,
+        node: dict[str, Any],
+        candidates: list[str],
+        status: str,
+        job_id: str | None,
+        output_obj: dict[str, Any] | None,
+        artifact_sha256: str | None,
+        now: float,
+    ) -> None:
+        conn.execute(
+            "INSERT INTO microtask428_nodes VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) "
+            "ON CONFLICT(node_key) DO UPDATE SET status=excluded.status,job_id=excluded.job_id,"
+            "output_json=excluded.output_json,artifact_sha256=excluded.artifact_sha256,"
+            "node_json=excluded.node_json,updated_at=excluded.updated_at",
+            (
+                node_key,
+                task_id,
+                mt_id,
+                gen_sha,
+                node["lineage_kind"],
+                node["attempt_lineage_id"],
+                node["role"],
+                node["complexity"],
+                json.dumps(node["task_types"]),
+                json.dumps(node["wbs_ids"]),
+                json.dumps(node["section_ids"]),
+                json.dumps(node["requirement_ids"]),
+                json.dumps(node["deliverables"]),
+                json.dumps(node["audit_metrics"]),
+                json.dumps(node["release_criteria"]),
+                json.dumps(node["depends_on"]),
+                json.dumps(candidates),
+                json.dumps(node, sort_keys=True),
+                status,
+                job_id,
+                json.dumps(output_obj, sort_keys=True) if output_obj is not None else None,
+                artifact_sha256,
+                now,
+            ),
+        )
+
+    def _materialize_internal(
+        self,
+        task_id: str,
+        *,
+        use_swarm_batches: bool,
+        preserve_pending_retry_ids: set[str] | None = None,
+    ) -> dict[str, Any]:
         gen_sha, compiled_nodes, state, catalog, limit = self._compile(task_id)
         ordered_nodes = self._topological_nodes(compiled_nodes)
         now = float(self.clock())
+        preserved_ids = set(preserve_pending_retry_ids or ())
 
-        # 1. Supersede any nodes from an older generation (changed classification/WBS/SRS)
+        # 1. Supersede any nodes and batches from an older generation (changed classification/WBS/SRS)
         stale_job_ids: list[str] = []
         with self.journal._write() as conn:
             stale_rows = conn.execute(
@@ -379,11 +644,28 @@ class MicrotaskBoardRuntime:
                     "UPDATE microtask428_nodes SET status='SUPERSEDED',updated_at=? WHERE node_key=?",
                     (now, srow["node_key"]),
                 )
-        for stale_jid in stale_job_ids:
+            stale_batches = conn.execute(
+                "SELECT batch_id, job_id FROM microtask428_batches "
+                "WHERE task_id=? AND plan_generation_sha256<>? AND status<>'SUPERSEDED'",
+                (task_id, gen_sha),
+            ).fetchall()
+            for sb in stale_batches:
+                if sb["job_id"]:
+                    stale_job_ids.append(sb["job_id"])
+                conn.execute(
+                    "UPDATE microtask428_batches SET status='SUPERSEDED',updated_at=? WHERE batch_id=?",
+                    (now, sb["batch_id"]),
+                )
+            conn.execute(
+                "DELETE FROM microtask428_file_locks WHERE task_id=? AND plan_generation_sha256<>?",
+                (task_id, gen_sha),
+            )
+        for stale_jid in dict.fromkeys(stale_job_ids):
             self._cancel_stale_board_job(stale_jid)
 
         # 2. Ensure current generation rows exist and sync completed board jobs in topological order
         completed_by_id: dict[str, dict[str, Any]] = {}
+        existing_by_id: dict[str, dict[str, Any]] = {}
         for node in ordered_nodes:
             mt_id = node["microtask_id"]
             node_key = f"{gen_sha[:32]}::{mt_id}"
@@ -391,12 +673,19 @@ class MicrotaskBoardRuntime:
             candidates = [opt["model_id"] for opt in options if opt["meets_floor"]]
             if not candidates:
                 raise ValueError(f"No eligible profiles meet the floor for microtask {mt_id}")
+            if self.attempt_accounting is not None:
+                self.attempt_accounting.ensure_lineage(
+                    node["attempt_lineage_id"],
+                    complexity=int(node["complexity"]),
+                )
 
             with self.journal._write() as conn:
                 existing = conn.execute(
                     "SELECT * FROM microtask428_nodes WHERE node_key=?",
                     (node_key,),
                 ).fetchone()
+            if existing is not None:
+                existing_by_id[mt_id] = dict(existing)
 
             expected_pred_hashes = (
                 {dep: completed_by_id[dep]["artifact_sha256"] for dep in sorted(node["depends_on"])}
@@ -410,6 +699,8 @@ class MicrotaskBoardRuntime:
                     expected_pred_hashes is not None
                     and existing_out.get("predecessor_artifact_hashes", {}) == expected_pred_hashes
                 ):
+                    with self.journal._write() as conn:
+                        self._release_node_file_locks(conn, node_key)
                     completed_by_id[mt_id] = existing_out
                     continue
 
@@ -432,31 +723,258 @@ class MicrotaskBoardRuntime:
                                 node_key,
                             ),
                         )
+                        self._release_node_file_locks(conn, node_key)
                     completed_by_id[mt_id] = val
                     continue
 
-        # 3. Evaluate dependency readiness and child owner approval for remaining nodes
+        # 3. Partition remaining nodes into held/waiting vs dependency-ready
+        ready_nodes: list[dict[str, Any]] = []
+        candidates_by_mt: dict[str, list[str]] = {}
         for node in ordered_nodes:
             mt_id = node["microtask_id"]
             if mt_id in completed_by_id:
                 continue
             node_key = f"{gen_sha[:32]}::{mt_id}"
-            options = five_model_options(catalog, node["task_types"], node["complexity"])
-            candidates = [opt["model_id"] for opt in options if opt["meets_floor"]]
+            route_info = resolve_microtask_route_tier(node, catalog)
+            candidates = route_info["candidate_profiles"]
+            candidates_by_mt[mt_id] = candidates
+            enriched_node = {
+                **node,
+                "provider_family": route_info["provider_family"],
+                "routed_profile_id": route_info["routed_profile_id"],
+                "routed_model": route_info["model"],
+                "routed_effort": route_info["reasoning_effort"],
+                "swarm_profile": route_info["swarm_profile"],
+                "file_footprint": extract_microtask_files(node),
+            }
+
+            if mt_id in preserved_ids and mt_id in existing_by_id:
+                continue
 
             deps_ready = all(dep in completed_by_id for dep in node["depends_on"])
             if node["needs_owner_approval"]:
-                desired_status = "HOLD_OWNER_APPROVAL"
-                job_id = None
-            elif not deps_ready:
-                desired_status = "WAITING_ON_DEPENDENCIES"
-                job_id = None
+                with self.journal._write() as conn:
+                    self._release_node_file_locks(conn, node_key)
+                    self._upsert_node_row(
+                        conn,
+                        node_key=node_key,
+                        task_id=task_id,
+                        mt_id=mt_id,
+                        gen_sha=gen_sha,
+                        node=enriched_node,
+                        candidates=candidates,
+                        status="HOLD_OWNER_APPROVAL",
+                        job_id=None,
+                        output_obj=None,
+                        artifact_sha256=None,
+                        now=now,
+                    )
+                continue
+
+            if not deps_ready:
+                with self.journal._write() as conn:
+                    self._release_node_file_locks(conn, node_key)
+                    self._upsert_node_row(
+                        conn,
+                        node_key=node_key,
+                        task_id=task_id,
+                        mt_id=mt_id,
+                        gen_sha=gen_sha,
+                        node=enriched_node,
+                        candidates=candidates,
+                        status="WAITING_ON_DEPENDENCIES",
+                        job_id=None,
+                        output_obj=None,
+                        artifact_sha256=None,
+                        now=now,
+                    )
+                continue
+
+            if self.attempt_accounting is not None:
+                lstate = self.attempt_accounting.ensure_lineage(
+                    node["attempt_lineage_id"],
+                    complexity=int(node["complexity"]),
+                )
+                if lstate["stage"] in ("PIVOT_RESEARCH", "LOCKED"):
+                    with self.journal._write() as conn:
+                        self._release_node_file_locks(conn, node_key)
+                        self._upsert_node_row(
+                            conn,
+                            node_key=node_key,
+                            task_id=task_id,
+                            mt_id=mt_id,
+                            gen_sha=gen_sha,
+                            node=enriched_node,
+                            candidates=candidates,
+                            status="HELD",
+                            job_id=None,
+                            output_obj=None,
+                            artifact_sha256=None,
+                            now=now,
+                        )
+                    continue
+
+            ready_nodes.append(enriched_node)
+
+        # 4. Pack conflict-colored provider wave (Case B disjoint batching vs Case C cross-slot file locking)
+        with self.journal._write() as conn:
+            external_lock_rows = conn.execute(
+                "SELECT file_path, microtask_id FROM microtask428_file_locks WHERE task_id<>?",
+                (task_id,),
+            ).fetchall()
+        external_locks = {r["file_path"]: r["microtask_id"] for r in external_lock_rows}
+
+        wave = pack_conflict_colored_wave(
+            ready_nodes,
+            catalog,
+            active_locked_files=external_locks,
+            task_id=task_id,
+            plan_generation_sha256=gen_sha,
+        )
+
+        # 5. Record Case C nodes held in WAITING_ON_FILE_LOCK (job_id=None)
+        for held_node in wave["waiting_on_lock_nodes"]:
+            mt_id = held_node["microtask_id"]
+            node_key = f"{gen_sha[:32]}::{mt_id}"
+            with self.journal._write() as conn:
+                self._release_node_file_locks(conn, node_key)
+                self._upsert_node_row(
+                    conn,
+                    node_key=node_key,
+                    task_id=task_id,
+                    mt_id=mt_id,
+                    gen_sha=gen_sha,
+                    node=held_node,
+                    candidates=held_node["candidate_profiles"],
+                    status="WAITING_ON_FILE_LOCK",
+                    job_id=None,
+                    output_obj=None,
+                    artifact_sha256=None,
+                    now=now,
+                )
+
+        # 6. Dispatch admitted wave (either as slot-level MICROTASK_SWARM_BATCH jobs or per-node jobs)
+        admitted_by_id = {n["microtask_id"]: n for n in wave["admitted_nodes"]}
+        batch_job_by_batch_id: dict[str, dict[str, Any]] = {}
+
+        if use_swarm_batches:
+            for batch in wave["batches"]:
+                pred_by_mt = {
+                    mt_id: {
+                        dep: completed_by_id[dep]
+                        for dep in admitted_by_id[mt_id]["depends_on"]
+                    }
+                    for mt_id in batch["microtask_ids"]
+                }
+                bjob = self._submit_board_job_for_swarm_batch(
+                    task_id,
+                    gen_sha,
+                    batch,
+                    state,
+                    catalog,
+                    limit,
+                    pred_by_mt,
+                )
+                batch_job_by_batch_id[batch["batch_id"]] = bjob
+                with self.journal._write() as conn:
+                    conn.execute(
+                        "INSERT INTO microtask428_batches VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) "
+                        "ON CONFLICT(batch_id) DO UPDATE SET status=excluded.status,job_id=excluded.job_id,"
+                        "microtask_ids_json=excluded.microtask_ids_json,subagents_json=excluded.subagents_json,"
+                        "locked_files_json=excluded.locked_files_json,batch_json=excluded.batch_json,"
+                        "updated_at=excluded.updated_at",
+                        (
+                            batch["batch_id"],
+                            task_id,
+                            gen_sha,
+                            batch["provider_family"],
+                            batch["slot_index"],
+                            batch["slot_id"],
+                            batch["max_agents_per_slot"],
+                            batch["max_nesting_depth"],
+                            json.dumps(batch["microtask_ids"]),
+                            json.dumps(batch["subagents"], sort_keys=True),
+                            json.dumps(batch["locked_files"]),
+                            json.dumps(batch, sort_keys=True),
+                            "DISPATCHED",
+                            bjob["job_id"],
+                            now,
+                        ),
+                    )
+        else:
+            for batch in wave["batches"]:
+                with self.journal._write() as conn:
+                    conn.execute(
+                        "INSERT INTO microtask428_batches VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) "
+                        "ON CONFLICT(batch_id) DO UPDATE SET status=excluded.status,"
+                        "microtask_ids_json=excluded.microtask_ids_json,subagents_json=excluded.subagents_json,"
+                        "locked_files_json=excluded.locked_files_json,batch_json=excluded.batch_json,"
+                        "updated_at=excluded.updated_at",
+                        (
+                            batch["batch_id"],
+                            task_id,
+                            gen_sha,
+                            batch["provider_family"],
+                            batch["slot_index"],
+                            batch["slot_id"],
+                            batch["max_agents_per_slot"],
+                            batch["max_nesting_depth"],
+                            json.dumps(batch["microtask_ids"]),
+                            json.dumps(batch["subagents"], sort_keys=True),
+                            json.dumps(batch["locked_files"]),
+                            json.dumps(batch, sort_keys=True),
+                            "DISPATCHED",
+                            None,
+                            now,
+                        ),
+                    )
+
+        compiled_by_id = {n["microtask_id"]: n for n in ordered_nodes}
+        for admitted_node in wave["admitted_nodes"]:
+            mt_id = admitted_node["microtask_id"]
+            node_key = f"{gen_sha[:32]}::{mt_id}"
+            candidates = admitted_node["candidate_profiles"]
+            pred_outputs = {dep: completed_by_id[dep] for dep in admitted_node["depends_on"]}
+
+            if use_swarm_batches:
+                bjob = batch_job_by_batch_id[admitted_node["batch_id"]]
+                job_id = bjob["job_id"]
+                desired_status = "HELD" if bjob["status"] in ("FAILED", "BLOCKED") else "DISPATCHED"
+                with self.journal._write() as conn:
+                    if desired_status == "DISPATCHED":
+                        self._acquire_node_file_locks(
+                            conn,
+                            task_id=task_id,
+                            microtask_id=mt_id,
+                            node_key=node_key,
+                            gen_sha=gen_sha,
+                            batch_id=admitted_node["batch_id"],
+                            slot_id=admitted_node["slot_id"],
+                            provider_family=admitted_node["provider_family"],
+                            locked_files=admitted_node["locked_files"],
+                            now=now,
+                        )
+                    else:
+                        self._release_node_file_locks(conn, node_key)
+                    self._upsert_node_row(
+                        conn,
+                        node_key=node_key,
+                        task_id=task_id,
+                        mt_id=mt_id,
+                        gen_sha=gen_sha,
+                        node=admitted_node,
+                        candidates=candidates,
+                        status=desired_status,
+                        job_id=job_id,
+                        output_obj=None,
+                        artifact_sha256=None,
+                        now=now,
+                    )
             else:
-                pred_outputs = {dep: completed_by_id[dep] for dep in node["depends_on"]}
                 board_job = self._submit_board_job_for_node(
                     task_id,
                     gen_sha,
-                    node,
+                    compiled_by_id[mt_id],
                     state,
                     catalog,
                     limit,
@@ -467,39 +985,24 @@ class MicrotaskBoardRuntime:
                 if board_job["status"] in ("FAILED", "BLOCKED"):
                     desired_status = "HELD"
                 elif board_job["status"] == "COMPLETED":
-                    done = self._check_board_completion(job_id, node)
+                    done = self._check_board_completion(job_id, compiled_by_id[mt_id])
                     if done is not None:
                         val = done["validated"]
                         with self.journal._write() as conn:
-                            conn.execute(
-                                "INSERT INTO microtask428_nodes VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) "
-                                "ON CONFLICT(node_key) DO UPDATE SET status='COMPLETED',job_id=excluded.job_id,"
-                                "output_json=excluded.output_json,artifact_sha256=excluded.artifact_sha256,updated_at=excluded.updated_at",
-                                (
-                                    node_key,
-                                    task_id,
-                                    mt_id,
-                                    gen_sha,
-                                    node["lineage_kind"],
-                                    node["attempt_lineage_id"],
-                                    node["role"],
-                                    node["complexity"],
-                                    json.dumps(node["task_types"]),
-                                    json.dumps(node["wbs_ids"]),
-                                    json.dumps(node["section_ids"]),
-                                    json.dumps(node["requirement_ids"]),
-                                    json.dumps(node["deliverables"]),
-                                    json.dumps(node["audit_metrics"]),
-                                    json.dumps(node["release_criteria"]),
-                                    json.dumps(node["depends_on"]),
-                                    json.dumps(candidates),
-                                    json.dumps(node, sort_keys=True),
-                                    "COMPLETED",
-                                    job_id,
-                                    json.dumps(val, sort_keys=True),
-                                    val["artifact_sha256"],
-                                    now,
-                                ),
+                            self._release_node_file_locks(conn, node_key)
+                            self._upsert_node_row(
+                                conn,
+                                node_key=node_key,
+                                task_id=task_id,
+                                mt_id=mt_id,
+                                gen_sha=gen_sha,
+                                node=admitted_node,
+                                candidates=candidates,
+                                status="COMPLETED",
+                                job_id=job_id,
+                                output_obj=val,
+                                artifact_sha256=val["artifact_sha256"],
+                                now=now,
                             )
                         completed_by_id[mt_id] = val
                         continue
@@ -507,40 +1010,252 @@ class MicrotaskBoardRuntime:
                 else:
                     desired_status = "DISPATCHED"
 
-            with self.journal._write() as conn:
-                conn.execute(
-                    "INSERT INTO microtask428_nodes VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) "
-                    "ON CONFLICT(node_key) DO UPDATE SET status=excluded.status,job_id=excluded.job_id,"
-                    "output_json=excluded.output_json,artifact_sha256=excluded.artifact_sha256,"
-                    "node_json=excluded.node_json,updated_at=excluded.updated_at",
-                    (
-                        node_key,
-                        task_id,
-                        mt_id,
-                        gen_sha,
-                        node["lineage_kind"],
-                        node["attempt_lineage_id"],
-                        node["role"],
-                        node["complexity"],
-                        json.dumps(node["task_types"]),
-                        json.dumps(node["wbs_ids"]),
-                        json.dumps(node["section_ids"]),
-                        json.dumps(node["requirement_ids"]),
-                        json.dumps(node["deliverables"]),
-                        json.dumps(node["audit_metrics"]),
-                        json.dumps(node["release_criteria"]),
-                        json.dumps(node["depends_on"]),
-                        json.dumps(candidates),
-                        json.dumps(node, sort_keys=True),
-                        desired_status,
-                        job_id,
-                        None,
-                        None,
-                        now,
-                    ),
-                )
+                with self.journal._write() as conn:
+                    if desired_status in ("DISPATCHED", "WAITING_FOR_NATIVE_CLEANUP"):
+                        self._acquire_node_file_locks(
+                            conn,
+                            task_id=task_id,
+                            microtask_id=mt_id,
+                            node_key=node_key,
+                            gen_sha=gen_sha,
+                            batch_id=admitted_node["batch_id"],
+                            slot_id=admitted_node["slot_id"],
+                            provider_family=admitted_node["provider_family"],
+                            locked_files=admitted_node["locked_files"],
+                            now=now,
+                        )
+                    else:
+                        self._release_node_file_locks(conn, node_key)
+                    self._upsert_node_row(
+                        conn,
+                        node_key=node_key,
+                        task_id=task_id,
+                        mt_id=mt_id,
+                        gen_sha=gen_sha,
+                        node=admitted_node,
+                        candidates=candidates,
+                        status=desired_status,
+                        job_id=job_id,
+                        output_obj=None,
+                        artifact_sha256=None,
+                        now=now,
+                    )
 
         return self.board_status(task_id)
+
+    def materialize(self, task_id: str) -> dict[str, Any]:
+        """Compile, reconcile, and dispatch ready microtask nodes for `task_id`."""
+        return self._materialize_internal(task_id, use_swarm_batches=self.swarm_batch_mode)
+
+    def dispatch_swarm_batches(self, task_id: str) -> dict[str, Any]:
+        """Compile, pack conflict-colored provider waves, and dispatch slot-level `MICROTASK_SWARM_BATCH` jobs."""
+        return self._materialize_internal(task_id, use_swarm_batches=True)
+
+    def complete_swarm_batch(
+        self,
+        task_id: str,
+        batch_id: str,
+        subagent_outputs: Mapping[str, Any],
+    ) -> dict[str, Any]:
+        """Commit a completed intra-slot swarm batch with per-microtask validation and failure isolation.
+
+        In a batch of `N` microtasks where `k` succeed and `N - k` fail validation:
+        - The `k` valid microtasks transition immediately to `COMPLETED`, release their file locks in
+          `microtask428_file_locks`, and unlock their downstream dependents and waiting Case C tasks.
+        - The `N - k` failed microtasks record individual `AttemptLedger` quality failures (10/20/30 accounting),
+          release their file locks, and transition to `PENDING_RETRY` (or `HELD` at 10/20/30 boundaries)
+          without rolling back or invalidating the `k` completed siblings.
+        """
+        _id(task_id)
+        _id(batch_id)
+        if not isinstance(subagent_outputs, Mapping):
+            raise ValueError("subagent_outputs must be a mapping of microtask_id -> output")
+        raw_map = (
+            subagent_outputs["subagent_outputs"]
+            if "subagent_outputs" in subagent_outputs and isinstance(subagent_outputs["subagent_outputs"], Mapping)
+            else subagent_outputs
+        )
+
+        now = float(self.clock())
+        with self.journal._write() as conn:
+            row = self.journal._read(conn, task_id)
+            state = json.loads(row["state_json"])
+            catalog = json.loads(row["catalog_json"])
+            gen_sha = self._plan_generation_sha256(state, catalog)
+            batch_row = conn.execute(
+                "SELECT * FROM microtask428_batches WHERE batch_id=? AND task_id=? AND plan_generation_sha256=?",
+                (batch_id, task_id, gen_sha),
+            ).fetchone()
+            if batch_row is None:
+                raise ValueError(f"Unknown or superseded swarm batch: {batch_id}")
+            batch_desc = json.loads(batch_row["batch_json"])
+            node_rows = conn.execute(
+                "SELECT * FROM microtask428_nodes WHERE task_id=? AND plan_generation_sha256=?",
+                (task_id, gen_sha),
+            ).fetchall()
+
+        validate_swarm_batch_stage_output(batch_desc, {"subagent_outputs": dict(raw_map)})
+        nodes_by_id = {r["microtask_id"]: dict(r) for r in node_rows}
+        completed_hashes_by_id = {
+            r["microtask_id"]: r["artifact_sha256"]
+            for r in node_rows
+            if r["status"] == "COMPLETED" and r["artifact_sha256"]
+        }
+
+        succeeded_ids: list[str] = []
+        failed_ids: set[str] = set()
+        failure_errors: dict[str, str] = {}
+
+        for sub in batch_desc["subagents"]:
+            mt_id = sub["microtask_id"]
+            if mt_id not in nodes_by_id:
+                raise ValueError(f"Batch microtask {mt_id} not found in board nodes")
+            nrow = nodes_by_id[mt_id]
+            node_key = nrow["node_key"]
+            node_obj = json.loads(nrow["node_json"])
+            lineage_root = nrow["attempt_lineage_id"]
+            model_family = _id(str(sub.get("model") or node_obj.get("routed_model") or sub["routed_profile_id"]))
+            mt_out = raw_map.get(mt_id)
+
+            fence_job_id = _id(f"{batch_id}.{mt_id}")
+            fence_attempt_id = _id(f"att.{ int(now * 1000) }.{mt_id}")
+
+            try:
+                if not isinstance(mt_out, dict):
+                    raise ValueError(f"Missing or non-object subagent output for microtask {mt_id}")
+                validated = validate_microtask_execution_output(node_obj, mt_out)
+                validated["profile_id"] = sub["routed_profile_id"]
+                validated["routed_model"] = sub["model"]
+                validated["routed_effort"] = sub["reasoning_effort"]
+                validated["predecessor_artifact_hashes"] = {
+                    dep: completed_hashes_by_id[dep]
+                    for dep in sorted(node_obj["depends_on"])
+                    if dep in completed_hashes_by_id
+                }
+                if self.attempt_accounting is not None:
+                    self.attempt_accounting.start_board_attempt(
+                        fence_job_id,
+                        fence_attempt_id,
+                        1,
+                        lineage_root=lineage_root,
+                        member_id=lineage_root,
+                        model_family=model_family,
+                        complexity=int(node_obj["complexity"]),
+                    )
+                    self.attempt_accounting.record_board_outcome(
+                        fence_job_id,
+                        fence_attempt_id,
+                        1,
+                        category="success",
+                        evidence_sha256=validated["artifact_sha256"],
+                    )
+                with self.journal._write() as conn:
+                    self._release_node_file_locks(conn, node_key)
+                    conn.execute(
+                        "UPDATE microtask428_nodes SET status='COMPLETED',output_json=?,artifact_sha256=?,updated_at=? "
+                        "WHERE node_key=?",
+                        (
+                            json.dumps(validated, sort_keys=True),
+                            validated["artifact_sha256"],
+                            now,
+                            node_key,
+                        ),
+                    )
+                completed_hashes_by_id[mt_id] = validated["artifact_sha256"]
+                succeeded_ids.append(mt_id)
+            except ValueError as exc:
+                failed_ids.add(mt_id)
+                failure_errors[mt_id] = str(exc)
+                err_sha = digest(
+                    {
+                        "batch_id": batch_id,
+                        "microtask_id": mt_id,
+                        "error": str(exc),
+                        "raw_output": mt_out,
+                    }
+                )
+                failed_status = "PENDING_RETRY"
+                if self.attempt_accounting is not None:
+                    self.attempt_accounting.start_board_attempt(
+                        fence_job_id,
+                        fence_attempt_id,
+                        1,
+                        lineage_root=lineage_root,
+                        member_id=lineage_root,
+                        model_family=model_family,
+                        complexity=int(node_obj["complexity"]),
+                    )
+                    lstate = self.attempt_accounting.record_board_outcome(
+                        fence_job_id,
+                        fence_attempt_id,
+                        1,
+                        category="quality_failure",
+                        evidence_sha256=err_sha,
+                    )
+                    if lstate["stage"] in ("PIVOT_RESEARCH", "LOCKED"):
+                        failed_status = "HELD"
+                with self.journal._write() as conn:
+                    self._release_node_file_locks(conn, node_key)
+                    conn.execute(
+                        "UPDATE microtask428_nodes SET status=?,job_id=NULL,output_json=NULL,artifact_sha256=NULL,updated_at=? "
+                        "WHERE node_key=?",
+                        (failed_status, now, node_key),
+                    )
+
+        if not failed_ids:
+            batch_status = "COMPLETED"
+        elif succeeded_ids:
+            batch_status = "PARTIAL_COMPLETED"
+        else:
+            batch_status = "FAILED"
+
+        with self.journal._write() as conn:
+            conn.execute(
+                "UPDATE microtask428_batches SET status=?,updated_at=? WHERE batch_id=?",
+                (batch_status, now, batch_id),
+            )
+
+        snap = self._materialize_internal(
+            task_id,
+            use_swarm_batches=True,
+            preserve_pending_retry_ids=failed_ids,
+        )
+        snap["last_completed_batch"] = {
+            "batch_id": batch_id,
+            "status": batch_status,
+            "completed_microtask_ids": succeeded_ids,
+            "failed_microtask_ids": sorted(failed_ids),
+            "failure_errors": failure_errors,
+        }
+        return snap
+
+    def active_file_locks(self, task_id: str | None = None) -> list[dict[str, Any]]:
+        """Return currently held cross-slot file locks from `microtask428_file_locks`."""
+        with self.journal._write() as conn:
+            if task_id is not None:
+                _id(task_id)
+                rows = conn.execute(
+                    "SELECT * FROM microtask428_file_locks WHERE task_id=? ORDER BY file_path",
+                    (task_id,),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT * FROM microtask428_file_locks ORDER BY file_path"
+                ).fetchall()
+        return [
+            {
+                "file_path": r["file_path"],
+                "task_id": r["task_id"],
+                "microtask_id": r["microtask_id"],
+                "node_key": r["node_key"],
+                "plan_generation_sha256": r["plan_generation_sha256"],
+                "batch_id": r["batch_id"],
+                "slot_id": r["slot_id"],
+                "provider_family": r["provider_family"],
+                "acquired_at": r["acquired_at"],
+            }
+            for r in rows
+        ]
 
     def approve_child_microtask(
         self,
@@ -597,6 +1312,14 @@ class MicrotaskBoardRuntime:
                 "SELECT * FROM microtask428_nodes WHERE task_id=? AND plan_generation_sha256=? ORDER BY microtask_id",
                 (task_id, gen_sha),
             ).fetchall()
+            batch_rows = conn.execute(
+                "SELECT * FROM microtask428_batches WHERE task_id=? AND plan_generation_sha256=? ORDER BY slot_index, batch_id",
+                (task_id, gen_sha),
+            ).fetchall()
+            lock_rows = conn.execute(
+                "SELECT * FROM microtask428_file_locks WHERE task_id=? AND plan_generation_sha256=? ORDER BY file_path",
+                (task_id, gen_sha),
+            ).fetchall()
             superseded_count = conn.execute(
                 "SELECT count(*) FROM microtask428_nodes WHERE task_id=? AND status='SUPERSEDED'",
                 (task_id,),
@@ -604,6 +1327,7 @@ class MicrotaskBoardRuntime:
 
         nodes = []
         for r in rows:
+            node_meta = json.loads(r["node_json"]) if r["node_json"] else {}
             nodes.append(
                 {
                     "microtask_id": r["microtask_id"],
@@ -622,15 +1346,55 @@ class MicrotaskBoardRuntime:
                     "candidate_profiles": json.loads(r["candidate_profiles_json"]),
                     "status": r["status"],
                     "job_id": r["job_id"],
+                    "batch_id": node_meta.get("batch_id"),
+                    "slot_id": node_meta.get("slot_id"),
+                    "provider_family": node_meta.get("provider_family"),
+                    "subagent_index": node_meta.get("subagent_index"),
+                    "routed_profile_id": node_meta.get("routed_profile_id"),
+                    "routed_model": node_meta.get("routed_model"),
+                    "routed_effort": node_meta.get("routed_effort"),
+                    "swarm_profile": node_meta.get("swarm_profile"),
+                    "file_footprint": node_meta.get("file_footprint"),
+                    "locked_files": node_meta.get("locked_files", []),
+                    "blocking_files": node_meta.get("blocking_files", []),
+                    "blocking_microtask_ids": node_meta.get("blocking_microtask_ids", []),
                     "artifact_sha256": r["artifact_sha256"],
                     "output": json.loads(r["output_json"]) if r["output_json"] else None,
                 }
             )
+        batches = [
+            {
+                "batch_id": br["batch_id"],
+                "provider_family": br["provider_family"],
+                "slot_index": br["slot_index"],
+                "slot_id": br["slot_id"],
+                "max_agents_per_slot": br["max_agents_per_slot"],
+                "max_nesting_depth": br["max_nesting_depth"],
+                "microtask_ids": json.loads(br["microtask_ids_json"]),
+                "subagents": json.loads(br["subagents_json"]),
+                "locked_files": json.loads(br["locked_files_json"]),
+                "status": br["status"],
+                "job_id": br["job_id"],
+            }
+            for br in batch_rows
+        ]
+        active_locks = [
+            {
+                "file_path": lr["file_path"],
+                "microtask_id": lr["microtask_id"],
+                "batch_id": lr["batch_id"],
+                "slot_id": lr["slot_id"],
+                "provider_family": lr["provider_family"],
+            }
+            for lr in lock_rows
+        ]
         return {
             "schema": "cochem-microtask-board/4.2.8",
             "task_id": task_id,
             "plan_generation_sha256": gen_sha,
             "nodes": nodes,
+            "batches": batches,
+            "active_file_locks": active_locks,
             "superseded_nodes": superseded_count,
             "all_completed": bool(nodes) and all(n["status"] == "COMPLETED" for n in nodes),
         }

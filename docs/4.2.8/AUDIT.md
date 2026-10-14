@@ -52,3 +52,14 @@ Primary references used for availability/selector constraints include the
 Exact benchmark-page URLs and numerical provenance are attached to each record
 in `benchmark-observations.json`. Future release dates and unobserved selectors
 are not assumed.
+
+Intra-slot swarm batching (`src/cochem_pipeline/swarm_batch_428.py` and
+`src/cochem_pipeline/microtask_board_428.py`) preserves per-microtask routing
+authority: ready microtasks with disjoint file footprints (Case B) pack by
+provider family (`claude` $\le 20$ / depth $3$, `codex` $\le 20$ / depth $2$,
+`gemini`/Agy $\le 64$ / depth $2$ per slot across the 4 OS slots), while each
+spawned subagent executes at its own microtask's exact routed `(model, reasoning_effort)`
+tier (`candidate_profiles[0]`). Overlapping file footprints (Case C) admit at
+most one microtask per shared file group into `microtask428_file_locks` across
+all 4 slots and hold remaining tasks in `WAITING_ON_FILE_LOCK` until lock release.
+

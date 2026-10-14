@@ -26,6 +26,9 @@ def _native_policy_error(operation: str):
     raise error from cause
 
 
+SWARM_CREATION_FLAGS = 0x08000200  # CREATE_NO_WINDOW (0x08000000) | CREATE_NEW_PROCESS_GROUP (0x00000200)
+
+
 @dataclass(frozen=True)
 class ResourceLimits:
     memory_limit_mb: int = 2048
@@ -38,8 +41,11 @@ class ResourceLimits:
     launch_jitter_max_ms: int = 500
     poll_jitter_min_ms: int = 100
     poll_jitter_max_ms: int = 500
+    swarm_mode: bool = False
 
     def __post_init__(self):
+        if type(self.swarm_mode) is not bool:
+            raise ValueError('swarm_mode must be a boolean')
         for key, low, high in (('memory_limit_mb',64,1048576),('cpu_rate_percent',1,100),('max_processes',1,1024)):
             value = getattr(self,key)
             if type(value) is not int or not low <= value <= high:
@@ -51,12 +57,34 @@ class ResourceLimits:
         if self.affinity_mask is not None and (type(self.affinity_mask) is not int
                 or not 0 < self.affinity_mask <= ctypes.c_size_t(-1).value or self.e_core_policy != 'required'):
             raise ValueError('affinity_mask must be a positive native-width integer verified against actual E cores')
-        if type(self.node_heap_mb) is not int or not 64 <= self.node_heap_mb <= 512:
-            raise ValueError('Node worker heap must be bounded to 64..512 MiB')
+        max_heap = 4096 if self.swarm_mode else 512
+        if type(self.node_heap_mb) is not int or not 64 <= self.node_heap_mb <= max_heap:
+            raise ValueError(f'Node worker heap must be bounded to 64..{max_heap} MiB')
         for kind in ('launch','poll'):
             low,high = getattr(self,kind+'_jitter_min_ms'),getattr(self,kind+'_jitter_max_ms')
             if type(low) is not int or type(high) is not int or not 100 <= low <= high <= 500:
                 raise ValueError(f'{kind} jitter must remain inside the prescribed 100..500 ms range')
+
+    @property
+    def creation_flags(self) -> int:
+        return SWARM_CREATION_FLAGS
+
+    @property
+    def node_options(self) -> str:
+        return f"--max-old-space-size={self.node_heap_mb}"
+
+    @classmethod
+    def swarm_default(cls, **overrides) -> ResourceLimits:
+        """Per-slot OS Job Object envelope for intra-slot agent swarms (6 GiB RAM, 4096 MiB V8 heap, 96 processes)."""
+        defaults = {
+            'memory_limit_mb': 6144,
+            'cpu_rate_percent': 20,
+            'max_processes': 96,
+            'node_heap_mb': 4096,
+            'swarm_mode': True,
+        }
+        defaults.update(overrides)
+        return cls(**defaults)
 
     @classmethod
     def from_dict(cls, value: Mapping | None = None) -> ResourceLimits:
@@ -67,7 +95,10 @@ class ResourceLimits:
         return cls(**dict(value))
 
     def as_dict(self) -> dict:
-        return asdict(self)
+        data = asdict(self)
+        if not self.swarm_mode:
+            data.pop('swarm_mode', None)
+        return data
 
 
 _DWORD = ctypes.c_uint32

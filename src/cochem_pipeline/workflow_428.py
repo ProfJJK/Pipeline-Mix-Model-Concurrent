@@ -260,9 +260,11 @@ def accept_microtasks(state, rows):
     ancestors = _dag(rows)
     wbs = {row['id']: row for row in state['wbs']}
     covered, implementations, assemblies, final_tests = set(), set(), set(), set()
+    required_keys = {'id', 'wbs_ids', 'role', 'complexity', 'task_types', 'deliverables',
+                     'audit_metrics', 'release_criteria', 'depends_on', 'prompt'}
+    optional_keys = {'file_targets', 'shared_files'}
     for row in rows:
-        if set(row) != {'id', 'wbs_ids', 'role', 'complexity', 'task_types', 'deliverables',
-                       'audit_metrics', 'release_criteria', 'depends_on', 'prompt'}:
+        if not (required_keys <= set(row) <= (required_keys | optional_keys)):
             raise ValueError('Microtasks require prompts, assessments and acceptance fields')
         links = set(_texts(row['wbs_ids'], 'Microtask WBS links'))
         if links - wbs.keys():
@@ -271,6 +273,9 @@ def accept_microtasks(state, rows):
         assessment(dict(complexity=row['complexity'], task_types=row['task_types'], rationale=row['prompt']))
         for field in ('deliverables', 'audit_metrics', 'release_criteria'):
             _texts(row[field], field)
+        for opt_field in ('file_targets', 'shared_files'):
+            if opt_field in row and row[opt_field] is not None:
+                _texts(row[opt_field], opt_field)
         if row['role'] == 'implementation':
             implementations.add(row['id'])
         elif row['role'] == 'assembly':
@@ -358,29 +363,31 @@ def compile_reassessed_microtask_plan(state):
             if not (isinstance(child_app, dict) and child_app.get('receipt_id')):
                 needs_child_approval = True
 
-        compiled.append(
-            dict(
-                microtask_id=row['id'],
-                parent_task_id=state['task_id'],
-                lineage_kind='WBS_CHILD',
-                attempt_lineage_id=f"{state['task_id']}.mt.{row['id']}",
-                role=row['role'],
-                complexity=check['complexity'],
-                task_types=list(check['task_types']),
-                assessment=deepcopy(check),
-                wbs_ids=list(wbs_ids),
-                section_ids=sec_ids,
-                requirement_ids=req_ids,
-                deliverables=list(row['deliverables']),
-                audit_metrics=list(row['audit_metrics']),
-                release_criteria=list(row['release_criteria']),
-                depends_on=list(row['depends_on']),
-                ancestors=sorted(ancestors[row['id']]),
-                prompt=_text(row['prompt'], 'Microtask prompt', 200000),
-                needs_owner_approval=needs_child_approval,
-                owner_approval=deepcopy(row.get('owner_approval')),
-            )
+        entry = dict(
+            microtask_id=row['id'],
+            parent_task_id=state['task_id'],
+            lineage_kind='WBS_CHILD',
+            attempt_lineage_id=f"{state['task_id']}.mt.{row['id']}",
+            role=row['role'],
+            complexity=check['complexity'],
+            task_types=list(check['task_types']),
+            assessment=deepcopy(check),
+            wbs_ids=list(wbs_ids),
+            section_ids=sec_ids,
+            requirement_ids=req_ids,
+            deliverables=list(row['deliverables']),
+            audit_metrics=list(row['audit_metrics']),
+            release_criteria=list(row['release_criteria']),
+            depends_on=list(row['depends_on']),
+            ancestors=sorted(ancestors[row['id']]),
+            prompt=_text(row['prompt'], 'Microtask prompt', 200000),
+            needs_owner_approval=needs_child_approval,
+            owner_approval=deepcopy(row.get('owner_approval')),
         )
+        for opt_field in ('file_targets', 'shared_files'):
+            if opt_field in row and row[opt_field] is not None:
+                entry[opt_field] = list(_texts(row[opt_field], opt_field))
+        compiled.append(entry)
 
     if covered_reqs != all_srs_reqs:
         raise ValueError('Compiled microtask graph does not cover every SRS requirement')

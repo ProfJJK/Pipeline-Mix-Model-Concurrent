@@ -188,17 +188,17 @@ Before P428-00, the external R6 runner is valid only for its hardcoded -r6 check
 
 ## P428-12 — Materialize the reassessed microtask dependency graph
 
-- [x] Completed; commit/evidence: `64b6470` (`src/cochem_pipeline/microtask_board_428.py`, `src/cochem_pipeline/workflow_428.py`, `src/cochem_pipeline/planning_gateway.py`, `pipeline_tests/test_microtask_board_428.py`). Verified via `python.exe -I scripts/run_source_tests_428.py --timeout-seconds 120 -- pipeline_tests/test_microtask_board_428.py pipeline_tests/test_workflow_428.py --tb=short` -> `16 passed in 1.11s`. Host-only native execution acceptance deferred to `P428-28`.
+- [x] Completed; commit/evidence: `64b6470` (`src/cochem_pipeline/microtask_board_428.py`, `src/cochem_pipeline/workflow_428.py`, `src/cochem_pipeline/planning_gateway.py`, `pipeline_tests/test_microtask_board_428.py`), extended with Two-Staged Concurrency + Conflict-Colored Provider Batching + Intra-Slot Agent Swarm (`P428-SWARM`: `src/cochem_pipeline/swarm_batch_428.py`, `src/cochem_pipeline/microtask_board_428.py`, `src/cochem_pipeline/resource_limits.py`, `src/cochem_pipeline/inference_policy.py`, `src/cochem_pipeline/worker.py`, `pipeline_tests/test_swarm_batch_428.py`). Verified via `python.exe -I scripts/run_source_tests_428.py pipeline_tests/test_swarm_batch_428.py pipeline_tests/test_microtask_board_428.py pipeline_tests/test_resource_limits.py pipeline_tests/test_inference_policy.py pipeline_tests/test_worker_inference_policy.py -v` -> `107 passed, 6 skipped in 2.3s`. Host-only native execution acceptance deferred to `P428-28`.
 - **Lane / size:** E / M. **Depends on:** P428-11, P428-09.
-- **Files:** proposed `microtask_board_428.py`, `workflow_428.py`,
-  proposed `pipeline_tests/test_microtask_board_428.py`; shared schema hooks via C.
+- **Files:** proposed `microtask_board_428.py`, `swarm_batch_428.py`, `workflow_428.py`,
+  proposed `pipeline_tests/test_microtask_board_428.py`, `pipeline_tests/test_swarm_batch_428.py`; shared schema hooks via C.
 - **Deliverable:** immutable parent/WBS/requirement-linked jobs with individual
-  classification, dependency readiness and owner approval for newly high-tier work.
+  classification, dependency readiness, conflict-colored provider batching (20 Claude/d3, 20 Codex/d2, 64 Agy/d2 per slot across 4 OS slots), cross-slot file locking (`microtask428_file_locks`), partial-batch per-microtask commit with `AttemptLedger` failure isolation, and owner approval for newly high-tier work.
 - **Acceptance:** no missing/cyclic dependencies or dispatch before prerequisites;
-  independent fragments can use up to the shared four slots; changed classification/
+  independent fragments can use up to the shared four slots and intra-slot subagent swarms; changed classification/
   approvals invalidate affected dispatch instead of silently preserving stale routes.
   Each node has requirement links, concrete deliverables, audit metrics and release criteria.
-- **Verify:** multitype WBS, mixed task tiers, high-tier child hold, concurrent
+- **Verify:** multitype WBS, mixed task tiers, high-tier child hold, Case B disjoint provider packing, Case C shared file lock hold/promotion, partial-batch failure isolation, concurrent
   duplicate materialization and restart preserving DAG and requirement coverage.
 
 ## P428-13 — Stage code and non-code fragment artifacts safely

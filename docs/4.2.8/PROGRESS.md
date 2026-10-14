@@ -60,6 +60,16 @@ or full SRS acceptance before that sitting completes.
   single owner entry point (`run_428_launch.ps1`, `accept_428_native.py` — `P428-26`)
   supporting the live `AETHERDESK` `R4 v11` + `R6 target-23` hold baseline as well as
   `R6`/`R7` sitting receipts, and immutable release bundle preparation (`P428-27`).
+- Two-Staged Concurrency + Conflict-Colored Provider Batching + Intra-Slot Agent Swarm
+  (`P428-SWARM`: `src/cochem_pipeline/swarm_batch_428.py`, `src/cochem_pipeline/microtask_board_428.py`,
+  `src/cochem_pipeline/resource_limits.py`, `src/cochem_pipeline/inference_policy.py`,
+  `src/cochem_pipeline/planning_gateway.py`, `src/cochem_pipeline/worker.py`,
+  `pipeline_tests/test_swarm_batch_428.py`): 4 Layer-2 OS execution slots (`6144 MiB` RAM,
+  `4096 MiB` V8 heap, `96` processes, `0x08000200` creation flags) paired with Layer-1
+  intra-slot subagent swarms (`claude` 20/depth 3, `codex` 20/depth 2, `gemini`/Agy 64/depth 2),
+  Case B disjoint provider wave packing with exact per-subagent routed `(model, reasoning_effort)`,
+  Case C global cross-slot file locking (`microtask428_file_locks` + `WAITING_ON_FILE_LOCK`),
+  and partial-batch per-microtask commit with individual `AttemptLedger` failure isolation.
 
 ## Remaining owner action (`P428-28`)
 

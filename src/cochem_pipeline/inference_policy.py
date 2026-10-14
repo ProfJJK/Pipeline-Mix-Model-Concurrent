@@ -144,3 +144,112 @@ def gemini_inference_arguments(spec: dict) -> list[str]:
             not isinstance(item, str) or '\0' in item or len(item) > 8192 for item in arguments):
         raise ValueError('Agy inference contract arguments must be an explicit bounded argv array')
     return list(arguments)
+
+
+def claude_swarm_arguments(*, max_agents: int = 20, max_nesting_depth: int = 3) -> list[str]:
+    """Enable intra-slot Claude subagent Task delegation (up to 20 agents, depth 3, 4096 MiB V8 heap) while keeping external MCP/hooks/model-switching disabled."""
+    if type(max_agents) is not int or not 1 <= max_agents <= 20:
+        raise ValueError('Claude intra-slot swarm max_agents must be an integer in 1..20')
+    if type(max_nesting_depth) is not int or not 1 <= max_nesting_depth <= 3:
+        raise ValueError('Claude intra-slot swarm max_nesting_depth must be an integer in 1..3')
+    settings = {
+        'disableAllHooks': True,
+        'disableSkillShellExecution': True,
+        'fallbackModel': [],
+        'switchModelsOnFlag': False,
+        'swarmMode': True,
+        'maxSubagents': max_agents,
+        'maxNestingDepth': max_nesting_depth,
+        'nodeHeapMb': 4096,
+    }
+    return [
+        '--tools',
+        'Task',
+        '--strict-mcp-config',
+        '--mcp-config',
+        '{"mcpServers":{}}',
+        '--setting-sources',
+        '',
+        '--disable-slash-commands',
+        '--settings',
+        json.dumps(settings, separators=(',', ':')),
+    ]
+
+
+def codex_swarm_overrides(mcp_names=(), *, max_agents: int = 20, max_nesting_depth: int = 2) -> list[str]:
+    """Enable intra-slot Codex multi-agent delegation (up to 20 agents, depth 2) while keeping shell_tool, web_search, and external MCPs disabled."""
+    if type(max_agents) is not int or not 1 <= max_agents <= 20:
+        raise ValueError('Codex intra-slot swarm max_agents must be an integer in 1..20')
+    if type(max_nesting_depth) is not int or not 1 <= max_nesting_depth <= 2:
+        raise ValueError('Codex intra-slot swarm max_nesting_depth must be an integer in 1..2')
+    result: list[str] = []
+    for name in CODEX_DISABLED_FEATURES:
+        if name in ('multi_agent', 'multi_agent_v2'):
+            result += ['-c', f'features.{name}=true']
+        else:
+            result += ['-c', f'features.{name}=false']
+    result += [
+        '-c',
+        'web_search="disabled"',
+        '-c',
+        'agents.enabled=true',
+        '-c',
+        f'agents.max_concurrency={max_agents}',
+        '-c',
+        f'agents.max_depth={max_nesting_depth}',
+    ]
+    seen: set[str] = set()
+    entries: list[str] = []
+    for name in mcp_names:
+        if (
+            not isinstance(name, str)
+            or not name
+            or len(name) > 256
+            or any(ord(char) < 32 or ord(char) == 127 for char in name)
+            or name in seen
+        ):
+            raise ValueError('Invalid MCP name for native policy override')
+        seen.add(name)
+        entries.append(json.dumps(name, ensure_ascii=False) + '={enabled=false}')
+    if entries:
+        result += ['-c', 'mcp_servers={' + ','.join(entries) + '}']
+    return result
+
+
+def gemini_swarm_arguments(spec: dict, *, max_agents: int = 64, max_nesting_depth: int = 2) -> list[str]:
+    """Enable intra-slot Agy/Gemini subagent swarm execution (up to 64 agents, depth 2) on a verified native contract."""
+    if type(max_agents) is not int or not 1 <= max_agents <= 64:
+        raise ValueError('Agy intra-slot swarm max_agents must be an integer in 1..64')
+    if type(max_nesting_depth) is not int or not 1 <= max_nesting_depth <= 2:
+        raise ValueError('Agy intra-slot swarm max_nesting_depth must be an integer in 1..2')
+    if not isinstance(spec, dict):
+        raise ValueError('Agy swarm execution requires a verified native spec dict')
+    contract = spec.get('swarm_contract') or spec.get('inference_only')
+    if not isinstance(contract, dict):
+        raise ValueError('Agy swarm execution requires an operator-verified native contract')
+    if (
+        not isinstance(contract.get('executable_sha256'), str)
+        or not re.fullmatch('[0-9a-f]{64}', contract['executable_sha256'])
+    ):
+        raise ValueError('Agy swarm contract requires the exact verified native binary digest')
+    if any(
+        not isinstance(contract.get(key), str) or not contract[key].strip() or len(contract[key]) > 2048
+        for key in ('version', 'capability_reference')
+    ):
+        raise ValueError('Agy swarm contract requires version and native capability provenance')
+    if any(contract.get(key) is not True for key in ('disables_tools', 'disables_mcp', 'disables_hooks', 'disables_model_fallback')):
+        raise ValueError('Agy swarm contract must disable host tools, MCP, hooks, and model fallback')
+    arguments = contract.get('arguments')
+    if not isinstance(arguments, list) or not arguments or len(arguments) > 64 or any(
+            not isinstance(item, str) or '\0' in item or len(item) > 8192 for item in arguments):
+        raise ValueError('Agy swarm contract arguments must be an explicit bounded argv array')
+    return [
+        *arguments,
+        '--subagents',
+        'enabled',
+        '--max-subagents',
+        str(max_agents),
+        '--max-subagent-depth',
+        str(max_nesting_depth),
+    ]
+

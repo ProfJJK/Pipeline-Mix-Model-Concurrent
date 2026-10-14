@@ -286,8 +286,19 @@ def node_prompt(node: dict, context_xml: str = '') -> str:
         instruction += (' Cite at least two distinct controller-fetched external_sources in planning_evidence and trace '
                         'all current requirements as R1..Rn. The controller checks source bytes, exact quotes and '
                         'coverage; a self-reported confidence score cannot satisfy the evidence gate.')
-    instruction += (' Native tools, MCP servers, hooks, and host execution are disabled. '
-                    'Delegation is disabled. All model jobs are assigned by the controller job board; never spawn another agent.')
+    if kind == 'TASK_PLAN' and isinstance(node.get('payload'), dict) and (node['payload'].get('planning_intent') or {}).get('stage') == 'MICROTASK_SWARM_BATCH':
+        sbatch = node['payload'].get('swarm_batch') or {}
+        instruction += (
+            f" STAGE: MICROTASK_SWARM_BATCH (provider_family={sbatch.get('provider_family')}, "
+            f"slot_id={sbatch.get('slot_id')}, max_agents_per_slot={sbatch.get('max_agents_per_slot')}, "
+            f"max_nesting_depth={sbatch.get('max_nesting_depth')}). "
+            "Intra-slot subagent swarm delegation is enabled within the assigned provider slot cap, "
+            "with each subagent executing at its microtask's exact routed (model, reasoning_effort) tier. "
+            "External MCP servers, hooks, and host shell execution remain disabled."
+        )
+    else:
+        instruction += (' Native tools, MCP servers, hooks, and host execution are disabled. '
+                        'Delegation is disabled. All model jobs are assigned by the controller job board; never spawn another agent.')
     if kind in CODING_NATIVE_KINDS:
         instruction += (' '
                         'Use only the supplied source_context file texts and controller diagnostics as project evidence. '
