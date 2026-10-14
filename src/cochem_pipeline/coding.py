@@ -93,6 +93,15 @@ def validate_coding_projects(raw) -> dict[str, CodingProject]:
     return {key: CodingProject.from_dict(key, value) for key, value in raw.items()}
 
 
+def validate_production_coding_project(project: CodingProject) -> CodingProject:
+    """Ensure a 4.2.8 coding fragment or task uses a real registered project, never windows-acceptance."""
+    if not isinstance(project, CodingProject):
+        raise ValueError('Expected a validated CodingProject descriptor')
+    if project.project_id.strip().casefold() == 'windows-acceptance':
+        raise ValueError('windows-acceptance is an acceptance fixture and cannot be used as a production coding project')
+    return project
+
+
 def manifest(files: dict[str, bytes]) -> dict[str, str]:
     return {safe_path(name): hashlib.sha256(content).hexdigest() for name, content in sorted(files.items())}
 
