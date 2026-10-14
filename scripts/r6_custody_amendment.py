@@ -71,8 +71,26 @@ def install(expected_hash, *, registry=False):
 # Separate, exact-source repair. The original installed files remain unchanged.
 REGISTRY_PROTOCOL = '2738b76b140e5bc25860c78a457dd91464b57681b607e44096d4d3bc30317ce2'
 REGISTRY_WORKER = 'cb528d87f75c9b05f653aea0d3c23370e5d0f0632869afaca4d37be4e68bf147'
+FAILURES_ORIGINAL = '625f9c6e045f6a108be04a6a13767593db08ac960bb3839fade0a37e36c6edf5'
+CLAUDE_HTTP_STATUS = r'^(?:(?:failed to authenticate\.\s*)?api error:\s*|(?:api error:\s*)?request failed with status code )([0-9]{3})\b'
 BINARY_SHA256 = '38f30c7dd1ed808f5cf98fe2014de3d30903035a4f0df02d3eb72a9ff8993741'
 AGENT_SHA256 = '5c0082d70d073263a56d748a46187008968c070d0efc7d5b7612c2fd61d11810'
+
+
+def failure_module(raw, original):
+    """Preserve the immutable runtime while repairing one known HTTP prefix."""
+    before = "_CLAUDE_RESULT_API_STATUS = r'^(?:failed to authenticate\\.\\s*)?api error:\\s*([0-9]{3})\\b'"
+    if hashlib.sha256(raw).hexdigest() != FAILURES_ORIGINAL:
+        raise ValueError('Claude failure amendment original source binding differs')
+    text = raw.decode('utf-8')
+    if text.count(before) != 1:
+        raise ValueError('Claude failure amendment anchor differs')
+    text = text.replace(before, "_CLAUDE_RESULT_API_STATUS = " + repr(CLAUDE_HTTP_STATUS))
+    clone = types.ModuleType('cochem_pipeline._r6_claude_failure')
+    clone.__package__ = 'cochem_pipeline'
+    exec(compile(text, '<r6-reviewed-claude-http-failure>', 'exec'), clone.__dict__)
+    clone.ProviderFailure = original.ProviderFailure
+    return clone
 
 
 def codex_inherited_workspace_command(argv, workspace, descriptor, identity):
@@ -118,7 +136,7 @@ def validate_registry(init, spec):
                 executable_sha256=BINARY_SHA256)
 
 
-def registry_modules(protocol_raw, worker_raw, spec, protocol, worker):
+def registry_modules(protocol_raw, worker_raw, spec, protocol, worker, *, failure_parser=None):
     """Compile only known source bytes; publish no changed callbacks on error."""
     import ast
     if (hashlib.sha256(protocol_raw).hexdigest() != REGISTRY_PROTOCOL or
@@ -153,23 +171,30 @@ def registry_modules(protocol_raw, worker_raw, spec, protocol, worker):
     run.name = '_registry_native_run'
     selected = ast.Module(body=[ast.ImportFrom(module='__future__', names=[ast.alias(name='annotations')], level=0), parse, run], type_ignores=[])
     namespace = dict(worker.__dict__)
+    if failure_parser is not None:
+        namespace['parse_native_failure'] = failure_parser
     namespace['codex_inherited_workspace_command'] = codex_inherited_workspace_command
     exec(compile(ast.fix_missing_locations(selected), '<r6-reviewed-registry-worker>', 'exec'), namespace)
     return clone.parse_stream, namespace['parse_gemini'], namespace['_registry_native_run']
 
 
 def install_registry(win, read_bound):
-    from cochem_pipeline import agy_protocol as protocol, worker
+    from cochem_pipeline import agy_protocol as protocol, worker, failures
     base = ROOT / '.venv/Lib/site-packages/cochem_pipeline'
     if (Path(protocol.__file__) != base / 'agy_protocol.py' or Path(worker.__file__) != base / 'worker.py'
+            or Path(failures.__file__) != base / 'failures.py'
             or hasattr(protocol, '_r6_registry_amendment')):
         raise ValueError('Registry amendment module identity differs or is already installed')
     candidate = json.loads(read_bound(win, ROOT / 'pipeline.json', CANDIDATE, 4194304))
     spec = candidate['providers']['gemini']
     # Verify the exact pair before replacing any callback. This is not a model probe.
     validate_registry({'agent': 'cochem-inference-only', 'tools': []}, spec)
+    failure_repair = failure_module(read_bound(win, base / 'failures.py', FAILURES_ORIGINAL, 65536), failures)
     functions = registry_modules(read_bound(win, base / 'agy_protocol.py', REGISTRY_PROTOCOL, 65536),
-        read_bound(win, base / 'worker.py', REGISTRY_WORKER, 131072), spec, protocol, worker)
+        read_bound(win, base / 'worker.py', REGISTRY_WORKER, 131072), spec, protocol, worker,
+        failure_parser=failure_repair.parse_native_failure)
+    worker._CLAUDE_RESULT_API_STATUS = re.compile(CLAUDE_HTTP_STATUS)
+    worker.parse_native_failure = failure_repair.parse_native_failure
     protocol.parse_stream, worker.parse_gemini, worker.NativeRunner.run = functions
     protocol._r6_registry_amendment = BINARY_SHA256
     return dict(schema='cochem-r6-agy-registry-amendment/1', protocol_sha256=REGISTRY_PROTOCOL,
@@ -177,6 +202,7 @@ def install_registry(win, read_bound):
                 agent_sha256=AGENT_SHA256, advertised_registry_scope='cli_builtin_runners',
                 agent_identity_required=True, actual_tool_steps_rejected=True,
                 codex_workspace_selection='validated_process_cwd',
+                claude_failed_result_http_status=True, failures_sha256=FAILURES_ORIGINAL,
                 installed_files_modified=False)
 
 

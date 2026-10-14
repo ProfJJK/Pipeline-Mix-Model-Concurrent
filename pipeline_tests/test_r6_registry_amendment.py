@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from cochem_pipeline import agy_protocol, agy_tool_registry, worker
+from cochem_pipeline import agy_protocol, agy_tool_registry, worker, failures
 from scripts import r6_custody_amendment as amendment
 from pipeline_tests.test_agy_tool_registry import spec, observation, raw
 from pipeline_tests.test_worker_gemini_dispatch import harness, DIGEST, agy_stream, HIGH
@@ -53,17 +53,20 @@ def test_any_installed_source_change_holds(spec, index):
         amendment.registry_modules(*inputs, spec, agy_protocol, worker)
 
 
-@pytest.mark.parametrize('fault', ['', 'path', 'protocol', 'worker', 'candidate', 'already_installed'])
+@pytest.mark.parametrize('fault', ['', 'path', 'protocol', 'worker', 'failures', 'candidate', 'already_installed'])
 def test_installation_publishes_callbacks_only_after_exact_binding(spec, monkeypatch, fault):
     import json
     from cochem_pipeline import windows
     base = amendment.ROOT / '.venv/Lib/site-packages/cochem_pipeline'
     monkeypatch.setattr(agy_protocol, '__file__', str(base / ('other.py' if fault == 'path' else 'agy_protocol.py')))
     monkeypatch.setattr(worker, '__file__', str(base / 'worker.py'))
+    monkeypatch.setattr(failures, '__file__', str(base / 'failures.py'))
     originals = (agy_protocol.parse_stream, worker.parse_gemini, worker.NativeRunner.run)
     monkeypatch.setattr(agy_protocol, 'parse_stream', originals[0])
     monkeypatch.setattr(worker, 'parse_gemini', originals[1])
     monkeypatch.setattr(worker.NativeRunner, 'run', originals[2])
+    monkeypatch.setattr(worker, 'parse_native_failure', worker.parse_native_failure)
+    monkeypatch.setattr(worker, '_CLAUDE_RESULT_API_STATUS', worker._CLAUDE_RESULT_API_STATUS)
     if fault == 'already_installed':
         monkeypatch.setattr(agy_protocol, '_r6_registry_amendment', 'fixture', raising=False)
     elif fault == 'candidate':
@@ -79,6 +82,10 @@ def test_installation_publishes_callbacks_only_after_exact_binding(spec, monkeyp
         if path.name == 'agy_protocol.py':
             assert expected == amendment.REGISTRY_PROTOCOL
             return protocol_raw + (b'\n' if fault == 'protocol' else b'')
+        if path.name == 'failures.py':
+            assert expected == amendment.FAILURES_ORIGINAL
+            value = (Path(__file__).parent / 'fixtures/r6_failures_359ca92.txt').read_bytes()
+            return value + (b'\n' if fault == 'failures' else b'')
         assert path.name == 'worker.py' and expected == amendment.REGISTRY_WORKER
         return worker_raw + (b'\n' if fault == 'worker' else b'')
     try:
@@ -91,7 +98,8 @@ def test_installation_publishes_callbacks_only_after_exact_binding(spec, monkeyp
                 (agy_protocol.parse_stream, worker.parse_gemini, worker.NativeRunner.run), originals))
             assert result['agent_identity_required'] and result['actual_tool_steps_rejected']
             assert result['installed_files_modified'] is False
-            assert reads == ['pipeline.json', 'agy_protocol.py', 'worker.py']
+            assert reads == ['pipeline.json', 'failures.py', 'agy_protocol.py', 'worker.py']
+            assert result['claude_failed_result_http_status'] is True
     finally:
         if not fault and hasattr(agy_protocol, '_r6_registry_amendment'):
             del agy_protocol._r6_registry_amendment

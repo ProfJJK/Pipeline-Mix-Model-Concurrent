@@ -231,8 +231,10 @@ _NATIVE_DIAGNOSTICS = (
     ('busy', r'^(?:the model is currently overloaded\b|the server is overloaded\b|model is temporarily unavailable\b|this model is currently at capacity\b|server is busy\b)'),
 )
 # Claude CLI can report an API failure only as text in its failed result record.
-# A leading API status decides alone; an unmapped status keeps the 'code' fallback.
-_CLAUDE_RESULT_API_STATUS = r'^(?:failed to authenticate\.\s*)?api error:\s*([0-9]{3})\b'
+# The CLI's HTTP client can instead supply "Request failed with status code N".
+# Both prefixes must start a failed result; arbitrary HTTP mentions stay data.
+# A leading status decides alone; an unmapped status keeps the 'code' fallback.
+_CLAUDE_RESULT_API_STATUS = r'^(?:(?:failed to authenticate\.\s*)?api error:\s*|(?:api error:\s*)?request failed with status code )([0-9]{3})\b'
 _CLAUDE_RESULT_AUTH = r'^(?:invalid api key|oauth token has expired|failed to authenticate|please run /login)\b'
 
 

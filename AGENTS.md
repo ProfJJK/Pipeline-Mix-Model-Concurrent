@@ -77,6 +77,26 @@ This is the preferred interface, not a claim that all three adapters have been
 implemented or accepted on this host. Reuse verified sessions before asking for input.
 
 ## Current handoff
+The v3 native diagnostic is now received: target-23 is Claude Fable 5.1 High,
+with a failed result and HTTP 429 indicator. The owner reports likely exhausted
+Fable quota. The additional HTTP-client status prefix is repaired in source and
+the exact-source amendment; 255 inert regression tests passed. Raw host text
+remains private, so the next reviewed continuation must validate the pinned
+failure before a stop/cutover. No replacement launch package has been delivered
+for this change. Read docs/R6_NATIVE_LATEST_2026-10-13.md. R4 v11 is the last
+verified restoration, admission capacity zero; do not repeat sign-ins/export.
+The following earlier handoff records its state before that diagnostic arrived.
+
+2026-10-13 18:26: `r6-launch-d19b42c` has run and is spent. All 18 sessions,
+knowledge and agent checks passed; native acceptance held with ProviderFailure
+category `code` (worker frame 1023). R4 v11 restoration returned verified health,
+with admission capacity zero. No R6 cutover occurred. The public report does not
+identify the failed native target. Read `docs/R6_NATIVE_LATEST_2026-10-13.md`.
+The new v3 diagnostic reads this exact attempt; never replay d19b42c or request
+sign-ins again. Independent 4.2.8 source work is on `feature/4.2.8-task-routing`;
+see `docs/4.2.8/IMPLEMENTATION_PLAN.md`. It is not deployed. Earlier notes below
+are historical and do not authorize running an old setup command.
+
 2026-10-13 v2 diagnostic received: native target-02 was Codex Luna Medium,
 slot3. Agy Flash Low and Claude Haiku Medium passed. Its 40-byte stderr hash
 exactly matches Windows error 1, reproduced by the DOS final-path query on R:.

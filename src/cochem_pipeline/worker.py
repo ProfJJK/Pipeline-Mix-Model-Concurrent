@@ -28,7 +28,7 @@ NATIVE_FAILURE_KEYS = frozenset({'schema', 'category', 'exit_code', 'stdout_byte
                                  'stderr_bytes', 'stderr_sha256', 'envelope_kind', 'claude_result_subtype',
                                  'api_status', 'started_at', 'finished_at'})
 _CLAUDE_RESULT_SUBTYPE = re.compile(r'success|error_[a-z0-9_]{1,64}')
-_CLAUDE_RESULT_API_STATUS = re.compile(r'(?:failed to authenticate\.\s*)?api error:\s*([0-9]{3})\b')
+_CLAUDE_RESULT_API_STATUS = re.compile(r'^(?:(?:failed to authenticate\.\s*)?api error:\s*|(?:api error:\s*)?request failed with status code )([0-9]{3})\b')
 
 
 class NativeOutputLimitError(ProviderFailure):
