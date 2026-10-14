@@ -58,10 +58,13 @@ class PlanningConfig:
 
 
 class PlanningController:
-    def __init__(self, journal, store, *, clock=time.time):
+    def __init__(self, journal, store, *, clock=time.time, research_runtime=None):
         self.journal, self.store, self.clock = journal, store, clock
+        self.research_runtime = research_runtime
         self.gateway = PlanningGateway(journal, store)
         self.journal.model_result = self.gateway.model_result
+        if research_runtime is not None and self.journal.search_result is None:
+            self.journal.search_result = research_runtime.evidence_store.load_for_journal
         self._lock = threading.Lock()
         with journal._write() as conn:
             conn.executescript('''
@@ -78,7 +81,17 @@ class PlanningController:
         spec = runtime.config.task_planning
         journal = PlanningJournal(runtime.config.private_root / 'planning428.db', spec.read_catalog(),
                                   flash_context_limit=spec.flash_context_limit)
-        return cls(journal, runtime.store)
+        from .research_evidence_428 import ResearchEvidenceStore
+        from .research_runtime_428 import ResearchRuntime
+        from .research_search_428 import ResearchSearchClient
+        ev_store = ResearchEvidenceStore(runtime.config.private_root / 'research428.db')
+        res_runtime = ResearchRuntime(
+            ev_store,
+            ResearchSearchClient(),
+            knowledge_service=getattr(runtime, 'knowledge', None),
+            knowledge_authority=getattr(runtime, 'knowledge_authority', None),
+        )
+        return cls(journal, runtime.store, research_runtime=res_runtime)
 
     def submit(self, objective, task_id=None):
         # No catalog, tier, approval, profile or dispatch arguments are accepted.
@@ -129,10 +142,13 @@ class PlanningController:
             research_id = 'research428-' + digest(intent)[:40]
             # The collector writes a durable receipt keyed by this intent. A
             # poll never performs network I/O on the scheduler thread.
+            if self.research_runtime is not None:
+                self.research_runtime.enqueue(intent)
             port = self.journal.search_result
             result = port(research_id) if port is not None else None
             if result is None:
-                self._record(task_id, version, 'WAITING_FOR_RESEARCH', research_id=research_id, delay=30)
+                delay = self.research_runtime.backoff_delay(research_id, default=30) if self.research_runtime is not None else 30
+                self._record(task_id, version, 'WAITING_FOR_RESEARCH', research_id=research_id, delay=delay)
             else:
                 self.journal.apply_research(task_id, version, research_id)
                 self._record(task_id, version, 'RESEARCH_RESULT_IMPORTED', research_id=research_id, delay=0)

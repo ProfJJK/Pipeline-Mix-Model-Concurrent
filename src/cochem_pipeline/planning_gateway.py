@@ -92,6 +92,7 @@ class PlanningGateway:
         job_id='plan428-node-'+identity[:40]
         payload=dict(workflow_type='planning428', planning_intent=intent,
                      task_catalog=catalog, flash_context_limit=limit)
+        prompt_contract(payload)
         with self.store._write() as conn:
             existing=conn.execute('SELECT job_id FROM pipeline_jobs WHERE job_id=?',(job_id,)).fetchone()
             if existing:
@@ -126,6 +127,24 @@ class PlanningGateway:
 def prompt_contract(payload):
     intent=payload['planning_intent']
     stage=intent['stage']
+    task_state=intent['task']
+    if isinstance(task_state, dict) and isinstance(task_state.get('research'), dict):
+        if task_state['research'].get('srs_sha256') != task_state.get('srs_sha256'):
+            raise ValueError('Research evidence belongs to a stale SRS revision')
+        if 'research_excerpts' in task_state:
+            from .research_evidence_428 import validate_research_excerpts
+            validate_research_excerpts(task_state['research']['channels'], task_state['research_excerpts'])
+            limit = payload.get('flash_context_limit')
+            if limit is not None:
+                from .task_routing import context_fits
+                doc = task_state.get('document') or {}
+                content_budget = max(int(doc.get('srs_tokens', 0)), len(json.dumps(doc, ensure_ascii=False).encode('utf-8')))
+                excerpt_bytes = len(json.dumps(task_state['research_excerpts'], ensure_ascii=False).encode('utf-8'))
+                instr_budget = max(int(doc.get('evidence_and_instruction_tokens', 0)),
+                                   4096 + len(str(task_state.get('objective', '')).encode('utf-8')) + excerpt_bytes)
+                out_budget = max(int(doc.get('output_reserve_tokens', 4096)), 4096)
+                if not context_fits(content_budget, instr_budget, out_budget, limit):
+                    raise ValueError('Research and prompt context exceed verified model context budget')
     if stage in ('SRS','REVISING_SRS'):
         contract=dict(plan='Concrete implementation plan',architecture='Components, interfaces and tradeoffs',
             srs=[dict(id='S1',requirement_ids=['R1'],text='Verifiable specification')],
@@ -153,4 +172,4 @@ def prompt_contract(payload):
         'WBS must cover every requirement. Microtasks need implementation, assembly and final-test nodes; '
         'assembly follows all fragments and final testing follows assembly. Preserve WBS dependencies. '
         'Aim for single-type complexity 1–5 implementation fragments; assess orchestration and assembly honestly.')
-    return contract,instruction,intent['task']
+    return contract,instruction,task_state
