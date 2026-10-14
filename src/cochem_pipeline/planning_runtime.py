@@ -58,10 +58,20 @@ class PlanningConfig:
 
 
 class PlanningController:
-    def __init__(self, journal, store, *, clock=time.time, research_runtime=None, execution_runtime=None):
+    def __init__(
+        self,
+        journal,
+        store,
+        *,
+        clock=time.time,
+        research_runtime=None,
+        execution_runtime=None,
+        release_runtime=None,
+    ):
         self.journal, self.store, self.clock = journal, store, clock
         self.research_runtime = research_runtime
         self.execution_runtime = execution_runtime
+        self.release_runtime = release_runtime
         self.gateway = PlanningGateway(journal, store)
         self.journal.model_result = self.gateway.model_result
         if research_runtime is not None and self.journal.search_result is None:
@@ -86,6 +96,7 @@ class PlanningController:
         from .research_runtime_428 import ResearchRuntime
         from .research_search_428 import ResearchSearchClient
         from .task_execution_428 import SimpleTaskExecutionRuntime
+        from .task_release_428 import TaskReleaseRuntime
         ev_store = ResearchEvidenceStore(runtime.config.private_root / 'research428.db')
         res_runtime = ResearchRuntime(
             ev_store,
@@ -94,7 +105,14 @@ class PlanningController:
             knowledge_authority=getattr(runtime, 'knowledge_authority', None),
         )
         exec_runtime = SimpleTaskExecutionRuntime(journal, runtime.store)
-        return cls(journal, runtime.store, research_runtime=res_runtime, execution_runtime=exec_runtime)
+        rel_runtime = TaskReleaseRuntime(journal, runtime.store)
+        return cls(
+            journal,
+            runtime.store,
+            research_runtime=res_runtime,
+            execution_runtime=exec_runtime,
+            release_runtime=rel_runtime,
+        )
 
     def has_task(self, task_id) -> bool:
         return self.journal.has_task(task_id)
@@ -125,13 +143,17 @@ class PlanningController:
             art = self.execution_runtime.get_artifact(task_id)
             if art is not None:
                 result['execution'] = art
+        if self.release_runtime is not None and hasattr(self.release_runtime, 'get_release'):
+            rel = self.release_runtime.get_release(task_id)
+            if rel is not None:
+                result['release'] = rel
         return result
 
     def status(self):
         with self.journal._write() as conn:
             total = conn.execute('SELECT count(*) FROM planning428_tasks').fetchone()[0]
             counts = dict(conn.execute('SELECT status,count(*) FROM planning428_progress GROUP BY status').fetchall())
-        mat_state = 'CONNECTED' if self.execution_runtime is not None else 'NOT_CONNECTED'
+        mat_state = 'CONNECTED' if (self.execution_runtime is not None or self.release_runtime is not None) else 'NOT_CONNECTED'
         return dict(status='ENABLED', tasks=total, states=counts, execution_materialization=mat_state)
 
     def _record(self, task_id, version, status, *, delay=1, job_id=None, research_id=None, error_type=None):
@@ -175,6 +197,9 @@ class PlanningController:
                 self._record(task_id, version, 'RESEARCH_RESULT_IMPORTED', research_id=research_id, delay=0)
         elif action == 'jobboard_submission' and intent.get('stage') == 'READY' and self.execution_runtime is not None:
             res = self.execution_runtime.step_ready_task(task_id)
+            self._record(task_id, version, res['status'], job_id=res.get('job_id'), delay=res.get('delay', 1))
+        elif action == 'jobboard_submission' and intent.get('stage') == 'MICROTASKS_READY' and self.release_runtime is not None:
+            res = self.release_runtime.step_microtask_task(task_id)
             self._record(task_id, version, res['status'], job_id=res.get('job_id'), delay=res.get('delay', 1))
         elif intent.get('stage') == 'COMPLETED':
             self._record(task_id, version, 'EXECUTION_COMPLETED', delay=3600)

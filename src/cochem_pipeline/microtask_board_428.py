@@ -221,6 +221,20 @@ class MicrotaskBoardRuntime:
                 )
                 routes.release(conn, job_id, "cancelled", "FAILED")
 
+    @staticmethod
+    def _topological_nodes(nodes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        by_id = {n["microtask_id"]: n for n in nodes}
+        remaining = set(by_id)
+        ordered: list[dict[str, Any]] = []
+        while remaining:
+            ready = sorted(k for k in remaining if not (set(by_id[k]["depends_on"]) & remaining))
+            if not ready:
+                raise ValueError("Dependency cycle in compiled microtask nodes")
+            for k in ready:
+                ordered.append(by_id[k])
+                remaining.remove(k)
+        return ordered
+
     def _submit_board_job_for_node(
         self,
         task_id: str,
@@ -234,6 +248,10 @@ class MicrotaskBoardRuntime:
     ) -> dict[str, Any]:
         from .planning_gateway import prompt_contract, scoped_policy
 
+        pred_hashes = {
+            dep: out["artifact_sha256"]
+            for dep, out in sorted(predecessor_outputs.items())
+        }
         intent = {
             "schema": "cochem-planning-intent/4.2.8",
             "action": "model_stage",
@@ -241,6 +259,7 @@ class MicrotaskBoardRuntime:
             "task_id": task_id,
             "microtask_id": node["microtask_id"],
             "plan_generation_sha256": gen_sha,
+            "predecessor_artifact_hashes": pred_hashes,
             "version": state.get("journal_version", 0),
             "state_sha256": digest(state),
             "catalog_sha256": digest(catalog),
@@ -252,7 +271,14 @@ class MicrotaskBoardRuntime:
             "execution_authorized": True,
         }
         policy = scoped_policy(self.store.routing_policy, intent, catalog)
-        identity = digest({"gen": gen_sha, "microtask_id": node["microtask_id"], "candidates": candidates})
+        identity = digest(
+            {
+                "gen": gen_sha,
+                "microtask_id": node["microtask_id"],
+                "candidates": candidates,
+                "pred_hashes": pred_hashes,
+            }
+        )
         root_id = "mt428-" + identity[:40]
         job_id = "mt428-node-" + identity[:40]
         payload = {
@@ -261,6 +287,7 @@ class MicrotaskBoardRuntime:
             "planning_intent": intent,
             "microtask_node": node,
             "predecessor_outputs": predecessor_outputs,
+            "predecessor_artifact_hashes": pred_hashes,
             "task_catalog": catalog,
             "flash_context_limit": limit,
         }
@@ -325,11 +352,16 @@ class MicrotaskBoardRuntime:
                 return None
             profile_id = validate_stage_output(job["payload"], job["output"], job["route"])
             validated = validate_microtask_execution_output(node, job["output"])
+            validated["profile_id"] = profile_id
+            validated["predecessor_artifact_hashes"] = dict(
+                job["payload"].get("predecessor_artifact_hashes") or {}
+            )
             return {"profile_id": profile_id, "validated": validated}
 
     def materialize(self, task_id: str) -> dict[str, Any]:
         """Compile, reconcile, and dispatch ready microtask nodes for `task_id`."""
         gen_sha, compiled_nodes, state, catalog, limit = self._compile(task_id)
+        ordered_nodes = self._topological_nodes(compiled_nodes)
         now = float(self.clock())
 
         # 1. Supersede any nodes from an older generation (changed classification/WBS/SRS)
@@ -350,9 +382,9 @@ class MicrotaskBoardRuntime:
         for stale_jid in stale_job_ids:
             self._cancel_stale_board_job(stale_jid)
 
-        # 2. Ensure current generation rows exist and sync completed board jobs
+        # 2. Ensure current generation rows exist and sync completed board jobs in topological order
         completed_by_id: dict[str, dict[str, Any]] = {}
-        for node in compiled_nodes:
+        for node in ordered_nodes:
             mt_id = node["microtask_id"]
             node_key = f"{gen_sha[:32]}::{mt_id}"
             options = five_model_options(catalog, node["task_types"], node["complexity"])
@@ -366,13 +398,28 @@ class MicrotaskBoardRuntime:
                     (node_key,),
                 ).fetchone()
 
-            if existing is not None and existing["status"] == "COMPLETED":
-                completed_by_id[mt_id] = json.loads(existing["output_json"])
-                continue
+            expected_pred_hashes = (
+                {dep: completed_by_id[dep]["artifact_sha256"] for dep in sorted(node["depends_on"])}
+                if all(dep in completed_by_id for dep in node["depends_on"])
+                else None
+            )
+
+            if existing is not None and existing["status"] == "COMPLETED" and existing["output_json"]:
+                existing_out = json.loads(existing["output_json"])
+                if (
+                    expected_pred_hashes is not None
+                    and existing_out.get("predecessor_artifact_hashes", {}) == expected_pred_hashes
+                ):
+                    completed_by_id[mt_id] = existing_out
+                    continue
 
             if existing is not None and existing["job_id"]:
                 done = self._check_board_completion(existing["job_id"], node)
-                if done is not None:
+                if (
+                    done is not None
+                    and expected_pred_hashes is not None
+                    and done["validated"].get("predecessor_artifact_hashes", {}) == expected_pred_hashes
+                ):
                     val = done["validated"]
                     with self.journal._write() as conn:
                         conn.execute(
@@ -389,7 +436,7 @@ class MicrotaskBoardRuntime:
                     continue
 
         # 3. Evaluate dependency readiness and child owner approval for remaining nodes
-        for node in compiled_nodes:
+        for node in ordered_nodes:
             mt_id = node["microtask_id"]
             if mt_id in completed_by_id:
                 continue
@@ -464,6 +511,7 @@ class MicrotaskBoardRuntime:
                 conn.execute(
                     "INSERT INTO microtask428_nodes VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) "
                     "ON CONFLICT(node_key) DO UPDATE SET status=excluded.status,job_id=excluded.job_id,"
+                    "output_json=excluded.output_json,artifact_sha256=excluded.artifact_sha256,"
                     "node_json=excluded.node_json,updated_at=excluded.updated_at",
                     (
                         node_key,
