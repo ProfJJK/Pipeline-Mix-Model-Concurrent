@@ -459,8 +459,10 @@ class AttemptLedger:
         _id(model)
         with self._write() as conn:
             state = self._read(conn, task_id)
+            child_models = state.get('fracture_child_models') or {}
+            expected_model = child_models.get(task_id, state['next_model'])
             if (state['root'] != root or state['stage'] != 'READY' or state['failures'] >= 30
-                    or state['next_model'] not in (None, model)):
+                    or expected_model not in (None, model)):
                 raise ValueError('Lineage is held, locked or requires its pivot model')
             lease = uuid.uuid4().hex
             try:
@@ -535,6 +537,53 @@ class AttemptLedger:
             self._save(conn, state)
             return state
 
+    def fracture_lineage(self, root, research, proposal, evidence_sha256, *, child_models=None):
+        """Register a fracture child graph into the shared lineage without resetting quality budgets (`P428-17`)."""
+        research = validate_research(research)
+        _sha(evidence_sha256)
+        if any(x['status'] == 'unavailable' for x in research.values()):
+            raise ValueError('Pivot research is incomplete')
+        if not isinstance(proposal, dict) or set(proposal) != {
+                'strategy', 'task_types', 'complexity', 'rationale', 'next_model', 'children'}:
+            raise ValueError('Fracture requires reassessment and an explicit strategy')
+        if proposal['strategy'] != 'fracture':
+            raise ValueError('fracture_lineage requires strategy="fracture"')
+        assessment({key: proposal[key] for key in ('complexity', 'task_types', 'rationale')})
+        _id(proposal['next_model'])
+        children = proposal['children']
+        if not isinstance(children, list) or not 2 <= len(children) <= 200 or len(set(children)) != len(children):
+            raise ValueError('Invalid fracture membership')
+        for child in children:
+            _id(child)
+        with self._write() as conn:
+            state = self._read(conn, root)
+            if state['root'] != root or state['failures'] >= 30 or state['stage'] == 'LOCKED':
+                raise ValueError('Lineage is locked or invalid for fracture')
+            if state['failures'] not in (10, 20, 29):
+                raise ValueError('Fracture requires 10/20 boundary or 29-failure emergency reassessment')
+            if state['failures'] in (10, 20) and (state['stage'] != 'PIVOT_RESEARCH' or not state['research_due']):
+                raise ValueError('No pivot is due')
+            if proposal['next_model'] == state['last_model']:
+                raise ValueError('A quality fracture must use a different underlying model for the escalated assembly')
+            for child in children:
+                if conn.execute('SELECT 1 FROM task428_members WHERE task_id=?', (child,)).fetchone():
+                    raise ValueError('Fracture child already belongs to a lineage')
+                conn.execute('INSERT INTO task428_members VALUES(?,?)', (child, root))
+            state['pivots'].append(dict(after_failures=state['failures'], research=research,
+                proposal=deepcopy(proposal), evidence_sha256=evidence_sha256))
+            state['research_due'] = False
+            if isinstance(child_models, dict):
+                merged = dict(state.get('fracture_child_models') or {})
+                for cid, cmodel in child_models.items():
+                    _id(cid)
+                    _id(cmodel)
+                    merged[cid] = cmodel
+                state['fracture_child_models'] = merged
+            state.update(stage='READY', next_model=proposal['next_model'],
+                floor=max(proposal['complexity'], min(10, state['floor'] + 1)))
+            self._save(conn, state)
+            return state
+
     def decision_packets(self):
         """Read-only projection for the next status request; never unlocks work."""
         with self._write() as conn:
@@ -546,3 +595,153 @@ class AttemptLedger:
                          dict(action='defer', pros='Preserve evidence and spent quota',
                               cons='Task remains unfinished', risks='Dependent work remains blocked')])
                 for x in locked if x['stage'] == 'LOCKED']
+
+
+def compile_fracture_child_graph(failed_scope, children, review):
+    """Validate and compile a narrower reassessed fracture child graph with explicit assembly (`P428-17`)."""
+    if not isinstance(failed_scope, dict) or not {
+        'scope_id', 'lineage_root', 'parent_floor', 'last_failed_model', 'requirement_ids', 'deliverables'
+    } <= set(failed_scope):
+        raise ValueError('failed_scope requires scope_id, lineage_root, parent_floor, last_failed_model, requirement_ids, and deliverables')
+    scope_id = _id(failed_scope['scope_id'])
+    lineage_root = _id(failed_scope['lineage_root'])
+    parent_floor = failed_scope['parent_floor']
+    if type(parent_floor) is not int or not 1 <= parent_floor <= 10:
+        raise ValueError('parent_floor must be an integer in 1..10')
+    last_failed_model = _id(failed_scope['last_failed_model'])
+    parent_reqs = set(_texts(failed_scope['requirement_ids'], 'Parent requirement IDs'))
+    parent_delivs = set(_texts(failed_scope['deliverables'], 'Parent deliverables'))
+    for req_id in parent_reqs:
+        _id(req_id)
+
+    escalated_floor = min(10, parent_floor + 1)
+
+    if not isinstance(review, dict) or set(review) != {
+        'reviewer_model', 'reviewer_tier', 'effort', 'accepted', 'review_sha256'
+    }:
+        raise ValueError('Fracture requires an independent higher-tier review record')
+    reviewer_model = _id(review['reviewer_model'])
+    reviewer_tier = review['reviewer_tier']
+    review_effort = _text(review['effort'], 'Reviewer effort', 32)
+    review_sha256 = _sha(review['review_sha256'])
+    if (reviewer_model == last_failed_model or type(reviewer_tier) is not int
+            or reviewer_tier < escalated_floor or review['accepted'] is not True):
+        raise ValueError('Fracture review requires an accepted independent model at or above the escalated tier')
+    req_max = 'high' if reviewer_model.startswith('gemini-') else 'max'
+    if (parent_floor == 10 or reviewer_tier == 10) and review_effort != req_max:
+        raise ValueError('Tier 10 fracture review requires maximum effort')
+
+    ancestors = _dag(children)
+    implementations, assemblies, final_tests = set(), set(), set()
+    covered_reqs, covered_delivs = set(), set()
+    impl_signatures = set()
+    compiled_children = []
+
+    for row in children:
+        expected_fields = {
+            'id', 'role', 'complexity', 'task_types', 'rationale',
+            'requirement_ids', 'deliverables', 'release_criteria', 'depends_on',
+        }
+        if not isinstance(row, dict) or not expected_fields <= set(row):
+            raise ValueError('Fracture child requires id, role, complexity, task_types, rationale, requirement_ids, deliverables, release_criteria, and depends_on')
+        cid = _id(row['id'])
+        if cid in (scope_id, lineage_root):
+            raise ValueError('Fracture child cannot reuse the failed scope or lineage root ID')
+        role = row['role']
+        check = assessment({
+            'complexity': row['complexity'],
+            'task_types': row['task_types'],
+            'rationale': row['rationale'],
+        })
+        reqs = [_id(r) for r in _texts(row['requirement_ids'], 'Child requirement_ids')]
+        if set(reqs) - parent_reqs:
+            raise ValueError(f'Fracture child {cid} links unknown requirement outside failed scope')
+        delivs = _texts(row['deliverables'], 'Child deliverables')
+        criteria = _texts(row['release_criteria'], 'Child release_criteria')
+
+        if role == 'implementation':
+            implementations.add(cid)
+            # Each implementation fragment must be genuinely narrower than a multi-item parent scope
+            if (len(parent_reqs) > 1 and set(reqs) == parent_reqs) and (
+                len(parent_delivs) > 1 and set(delivs) == parent_delivs
+            ):
+                raise ValueError(f'Implementation fragment {cid} is not narrower than the failed scope')
+            sig = (tuple(sorted(set(reqs))), tuple(sorted(set(delivs))))
+            if sig in impl_signatures:
+                raise ValueError(f'Duplicate implementation fragment scope in {cid}')
+            impl_signatures.add(sig)
+            covered_reqs.update(reqs)
+            covered_delivs.update(set(delivs) & parent_delivs)
+            effective_complexity = check['complexity']
+        elif role == 'assembly':
+            assemblies.add(cid)
+            if check['complexity'] < escalated_floor:
+                raise ValueError(
+                    f'Fracture assembly {cid} complexity ({check["complexity"]}) must be at least the escalated floor ({escalated_floor})'
+                )
+            if set(reqs) != parent_reqs:
+                raise ValueError(f'Fracture assembly {cid} must cover all failed-scope requirements')
+            effective_complexity = check['complexity']
+        elif role == 'final_test':
+            final_tests.add(cid)
+            effective_complexity = max(check['complexity'], escalated_floor)
+        else:
+            raise ValueError(f'Unknown fracture child role: {role}')
+
+        needs_approval = False
+        if 8 <= effective_complexity <= 10:
+            app = row.get('owner_approval')
+            if not (isinstance(app, dict) and app.get('receipt_id')):
+                needs_approval = True
+
+        compiled_children.append({
+            'id': cid,
+            'failed_scope_id': scope_id,
+            'lineage_root': lineage_root,
+            'role': role,
+            'complexity': effective_complexity,
+            'task_types': list(check['task_types']),
+            'rationale': check['rationale'],
+            'requirement_ids': sorted(set(reqs)),
+            'deliverables': list(delivs),
+            'release_criteria': list(criteria),
+            'depends_on': list(row['depends_on']),
+            'ancestors': sorted(ancestors[cid]),
+            'escalated_scope': role in ('assembly', 'final_test'),
+            'needs_owner_approval': needs_approval,
+            'owner_approval': deepcopy(row.get('owner_approval')),
+        })
+
+    if len(implementations) < 2 or not assemblies:
+        raise ValueError('Fracture requires at least two narrower implementation fragments and an explicit assembly')
+    if covered_reqs != parent_reqs:
+        raise ValueError('Fracture implementation fragments must collectively cover all failed-scope requirements')
+    if not any(implementations <= ancestors[a] for a in assemblies):
+        raise ValueError('Fracture assembly must depend on every implementation fragment')
+    if final_tests and not any((implementations | assemblies) <= ancestors[t] for t in final_tests):
+        raise ValueError('Fracture final_test must depend on all implementation and assembly nodes')
+
+    graph_body = {
+        'schema': 'cochem-fracture-graph/4.2.8',
+        'failed_scope_id': scope_id,
+        'lineage_root': lineage_root,
+        'parent_floor': parent_floor,
+        'escalated_floor': escalated_floor,
+        'last_failed_model': last_failed_model,
+        'review': {
+            'reviewer_model': reviewer_model,
+            'reviewer_tier': reviewer_tier,
+            'effort': review_effort,
+            'accepted': True,
+            'review_sha256': review_sha256,
+        },
+        'children': [
+            {k: v for k, v in c.items() if k != 'owner_approval'}
+            for c in compiled_children
+        ],
+    }
+    return {
+        **graph_body,
+        'children': compiled_children,
+        'graph_sha256': digest(graph_body),
+    }
