@@ -60,17 +60,40 @@ class PlanningJournal:
             raise ValueError('Unknown planning task')
         return dict(row)
 
-    def create(self, task_id, objective):
+    def has_task(self, task_id) -> bool:
+        try:
+            workflow._id(task_id)
+        except ValueError:
+            return False
+        with self._write() as conn:
+            return conn.execute('SELECT 1 FROM planning428_tasks WHERE task_id=?', (task_id,)).fetchone() is not None
+
+    def create(self, task_id, objective, *, project_id=None):
         state = workflow.new_task(task_id, objective)
+        if project_id is not None:
+            state['project_id'] = workflow._id(project_id)
         with self._write() as conn:
             existing = conn.execute('SELECT 1 FROM planning428_tasks WHERE task_id=?', (task_id,)).fetchone()
             if existing:
                 old = self._read(conn, task_id)
-                if json.loads(old['state_json'])['objective'] != objective:
-                    raise ValueError('Task ID belongs to another objective')
+                old_state = json.loads(old['state_json'])
+                if old_state['objective'] != objective or old_state.get('project_id') != project_id:
+                    raise ValueError('Task ID belongs to another objective or project')
                 return self._projection(old)
             conn.execute('INSERT INTO planning428_tasks VALUES(?,?,?,?,?)',
                 (task_id, json.dumps(state), json.dumps(self.catalog), 0, self.flash_context_limit))
+            return self._projection(self._read(conn, task_id))
+
+    def cancel(self, task_id):
+        workflow._id(task_id)
+        with self._write() as conn:
+            row = self._read(conn, task_id)
+            state = json.loads(row['state_json'])
+            if state.get('stage') == 'COMPLETED':
+                raise ValueError('Completed task cannot be cancelled')
+            state['stage'] = 'CANCELLED'
+            conn.execute('UPDATE planning428_tasks SET state_json=?,version=version+1 WHERE task_id=?',
+                         (json.dumps(state, sort_keys=True, allow_nan=False), task_id))
             return self._projection(self._read(conn, task_id))
 
     @staticmethod

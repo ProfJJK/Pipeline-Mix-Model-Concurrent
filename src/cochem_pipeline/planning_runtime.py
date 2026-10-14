@@ -93,10 +93,21 @@ class PlanningController:
         )
         return cls(journal, runtime.store, research_runtime=res_runtime)
 
-    def submit(self, objective, task_id=None):
+    def has_task(self, task_id) -> bool:
+        return self.journal.has_task(task_id)
+
+    def submit(self, objective, task_id=None, *, project_id=None):
         # No catalog, tier, approval, profile or dispatch arguments are accepted.
         task_id = _id(task_id if task_id is not None else 'task428-' + uuid.uuid4().hex)
-        self.journal.create(task_id, objective)
+        self.journal.create(task_id, objective, project_id=project_id)
+        return self.task_status(task_id)
+
+    def cancel(self, task_id):
+        _id(task_id)
+        current = self.task_status(task_id)
+        job_id = (current.get('controller') or {}).get('job_id')
+        state = self.journal.cancel(task_id)
+        self._record(task_id, state['journal_version'], 'CANCELLED', job_id=job_id, delay=3600)
         return self.task_status(task_id)
 
     def task_status(self, task_id):

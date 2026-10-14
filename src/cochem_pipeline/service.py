@@ -168,11 +168,19 @@ class Handler(BaseHTTPRequestHandler):
     def _projection(self,runtime,path):
         # Called only while the path's projection lock is held.
         if path.startswith('/tasks/status/'):
-            return redact(runtime.task_status(path[len('/tasks/status/'):]))
+            from .owner_ui_428 import build_public_task_view
+            return redact(build_public_task_view(runtime.task_status(path[len('/tasks/status/'):]),
+                                                 owner_broker=getattr(runtime,'owner_approval_broker',None)))
         if path.startswith('/coding/workflow/'):
             return public_workflow(runtime.coding_workflow(path[len('/coding/workflow/'):]))
         if path.startswith('/workflow/'):
-            return public_workflow(runtime.store.workflow(path[len('/workflow/'):]))
+            workflow_id=path[len('/workflow/'):]
+            planner=getattr(runtime,'task_planning',None)
+            if planner is not None and hasattr(planner,'has_task') and planner.has_task(workflow_id):
+                from .owner_ui_428 import build_public_task_view
+                return redact(build_public_task_view(runtime.task_status(workflow_id),
+                                                     owner_broker=getattr(runtime,'owner_approval_broker',None)))
+            return public_workflow(runtime.store.workflow(workflow_id))
         from .operator_views import operator_snapshot
         workflow_id=path[len('/operator/workflow/'):] if path.startswith('/operator/workflow/') else None
         job_id=path[len('/operator/job/'):] if path.startswith('/operator/job/') else None
@@ -238,9 +246,25 @@ class Handler(BaseHTTPRequestHandler):
                 if not isinstance(data,dict):
                     raise ValueError('Request must be a JSON object')
                 if path=='/tasks/submit':
-                    if set(data)-{'objective','task_id'}:
-                        raise ValueError('Task intake accepts only objective and optional task_id; planning assigns all gates and routes')
-                    self.reply(202,redact(runtime.submit_task(data['objective'],data.get('task_id'))))
+                    if set(data)-{'objective','task_id','project_id','workflow_id'}:
+                        raise ValueError('Task intake accepts only objective and optional task_id/project_id; planning assigns all gates and routes')
+                    task_id=data.get('task_id')
+                    if data.get('workflow_id') is not None:
+                        if task_id is not None and task_id!=data['workflow_id']:
+                            raise ValueError('Conflicting task_id and workflow_id')
+                        task_id=data['workflow_id']
+                    project_id=data.get('project_id')
+                    if project_id is not None:
+                        projects=getattr(getattr(runtime,'config',None),'coding_projects',{}) or {}
+                        if not isinstance(project_id,str) or project_id not in projects:
+                            raise ValueError('Task project_id must be a registered coding project')
+                    from .owner_ui_428 import build_public_task_view
+                    planner=getattr(runtime,'task_planning',None)
+                    if project_id is not None and planner is not None:
+                        submitted=planner.submit(data['objective'],task_id,project_id=project_id)
+                    else:
+                        submitted=runtime.submit_task(data['objective'],task_id)
+                    self.reply(202,redact(build_public_task_view(submitted,owner_broker=getattr(runtime,'owner_approval_broker',None))))
                 elif path=='/preflight':
                     if set(data)-{'workflow_id'}:
                         raise ValueError('Preflight accepts only an optional workflow_id; Chapter 06 assigns its model')
@@ -265,16 +289,44 @@ class Handler(BaseHTTPRequestHandler):
                         raise ValueError('Coding resume requires an operator reason of at most 512 characters')
                     self.reply(200,public_workflow(runtime.resume_coding(data['workflow_id'],reason.strip())))
                 elif path=='/submit':
-                    count=data.get('chapter_count',6)
-                    if type(count) is not int or not 1<=count<=len(runtime.config.workers):
-                        raise ValueError('chapter_count must fit the provisioned distinct worker identity pool')
-                    workflow=runtime.store.submit(data['objective'],data.get('requirements',['REQ-001']),
-                                                  count,data.get('workflow_id'),max_attempts=data.get('max_attempts'),
-                                                  max_dispatches=data.get('max_dispatches'))
-                    self.reply(202,public_workflow(workflow))
+                    planner=getattr(runtime,'task_planning',None)
+                    if planner is not None:
+                        if set(data)-{'objective','requirements','chapter_count','workflow_id','task_id','project_id','max_attempts','max_dispatches'}:
+                            raise ValueError('Task intake accepts only objective and optional task_id/project_id; planning assigns all gates and routes')
+                        task_id=data.get('task_id')
+                        if data.get('workflow_id') is not None:
+                            if task_id is not None and task_id!=data['workflow_id']:
+                                raise ValueError('Conflicting task_id and workflow_id')
+                            task_id=data['workflow_id']
+                        project_id=data.get('project_id')
+                        if project_id is not None:
+                            projects=getattr(getattr(runtime,'config',None),'coding_projects',{}) or {}
+                            if not isinstance(project_id,str) or project_id not in projects:
+                                raise ValueError('Task project_id must be a registered coding project')
+                        from .owner_ui_428 import build_public_task_view
+                        if project_id is not None:
+                            submitted=planner.submit(data['objective'],task_id,project_id=project_id)
+                        else:
+                            submitted=runtime.submit_task(data['objective'],task_id)
+                        self.reply(202,redact(build_public_task_view(submitted,owner_broker=getattr(runtime,'owner_approval_broker',None))))
+                    else:
+                        count=data.get('chapter_count',6)
+                        if type(count) is not int or not 1<=count<=len(runtime.config.workers):
+                            raise ValueError('chapter_count must fit the provisioned distinct worker identity pool')
+                        workflow=runtime.store.submit(data['objective'],data.get('requirements',['REQ-001']),
+                                                      count,data.get('workflow_id'),max_attempts=data.get('max_attempts'),
+                                                      max_dispatches=data.get('max_dispatches'))
+                        self.reply(202,public_workflow(workflow))
                 elif path=='/cancel':
-                    runtime.cancel(data['workflow_id'])
-                    self.reply(200,public_workflow(runtime.store.workflow(data['workflow_id'])))
+                    planner=getattr(runtime,'task_planning',None)
+                    workflow_id=data['workflow_id']
+                    if planner is not None and hasattr(planner,'has_task') and planner.has_task(workflow_id):
+                        from .owner_ui_428 import build_public_task_view
+                        cancelled=planner.cancel(workflow_id)
+                        self.reply(200,redact(build_public_task_view(cancelled,owner_broker=getattr(runtime,'owner_approval_broker',None))))
+                    else:
+                        runtime.cancel(workflow_id)
+                        self.reply(200,public_workflow(runtime.store.workflow(workflow_id)))
                 else:
                     reason=data.get('reason')
                     if not isinstance(reason,str) or not reason.strip() or len(reason)>512 or '\x00' in reason:

@@ -78,11 +78,17 @@ def create_server(client:ControlClient):
 
     @server.tool()
     async def pipeline_submit(objective:str,requirements:list[str]|None=None,chapter_count:int=6,
-                              max_attempts:int|None=None,max_dispatches:int|None=None)->dict[str,Any]:
+                              max_attempts:int|None=None,max_dispatches:int|None=None,
+                              task_id:str|None=None,project_id:str|None=None)->dict[str,Any]:
         """Create one complete planning workflow; no manual repeated delegation is needed."""
-        return await asyncio.to_thread(client.call,'/submit',{
+        payload:dict[str,Any] = {
             'objective':objective,'requirements':requirements or ['REQ-001'],'chapter_count':chapter_count,
-            'max_attempts':max_attempts,'max_dispatches':max_dispatches})
+            'max_attempts':max_attempts,'max_dispatches':max_dispatches}
+        if task_id is not None:
+            payload['task_id'] = task_id
+        if project_id is not None:
+            payload['project_id'] = project_id
+        return await asyncio.to_thread(client.call,'/submit',payload)
 
     @server.tool()
     async def pipeline_status(workflow_id:str)->dict[str,Any]:
