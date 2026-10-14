@@ -185,6 +185,10 @@ class Runtime:
         self.last_capacity = 0
         self.heartbeat = Heartbeat(config.private_root,__version__)
         self.pool = ThreadPoolExecutor(max_workers=min(getattr(config,'max_execution_slots',4),len(config.workers)),thread_name_prefix='pipeline')
+        self.task_planning = None
+        if getattr(config, 'task_planning', None) is not None:
+            from .planning_runtime import PlanningController
+            self.task_planning = PlanningController.from_runtime(self)
         self.catalog=None
         if getattr(config,'catalog_activation',False):
             from .catalog_runtime import CatalogController
@@ -500,6 +504,7 @@ class Runtime:
                 self.catalog.step([s for s in self.config.slot_roots if s not in busy and s not in self.quarantined],ceiling)
         if ceiling<=0:
             return
+        self._planning_maintenance()
         with self.lock:
             busy = {value['slot'] for value in self.active.values()}
             available = [s for s in self.config.slot_roots if s not in busy and s not in self.quarantined]
@@ -523,6 +528,33 @@ class Runtime:
                                               'cleaned':threading.Event(),'cleanup_verified':False,
                                               'process_cleanup_verified':False,'cancel_event':threading.Event(),'container_reservation':reservation}
                 self.pool.submit(self._execute,node,slot)
+
+    def _planning_maintenance(self):
+        planner = getattr(self, 'task_planning', None)
+        if planner is None:
+            return
+        try:
+            planner.step()
+            self.components['task_planning'] = {'required':False, 'checked_at':time.time(),
+                'state':'healthy', 'evidence':planner.status()}
+        except Exception as error:
+            # Planning-storage failure must not interrupt existing containment or
+            # unrelated jobs. No replacement planning journal is created.
+            self.components['task_planning'] = {'required':False, 'checked_at':time.time(),
+                'state':'held', 'error_type':type(error).__name__}
+            LOG.error('Task planning held: %s', type(error).__name__)
+
+    def submit_task(self, objective, task_id=None):
+        planner = getattr(self, 'task_planning', None)
+        if planner is None:
+            raise ValueError('4.2.8 task planning is not enabled in the reviewed installation')
+        return planner.submit(objective, task_id)
+
+    def task_status(self, task_id):
+        planner = getattr(self, 'task_planning', None)
+        if planner is None:
+            raise ValueError('4.2.8 task planning is not enabled in the reviewed installation')
+        return planner.task_status(task_id)
 
     def _container_maintenance(self, capacity):
         if getattr(self,'docker',None) is None:
@@ -603,6 +635,7 @@ class Runtime:
                 'knowledge':self.knowledge_authority.status() if hasattr(self,'knowledge_authority') else
                     self.knowledge.status() if getattr(self,'knowledge',None) is not None else {'ready':False},
                 'planning':planning_readiness(getattr(self.config,'coding_projects',{})),
+                'task_planning':self.task_planning.status() if getattr(self,'task_planning',None) is not None else {'status':'DISABLED'},
                 'source_root':str(Path(__file__).resolve().parents[2])}
 
     def cancel(self,workflow_id):

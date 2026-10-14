@@ -26,6 +26,13 @@ The R6 native failure and tested source repair are documented separately in
   native prompt/route validation. Planning completions are semantically checked
   before commit and imported only after exact cleanup evidence. Existing jobs
   and captured policies survive the new job-kind schema migration.
+- A bounded runtime planning pump now submits and imports those jobs, survives
+  restart without duplicates, rotates fairly across waiting tasks and persists
+  sanitized per-task status. Authenticated `/tasks/submit` and `/tasks/status/`
+  expose intake and progress. They cannot set a route or manufacture approval.
+  Large status projections use the existing serialized HTTP projection lock.
+  The feature defaults off and requires a pinned protected host-accepted catalog,
+  v3 routing and four shared slots. The research candidate cannot enable it.
 - Durable 10/20/30 quality-failure lineage accounting, research/pivot/fracture
   requirements and locked-task decision packets. Availability failures do not
   consume quality attempts; fractures retain their parent budget.
@@ -33,16 +40,19 @@ The R6 native failure and tested source repair are documented separately in
   tier-10 selection, priority over competing new quota reservations, and
   repository/commit/test/cleanup evidence contracts. No repair agent is launched.
 
-The serialized source regression run passed 317 tests with two real-process
-tests excluded. The subsequent six gateway tests also passed, including the
-new migration-preservation test. All execution evidence in those tests is an
-explicit in-process fixture. Native providers, protected state and host tasks
-were not exercised.
+The latest serialized regression run passed 472 tests with two real-process
+tests excluded. A separate existing HTTP regression run passed 54 tests, with
+ten coding tests excluded from that run. These cover the planning chain, restart,
+cleanup, approval and research boundaries, quota accounting, configuration and
+existing routing behavior. One subsequently added runtime-maintenance integration
+test also passed. All model execution evidence is an explicit inert
+fixture. Native providers, protected state and host tasks were not exercised.
 
 ## Remaining implementation and acceptance
 
-1. Runtime planning pump, authenticated owner API/status integration and actual
-   controller internet/wiki/paper research adapters with durable evidence.
+1. Actual controller internet/wiki/paper research adapters with durable evidence
+   and the separate authenticated human approval interface. The implemented pump
+   waits at these boundaries; ordinary MCP/API credentials cannot approve an SRS.
 2. Materialize/reassess execution microtasks on the job board, including explicit
    assembly/final-test dependencies and approval of newly high-complexity work.
    Integrate the lineage attempt ledger with actual runtime outcomes.
@@ -57,3 +67,6 @@ were not exercised.
 
 This checkpoint does not include a reviewed 4.2.8 launch command. All delivered old
 4.2.7 packages, credentials, databases and historical receipts remain preserved.
+
+See `LAUNCH_PATH.md` for the release sequence and the owner's single-sitting
+requirement. No host launch or sign-in is needed to continue source integration.

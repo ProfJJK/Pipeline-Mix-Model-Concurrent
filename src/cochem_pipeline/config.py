@@ -14,6 +14,7 @@ from .resource_limits import ResourceLimits
 from .ramdisk import RamdiskConfig
 from .container_policy import DockerPolicy
 from .knowledge import KnowledgeConfig
+from .planning_runtime import PlanningConfig
 
 
 def validate_subscription_probe(spec: Any) -> None:
@@ -122,6 +123,7 @@ class PipelineConfig:
     max_attempts: int = 3
     max_execution_slots: int = 4
     catalog_activation: bool = False
+    task_planning: PlanningConfig | None = None
     context_budget: int = 16384
     reserved_fraction: float = 0.25
     min_free_memory_mb: int = 1024
@@ -222,6 +224,9 @@ def load_config(filename: str) -> PipelineConfig:
         raise ValueError('Catalog activation requires v3 routing and four shared slots')
     if 'gemini' not in held_providers:
         validate_gemini_route_bindings(gemini, routing)
+    task_planning = PlanningConfig.from_dict(raw.get('task_planning'))
+    if task_planning is not None and (routing.as_dict()['policy_version'] != 3 or values['max_execution_slots'] != 4):
+        raise ValueError('Task planning requires v3 routing and four shared execution slots')
     hardware = HardwarePolicy.from_dict(raw.get('hardware'))
     execution_limits = ResourceLimits.from_dict(raw.get('execution_limits'))
     ramdisk = RamdiskConfig.from_dict(raw.get('ramdisk'))
@@ -259,5 +264,5 @@ def load_config(filename: str) -> PipelineConfig:
         *([Path(ramdisk.mount_root)] if ramdisk.enabled else [])])
     return PipelineConfig(private.resolve(), {k:v.resolve() for k,v in roots.items()}, workers,
                           providers, rules, token, operator, reserved_fraction=fraction, routing=routing,
-                          catalog_activation=catalog_activation,hardware=hardware,execution_limits=execution_limits,ramdisk=ramdisk,
+                          catalog_activation=catalog_activation,task_planning=task_planning,hardware=hardware,execution_limits=execution_limits,ramdisk=ramdisk,
                           docker=docker,coding_projects=projects,knowledge=knowledge,git_executable=git_executable, **values)

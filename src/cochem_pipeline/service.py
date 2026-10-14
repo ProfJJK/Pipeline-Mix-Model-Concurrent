@@ -21,7 +21,7 @@ from urllib.parse import parse_qs, urlsplit
 # operator build. /health, /knowledge/* and every POST stay outside both locks.
 PROJECTION_WAIT_SECONDS = 20.0
 OPERATOR_PROJECTION_PREFIXES = ('/operator/workflow/','/operator/job/')
-WORKFLOW_PROJECTION_PREFIXES = ('/workflow/','/coding/workflow/')
+WORKFLOW_PROJECTION_PREFIXES = ('/workflow/','/coding/workflow/','/tasks/status/')
 PROJECTION_PREFIXES = OPERATOR_PROJECTION_PREFIXES+WORKFLOW_PROJECTION_PREFIXES
 
 
@@ -167,6 +167,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def _projection(self,runtime,path):
         # Called only while the path's projection lock is held.
+        if path.startswith('/tasks/status/'):
+            return redact(runtime.task_status(path[len('/tasks/status/'):]))
         if path.startswith('/coding/workflow/'):
             return public_workflow(runtime.coding_workflow(path[len('/coding/workflow/'):]))
         if path.startswith('/workflow/'):
@@ -198,11 +200,12 @@ class Handler(BaseHTTPRequestHandler):
         self._observed_started=started
         self._observed_operation=(path if path in {'/health','/operator','/knowledge/status',
             '/knowledge/search','/knowledge/read','/knowledge/refresh','/coding/projects',
-            '/submit','/preflight','/cancel','/routing/resume','/coding/submit','/coding/cancel','/coding/resume'}
+            '/submit','/preflight','/cancel','/routing/resume','/coding/submit','/coding/cancel','/coding/resume','/tasks/submit'}
             else '/operator/workflow' if path.startswith('/operator/workflow/')
             else '/operator/job' if path.startswith('/operator/job/')
             else '/coding/workflow' if path.startswith('/coding/workflow/')
-            else '/workflow' if path.startswith('/workflow/') else '/unknown')
+            else '/workflow' if path.startswith('/workflow/')
+            else '/tasks/status' if path.startswith('/tasks/status/') else '/unknown')
         try:
             if self.command=='GET' and path=='/health':
                 self.reply(200,redact(runtime.status()))
@@ -227,14 +230,18 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply(200,{'projects':sorted(runtime.config.coding_projects)})
             elif self.command=='POST' and path in ('/submit','/preflight','/cancel','/routing/resume',
                                                   '/coding/submit','/coding/cancel','/coding/resume',
-                                                  '/knowledge/search','/knowledge/read','/knowledge/refresh'):
+                                                  '/knowledge/search','/knowledge/read','/knowledge/refresh','/tasks/submit'):
                 size=int(self.headers.get('Content-Length','0'))
                 if not 1<=size<=4*1024*1024:
                     raise ValueError('Request body must be 1..4194304 bytes')
                 data=json.loads(self.rfile.read(size))
                 if not isinstance(data,dict):
                     raise ValueError('Request must be a JSON object')
-                if path=='/preflight':
+                if path=='/tasks/submit':
+                    if set(data)-{'objective','task_id'}:
+                        raise ValueError('Task intake accepts only objective and optional task_id; planning assigns all gates and routes')
+                    self.reply(202,redact(runtime.submit_task(data['objective'],data.get('task_id'))))
+                elif path=='/preflight':
                     if set(data)-{'workflow_id'}:
                         raise ValueError('Preflight accepts only an optional workflow_id; Chapter 06 assigns its model')
                     self.reply(202,public_workflow(runtime.store.submit_preflight(data.get('workflow_id'))))
