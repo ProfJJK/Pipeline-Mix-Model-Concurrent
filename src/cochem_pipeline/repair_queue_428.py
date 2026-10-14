@@ -198,3 +198,37 @@ class RepairQueue:
             conn.execute("UPDATE repair428_incidents SET state='SOURCE_REPAIRED',result_json=? WHERE lease=?",
                          (json.dumps(result), lease))
             return result
+
+    def get_incident(self, incident_id):
+        _id(incident_id)
+        with self._write() as conn:
+            row = conn.execute(
+                'SELECT * FROM repair428_incidents WHERE incident_id=?',
+                (incident_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        return dict(
+            incident_id=row['incident_id'],
+            evidence_sha256=row['evidence_sha256'],
+            state=row['state'],
+            lease=row['lease'],
+            request=json.loads(row['request_json']),
+            execution=json.loads(row['execution_json']) if row['execution_json'] else None,
+            result=json.loads(row['result_json']) if row['result_json'] else None,
+            created_at=float(row['created_at']),
+        )
+
+    def list_incidents(self, *, state=None):
+        with self._write() as conn:
+            if state is not None:
+                rows = conn.execute(
+                    'SELECT incident_id FROM repair428_incidents WHERE state=? ORDER BY created_at ASC, incident_id ASC',
+                    (state,),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    'SELECT incident_id FROM repair428_incidents ORDER BY created_at ASC, incident_id ASC'
+                ).fetchall()
+        return [self.get_incident(r['incident_id']) for r in rows]
+
