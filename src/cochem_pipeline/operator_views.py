@@ -744,4 +744,15 @@ def operator_snapshot(runtime, workflow_id=None, *, job_id=None, after_event_id=
         except (OSError, ValueError) as error:
             result['retention'] = {'available': False, 'reason': type(error).__name__,
                                    'pruning_supported': False}
+    decisions_store = getattr(runtime, 'task_decisions_428', None)
+    if decisions_store is None:
+        ledger_428 = getattr(runtime, 'attempt_ledger_428', None)
+        if ledger_428 is not None:
+            from .task_decisions_428 import LockedTaskDecisionStore
+            decisions_store = LockedTaskDecisionStore(ledger_428)
+    if decisions_store is not None and hasattr(decisions_store, 'status_projection'):
+        try:
+            result['locked_task_decisions'] = decisions_store.status_projection(workflow_id)
+        except (OSError, ValueError, RuntimeError, sqlite3.Error) as error:
+            result['locked_task_decisions'] = {'available': False, 'reason': type(error).__name__}
     return result
