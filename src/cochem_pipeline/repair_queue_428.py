@@ -266,4 +266,50 @@ class RepairQueue:
             )
         return self.get_incident(inc_id)
 
+    def apply_runtime_transition(
+        self,
+        incident_id,
+        *,
+        supervisor_authority_verified,
+        supervisor_receipt_id=None,
+        runtime_version_sha256=None,
+        smoke_check_sha256=None,
+    ):
+        """Transition a `SOURCE_REPAIRED` incident to `RESOLVED` only through reviewed supervisor authority (`P428-21`)."""
+        _id(incident_id)
+        with self._write() as conn:
+            row = conn.execute(
+                'SELECT * FROM repair428_incidents WHERE incident_id=?',
+                (incident_id,),
+            ).fetchone()
+            if row is None or row['state'] not in ('SOURCE_REPAIRED', 'AWAITING_SUPERVISOR_TRANSITION'):
+                raise ValueError('Incident must be in SOURCE_REPAIRED state before runtime transition')
+            result = json.loads(row['result_json']) if row['result_json'] else {}
+            if supervisor_authority_verified is not True or not supervisor_receipt_id:
+                result.update(
+                    deployment_performed=False,
+                    supervisor_transition_status='HELD_AWAITING_SUPERVISOR_AUTHORITY',
+                )
+                conn.execute(
+                    "UPDATE repair428_incidents SET state='AWAITING_SUPERVISOR_TRANSITION', result_json=? WHERE incident_id=?",
+                    (json.dumps(result, sort_keys=True), incident_id),
+                )
+            else:
+                _id(supervisor_receipt_id)
+                _sha(runtime_version_sha256)
+                _sha(smoke_check_sha256)
+                result.update(
+                    deployment_performed=True,
+                    supervisor_transition_status='APPLIED_BY_REVIEWED_SUPERVISOR',
+                    supervisor_receipt_id=supervisor_receipt_id,
+                    runtime_version_sha256=runtime_version_sha256,
+                    smoke_check_sha256=smoke_check_sha256,
+                )
+                conn.execute(
+                    "UPDATE repair428_incidents SET state='RESOLVED', result_json=? WHERE incident_id=?",
+                    (json.dumps(result, sort_keys=True), incident_id),
+                )
+        return self.get_incident(incident_id)
+
+
 
