@@ -220,11 +220,32 @@ class PlanningJournal:
         result = self._load(self.owner_receipt, receipt_id, 'Owner')
         def transition(row):
             state = json.loads(row['state_json'])
-            if (set(result) != {'task_id','srs_sha256','decision','actor_kind'}
-                    or result['task_id'] != task_id or result['decision'] != 'approved'
-                    or result['actor_kind'] != 'human_owner'):
+            from .owner_approval_428 import VALID_OWNER_DECISIONS, apply_owner_decision_to_state
+            legacy_keys = {'task_id', 'srs_sha256', 'decision', 'actor_kind'}
+            broker_keys = {
+                'receipt_id', 'request_id', 'task_id', 'revision',
+                'objective_sha256', 'srs_sha256', 'decision', 'notes',
+                'actor_kind', 'hmac_sha256', 'broker_verified',
+            }
+            if set(result) not in (legacy_keys, broker_keys):
                 raise ValueError('Only an authenticated human-owner approval is accepted')
-            return workflow.approve_srs(state, result['srs_sha256'], receipt_id)
+            if (result['task_id'] != task_id
+                    or result['actor_kind'] != 'human_owner'
+                    or result['decision'] not in VALID_OWNER_DECISIONS):
+                raise ValueError('Only an authenticated human-owner approval is accepted')
+            if set(result) == broker_keys:
+                if (result['receipt_id'] != receipt_id
+                        or result['broker_verified'] is not True
+                        or result['revision'] != state.get('revision')):
+                    raise ValueError('Owner approval receipt failed broker or revision verification')
+            return apply_owner_decision_to_state(
+                state,
+                expected_srs_sha256=result['srs_sha256'],
+                receipt_id=receipt_id,
+                decision=result['decision'],
+                notes=result.get('notes', ''),
+                objective_sha256=result.get('objective_sha256'),
+            )
         return self._transition(task_id, expected_version, 'owner.'+receipt_id, result, transition)
 
     def _transition(self, task_id, version, event_id, evidence, reduce):
