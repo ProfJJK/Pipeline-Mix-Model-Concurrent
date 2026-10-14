@@ -17,7 +17,7 @@ Before P428-00, the external R6 runner is valid only for its hardcoded -r6 check
 
 ## P428-00 — Worktree-correct serialized verification
 
-- [ ] Completed; commit/evidence: pending.
+- [x] Completed; commit/evidence: `b11e1ad`; `python.exe -I scripts/run_source_tests_428.py --timeout-seconds 120 -- pipeline_tests/test_source_runner_428.py pipeline_tests/test_planning_runtime_428.py --tb=short` -> `31 passed in 2.21s` (verified checkout/commit/import origin isolation, shared `C:\Users\ansac\CoChem427\heavy-run.lock` acquisition, distinct lock-wait vs execution timeouts, owned-PID cleanup, and retained lock when child refuses exit).
 - **Lane / size:** C / S. **Depends on:** none.
 - **Files:** proposed `scripts/run_source_tests_428.py`, proposed
   `pipeline_tests/test_source_runner_428.py`; reuse the reviewed serializer.
@@ -31,7 +31,7 @@ Before P428-00, the external R6 runner is valid only for its hardcoded -r6 check
 
 ## P428-01 — Freeze integration interfaces and ownership
 
-- [ ] Completed; commit/evidence: pending.
+- [x] Completed; commit/evidence: `a2e3613`; published `docs/4.2.8/INTEGRATION_CONTRACTS.md` defining canonical SHA-256 JSON schemas, trust/size/idempotency/recovery rules, explicit `WBS_CHILD` vs `FRACTURE_CHILD` lineage semantics, sample flow walkthroughs (`simple`, `researched`, `high-tier`, `failed`, `repair`), and shared-file edit schedule.
 - **Lane / size:** C / S. **Depends on:** P428-00.
 - **Files:** proposed `docs/4.2.8/INTEGRATION_CONTRACTS.md`, this checklist.
 - **Deliverable:** concrete request/result schemas and a shared-file edit schedule.
