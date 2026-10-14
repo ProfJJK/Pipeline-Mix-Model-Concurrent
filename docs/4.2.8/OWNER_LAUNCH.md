@@ -53,10 +53,10 @@ authority publication, and Warden cutover in one sitting:
    is free.
 6. **Versioned SYSTEM State Migration (`migration`):**
    Runs `cochem_pipeline.migration_428` as a one-shot `SYSTEM` scheduled task
-   against `C:\ProgramData\CoChemPipeline427\state`, preserving a full pre-cutover
+   against `C:\ProgramData\CoChemPipeline427\private`, preserving a full pre-cutover
    snapshot + SHA-256 inventory and verifying row/hash preservation across all
    existing 4.2.7 tables before applying additive 4.2.8 tables, and validating the
-   private receipt under `C:\ProgramData\CoChemPipeline427\private\migration-428-20261014-v2`.
+   private receipt under `C:\Program Files\CoChem\Migration4.2.8-windows-20261014-v2`.
 7. **Catalog Authority & Cutover (`cutover` $\rightarrow$ `catalog_publication`):**
    Copies `proposal.json` and `pointer.json` to
    `C:\Program Files\CoChem\RoutingCatalog4.2.8`, retargets `CoChem-4.2.7-Warden`
@@ -88,18 +88,18 @@ authority publication, and Warden cutover in one sitting:
 
 ## 3. Read-Only Plan vs Owner Execution Commands
 
-- **Frozen source commit (`P428-26` / `P428-28` fix):** `491e4a37c253aea038b2aa3a579b506ab3ed3c18` (`491e4a3`)
-- **Immutable release bundle:** `C:\Users\ansac\CoChem427\r428-bundle-491e4a3` (prior bundles `r428-bundle-4cc3460` and `r428-bundle-b862701` preserved intact)
-- **Launch manifest SHA-256:** `c9713b51ea48bb82d1ee7d11f8640ed3859b9dd49fe75d4297cfd9d4bd22cd1f`
-- **Install manifest SHA-256:** `0d45ffe310e6392979979125c24b1bfe5fa007409767dce028156085f5c39e8a`
+- **Frozen source commit (`P428-26` / `P428-28` fix):** `4a87f3345aa7892522efd1f5c873147002d52fdb` (`4a87f33`)
+- **Immutable release bundle:** `C:\Users\ansac\CoChem427\r428-bundle-4a87f33` (prior bundles `r428-bundle-4cc3460`, `r428-bundle-b862701`, and `r428-bundle-491e4a3` preserved intact)
+- **Launch manifest SHA-256:** `2c9359a5aea57f661be492313b61a0a31fc24d1a91a29d4f9ea7743698e1c020`
+- **Install manifest SHA-256:** `48b34c513dd7b7c86b0457e3c933f07e17b8f44b75ebda65715a36f9f9a2aab6`
 
 ### A. Read-Only Plan (Safe in Engineering / Non-Admin Sessions)
 
 ```powershell
 & "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive `
-  -File "C:\Users\ansac\CoChem427\r428-bundle-491e4a3\run_428_launch.ps1" `
-  -LaunchManifest "C:\Users\ansac\CoChem427\r428-bundle-491e4a3\launch-manifest.json" `
-  -LaunchManifestSha256 "c9713b51ea48bb82d1ee7d11f8640ed3859b9dd49fe75d4297cfd9d4bd22cd1f"
+  -File "C:\Users\ansac\CoChem427\r428-bundle-4a87f33\run_428_launch.ps1" `
+  -LaunchManifest "C:\Users\ansac\CoChem427\r428-bundle-4a87f33\launch-manifest.json" `
+  -LaunchManifestSha256 "2c9359a5aea57f661be492313b61a0a31fc24d1a91a29d4f9ea7743698e1c020"
 ```
 
 ### B. Single Owner Sitting Command (`P428-28`, 64-bit Administrator Windows PowerShell 5.1 as `AETHERDESK\ansac`)
@@ -108,9 +108,9 @@ See `docs/4.2.8/RELEASE_REVIEW.md` for the complete independent release-package 
 
 ```powershell
 & "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile `
-  -File "C:\Users\ansac\CoChem427\r428-bundle-491e4a3\run_428_launch.ps1" `
-  -LaunchManifest "C:\Users\ansac\CoChem427\r428-bundle-491e4a3\launch-manifest.json" `
-  -LaunchManifestSha256 "c9713b51ea48bb82d1ee7d11f8640ed3859b9dd49fe75d4297cfd9d4bd22cd1f" `
+  -File "C:\Users\ansac\CoChem427\r428-bundle-4a87f33\run_428_launch.ps1" `
+  -LaunchManifest "C:\Users\ansac\CoChem427\r428-bundle-4a87f33\launch-manifest.json" `
+  -LaunchManifestSha256 "2c9359a5aea57f661be492313b61a0a31fc24d1a91a29d4f9ea7743698e1c020" `
   -Apply
 ```
 
@@ -122,4 +122,4 @@ See `docs/4.2.8/RELEASE_REVIEW.md` for the complete independent release-package 
   - `C:\Program Files\CoChem\Pipeline4.2.8-windows-20261014-r2\r428-complete.json`
   - `C:\Program Files\CoChem\Pipeline4.2.8-windows-20261014-r2\r428-held.json`
 - **Protected migration evidence & pre-cutover backup:**
-  `C:\ProgramData\CoChemPipeline427\private\migration-428-20261014-v2\migration-428.json`
+  `C:\Program Files\CoChem\Migration4.2.8-windows-20261014-v2\migration-428.json`

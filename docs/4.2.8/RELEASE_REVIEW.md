@@ -3,7 +3,7 @@
 > [!IMPORTANT]
 > **Engineering Scope vs Owner Physical Acceptance (`P428-28`)**
 > This document records the non-administrator independent review of the immutable
-> Pipeline 4.2.8 release package (`C:\Users\ansac\CoChem427\r428-bundle-491e4a3`; prior bundles `r428-bundle-4cc3460` and `r428-bundle-b862701` and prior sitting/root `R428Sitting-windows-20261014-17cc6d671d8645ca92f3b8a718599726` / `Pipeline4.2.8-windows-20261014-r1` preserved intact).
+> Pipeline 4.2.8 release package (`C:\Users\ansac\CoChem427\r428-bundle-4a87f33`; prior bundles `r428-bundle-4cc3460`, `r428-bundle-b862701`, and `r428-bundle-491e4a3` and prior sitting/root `R428Sitting-windows-20261014-17cc6d671d8645ca92f3b8a718599726` / `Pipeline4.2.8-windows-20261014-r1` preserved intact).
 > Engineering sessions have executed source tests, synthetic fault/recovery
 > suites, offline wheel/bundle builds, and read-only package plans only.
 > **No `-Apply` invocation, Administrator elevation, `SYSTEM` scheduled-task
@@ -16,19 +16,19 @@
 
 | Artifact | Path / Identifier | Count / Size | SHA-256 / Digest |
 | :--- | :--- | :--- | :--- |
-| **Source commit (`P428-26` / `P428-28` fix)** | `feature/4.2.8-task-routing` | `491e4a3` | `491e4a37c253aea038b2aa3a579b506ab3ed3c18` |
-| **Frozen source tree** | `C:\Users\ansac\CoChem427\r428-source-491e4a3` | 253 files / 8,967,083 B | `ac17f29b8a1b5ad565575cf7d52ee31da22734e4a4a1eb6cbc4715e2ee2e3c45` |
-| **Offline application wheel** | `C:\Users\ansac\CoChem427\r428-build-491e4a3\dist\cochem-4.2.8-py3-none-any.whl` | 206 entries / 1,245,390 B | `bec73ad2a86cc3c61ac9d7e1e74104b5a53dc0f983cc9c8fb8ec3654910cb4e6` |
+| **Source commit (`P428-26` / `P428-28` fix)** | `feature/4.2.8-task-routing` | `4a87f33` | `4a87f3345aa7892522efd1f5c873147002d52fdb` |
+| **Frozen source tree** | `C:\Users\ansac\CoChem427\r428-source-4a87f33` | 253 files / 8,968,124 B | `83d8fc764aea843e70d4728dd3c57e0ed6878fe22d83ff513cbfb09f3ba5c056` |
+| **Offline application wheel** | `C:\Users\ansac\CoChem427\r428-build-4a87f33\dist\cochem-4.2.8-py3-none-any.whl` | 206 entries / 1,245,454 B | `7f63dedd55da0e5141c6396807a59205a02d4ce59b67cd09c4d7a840ca80a2fa` |
 | **Build backend receipt** | `C:\Users\ansac\CoChem427\r6-build-backend-20261012-v2\receipt.json` | 4 backend wheels | `27ce4c8d60f5173f3f9326ce5b8dc76a56eb2bcf87b8c57d19e12d6c809ae53d` |
 | **Toolchain `uv.exe`** | `C:\Program Files\CoChem\Toolchain4.2.7-windows-20261006\uv\uv.exe` | 57,540,184 B | `2019cdf564cb8f749262f5f021cedc75a99abb1c6081227ca340bbcda972611d` |
-| **Immutable owner bundle** | `C:\Users\ansac\CoChem427\r428-bundle-491e4a3` | 362 installer inputs | Revision `windows-20261014-428-v2` |
-| **Launch manifest** | `C:\Users\ansac\CoChem427\r428-bundle-491e4a3\launch-manifest.json` | 3,020 B (12 files) | `c9713b51ea48bb82d1ee7d11f8640ed3859b9dd49fe75d4297cfd9d4bd22cd1f` |
-| **Install manifest** | `C:\Users\ansac\CoChem427\r428-bundle-491e4a3\install-manifest.json` | 107,865 B (362 files) | `0d45ffe310e6392979979125c24b1bfe5fa007409767dce028156085f5c39e8a` |
-| **Candidate `pipeline.json`** | `C:\Users\ansac\CoChem427\r428-bundle-491e4a3\pipeline.json` | 26,902 B | `ff77d5e5713a5390a41fd384d78899f01f2b4d93d3931605759a1bad18420a1f` |
-| **Routing candidate** | `C:\Users\ansac\CoChem427\r428-bundle-491e4a3\routing-candidate.json` | 331,800 B | `e53f8e84e5be5dc0972f8abd5f226b27dc62be948121d1e90aeb41f74b3fbc25` |
-| **Catalog proposal** | `C:\Users\ansac\CoChem427\r428-bundle-491e4a3\proposal.json` | 4,038 B | `2588890b30d91902642cb400843d47d16795392bcbb9e20fcf7102566d073afc` |
-| **Catalog pointer** | `C:\Users\ansac\CoChem427\r428-bundle-491e4a3\pointer.json` | 194 B | `1a7f87d3b230dcf930d414a08c75dbeaa92054266545cc2e29b95a28be738a30` |
-| **Source test evidence** | `C:\Users\ansac\CoChem427\r428-bundle-491e4a3\source-test-evidence.json` | 377 B | `53cc8a0464081df94ad4494ee185887dc2410d5fb21630bc52d7a1badf032ca0` |
+| **Immutable owner bundle** | `C:\Users\ansac\CoChem427\r428-bundle-4a87f33` | 362 installer inputs | Revision `windows-20261014-428-v2` |
+| **Launch manifest** | `C:\Users\ansac\CoChem427\r428-bundle-4a87f33\launch-manifest.json` | 3,020 B (12 files) | `2c9359a5aea57f661be492313b61a0a31fc24d1a91a29d4f9ea7743698e1c020` |
+| **Install manifest** | `C:\Users\ansac\CoChem427\r428-bundle-4a87f33\install-manifest.json` | 107,866 B (362 files) | `48b34c513dd7b7c86b0457e3c933f07e17b8f44b75ebda65715a36f9f9a2aab6` |
+| **Candidate `pipeline.json`** | `C:\Users\ansac\CoChem427\r428-bundle-4a87f33\pipeline.json` | 26,902 B | `ff77d5e5713a5390a41fd384d78899f01f2b4d93d3931605759a1bad18420a1f` |
+| **Routing candidate** | `C:\Users\ansac\CoChem427\r428-bundle-4a87f33\routing-candidate.json` | 331,800 B | `e53f8e84e5be5dc0972f8abd5f226b27dc62be948121d1e90aeb41f74b3fbc25` |
+| **Catalog proposal** | `C:\Users\ansac\CoChem427\r428-bundle-4a87f33\proposal.json` | 4,038 B | `2588890b30d91902642cb400843d47d16795392bcbb9e20fcf7102566d073afc` |
+| **Catalog pointer** | `C:\Users\ansac\CoChem427\r428-bundle-4a87f33\pointer.json` | 194 B | `0288afb50852642cd70191edf140e0ec0a8257791c807fb2cd970a8d03756b96` |
+| **Source test evidence** | `C:\Users\ansac\CoChem427\r428-bundle-4a87f33\source-test-evidence.json` | 377 B | `2cf88f455cf387cc20045fb3583eef9e8e7f67b2ec3456ef20c49dffb66a9ee1` |
 
 ### Reviewed Launch Package Files (`launch-manifest.json`)
 
@@ -37,27 +37,27 @@
 | `install_428_runtime.ps1` | 18,484 | `208652452b3af0c5f9662b00cd0b7086410ab66514393eac155436ece7f61e0d` |
 | `stage_aetherdesk_427_payloads.ps1` | 12,591 | `0300b82731c0fddb9fad3e2ddb6a20b8368cfa91faf7aceb821752c65b5f6e0b` |
 | `accept_428_native.py` | 19,866 | `defd6953f92d78e337d3588016b23b92962879e6e62eefe1226bd320d40d0012` |
-| `verify_prior_native_428.py` | 27,638 | `c309a9826553b7a662e90a008e70c7e9e4819c8138983f2673c737898eb3c07e` |
+| `verify_prior_native_428.py` | 27,637 | `aebc26591aab2c985a39547c6342b2e13baea03677597f923821150f04c7bb22` |
 | `r6_custody_amendment.py` | 19,279 | `5663791041822c2492f572638d75b045de40fd6a751e9d7f0710ec29cb0b4284` |
-| `run_428_launch.ps1` | 41,168 | `78f55860e084c36011523103e8005ab8931b95f29956290e4630e354c32ebada` |
+| `run_428_launch.ps1` | 41,411 | `2b5f60d161ddb41963fd7676fac0bd9784f5ce67f089e792354ca6fd925dc4c0` |
 | `pipeline.json` | 26,902 | `ff77d5e5713a5390a41fd384d78899f01f2b4d93d3931605759a1bad18420a1f` |
-| `install-manifest.json` | 107,865 | `0d45ffe310e6392979979125c24b1bfe5fa007409767dce028156085f5c39e8a` |
-| `source-test-evidence.json` | 377 | `53cc8a0464081df94ad4494ee185887dc2410d5fb21630bc52d7a1badf032ca0` |
+| `install-manifest.json` | 107,866 | `48b34c513dd7b7c86b0457e3c933f07e17b8f44b75ebda65715a36f9f9a2aab6` |
+| `source-test-evidence.json` | 377 | `2cf88f455cf387cc20045fb3583eef9e8e7f67b2ec3456ef20c49dffb66a9ee1` |
 | `routing-candidate.json` | 331,800 | `e53f8e84e5be5dc0972f8abd5f226b27dc62be948121d1e90aeb41f74b3fbc25` |
 | `proposal.json` | 4,038 | `2588890b30d91902642cb400843d47d16795392bcbb9e20fcf7102566d073afc` |
-| `pointer.json` | 194 | `1a7f87d3b230dcf930d414a08c75dbeaa92054266545cc2e29b95a28be738a30` |
+| `pointer.json` | 194 | `0288afb50852642cd70191edf140e0ec0a8257791c807fb2cd970a8d03756b96` |
 
 ---
 
 ## 2. Read-Only Plan Verification on the Frozen Bundle
 
 All three read-only plans were executed directly against the frozen bundle
-`C:\Users\ansac\CoChem427\r428-bundle-491e4a3` without `-Apply`:
+`C:\Users\ansac\CoChem427\r428-bundle-4a87f33` without `-Apply`:
 
 1. **Owner Launch Read-Only Plan (`run_428_launch.ps1`):**
-   - Verified `launch-manifest.json` (`c9713b51ea48bb82d1ee7d11f8640ed3859b9dd49fe75d4297cfd9d4bd22cd1f`),
+   - Verified `launch-manifest.json` (`2c9359a5aea57f661be492313b61a0a31fc24d1a91a29d4f9ea7743698e1c020`),
      all 12 package files, `install-manifest.json`
-     (`0d45ffe310e6392979979125c24b1bfe5fa007409767dce028156085f5c39e8a`), and all
+     (`48b34c513dd7b7c86b0457e3c933f07e17b8f44b75ebda65715a36f9f9a2aab6`), and all
      362 installer inputs (253 frozen source files, 106 locked runtime wheels,
      application wheel, candidate `pipeline.json`, and `source-test-evidence.json`)
      with read-share file locks and reparse-point traversal guards.
@@ -122,8 +122,8 @@ window as `AETHERDESK\ansac`:
 
 ```powershell
 & "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile `
-  -File "C:\Users\ansac\CoChem427\r428-bundle-491e4a3\run_428_launch.ps1" `
-  -LaunchManifest "C:\Users\ansac\CoChem427\r428-bundle-491e4a3\launch-manifest.json" `
-  -LaunchManifestSha256 "c9713b51ea48bb82d1ee7d11f8640ed3859b9dd49fe75d4297cfd9d4bd22cd1f" `
+  -File "C:\Users\ansac\CoChem427\r428-bundle-4a87f33\run_428_launch.ps1" `
+  -LaunchManifest "C:\Users\ansac\CoChem427\r428-bundle-4a87f33\launch-manifest.json" `
+  -LaunchManifestSha256 "2c9359a5aea57f661be492313b61a0a31fc24d1a91a29d4f9ea7743698e1c020" `
   -Apply
 ```
