@@ -392,7 +392,7 @@ Before P428-00, the external R6 runner is valid only for its hardcoded -r6 check
 
 ## P428-26 — Single owner entry point with unattended completion
 
-- [x] Completed; commit/evidence: added `scripts/run_428_launch.ps1`, `scripts/accept_428_native.py`, `pipeline_tests/test_launch_428.py`, and `docs/4.2.8/OWNER_LAUNCH.md`; verified via `python -I scripts/run_source_tests_428.py --timeout-seconds 180 -- pipeline_tests/test_launch_428.py pipeline_tests/test_release_bundle_428.py --tb=short` -> `22 passed in 28.25s` (inert PowerShell 5.1 pin/ACL/task XML projection, 20-minute front-loaded input window, fresh OAuth URL/dialog replay rejection, 15 worker + 3 dedicated repair profile sign-in plan, prior target-23 Fable 429 replay and Argon quota vs hold classification, pre-start rollback and awake lease fixtures, and packaged read-only launch plan; owner `-Apply` execution deferred to `P428-28`).
+- [x] Completed; commit/evidence: `4cc3460` — added `scripts/run_428_launch.ps1`, `scripts/accept_428_native.py`, `pipeline_tests/test_launch_428.py`, and `docs/4.2.8/OWNER_LAUNCH.md`, plus standalone bundle pin/import support in `scripts/prepare_428_release.py` and `scripts/verify_prior_native_428.py`; verified via `python -I scripts/run_source_tests_428.py --timeout-seconds 180 -- pipeline_tests/test_launch_428.py pipeline_tests/test_release_bundle_428.py --tb=short` -> `22 passed in 29.08s` (inert PowerShell 5.1 pin/ACL/task XML projection, 20-minute front-loaded input window, fresh OAuth URL/dialog replay rejection, 15 worker + 3 dedicated repair profile sign-in plan, prior target-23 Fable 429 replay and Argon quota vs hold classification, pre-start rollback and awake lease fixtures, and packaged read-only launch plan; owner `-Apply` execution deferred to `P428-28`).
 - **Lane / size:** D / M. **Depends on:** P428-04, P428-05, P428-09, P428-20, P428-25.
 - **Files:** proposed `scripts/run_428_launch.ps1`, proposed
   `scripts/accept_428_native.py`, proposed `pipeline_tests/test_launch_428.py`,
@@ -408,7 +408,7 @@ Before P428-00, the external R6 runner is valid only for its hardcoded -r6 check
 
 ## P428-27 — Independent release-package review and publish handover
 
-- [ ] Completed; commit/evidence: pending.
+- [x] Completed; commit/evidence: froze source commit `4cc3460` (`4cc3460db29e620a9826bb16c95277548f1f21d5`) into `C:\Users\ansac\CoChem427\r428-source-4cc3460` (252 files, manifest `b39f449a92bbecaeb9b231f4cc93503abd010c69bd470fa08b5e8a60a4a39107`), built offline wheel `C:\Users\ansac\CoChem427\r428-build-4cc3460\dist\cochem-4.2.8-py3-none-any.whl` (`9938224d08d1a425135fc38ef7e6cd881b3dba80679f196e5a29321cfe62c136`), and staged immutable owner package `C:\Users\ansac\CoChem427\r428-bundle-4cc3460` (361 installer inputs, `install-manifest.json` `69c792f3417084dbd5c9ba249570d1e951f2143737dba6c83683d05f91b564ac`, `launch-manifest.json` `555f84da26adb24c0108912facdc10a8fb67b9d0a6bb4d47d11eee194af8617f`); verified all three packaged read-only plans directly from `r428-bundle-4cc3460` (`run_428_launch.ps1` -> `R428_LAUNCH_READ_ONLY_PLAN`, `install_428_runtime.ps1` -> `READ_ONLY_PLAN`, `accept_428_native.py --mode plan` -> `R428_NATIVE_ACCEPTANCE_READ_ONLY_PLAN` with 12/12 bundle pins verified) and documented full review and rollback trace in `docs/4.2.8/RELEASE_REVIEW.md` and `docs/4.2.8/OWNER_LAUNCH.md` (host `-Apply` deployment and native acceptance deferred to owner-run `P428-28`).
 - **Lane / size:** C / S. **Depends on:** P428-24, P428-25, P428-26.
 - **Files:** `docs/4.2.8/OWNER_LAUNCH.md`, `docs/4.2.8/VALIDATION.md`,
   proposed `docs/4.2.8/RELEASE_REVIEW.md`, this checklist.
@@ -441,7 +441,7 @@ Before P428-00, the external R6 runner is valid only for its hardcoded -r6 check
 - [x] Real workflow adapters and artifact paths integrated (06–14).
 - [x] Failure/audit/independent repair source integration verified (15–21).
 - [x] Versioned migration and merged controller regression complete (22–24).
-- [ ] Offline package and single owner command reviewed/delivered (25–27).
+- [x] Offline package and single owner command reviewed/delivered (25–27).
 - [ ] Physical owner-run acceptance reviewed; final status accurate (28).
 
 For each completed item replace `pending` with the commit, focused command,

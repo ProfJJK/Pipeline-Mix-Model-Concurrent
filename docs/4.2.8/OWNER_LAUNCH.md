@@ -18,7 +18,8 @@ authority publication, and Warden cutover in one sitting:
 1. **Pin & Package Verification (`package`):**
    Opens `launch-manifest.json` (`cochem-428-launch-package/1`) and holds read-share
    handles on every reviewed package input (`install_428_runtime.ps1`,
-   `stage_aetherdesk_427_payloads.ps1`, `accept_428_native.py`, `run_428_launch.ps1`,
+   `stage_aetherdesk_427_payloads.ps1`, `accept_428_native.py`,
+   `verify_prior_native_428.py`, `r6_custody_amendment.py`, `run_428_launch.ps1`,
    `pipeline.json`, `install-manifest.json`, `source-test-evidence.json`,
    `routing-candidate.json`, `proposal.json`, `pointer.json`) and every frozen
    source/wheel file so no bytes can be modified during the sitting.
@@ -84,25 +85,29 @@ authority publication, and Warden cutover in one sitting:
 
 ## 3. Read-Only Plan vs Owner Execution Commands
 
+- **Frozen source commit (`P428-26`):** `4cc3460db29e620a9826bb16c95277548f1f21d5` (`4cc3460`)
+- **Immutable release bundle:** `C:\Users\ansac\CoChem427\r428-bundle-4cc3460`
+- **Launch manifest SHA-256:** `555f84da26adb24c0108912facdc10a8fb67b9d0a6bb4d47d11eee194af8617f`
+- **Install manifest SHA-256:** `69c792f3417084dbd5c9ba249570d1e951f2143737dba6c83683d05f91b564ac`
+
 ### A. Read-Only Plan (Safe in Engineering / Non-Admin Sessions)
 
 ```powershell
 & "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive `
-  -File "<BUNDLE_DIR>\run_428_launch.ps1" `
-  -LaunchManifest "<BUNDLE_DIR>\launch-manifest.json" `
-  -LaunchManifestSha256 "<LAUNCH_MANIFEST_SHA256>"
+  -File "C:\Users\ansac\CoChem427\r428-bundle-4cc3460\run_428_launch.ps1" `
+  -LaunchManifest "C:\Users\ansac\CoChem427\r428-bundle-4cc3460\launch-manifest.json" `
+  -LaunchManifestSha256 "555f84da26adb24c0108912facdc10a8fb67b9d0a6bb4d47d11eee194af8617f"
 ```
 
 ### B. Single Owner Sitting Command (`P428-28`, 64-bit Administrator Windows PowerShell 5.1 as `AETHERDESK\ansac`)
 
-See `docs/4.2.8/RELEASE_REVIEW.md` for the exact frozen `<BUNDLE_DIR>` path and
-`<LAUNCH_MANIFEST_SHA256>` pin produced by `P428-27`.
+See `docs/4.2.8/RELEASE_REVIEW.md` for the complete independent release-package review and pin inventory.
 
 ```powershell
 & "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile `
-  -File "<BUNDLE_DIR>\run_428_launch.ps1" `
-  -LaunchManifest "<BUNDLE_DIR>\launch-manifest.json" `
-  -LaunchManifestSha256 "<LAUNCH_MANIFEST_SHA256>" `
+  -File "C:\Users\ansac\CoChem427\r428-bundle-4cc3460\run_428_launch.ps1" `
+  -LaunchManifest "C:\Users\ansac\CoChem427\r428-bundle-4cc3460\launch-manifest.json" `
+  -LaunchManifestSha256 "555f84da26adb24c0108912facdc10a8fb67b9d0a6bb4d47d11eee194af8617f" `
   -Apply
 ```
 
