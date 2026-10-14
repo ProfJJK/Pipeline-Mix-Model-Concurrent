@@ -363,7 +363,7 @@ Before P428-00, the external R6 runner is valid only for its hardcoded -r6 check
 
 ## P428-24 — Integrated regression and failure-injection acceptance suite
 
-- [ ] Completed; commit/evidence: pending.
+- [x] Completed; commit/evidence: added `pipeline_tests/test_acceptance_428.py`, `pipeline_tests/test_recovery_428.py`, and `docs/4.2.8/VALIDATION.md`; verified focused acceptance + recovery via `python -I scripts/run_source_tests_428.py --timeout-seconds 120 -- pipeline_tests/test_acceptance_428.py pipeline_tests/test_recovery_428.py --tb=short` -> `5 passed in 4.89s`, and full 4.2.8 + R6/R7 regression sweep via `scripts/run_source_tests_428.py` -> `525 passed, 1 deselected in 48.78s` (exclusions: `-k "not live"` host-only live provider execution deferred to `P428-28`).
 - **Lane / size:** C / M. **Depends on:** P428-04, P428-05, P428-23.
 - **Files:** proposed `pipeline_tests/test_acceptance_428.py`, proposed
   `pipeline_tests/test_recovery_428.py`, proposed `docs/4.2.8/VALIDATION.md`.
@@ -440,7 +440,7 @@ Before P428-00, the external R6 runner is valid only for its hardcoded -r6 check
 - [x] Contracts/verification/catalog/native preparation reviewed (00–05).
 - [x] Real workflow adapters and artifact paths integrated (06–14).
 - [x] Failure/audit/independent repair source integration verified (15–21).
-- [ ] Versioned migration and merged controller regression complete (22–24).
+- [x] Versioned migration and merged controller regression complete (22–24).
 - [ ] Offline package and single owner command reviewed/delivered (25–27).
 - [ ] Physical owner-run acceptance reviewed; final status accurate (28).
 
