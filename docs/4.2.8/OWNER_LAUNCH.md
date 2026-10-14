@@ -88,18 +88,18 @@ authority publication, and Warden cutover in one sitting:
 
 ## 3. Read-Only Plan vs Owner Execution Commands
 
-- **Frozen source commit (`P428-26` / `P428-28` fix):** `4a87f3345aa7892522efd1f5c873147002d52fdb` (`4a87f33`)
-- **Immutable release bundle:** `C:\Users\ansac\CoChem427\r428-bundle-4a87f33` (prior bundles `r428-bundle-4cc3460`, `r428-bundle-b862701`, and `r428-bundle-491e4a3` preserved intact)
-- **Launch manifest SHA-256:** `2c9359a5aea57f661be492313b61a0a31fc24d1a91a29d4f9ea7743698e1c020`
-- **Install manifest SHA-256:** `48b34c513dd7b7c86b0457e3c933f07e17b8f44b75ebda65715a36f9f9a2aab6`
+- **Frozen source commit (`P428-SWARM` two-staged concurrency & provider batching):** `49d65d415e90ec2f8cfaf4302dc9cfacb4e9b09c` (`49d65d4`)
+- **Immutable release bundle:** `C:\Users\ansac\CoChem427\r428-bundle-49d65d4` (prior bundles `r428-bundle-4a87f33`, `r428-bundle-4cc3460`, `r428-bundle-b862701`, and `r428-bundle-491e4a3` preserved intact)
+- **Launch manifest SHA-256:** `7c019a1387f08ce5830d2d1bf3b221cd145eb130010f39a2b9544ca4acdbc72a`
+- **Install manifest SHA-256:** `4a7a415a098e7b56eddc22e1421c68dd1a2bf5c9abb587a17b1dee574c5c422d`
 
 ### A. Read-Only Plan (Safe in Engineering / Non-Admin Sessions)
 
 ```powershell
 & "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive `
-  -File "C:\Users\ansac\CoChem427\r428-bundle-4a87f33\run_428_launch.ps1" `
-  -LaunchManifest "C:\Users\ansac\CoChem427\r428-bundle-4a87f33\launch-manifest.json" `
-  -LaunchManifestSha256 "2c9359a5aea57f661be492313b61a0a31fc24d1a91a29d4f9ea7743698e1c020"
+  -File "C:\Users\ansac\CoChem427\r428-bundle-49d65d4\run_428_launch.ps1" `
+  -LaunchManifest "C:\Users\ansac\CoChem427\r428-bundle-49d65d4\launch-manifest.json" `
+  -LaunchManifestSha256 "7c019a1387f08ce5830d2d1bf3b221cd145eb130010f39a2b9544ca4acdbc72a"
 ```
 
 ### B. Single Owner Sitting Command (`P428-28`, 64-bit Administrator Windows PowerShell 5.1 as `AETHERDESK\ansac`)
@@ -108,9 +108,9 @@ See `docs/4.2.8/RELEASE_REVIEW.md` for the complete independent release-package 
 
 ```powershell
 & "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile `
-  -File "C:\Users\ansac\CoChem427\r428-bundle-4a87f33\run_428_launch.ps1" `
-  -LaunchManifest "C:\Users\ansac\CoChem427\r428-bundle-4a87f33\launch-manifest.json" `
-  -LaunchManifestSha256 "2c9359a5aea57f661be492313b61a0a31fc24d1a91a29d4f9ea7743698e1c020" `
+  -File "C:\Users\ansac\CoChem427\r428-bundle-49d65d4\run_428_launch.ps1" `
+  -LaunchManifest "C:\Users\ansac\CoChem427\r428-bundle-49d65d4\launch-manifest.json" `
+  -LaunchManifestSha256 "7c019a1387f08ce5830d2d1bf3b221cd145eb130010f39a2b9544ca4acdbc72a" `
   -Apply
 ```
 
