@@ -69,6 +69,9 @@ def validate_stage_output(payload, output, route):
     elif stage == 'MICROTASK_ASSESSMENT':
         from .planning_journal import PlanningJournal
         PlanningJournal._accept_micro_assessments(state,output)
+    elif stage == 'SIMPLE_EXECUTION':
+        from .task_execution_428 import validate_simple_execution_output
+        validate_simple_execution_output(state, output)
     else:
         raise ValueError('Unsupported planning output stage')
     return matches[0]
@@ -164,6 +167,13 @@ def prompt_contract(payload):
             release_criteria=['Pass condition'],depends_on=[],prompt='Self-contained bounded task')])
     elif stage=='MICROTASK_ASSESSMENT':
         contract=dict(assessments=[dict(id='M1',complexity=2,task_types=['COD-TERM'],rationale='Task-specific assessment')])
+    elif stage=='SIMPLE_EXECUTION':
+        contract=dict(
+            artifact_text='Complete verified deliverable summary',
+            deliverables=[dict(name='artifact.txt',content='Deliverable content',sha256='0'*64)],
+            requirement_evidence=[dict(requirement_id='R1',deliverable_name='artifact.txt',verification_evidence='Exact check')],
+            release_criteria_results=[dict(criterion='Criterion',passed=True,evidence='Exact verification')]
+        )
     else:
         raise ValueError('Stage is not a native planning request')
     instruction=('Produce the specified planning artifact using the captured requirements and research. '

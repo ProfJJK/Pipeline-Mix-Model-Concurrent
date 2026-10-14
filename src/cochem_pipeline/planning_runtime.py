@@ -58,9 +58,10 @@ class PlanningConfig:
 
 
 class PlanningController:
-    def __init__(self, journal, store, *, clock=time.time, research_runtime=None):
+    def __init__(self, journal, store, *, clock=time.time, research_runtime=None, execution_runtime=None):
         self.journal, self.store, self.clock = journal, store, clock
         self.research_runtime = research_runtime
+        self.execution_runtime = execution_runtime
         self.gateway = PlanningGateway(journal, store)
         self.journal.model_result = self.gateway.model_result
         if research_runtime is not None and self.journal.search_result is None:
@@ -84,6 +85,7 @@ class PlanningController:
         from .research_evidence_428 import ResearchEvidenceStore
         from .research_runtime_428 import ResearchRuntime
         from .research_search_428 import ResearchSearchClient
+        from .task_execution_428 import SimpleTaskExecutionRuntime
         ev_store = ResearchEvidenceStore(runtime.config.private_root / 'research428.db')
         res_runtime = ResearchRuntime(
             ev_store,
@@ -91,7 +93,8 @@ class PlanningController:
             knowledge_service=getattr(runtime, 'knowledge', None),
             knowledge_authority=getattr(runtime, 'knowledge_authority', None),
         )
-        return cls(journal, runtime.store, research_runtime=res_runtime)
+        exec_runtime = SimpleTaskExecutionRuntime(journal, runtime.store)
+        return cls(journal, runtime.store, research_runtime=res_runtime, execution_runtime=exec_runtime)
 
     def has_task(self, task_id) -> bool:
         return self.journal.has_task(task_id)
@@ -116,13 +119,20 @@ class PlanningController:
             task = self.journal._projection(self.journal._read(conn, task_id))
             row = conn.execute('SELECT * FROM planning428_progress WHERE task_id=?', (task_id,)).fetchone()
             progress = dict(row) if row else {'status': 'NOT_YET_POLLED', 'version': task['journal_version']}
-        return dict(task=task, controller=progress, deliverable_completed=False)
+        completed = task.get('stage') == 'COMPLETED'
+        result = dict(task=task, controller=progress, deliverable_completed=completed)
+        if self.execution_runtime is not None and hasattr(self.execution_runtime, 'get_artifact'):
+            art = self.execution_runtime.get_artifact(task_id)
+            if art is not None:
+                result['execution'] = art
+        return result
 
     def status(self):
         with self.journal._write() as conn:
             total = conn.execute('SELECT count(*) FROM planning428_tasks').fetchone()[0]
             counts = dict(conn.execute('SELECT status,count(*) FROM planning428_progress GROUP BY status').fetchall())
-        return dict(status='ENABLED', tasks=total, states=counts, execution_materialization='NOT_CONNECTED')
+        mat_state = 'CONNECTED' if self.execution_runtime is not None else 'NOT_CONNECTED'
+        return dict(status='ENABLED', tasks=total, states=counts, execution_materialization=mat_state)
 
     def _record(self, task_id, version, status, *, delay=1, job_id=None, research_id=None, error_type=None):
         now = self.clock()
@@ -163,6 +173,11 @@ class PlanningController:
             else:
                 self.journal.apply_research(task_id, version, research_id)
                 self._record(task_id, version, 'RESEARCH_RESULT_IMPORTED', research_id=research_id, delay=0)
+        elif action == 'jobboard_submission' and intent.get('stage') == 'READY' and self.execution_runtime is not None:
+            res = self.execution_runtime.step_ready_task(task_id)
+            self._record(task_id, version, res['status'], job_id=res.get('job_id'), delay=res.get('delay', 1))
+        elif intent.get('stage') == 'COMPLETED':
+            self._record(task_id, version, 'EXECUTION_COMPLETED', delay=3600)
         else:
             status = {'owner_review': 'WAITING_FOR_OWNER_APPROVAL',
                       'jobboard_submission': 'PLAN_READY_EXECUTION_PENDING',
