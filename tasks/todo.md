@@ -377,7 +377,7 @@ Before P428-00, the external R6 runner is valid only for its hardcoded -r6 check
 
 ## P428-25 — Offline source, application and installation freeze
 
-- [ ] Completed; commit/evidence: pending.
+- [x] Completed; commit/evidence: added `scripts/prepare_428_release.py`, `scripts/install_428_runtime.ps1`, and `pipeline_tests/test_release_bundle_428.py`; verified via `python -I scripts/run_source_tests_428.py --timeout-seconds 180 -- pipeline_tests/test_release_bundle_428.py --tb=short` -> `14 passed in 10.01s` (including real offline `cochem-4.2.8-py3-none-any.whl` build against `C:\Users\ansac\CoChem427\r6-build-backend-20261012-v2` and `C:\Users\ansac\CoChem427\r6-runtime-wheels-20261012-v1`, tamper/missing input rejection, and packaged `install_428_runtime.ps1` read-only plan in 64-bit Windows PowerShell 5.1; elevated `-Apply` installation deferred to `P428-28`).
 - **Lane / size:** D / M. **Depends on:** P428-22, P428-24.
 - **Files:** proposed `scripts/prepare_428_release.py`, proposed
   `scripts/install_428_runtime.ps1`, proposed `pipeline_tests/test_release_bundle_428.py`;
