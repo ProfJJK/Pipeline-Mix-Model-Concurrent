@@ -25,8 +25,11 @@ import uuid
 import zipfile
 
 SCRIPTS_DIR = Path(__file__).resolve().parent
-if str(SCRIPTS_DIR) not in sys.path:
-    sys.path.insert(0, str(SCRIPTS_DIR))
+REPO_ROOT = SCRIPTS_DIR.parent
+for _p in (str(SCRIPTS_DIR), str(REPO_ROOT), str(REPO_ROOT / "src")):
+    if _p in sys.path:
+        sys.path.remove(_p)
+    sys.path.insert(0, _p)
 
 from cochem_pipeline.catalog_activation import compile_change
 from cochem_pipeline.config import load_config
@@ -565,7 +568,12 @@ def prepare_release_bundle_428(
         write("stage_aetherdesk_427_payloads.ps1", stage_helper_bytes)
 
         optional_launch_scripts: list[str] = []
-        for opt_name in ("accept_428_native.py", "run_428_launch.ps1"):
+        for opt_name in (
+            "accept_428_native.py",
+            "verify_prior_native_428.py",
+            "r6_custody_amendment.py",
+            "run_428_launch.ps1",
+        ):
             opt_path = repository / "scripts" / opt_name
             if opt_path.is_file():
                 write(opt_name, read_regular(opt_path))
@@ -707,15 +715,14 @@ def main() -> None:
             )
         )
     else:
-        commit = args.commit
-        if not commit:
-            commit = subprocess.run(
-                ["git", "-C", str(args.repository), "rev-parse", "HEAD"],
-                check=True,
-                capture_output=True,
-                text=True,
-                timeout=15,
-            ).stdout.strip()
+        ref = args.commit or "HEAD"
+        commit = subprocess.run(
+            ["git", "-C", str(args.repository), "rev-parse", "--verify", f"{ref}^{{commit}}"],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=15,
+        ).stdout.strip()
         short = commit[:7]
         root_parent = args.destination.parent
         freeze_dir = args.freeze or (root_parent / f"r428-source-{short}")

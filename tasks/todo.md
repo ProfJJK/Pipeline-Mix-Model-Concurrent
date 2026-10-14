@@ -377,7 +377,7 @@ Before P428-00, the external R6 runner is valid only for its hardcoded -r6 check
 
 ## P428-25 — Offline source, application and installation freeze
 
-- [x] Completed; commit/evidence: added `scripts/prepare_428_release.py`, `scripts/install_428_runtime.ps1`, and `pipeline_tests/test_release_bundle_428.py`; verified via `python -I scripts/run_source_tests_428.py --timeout-seconds 180 -- pipeline_tests/test_release_bundle_428.py --tb=short` -> `14 passed in 10.01s` (including real offline `cochem-4.2.8-py3-none-any.whl` build against `C:\Users\ansac\CoChem427\r6-build-backend-20261012-v2` and `C:\Users\ansac\CoChem427\r6-runtime-wheels-20261012-v1`, tamper/missing input rejection, and packaged `install_428_runtime.ps1` read-only plan in 64-bit Windows PowerShell 5.1; elevated `-Apply` installation deferred to `P428-28`).
+- [x] Completed; commit/evidence: `4b11dc2` — added `scripts/prepare_428_release.py`, `scripts/install_428_runtime.ps1`, and `pipeline_tests/test_release_bundle_428.py`; verified via `python -I scripts/run_source_tests_428.py --timeout-seconds 180 -- pipeline_tests/test_release_bundle_428.py --tb=short` -> `14 passed in 10.01s` (including real offline `cochem-4.2.8-py3-none-any.whl` build against `C:\Users\ansac\CoChem427\r6-build-backend-20261012-v2` and `C:\Users\ansac\CoChem427\r6-runtime-wheels-20261012-v1`, tamper/missing input rejection, and packaged `install_428_runtime.ps1` read-only plan in 64-bit Windows PowerShell 5.1; elevated `-Apply` installation deferred to `P428-28`).
 - **Lane / size:** D / M. **Depends on:** P428-22, P428-24.
 - **Files:** proposed `scripts/prepare_428_release.py`, proposed
   `scripts/install_428_runtime.ps1`, proposed `pipeline_tests/test_release_bundle_428.py`;
@@ -392,7 +392,7 @@ Before P428-00, the external R6 runner is valid only for its hardcoded -r6 check
 
 ## P428-26 — Single owner entry point with unattended completion
 
-- [ ] Completed; commit/evidence: pending.
+- [x] Completed; commit/evidence: added `scripts/run_428_launch.ps1`, `scripts/accept_428_native.py`, `pipeline_tests/test_launch_428.py`, and `docs/4.2.8/OWNER_LAUNCH.md`; verified via `python -I scripts/run_source_tests_428.py --timeout-seconds 180 -- pipeline_tests/test_launch_428.py pipeline_tests/test_release_bundle_428.py --tb=short` -> `22 passed in 28.25s` (inert PowerShell 5.1 pin/ACL/task XML projection, 20-minute front-loaded input window, fresh OAuth URL/dialog replay rejection, 15 worker + 3 dedicated repair profile sign-in plan, prior target-23 Fable 429 replay and Argon quota vs hold classification, pre-start rollback and awake lease fixtures, and packaged read-only launch plan; owner `-Apply` execution deferred to `P428-28`).
 - **Lane / size:** D / M. **Depends on:** P428-04, P428-05, P428-09, P428-20, P428-25.
 - **Files:** proposed `scripts/run_428_launch.ps1`, proposed
   `scripts/accept_428_native.py`, proposed `pipeline_tests/test_launch_428.py`,

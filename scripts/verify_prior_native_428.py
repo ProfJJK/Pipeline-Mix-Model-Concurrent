@@ -26,7 +26,10 @@ import traceback
 from typing import Any, Callable
 
 from cochem_pipeline import agy_agent_guard, agy_protocol, agy_tool_registry, failures, worker
-from scripts import r6_custody_amendment as amendment
+try:
+    from scripts import r6_custody_amendment as amendment
+except ImportError:
+    import r6_custody_amendment as amendment  # type: ignore[no-redef]
 
 
 COCHEM_PROGRAM_FILES = Path(r"C:\Program Files\CoChem")
