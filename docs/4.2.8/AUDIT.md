@@ -36,10 +36,14 @@ cost, a subscription charge, or the owner's remaining quota.
 The supplied floors still leave one execution gap (SCI-FORMAL tier 10) and
 20 producer/reviewer combinations without an eligible different-model review.
 Those combinations are explicitly held. Comparison entries below a floor are
-shown as HELD and cannot execute. A two-family calibration helper exists only
-as a proposal; it is not applied to the candidate or deployed policy. The
-five-comparison request has not been treated as permission to fabricate scores
-or silently waive a reasoning floor.
+shown as HELD and cannot execute. `routing-decision-packet.json` packages the
+3 missing effort profiles (`flash38-low`, `argon-low`, `argon-med`), the
+`SCI-FORMAL` tier-10 execution gap, the 20 single-family reviewer gaps, and
+the 7 concrete two-family calibration floor deltas alongside the calibrated
+5-option proposal (`floor_changed` / `uncalibrated_floor` explicitly retained).
+The default unattended runtime policy remains `hold_strict_supplied_floors`;
+the five-comparison request has not been treated as permission to fabricate
+scores or silently waive a reasoning floor.
 
 Primary references used for availability/selector constraints include the
 [Agy headless CLI documentation](https://www.agy.dev/docs/cli/headless/),

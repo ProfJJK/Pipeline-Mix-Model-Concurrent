@@ -6,7 +6,8 @@ from pathlib import Path
 import pytest
 
 from cochem_pipeline.task_routing import (
-    audit_owner_matrix, compile_matrix, select_candidates, select_reviewers,
+    audit_owner_matrix, build_gap_resolution_packet, compile_matrix,
+    select_candidates, select_pivot_candidates, select_reviewers,
     backoff_seconds, context_fits, validate_task_tags,
     independent_review_calibration,
     with_five_model_rows, five_model_options,
@@ -156,8 +157,47 @@ def test_all_110_rows_have_five_ranked_slots_with_visible_scores_and_cost(owner)
 
 def test_highest_tier_comparison_uses_max_effort_and_performance_order(owner):
     catalog = compile_matrix(owner, observed())
-    options = five_model_options(catalog, ['COD-TERM'], 10)
-    for option in options:
-        assert option['effort'] in ('max', 'high')
-    assert [x['scores']['COD-TERM'] for x in options] == sorted(
-        [x['scores']['COD-TERM'] for x in options], reverse=True)
+    for tag in catalog['task_types']:
+        options = five_model_options(catalog, [tag], 10)
+        for option in options:
+            assert option['effort'] in ('max', 'high')
+        assert [x['scores'][tag] for x in options] == sorted(
+            [x['scores'][tag] for x in options], reverse=True)
+
+
+def test_pivot_selection_excludes_same_family_effort_variants_and_respects_quota(owner):
+    catalog = with_five_model_rows(compile_matrix(owner, observed()))
+    pivots = select_pivot_candidates(catalog, ['COD-TERM'], 8, ['opus-xhigh'])
+    assert pivots
+    for model_id in pivots:
+        assert catalog['models'][model_id]['family'] != 'claude-opus-5-5'
+        assert catalog['models'][model_id]['scores']['COD-TERM'] >= catalog['task_types']['COD-TERM']['tiers']['8']['floor']
+    assert select_pivot_candidates(catalog, ['COD-TERM'], 8, ['opus-xhigh'], available_ids={'opus-max'}) == []
+    assert select_pivot_candidates(catalog, ['COD-TERM'], 8, ['opus-xhigh'], available_ids={'sonnet-max'}) == ['sonnet-max']
+    with pytest.raises(ValueError):
+        select_pivot_candidates(catalog, ['COD-TERM'], 8, [])
+    with pytest.raises(ValueError):
+        select_pivot_candidates(catalog, ['COD-TERM'], 8, ['unknown-model'])
+
+
+def test_gap_resolution_packet_matches_preserved_artifact_and_exposes_floor_deltas(owner):
+    packet = build_gap_resolution_packet(owner, observed())
+    saved = json.loads((SOURCE.parents[1] / 'routing-decision-packet.json').read_text(encoding='utf-8'))
+    assert packet == saved
+    assert [m['model_id'] for m in packet['missing_effort_profiles']] == ['argon-low', 'argon-med', 'flash38-low']
+    assert len(packet['uncalibrated_execution_gaps']) == 1
+    assert packet['uncalibrated_execution_gaps'][0]['task_type'] == 'SCI-FORMAL'
+    assert packet['uncalibrated_execution_gaps'][0]['tier'] == 10
+    assert packet['uncalibrated_execution_gaps'][0]['calibrated_eligible']
+    assert len(packet['uncalibrated_reviewer_gaps']) == 20
+    for gap in packet['uncalibrated_reviewer_gaps']:
+        assert gap['calibrated_reviewers']
+    changed_rows = [
+        (tag, int(tier), row['uncalibrated_floor'], row['floor'])
+        for tag, spec in packet['calibrated_proposal']['task_types'].items()
+        for tier, row in spec['tiers'].items()
+        if row['floor_changed']
+    ]
+    assert len(changed_rows) == len(packet['calibration_changes']) == 7
+    assert packet['default_runtime_policy'] == 'hold_strict_supplied_floors'
+

@@ -5,7 +5,8 @@ import json
 from pathlib import Path
 
 from cochem_pipeline.task_routing import (
-    audit_owner_matrix, compile_matrix, digest, select_reviewers, select_candidates, with_five_model_rows,
+    audit_owner_matrix, build_gap_resolution_packet, compile_matrix, digest,
+    select_reviewers, select_candidates, with_five_model_rows,
 )
 
 BENCHMARKS = {
@@ -61,6 +62,7 @@ def main():
                 mismatches.append(dict(model_id=key, task_type=tag, supplied=old,
                     observed=value, source=source['url']))
     catalog = with_five_model_rows(compile_matrix(owner, observations))
+    decision_packet = build_gap_resolution_packet(owner, observations)
     report = audit_owner_matrix(owner)
     report.update(benchmark_mismatches=mismatches, observed_models=len(observations['models']),
         missing_published_effort_results=observations['missing'],
@@ -94,11 +96,16 @@ def main():
     write(root / 'benchmark-observations.json', observations)
     write(root / 'routing-audit.json', report)
     write(root / 'routing-candidate.json', catalog)
+    write(root / 'routing-decision-packet.json', decision_packet)
     (root / 'ROUTING_MATRIX.md').write_text('\n'.join(table) + '\n', encoding='utf-8')
     print(json.dumps({key: report[key] for key in ('model_count', 'row_count', 'observed_models',
         'missing_published_effort_results', 'routing_gaps')} | dict(
-            mismatches=len(mismatches), findings=len(report['findings']), reviewer_gaps=len(report['reviewer_gaps']))))
+            mismatches=len(mismatches), findings=len(report['findings']),
+            reviewer_gaps=len(report['reviewer_gaps']),
+            calibration_changes=len(decision_packet['calibration_changes']),
+            decision_packet_sha256=digest(decision_packet))))
 
 
 if __name__ == '__main__':
     main()
+

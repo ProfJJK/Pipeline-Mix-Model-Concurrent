@@ -415,3 +415,146 @@ def context_fits(srs_tokens, evidence_and_instruction_tokens, output_reserve_tok
         return False
     _integer(context_limit, 1, 10**9, 'Verified context limit')
     return srs_tokens + evidence_and_instruction_tokens + output_reserve_tokens <= context_limit
+
+
+def select_pivot_candidates(catalog, tags, complexity, failed_model_ids, *, available_ids=None):
+    """Select higher/different underlying models after a 10-failure quality threshold.
+
+    Changing effort on a failed underlying model family never qualifies as a
+    pivot. Candidates must clear the current tier floor (preferring next-tier
+    choices first), belong to a distinct family from all failed models, and obey
+    tier-10 maximum-effort rules. Quota/availability filtering (`available_ids`)
+    remains separate from benchmark capability scores.
+    """
+    tags = validate_task_tags(tags)
+    _integer(complexity, 1, 10, 'Complexity')
+    if (not isinstance(failed_model_ids, (list, tuple, set))
+            or not failed_model_ids
+            or any(not isinstance(mid, str) or mid not in catalog['models'] for mid in failed_model_ids)):
+        raise ValueError('Pivot selection requires at least one known failed model ID')
+    excluded_families = {catalog['models'][mid]['family'] for mid in failed_model_ids}
+    next_tier = min(10, complexity + 1)
+    ordered = list(dict.fromkeys(
+        select_candidates(catalog, tags, next_tier, exclude_families=excluded_families)
+        + select_candidates(catalog, tags, complexity, exclude_families=excluded_families)
+        + list(catalog['models'])
+    ))
+    result, seen_families = [], set(excluded_families)
+    for model_id in ordered:
+        model = catalog['models'][model_id]
+        maximum = 'high' if model['provider'] == 'gemini' else 'max'
+        if model['family'] in seen_families or (complexity == 10 and model['effort'] != maximum):
+            continue
+        if available_ids is not None and model_id not in available_ids:
+            continue
+        if all(model['scores'][tag] is not None and
+               model['scores'][tag] >= catalog['task_types'][tag]['tiers'][str(complexity)]['floor']
+               for tag in tags):
+            seen_families.add(model['family'])
+            result.append(model_id)
+    return result
+
+
+def build_gap_resolution_packet(owner_raw, observations):
+    """Compile a reproducible decision packet for all documented 4.2.8 routing gaps."""
+    uncalibrated_base = compile_matrix(owner_raw, observations)
+    uncalibrated = with_five_model_rows(uncalibrated_base)
+    calibrated_base = independent_review_calibration(uncalibrated_base)
+    calibrated = with_five_model_rows(calibrated_base)
+
+    missing_profiles = []
+    default_fallback_profiles = []
+    for model_id, model in sorted(uncalibrated['models'].items()):
+        if model['score_evidence'] == 'MISSING_PUBLISHED_EFFORT_RESULT':
+            missing_profiles.append(dict(
+                model_id=model_id,
+                family=model['family'],
+                provider=model['provider'],
+                effort=model['effort'],
+                score_evidence=model['score_evidence'],
+                resolution='hold_from_benchmark_floor_routing_until_publisher_capture',
+            ))
+        else:
+            obs_name = model.get('observed_configuration') or ''
+            if 'DefaultFallback' in obs_name or 'Fallback' in obs_name:
+                default_fallback_profiles.append(dict(
+                    model_id=model_id,
+                    observed_configuration=obs_name,
+                    evidence_url=model.get('evidence_url'),
+                    native_pinning_rule='requires_separate_host_cli_acceptance_receipt',
+                ))
+
+    execution_gaps = []
+    reviewer_gaps = []
+    for tag, spec in uncalibrated['task_types'].items():
+        for tier_str, row in spec['tiers'].items():
+            tier = int(tier_str)
+            eligible = select_candidates(uncalibrated, [tag], tier)
+            if not eligible:
+                execution_gaps.append(dict(
+                    task_type=tag,
+                    tier=tier,
+                    supplied_floor=row['floor'],
+                    ranked_comparison=[
+                        dict(model_id=opt['model_id'], score=opt['scores'][tag],
+                             meets_floor=opt['meets_floor'])
+                        for opt in row['ranked_options']
+                    ],
+                    calibrated_floor=calibrated['task_types'][tag]['tiers'][tier_str]['floor'],
+                    calibrated_eligible=select_candidates(calibrated, [tag], tier),
+                ))
+            for producer in eligible:
+                reviewers = select_reviewers(uncalibrated, [tag], tier, producer)
+                if not reviewers:
+                    review_tier = str(min(10, tier + 1))
+                    reviewer_gaps.append(dict(
+                        task_type=tag,
+                        tier=tier,
+                        producer=producer,
+                        producer_family=uncalibrated['models'][producer]['family'],
+                        review_tier=int(review_tier),
+                        supplied_review_floor=spec['tiers'][review_tier]['floor'],
+                        calibrated_review_floor=calibrated['task_types'][tag]['tiers'][review_tier]['floor'],
+                        calibrated_reviewers=select_reviewers(calibrated, [tag], tier, producer),
+                    ))
+
+    for tag, spec in calibrated['task_types'].items():
+        for tier_str, row in spec['tiers'].items():
+            orig_floor = uncalibrated['task_types'][tag]['tiers'][tier_str]['floor']
+            row['uncalibrated_floor'] = orig_floor
+            row['floor_changed'] = (row['floor'] != orig_floor)
+
+    return dict(
+        schema='cochem-task-routing-decision-packet/1',
+        generation='4.2.8-gap-resolution-packet-20261013-v1',
+        source_sha256=uncalibrated['source_sha256'],
+        observations_sha256=uncalibrated['observations_sha256'],
+        uncalibrated_catalog_sha256=digest(uncalibrated),
+        calibrated_proposal_sha256=digest(calibrated),
+        missing_effort_profiles=missing_profiles,
+        default_fallback_profiles=default_fallback_profiles,
+        uncalibrated_execution_gaps=execution_gaps,
+        uncalibrated_reviewer_gaps=reviewer_gaps,
+        calibration_changes=calibrated_base['calibration_changes'],
+        calibrated_proposal=calibrated,
+        default_runtime_policy='hold_strict_supplied_floors',
+        owner_decisions=[
+            dict(
+                decision_id='routing-floor-policy-428',
+                default_choice='hold_strict_supplied_floors',
+                options=[
+                    dict(
+                        option_id='hold_strict_supplied_floors',
+                        summary='Keep all 110 owner-supplied floors unchanged; hold SCI-FORMAL tier 10 and the 20 single-family tier 9-10 review combinations when reached.',
+                        activates_calibrated_floors=False,
+                    ),
+                    dict(
+                        option_id='adopt_two_family_calibration',
+                        summary='Apply the 11 documented floor adjustments capping single-tag floors at the second-highest measured max-effort family so all 110 rows have >=2 independent families.',
+                        activates_calibrated_floors=True,
+                    ),
+                ],
+            ),
+        ],
+    )
+
