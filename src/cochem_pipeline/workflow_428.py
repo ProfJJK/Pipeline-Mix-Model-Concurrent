@@ -363,7 +363,7 @@ def compile_reassessed_microtask_plan(state):
                 microtask_id=row['id'],
                 parent_task_id=state['task_id'],
                 lineage_kind='WBS_CHILD',
-                attempt_lineage_id=f"{state['task_id']}::mt::{row['id']}",
+                attempt_lineage_id=f"{state['task_id']}.mt.{row['id']}",
                 role=row['role'],
                 complexity=check['complexity'],
                 task_types=list(check['task_types']),
