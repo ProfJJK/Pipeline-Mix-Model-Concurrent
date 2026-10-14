@@ -124,6 +124,7 @@ class PipelineConfig:
     max_execution_slots: int = 4
     catalog_activation: bool = False
     task_planning: PlanningConfig | None = None
+    runtime_version: str = '4.2.8'
     context_budget: int = 16384
     reserved_fraction: float = 0.25
     min_free_memory_mb: int = 1024
@@ -222,6 +223,9 @@ def load_config(filename: str) -> PipelineConfig:
     if type(catalog_activation) is not bool or (catalog_activation and
             (routing.as_dict()['policy_version']!=3 or values['max_execution_slots']!=4)):
         raise ValueError('Catalog activation requires v3 routing and four shared slots')
+    runtime_version = raw.get('runtime_version', '4.2.8')
+    if not isinstance(runtime_version, str) or runtime_version not in ('4.2.7', '4.2.8'):
+        raise ValueError('runtime_version must be 4.2.7 or 4.2.8')
     if 'gemini' not in held_providers:
         validate_gemini_route_bindings(gemini, routing)
     task_planning = PlanningConfig.from_dict(raw.get('task_planning'))
@@ -264,5 +268,5 @@ def load_config(filename: str) -> PipelineConfig:
         *([Path(ramdisk.mount_root)] if ramdisk.enabled else [])])
     return PipelineConfig(private.resolve(), {k:v.resolve() for k,v in roots.items()}, workers,
                           providers, rules, token, operator, reserved_fraction=fraction, routing=routing,
-                          catalog_activation=catalog_activation,task_planning=task_planning,hardware=hardware,execution_limits=execution_limits,ramdisk=ramdisk,
+                          catalog_activation=catalog_activation,task_planning=task_planning,runtime_version=runtime_version,hardware=hardware,execution_limits=execution_limits,ramdisk=ramdisk,
                           docker=docker,coding_projects=projects,knowledge=knowledge,git_executable=git_executable, **values)
