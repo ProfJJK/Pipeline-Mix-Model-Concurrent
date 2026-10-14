@@ -202,9 +202,18 @@ class PlanningJournal:
     def apply_research(self, task_id, expected_version, research_id):
         result = self._load(self.search_result, research_id, 'Search')
         def transition(row):
-            if set(result) != {'intent_sha256','channels'} or result['intent_sha256'] != digest(self._intent(row)):
+            if (not {'intent_sha256', 'channels'} <= set(result)
+                    or set(result) - {'intent_sha256', 'channels', 'excerpts'}
+                    or result['intent_sha256'] != digest(self._intent(row))):
                 raise ValueError('Search receipts belong to a different planning revision')
-            return workflow.accept_research(json.loads(row['state_json']), result['channels'])
+            excerpts = None
+            if 'excerpts' in result:
+                from .research_evidence_428 import validate_research_excerpts
+                excerpts = validate_research_excerpts(result['channels'], result['excerpts'])
+            updated = workflow.accept_research(json.loads(row['state_json']), result['channels'])
+            if excerpts is not None and updated.get('stage') == 'PLAN_REVIEW':
+                updated['research_excerpts'] = excerpts
+            return updated
         return self._transition(task_id, expected_version, 'research.'+research_id, result, transition)
 
     def apply_owner_approval(self, task_id, expected_version, receipt_id):
