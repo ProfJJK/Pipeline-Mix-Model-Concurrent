@@ -43,6 +43,8 @@ class TaskReleaseRuntime:
         self.store = store
         self.clock = clock
         self.artifact_runtime = artifact_runtime
+        from .content_review_428 import ContentReviewRuntime
+        self.content_review = ContentReviewRuntime(journal, store)
         self.board = board or MicrotaskBoardRuntime(
             journal,
             store,
@@ -282,14 +284,21 @@ class TaskReleaseRuntime:
 
         # Materialize physical checks on the existing admission pool. A native
         # final-test response cannot manufacture a controller test receipt.
+        content_reviews = []
+        physical_results = []
         if self.artifact_runtime is not None:
             for ft in ft_nodes:
                 check = self.artifact_runtime.ensure_verification(self.store.get(ft['job_id']), ft['requirement_ids'])
                 if check['status'] != 'VERIFIED':
                     return {'ready': False, **check, 'blocking_microtask_id': ft['microtask_id']}
+                physical_results.append(check)
                 if check['output']['verification_kind'] != 'coding_green':
-                    return {'ready': False, 'status': 'WAITING_FOR_INDEPENDENT_CONTENT_VERIFICATION',
-                            'blocking_microtask_id': ft['microtask_id']}
+                    reviewed = self.content_review.ensure(task_id, state=state, generation=gen_sha,
+                        producers=[n['job_id'] for n in asm_nodes] + [ft['job_id']], physical=check)
+                    if reviewed['status'] != 'VERIFIED':
+                        return {'ready': False, **reviewed, 'blocking_microtask_id': ft['microtask_id']}
+                    content_reviews.append(reviewed['evidence'])
+                    continue
                 self.record_controller_test_receipt(task_id, ft['microtask_id'], passed=True,
                     exit_code=0, cleanup_verified=True, verified_requirements=check['output']['verified_requirements'],
                     summary='Sealed requirement tests executed RED then GREEN by the protected offline runner',
@@ -304,6 +313,10 @@ class TaskReleaseRuntime:
 
         with self.journal._write() as conn:
             for ft in ft_nodes:
+                if content_reviews:
+                    # Content judgments are separately labeled. Do not turn
+                    # them into fictitious executed controller test receipts.
+                    continue
                 rkey = self._receipt_key(
                     task_id,
                     ft["microtask_id"],
@@ -370,12 +383,14 @@ class TaskReleaseRuntime:
                         }
                     )
 
-        if node_covered_reqs != all_srs_reqs or controller_verified_reqs != all_srs_reqs:
+        reviewed_content_reqs = {r for review in content_reviews for r in review['reviewed_requirements']}
+        release_covered_reqs = controller_verified_reqs | reviewed_content_reqs
+        if node_covered_reqs != all_srs_reqs or release_covered_reqs != all_srs_reqs:
             return {
                 "ready": False,
                 "status": "MISSING_REQUIREMENT_OR_TEST_COVERAGE",
                 "uncovered_by_nodes": sorted(all_srs_reqs - node_covered_reqs),
-                "uncovered_by_controller_tests": sorted(all_srs_reqs - controller_verified_reqs),
+                "uncovered_by_tests_or_independent_review": sorted(all_srs_reqs - release_covered_reqs),
             }
 
         required_wbs_deliverables = {
@@ -394,6 +409,8 @@ class TaskReleaseRuntime:
                 "plan_generation_sha256": gen_sha,
                 "assembly_hashes": assembly_hashes,
                 "test_receipts": [r["receipt_id"] for r in verified_test_receipts],
+                "content_reviews": content_reviews,
+                "physical_results": physical_results,
             }
         )[:40]
 
@@ -409,10 +426,15 @@ class TaskReleaseRuntime:
             "accepted_planning_jobs": deepcopy(state.get("accepted_planning_jobs") or []),
             "assembly_hashes": assembly_hashes,
             "controller_test_receipts": verified_test_receipts,
+            "independent_content_reviews": content_reviews,
+            "physical_verification": physical_results,
             "deliverables": [produced_deliverables[k] for k in sorted(produced_deliverables)],
             "verified_requirements": sorted(all_srs_reqs),
             "release_criteria_results": satisfied_criteria,
             "verification_status": "verified",
+            "verification_scope": "content_integrity_and_independent_model_review" if content_reviews
+                                  else "executed_requirement_tests",
+            "original_repository_integration": "NOT_APPLICABLE" if content_reviews else "REVIEW_REQUIRED",
         }
         return {
             "ready": True,

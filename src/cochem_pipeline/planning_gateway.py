@@ -62,6 +62,11 @@ def validate_stage_output(payload, output, route):
                 _text(text,'Review statement')
         accept_review(state, reviewer_model=model['family'], reviewer_tier=intent['complexity'],
                       effort=model['effort'], accepted=output['accepted'], review_sha256=digest(output))
+    elif stage == 'CONTENT_REVIEW':
+        from .content_review_428 import validate_content_review
+        if intent['content_binding_sha256'] != digest(payload['content_review']):
+            raise ValueError('Content review input commitment differs')
+        validate_content_review(payload, output, model)
     elif stage == 'WBS' and set(output)=={'wbs'}:
         accept_wbs(state,output['wbs'])
     elif stage == 'MICROTASKS' and set(output)=={'microtasks'}:
@@ -224,6 +229,11 @@ def prompt_contract(payload, *, check_context=True):
     elif stage=='PLAN_REVIEW':
         contract=dict(accepted=False,findings=['Concrete supported issue'],
                       suggestions=['Specific improvement'],clarifications=[])
+    elif stage=='CONTENT_REVIEW':
+        from .content_review_428 import review_contract
+        contract = review_contract(payload)
+        task_state = deepcopy(task_state)
+        task_state['content_review'] = deepcopy(payload['content_review'])
     elif stage=='WBS':
         contract=dict(wbs=[dict(id='W1',section_ids=['S1'],requirement_ids=['R1'],
             deliverables=['Named artifact'],audit_metrics=['Measurable verification'],release_criteria=['Pass condition'],depends_on=[])])
@@ -262,6 +272,12 @@ def prompt_contract(payload, *, check_context=True):
         'WBS must cover every requirement. Microtasks need implementation, assembly and final-test nodes; '
         'assembly follows all fragments and final testing follows assembly. Preserve WBS dependencies. '
         'Aim for single-type complexity 1–5 implementation fragments; assess orchestration and assembly honestly.')
+    if stage == 'CONTENT_REVIEW':
+        instruction += (' Independently assess the exact captured content against every SRS requirement '
+                        'and release criterion, using the research evidence. Cite exact artifact excerpts. '
+                        'Reject omissions, unsupported claims and material errors with actionable findings. '
+                        'An artifact is not proof of deployment, external actions or executed tests. '
+                        'Return accepted=false if satisfying the request requires such unproved actions.')
     if 'execution_context' in payload:
         if not isinstance(payload['execution_context'], dict):
             raise ValueError('Controller execution context must be a structured data object')
