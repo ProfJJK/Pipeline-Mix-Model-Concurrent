@@ -68,8 +68,15 @@ class PlanningJournal:
         with self._write() as conn:
             return conn.execute('SELECT 1 FROM planning428_tasks WHERE task_id=?', (task_id,)).fetchone() is not None
 
-    def create(self, task_id, objective, *, project_id=None):
+    def create(self, task_id, objective, *, project_id=None, requested_requirements=None):
         state = workflow.new_task(task_id, objective)
+        requirements = [] if requested_requirements is None else requested_requirements
+        if (not isinstance(requirements, list) or len(requirements) > 200
+                or any(not isinstance(x, str) or not x.strip() or '\x00' in x for x in requirements)
+                or len(set(requirements)) != len(requirements) or sum(len(x) for x in requirements) > 16000):
+            raise ValueError('Requested requirements must be unique bounded nonempty strings')
+        if requirements:
+            state['requested_requirements'] = deepcopy(requirements)
         if project_id is not None:
             state['project_id'] = workflow._id(project_id)
         with self._write() as conn:
@@ -77,7 +84,8 @@ class PlanningJournal:
             if existing:
                 old = self._read(conn, task_id)
                 old_state = json.loads(old['state_json'])
-                if old_state['objective'] != objective or old_state.get('project_id') != project_id:
+                if (old_state['objective'] != objective or old_state.get('project_id') != project_id
+                        or old_state.get('requested_requirements', []) != requirements):
                     raise ValueError('Task ID belongs to another objective or project')
                 return self._projection(old)
             conn.execute('INSERT INTO planning428_tasks VALUES(?,?,?,?,?)',
