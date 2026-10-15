@@ -9,7 +9,7 @@ import pytest
 from cochem_pipeline import controller_guard
 from cochem_pipeline import performance_acceptance as perf
 from cochem_pipeline import windows as win
-from cochem_pipeline.controller_guard import WARDEN_CPU_LIMIT_PERCENT, WARDEN_MEMORY_LIMIT_MB
+from cochem_pipeline.controller_guard import WARDEN_CPU_LIMIT_CORES, WARDEN_MEMORY_LIMIT_MB
 
 
 class Clock:
@@ -30,7 +30,8 @@ class Clock:
 def observation(monkeypatch, tmp_path):
     """Only the explicit native boundaries are replaced; real observer/file I/O."""
     clock = Clock()
-    current = SimpleNamespace(created=900000.0, sequence=0, after_handles=lambda: None, rss_mb=8, cpu=1.0)
+    current = SimpleNamespace(created=900000.0, sequence=0, after_handles=lambda: None, rss_mb=8, cpu=1.0,
+                              cpu_seconds=0.0, cpu_read_at=0.0, affinity=[0, 1])
     heartbeat = tmp_path / 'heartbeat.json'
     heap_path = tmp_path / 'heap.json'
     output = tmp_path / 'observation'
@@ -51,8 +52,10 @@ def observation(monkeypatch, tmp_path):
         def create_time(self):
             return self.created
 
-        def cpu_percent(self, interval=None):
-            return current.cpu
+        def cpu_times(self):
+            current.cpu_seconds += (clock.mono-current.cpu_read_at)*current.cpu/100
+            current.cpu_read_at = clock.mono
+            return SimpleNamespace(user=current.cpu_seconds, system=0.0)
 
         def num_handles(self):
             current.after_handles()
@@ -62,7 +65,7 @@ def observation(monkeypatch, tmp_path):
             return SimpleNamespace(rss=current.rss_mb*1048576)
 
         def cpu_affinity(self):
-            return [0, 1]
+            return current.affinity
 
     original_read = perf._read_object
 
@@ -209,11 +212,11 @@ def test_cached_process_creation_cannot_hide_pid_reuse(observation, when):
 
 
 @pytest.mark.parametrize('rss_mb,cpu,passed', [
-    # The fixture process has two allowed logical CPUs, so cpu_percent is halved.
-    (WARDEN_MEMORY_LIMIT_MB, 2*WARDEN_CPU_LIMIT_PERCENT, True),
+    # Process CPU 100% is one core, irrespective of affinity count.
+    (WARDEN_MEMORY_LIMIT_MB, 100*WARDEN_CPU_LIMIT_CORES, True),
     (51, 1.0, True),  # Above the superseded 50 MiB literal, inside the owner-amended budget.
     (WARDEN_MEMORY_LIMIT_MB+1, 1.0, False),
-    (8, 2*WARDEN_CPU_LIMIT_PERCENT+.2, False)])
+    (8, 100*WARDEN_CPU_LIMIT_CORES+.2, False)])
 def test_controller_verdict_uses_the_warden_budget_constants(observation, rss_mb, cpu, passed):
     observation.current.rss_mb, observation.current.cpu = rss_mb, cpu
     result = observation.run()
@@ -221,8 +224,43 @@ def test_controller_verdict_uses_the_warden_budget_constants(observation, rss_mb
     assert (result['controller']['maximum_rss_mb'], result['controller']['maximum_cpu_percent']) == (rss_mb, cpu/2)
     assert result['controller']['passed'] is passed
     # The harness reads the Warden's own budget, not a copied literal.
-    assert (perf.WARDEN_MEMORY_LIMIT_MB, perf.WARDEN_CPU_LIMIT_PERCENT) == (
-        controller_guard.WARDEN_MEMORY_LIMIT_MB, controller_guard.WARDEN_CPU_LIMIT_PERCENT)
+    assert result['controller']['maximum_cpu_core_equivalents'] == pytest.approx(cpu/100)
+    assert (perf.WARDEN_MEMORY_LIMIT_MB, perf.WARDEN_CPU_LIMIT_CORES) == (
+        controller_guard.WARDEN_MEMORY_LIMIT_MB, controller_guard.WARDEN_CPU_LIMIT_CORES)
+
+
+@pytest.mark.parametrize('processors', [2, 8, 32])
+def test_observer_core_budget_does_not_change_with_affinity(observation, processors):
+    observation.current.affinity = list(range(processors))
+    observation.current.cpu = 100.0
+    result = observation.run()
+    row = json.loads((observation.output/'native-samples.jsonl').read_text())
+    assert result['controller']['passed'] is True
+    assert result['controller']['maximum_cpu_core_equivalents'] == 1
+    assert row['cpu_percent'] == pytest.approx(100/processors)
+    assert row['cpu_limit_percent'] == pytest.approx(100/processors)
+    assert row['allowed_logical_processors'] == list(range(processors))
+
+
+def test_observer_uses_the_rolling_window_for_a_short_cpu_burst(observation):
+    observation.current.cpu = 50.0
+    def after_sleep(clock):
+        observation.current.cpu = 200.0 if clock.sleeps == 11 else 50.0
+        observation.publish_heap()
+    observation.clock.after_sleep = after_sleep
+    result = observation.run(duration=12)
+    rows = [json.loads(line) for line in (observation.output/'native-samples.jsonl').read_text().splitlines()]
+    assert rows[10]['cpu_window_seconds'] == 10
+    assert rows[10]['cpu_core_equivalents'] == pytest.approx(.65)
+    assert result['controller']['maximum_cpu_core_equivalents'] == pytest.approx(.65)
+    assert result['controller']['passed'] is True
+
+
+def test_observer_refuses_missing_affinity_evidence(observation):
+    observation.current.affinity = []
+    result = observation.run()
+    assert result['passed'] is False and result['sample_count'] == 0
+    assert 'Controller rolling CPU measurement is unavailable' in result['error']
 
 
 def test_missing_heap_source_stays_explicit(observation):

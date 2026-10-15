@@ -21,7 +21,9 @@ import time
 
 import psutil
 
-from .controller_guard import WARDEN_CPU_LIMIT_PERCENT, WARDEN_MEMORY_LIMIT_MB
+from .controller_guard import (CPU_WINDOW_SECONDS, WARDEN_CPU_LIMIT_CORES,
+                               WARDEN_CPU_TARGET_CORES, WARDEN_MEMORY_LIMIT_MB,
+                               CpuWindow, assess_controller)
 
 
 def _read_object(path, maximum=1048576):
@@ -220,11 +222,14 @@ def observe_native(heartbeat_path, output, *, duration_seconds=172800, interval_
     previous_wall=began; previous_monotonic=monotonic_start
     maximum_wall_gap=0.; maximum_monotonic_gap=0.; last_observed_elapsed=0.
     observations=0; initial_handles=None; final_handles=None; maximum_handles=0
-    max_rss=0.; max_cpu=0.; heap_available=True; heap_passed=True
+    max_rss=0.; max_cpu=0.; max_cpu_cores=0.; controller_passed=True
+    heap_available=True; heap_passed=True
+    cpu_window=CpuWindow(CPU_WINDOW_SECONDS)
     error=None
-    process.cpu_percent(interval=None)
-    time.sleep(min(interval_seconds,duration_seconds))
     try:
+        initial_cpu=process.cpu_times()
+        cpu_window.add(time.monotonic(),initial_cpu.user+initial_cpu.system,len(process.cpu_affinity()))
+        time.sleep(min(interval_seconds,duration_seconds))
         with (output/'native-samples.jsonl').open('x',encoding='utf-8') as stream:
             while True:
                 heartbeat=_read_object(heartbeat_path)
@@ -237,7 +242,14 @@ def observe_native(heartbeat_path, output, *, duration_seconds=172800, interval_
                 handles=process.num_handles()
                 rss=process.memory_info().rss/1048576
                 affinity=process.cpu_affinity()
-                cpu=process.cpu_percent(interval=None)/len(affinity)
+                used=process.cpu_times()
+                cpu,cpu_elapsed=cpu_window.add(time.monotonic(),used.user+used.system,len(affinity))
+                cpu_verdict=assess_controller({'rss_mb':rss,'cpu_percent':cpu,
+                                               'allowed_logical_processors':affinity})
+                cpu_cores=cpu_verdict['cpu_core_equivalents']
+                if cpu_cores is None:
+                    controller_passed=False
+                    raise RuntimeError('Controller rolling CPU measurement is unavailable')
                 heap=desktop_heap_evidence(desktop_heap_report,pid=process.pid,created_at=created_at,now=time.time())
                 if psutil.Process(process.pid).create_time()!=created_at:
                     raise RuntimeError('Warden restarted during evidence collection')
@@ -258,9 +270,14 @@ def observe_native(heartbeat_path, output, *, duration_seconds=172800, interval_
                 if initial_handles is None: initial_handles=handles
                 final_handles=handles;maximum_handles=max(maximum_handles,handles)
                 max_rss=max(max_rss,rss);max_cpu=max(max_cpu,cpu)
+                max_cpu_cores=max(max_cpu_cores,cpu_cores)
+                controller_passed &= cpu_verdict['ready']
                 last_observed_elapsed=completed_monotonic-monotonic_start
                 observation={'timestamp':completed,'elapsed_seconds':last_observed_elapsed,
                     'pid':process.pid,'handles':handles,'rss_mb':rss,'cpu_percent':cpu,
+                    'cpu_core_equivalents':cpu_cores,'cpu_window_seconds':cpu_elapsed,
+                    'allowed_logical_processors':affinity,
+                    'cpu_limit_percent':cpu_verdict['cpu_limit_percent'],
                     'process_created_at':created_at,'instance_id':first['instance_id'],
                     'heartbeat_sequence':heartbeat['sequence'],'desktop_heap':heap,
                     'wall_gap_seconds':wall_gap,'monotonic_gap_seconds':monotonic_gap}
@@ -288,8 +305,13 @@ def observe_native(heartbeat_path, output, *, duration_seconds=172800, interval_
                        'passed':complete and final_handles<=initial_handles,
                        'scope':'physical handle-count growth; individual handle lifetime attribution is not available'},
             'controller':{'maximum_rss_mb':max_rss,'maximum_cpu_percent':max_cpu,
-                          'passed':observations>0 and max_rss<=WARDEN_MEMORY_LIMIT_MB
-                                   and max_cpu<=WARDEN_CPU_LIMIT_PERCENT},
+                          'maximum_cpu_core_equivalents':max_cpu_cores,
+                          'cpu_limit_core_equivalents':WARDEN_CPU_LIMIT_CORES,
+                          'cpu_target_core_equivalents':WARDEN_CPU_TARGET_CORES,
+                          'cpu_window_seconds':CPU_WINDOW_SECONDS,
+                          'cpu_scope':'process CPU seconds per elapsed second; percent uses recorded affinity',
+                          'passed':observations>0 and controller_passed and max_rss<=WARDEN_MEMORY_LIMIT_MB
+                                   and max_cpu_cores<=WARDEN_CPU_LIMIT_CORES},
             'desktop_heap':{'available':observations>0 and heap_available,'passed':observations>0 and heap_passed},
             'supervisor_timing':timing}
     result['passed']=all((complete,result['handles']['passed'],result['controller']['passed'],

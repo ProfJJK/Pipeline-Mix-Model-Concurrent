@@ -35,7 +35,11 @@ Runtime-boundary fixtures verify CPU/disk pauses leave existing jobs and their
 cancellation flags untouched, while critical memory still fails and terminates
 the affected work. These are source tests, not deployed host acceptance.
 
-The installed runtime and all delivered packages remain unchanged. Sustained
-observer evidence must use the same core-unit budget before the new release is
-packaged; a historical fixed 7% or 12.5% comparison cannot prove it on a different
-affinity size.
+The sustained observer also uses `CpuWindow` and `assess_controller`, records the
+actual affinity, rolling duration and core equivalents, and reports the same
+one-core limit. Its 34 disposable clock/process/receipt tests passed, including
+unchanged continuity, PID-reuse, missing-heap, and sample-gap safeguards. A burst
+test verifies the observer uses the ten-second window, not a one-tick reading.
+
+The installed runtime and all delivered packages remain unchanged. These source
+tests do not establish new physical SYSTEM or 48-hour acceptance evidence.
