@@ -68,6 +68,28 @@ def validated_external_predecessors(planner, payload):
     return deepcopy(expected)
 
 
+def validated_child_pivot_scope(planner, source):
+    """Bind a high-tier pivot approval to its actual registered failed child."""
+    payload = source['payload']
+    node, intent = payload['microtask_node'], payload['planning_intent']
+    context = node.get('fracture_context')
+    if context is None:
+        return None
+    if intent['microtask_id'] != node['microtask_id']:
+        raise ValueError('Child pivot intent and captured scope differ')
+    validated_external_predecessors(planner, payload)
+    child = planner.fracture_runtime.get_fracture_child(node['microtask_id'])
+    if (child['fracture_id'] != context['fracture_id'] or child['graph_sha256'] != context['graph_sha256']
+            or child['lineage_root'] != context['lineage_root']
+            or node['attempt_lineage_id'] != child['child_id'] or child['status'] == 'FRACTURED_OBSOLETE'
+            or planner.fracture_runtime.ledger.status(node['attempt_lineage_id'])['root'] != child['lineage_root']):
+        raise ValueError('Child pivot must retain its compiled shared lineage')
+    return dict(fracture_id=context['fracture_id'], graph_sha256=context['graph_sha256'],
+        dossier_sha256=context['dossier_sha256'], lineage_root=context['lineage_root'], child_id=node['microtask_id'],
+        source_job_id=source['job_id'], source_intent_sha256=digest(intent), source_node_sha256=digest(node),
+        plan_generation_sha256=intent['plan_generation_sha256'])
+
+
 def validate_fracture_plan(payload, output):
     if not isinstance(output, dict) or set(output) != {'summary', 'children'}:
         raise ValueError('Fracture plan requires summary and children')

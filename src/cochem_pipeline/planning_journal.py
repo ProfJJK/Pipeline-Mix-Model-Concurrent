@@ -189,22 +189,48 @@ class PlanningJournal:
         return self._transition(task_id, expected_version, event, evidence, transition)
 
     def request_microtask_pivot_approval(self, task_id, source_intent, *, lineage_root,
-                                        boundary, review_job_id, review_sha256, classification):
+                                        boundary, review_job_id, review_sha256, classification,
+                                        fracture_scope=None):
         """Capture the exact changed child scope for the existing owner approval adapter."""
         classification = workflow.assessment(classification)
         if source_intent['stage'] != 'MICROTASK_EXECUTION' or classification['complexity'] < 8:
             raise ValueError('Only newly reviewed high-tier child pivots need this approval')
-        if (lineage_root != f"{task_id}.mt.{source_intent['microtask_id']}"
-                or boundary not in (10, 20) or type(boundary) is not int):
+        if (boundary not in (10, 20) or type(boundary) is not int
+                or (fracture_scope is None and lineage_root != f"{task_id}.mt.{source_intent['microtask_id']}")):
             raise ValueError('Child pivot approval requires its exact existing lineage and boundary')
+        if fracture_scope is not None:
+            if (set(fracture_scope) != {'fracture_id', 'graph_sha256', 'dossier_sha256', 'lineage_root',
+                    'child_id', 'source_job_id', 'source_intent_sha256', 'source_node_sha256', 'plan_generation_sha256'}
+                    or fracture_scope['lineage_root'] != lineage_root
+                    or fracture_scope['child_id'] != source_intent['microtask_id']
+                    or fracture_scope['source_intent_sha256'] != digest(source_intent)
+                    or fracture_scope['plan_generation_sha256'] != source_intent['plan_generation_sha256']):
+                raise ValueError('Fracture pivot approval differs from its captured child')
+            for key in ('graph_sha256', 'dossier_sha256', 'source_node_sha256'):
+                workflow._sha(fracture_scope[key])
         request = dict(microtask_id=source_intent['microtask_id'], lineage_root=lineage_root,
             boundary=boundary, review_job_id=review_job_id, review_sha256=workflow._sha(review_sha256),
             assessment=classification, srs_sha256=source_intent['srs_sha256'],
             microtasks_sha256=source_intent['task']['microtasks_sha256'])
+        if fracture_scope is not None:
+            request['fracture_scope'] = deepcopy(fracture_scope)
         request['request_sha256'] = digest(request)
         state = self.status(task_id)
-        if state['stage'] != 'MICROTASKS_READY':
+        if (state['stage'] != 'MICROTASKS_READY' or state['srs_sha256'] != request['srs_sha256']
+                or state['microtasks_sha256'] != request['microtasks_sha256']):
             raise ValueError('Child pivot approval belongs to an inactive task scope')
+        if fracture_scope is not None:
+            with self._write() as conn:
+                from .microtask_board_428 import MicrotaskBoardRuntime
+                current = self._read(conn, task_id)
+                generation = MicrotaskBoardRuntime._plan_generation_sha256(
+                    json.loads(current['state_json']), json.loads(current['catalog_json']))
+                accepted = conn.execute('SELECT lineage_root FROM planning428_fracture_plans '
+                    "WHERE task_id=? AND fracture_id=? AND status='FRACTURE_READY_NEW_CAPTURE'",
+                    (task_id, fracture_scope['fracture_id'])).fetchall()
+            if (len(accepted) != 1 or accepted[0][0] != lineage_root
+                    or generation != fracture_scope['plan_generation_sha256']):
+                raise ValueError('Fracture pivot approval has no accepted current graph')
         prior = (state.get('microtask_pivot_approvals') or {}).get(lineage_root)
         if prior and prior['boundary'] > boundary:
             raise ValueError('Child pivot approval cannot restore an older failure boundary')
@@ -215,8 +241,14 @@ class PlanningJournal:
             if (updated['stage'] != 'MICROTASKS_READY'
                     or updated['srs_sha256'] != request['srs_sha256']
                     or updated['microtasks_sha256'] != request['microtasks_sha256']
-                    or not any(m['id'] == request['microtask_id'] for m in updated['microtasks'])):
+                    or (fracture_scope is None
+                        and not any(m['id'] == request['microtask_id'] for m in updated['microtasks']))):
                 raise ValueError('Child pivot approval belongs to a stale task scope')
+            if fracture_scope is not None:
+                from .microtask_board_428 import MicrotaskBoardRuntime
+                generation = MicrotaskBoardRuntime._plan_generation_sha256(updated, json.loads(row['catalog_json']))
+                if generation != fracture_scope['plan_generation_sha256']:
+                    raise ValueError('Fracture pivot approval has no accepted current graph')
             updated.setdefault('microtask_pivot_approvals', {})[lineage_root] = deepcopy(request)
             return updated
         result = self._transition(task_id, state['journal_version'],

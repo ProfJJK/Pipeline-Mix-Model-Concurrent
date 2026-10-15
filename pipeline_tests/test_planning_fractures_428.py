@@ -262,3 +262,35 @@ def test_registered_physical_retry_reopens_exact_children_once(env):
     final_retry = next(n for n in after['nodes'] if n['microtask_id'] == final['microtask_id'])
     assert final_retry['status'] == 'DISPATCHED' and final_retry['job_id'] != final['job_id']
     assert ledger.status(root)['failures'] == 11
+
+
+def test_registered_child_high_tier_pivot_requires_exact_owner_receipt_without_new_budget(env):
+    from pipeline_tests.test_microtask_board_428 import OWNER_SECRET
+    prepare_fracture(env)
+    attach_board(env)
+    source, boundary = fail_window(env)
+    child = source['payload']['microtask_node']
+    assert child['fracture_context'] and boundary['boundary'] == 20
+    complete_review(env, complexity=8)
+    env[-1].step('task')
+    assert env[4].status('task')[-1]['status'] == 'PIVOT_OWNER_APPROVAL_REQUIRED'
+    state = env[1].status('task')
+    request = state['microtask_pivot_approvals'][boundary['lineage_root']]
+    assert request['microtask_id'] == child['microtask_id']
+    assert request['fracture_scope']['source_job_id'] == source['job_id']
+    assert request['assessment']['complexity'] == 8
+    assert 'owner_approval' not in request
+    altered = deepcopy(request['fracture_scope'])
+    altered['plan_generation_sha256'] = '0' * 64
+    with pytest.raises(ValueError, match='captured child'):
+        env[1].request_microtask_pivot_approval('task', source['payload']['planning_intent'],
+            lineage_root=boundary['lineage_root'], boundary=20, review_job_id=request['review_job_id'],
+            review_sha256=request['review_sha256'], classification=request['assessment'], fracture_scope=altered)
+    with pytest.raises(PermissionError):
+        env[3].approve_child_microtask('task', child['microtask_id'], owner_token='wrong')
+    env[3].approve_child_microtask('task', child['microtask_id'], owner_token=OWNER_SECRET)
+    receipt = env[1].status('task')['microtask_pivot_approvals'][boundary['lineage_root']]['owner_approval']
+    assert receipt['request_sha256'] == request['request_sha256']
+    env[-1].step('task')
+    assert env[4].status('task')[-1]['status'] == 'PIVOT_READY_NEW_CAPTURE'
+    assert env[2].status(boundary['lineage_root'])['failures'] == 20

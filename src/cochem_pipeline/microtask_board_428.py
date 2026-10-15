@@ -954,7 +954,10 @@ class MicrotaskBoardRuntime:
             node_key = f"{gen_sha[:32]}::{mt_id}"
             lstate = None
             node_for_route = dict(node)
-            pending_approval = (state.get('microtask_pivot_approvals') or {}).get(node['attempt_lineage_id'])
+            approval_lineage = (node.get('fracture_context') or {}).get('lineage_root', node['attempt_lineage_id'])
+            pending_approval = (state.get('microtask_pivot_approvals') or {}).get(approval_lineage)
+            if pending_approval and pending_approval['microtask_id'] != mt_id:
+                pending_approval = None
             if pending_approval and not pending_approval.get('owner_approval'):
                 node_for_route['needs_owner_approval'] = True
                 node_for_route['pending_pivot_approval'] = pending_approval
@@ -1656,23 +1659,30 @@ class MicrotaskBoardRuntime:
             raise ValueError("OwnerApprovalBroker is required to approve high-tier microtasks")
         self.owner_broker._authenticate_owner_token(owner_token)
         state = self.journal.status(task_id)
+        fracture_node = None
         if self.fracture_planning is not None:
             generation, nodes, _, _, _ = self._compile(task_id)
             matches = [node for node in nodes if node['microtask_id'] == microtask_id and node.get('fracture_context')]
             if matches:
-                node = matches[0]
-                _text(notes, 'Owner notes', 8000) if notes else None
-                context = node['fracture_context']
-                receipt_id = 'fractureowner428-' + digest(dict(task_id=task_id, microtask_id=microtask_id,
-                    generation=generation, graph_sha256=context['graph_sha256'], notes=notes))[:40]
-                self.fracture_runtime.approve_fracture_child(context['lineage_root'], microtask_id, receipt_id)
-                return self.materialize(task_id)
+                fracture_node = matches[0]
         expected_version = state["journal_version"]
-        lineage = f'{task_id}.mt.{microtask_id}'
+        lineage = (fracture_node['fracture_context']['lineage_root'] if fracture_node
+                   else f'{task_id}.mt.{microtask_id}')
         pending = (state.get('microtask_pivot_approvals') or {}).get(lineage)
+        if pending and pending['microtask_id'] != microtask_id:
+            pending = None
         if pending is not None and pending.get('owner_approval'):
             return self.materialize(task_id)
         if pending is not None and not pending.get('owner_approval'):
+            if pending.get('fracture_scope'):
+                from .planning_fractures_428 import validated_child_pivot_scope
+                binding = pending['fracture_scope']
+                if (fracture_node is None or fracture_node.get('fracture_join')
+                        or generation != binding['plan_generation_sha256']
+                        or fracture_node['fracture_context']['graph_sha256'] != binding['graph_sha256']
+                        or validated_child_pivot_scope(self.fracture_planning,
+                            self.store.get(binding['source_job_id'])) != binding):
+                    raise ValueError('Fracture pivot approval belongs to a stale compiled scope')
             _text(notes, 'Owner notes', 8000) if notes else None
             receipt = dict(receipt_id='mtpivotowner428-' + digest(dict(
                 request_sha256=pending['request_sha256'], notes=notes))[:40],
@@ -1688,6 +1698,13 @@ class MicrotaskBoardRuntime:
                 entry['owner_approval'] = receipt
                 return current
             self.journal._transition(task_id, expected_version, receipt['receipt_id'], receipt, approve_pivot)
+            return self.materialize(task_id)
+        if fracture_node is not None:
+            _text(notes, 'Owner notes', 8000) if notes else None
+            context = fracture_node['fracture_context']
+            receipt_id = 'fractureowner428-' + digest(dict(task_id=task_id, microtask_id=microtask_id,
+                generation=generation, graph_sha256=context['graph_sha256'], notes=notes))[:40]
+            self.fracture_runtime.approve_fracture_child(context['lineage_root'], microtask_id, receipt_id)
             return self.materialize(task_id)
         receipt_id = "mtownercpt428-" + digest(
             {

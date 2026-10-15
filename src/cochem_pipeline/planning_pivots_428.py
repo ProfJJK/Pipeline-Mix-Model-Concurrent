@@ -175,9 +175,11 @@ class PlanningPivotRuntime:
                 effective_tier = prior_pivot['proposal']['complexity']
             source_node = job['payload']['planning_intent']['task']['failing_microtask']
             if source_node and effective_tier >= 8:
+                from .planning_fractures_428 import validated_child_pivot_scope
+                fracture_scope = validated_child_pivot_scope(self.fractures, source)
                 approval = self.journal.request_microtask_pivot_approval(task_id, source_intent,
                     lineage_root=root, boundary=number, review_job_id=job['job_id'], review_sha256=sha,
-                    classification=dict(output['assessment'], complexity=effective_tier))
+                    classification=dict(output['assessment'], complexity=effective_tier), fracture_scope=fracture_scope)
                 receipt = approval.get('owner_approval') or {}
                 if not (receipt.get('actor_kind') == 'human_owner' and receipt.get('receipt_id')
                         and receipt.get('request_sha256') == approval['request_sha256']):
