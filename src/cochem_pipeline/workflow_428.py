@@ -103,6 +103,9 @@ def accept_srs(state, document, *, planner_model, flash_context_limit):
         covered.update(ids)
     if covered != requirement_ids:
         raise ValueError('SRS must cover every requirement')
+    if state.get('fracture_promotion'):
+        from .fracture_promotion_428 import validate_promoted_srs
+        validate_promoted_srs(state, document)
     # Model-supplied token estimates cannot grant the short-task fast path.
     # Count the complete UTF-8 document conservatively and reserve controller
     # instructions/output independently. Native context limits still require
@@ -126,7 +129,7 @@ def accept_srs(state, document, *, planner_model, flash_context_limit):
     result.update(document=deepcopy(document), srs_sha256=sha, assessment=classification,
         planner_model=_id(planner_model), approval_required=classification['complexity'] >= 8,
         review_tier=min(10, classification['complexity'] + 1), fits_flash_context=fits,
-        needs_wbs=classification['complexity'] >= 4 or len(classification['task_types']) > 1 or not fits)
+        needs_wbs=bool(state.get('fracture_promotion')) or classification['complexity'] >= 4 or len(classification['task_types']) > 1 or not fits)
     result['context_budget'] = dict(content=content_budget, instructions=instruction_budget, output=output_budget)
     result['stage'] = _next_plan_stage(result)
     return result
@@ -135,7 +138,7 @@ def accept_srs(state, document, *, planner_model, flash_context_limit):
 def _next_plan_stage(state):
     if state['approval_required'] and not state.get('approval'):
         return 'OWNER_APPROVAL'
-    if state['assessment']['complexity'] >= 4 and not state.get('research'):
+    if (state['assessment']['complexity'] >= 4 or state.get('fracture_promotion')) and not state.get('research'):
         return 'RESEARCH'
     if state['needs_wbs'] and not state.get('review'):
         return 'PLAN_REVIEW'
@@ -251,7 +254,8 @@ def accept_wbs(state, rows):
     if covered != all_requirements:
         raise ValueError('WBS omits SRS requirements')
     result = deepcopy(state)
-    result.update(wbs=deepcopy(rows), wbs_sha256=digest(rows), stage='MICROTASKS')
+    result.update(wbs=deepcopy(rows), wbs_sha256=digest(rows),
+                  stage='FRACTURE_PROMOTION_READY' if state.get('fracture_promotion') else 'MICROTASKS')
     return result
 
 

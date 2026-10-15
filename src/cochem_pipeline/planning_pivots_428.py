@@ -135,7 +135,8 @@ class PlanningPivotRuntime:
         if self.journal.status(task_id)['stage'] == 'CANCELLED':
             return 0
         eligible = {'WAITING_FOR_PIVOT_REVIEW', 'WAITING_FOR_PIVOT_BOARD', 'PIVOT_OWNER_APPROVAL_REQUIRED',
-                    'WAITING_FOR_FRACTURE_PLAN', 'WAITING_FOR_FRACTURE_REVIEW', 'FRACTURE_PLAN_REQUIRED'}
+                    'WAITING_FOR_FRACTURE_PLAN', 'WAITING_FOR_FRACTURE_REVIEW', 'FRACTURE_PLAN_REQUIRED',
+                    'WAITING_FOR_FRACTURE_PROMOTION'}
         boundaries = [b for b in self.outcomes.status(task_id) if b['status'] in eligible][:limit]
         for boundary in boundaries:
             root, number = boundary['lineage_root'], boundary['boundary']

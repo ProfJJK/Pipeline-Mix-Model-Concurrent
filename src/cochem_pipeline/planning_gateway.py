@@ -143,7 +143,9 @@ class PlanningGateway:
                 return prior
             from .planning_budgets_428 import capture_lineage_budget
             budget = (capture_lineage_budget(conn, job_id, payload, policy,
-                attempt_ledger=self.attempt_accounting) if self.attempt_accounting is not None else None)
+                attempt_ledger=self.attempt_accounting,
+                aggregate_lineage_root=(intent['task'].get('fracture_promotion') or {}).get('lineage_root'))
+                if self.attempt_accounting is not None else None)
             self.store._insert(conn,root_id,root_id,None,'MACRO_PLANNING_REQUEST','IN_PROGRESS',
                                dict(workflow_type='planning428',intent_sha256=identity))
             routes.capture_workflow(conn,root_id,policy,max_dispatches=budget.max_dispatches if budget else None)
@@ -328,6 +330,12 @@ def prompt_contract(payload, *, check_context=True):
             'and one final test covering every requirement. Give every child its own classification, '
             'prompt, audit metric and release criterion. Do not supply approvals, routing identities or '
             'claim execution. An independent review must reject gaps and preserve the exact plan hash.')
+    if task_state.get('fracture_promotion'):
+        instruction += (' This is a whole-task failure promotion. Preserve every original requirement text '
+            'and release criterion and the captured reasoning floor. Revise the SRS using the failure '
+            'recommendation. The WBS must name real deliverable paths and trace each to SRS requirements; '
+            'do not invent missing source evidence. The controller requires research and independent review '
+            'before registering a fracture under the original shared failure budget.')
     if stage == 'PIVOT_REVIEW':
         instruction += (' Evaluate the exact failure dossier and controller research excerpts. Reassess task '
             'types and complexity, explain failure causes with evidence, and propose a materially changed '

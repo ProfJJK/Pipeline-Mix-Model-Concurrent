@@ -127,7 +127,6 @@ def _bind_control_budget(conn, root, aggregate_root, payload):
     if old:
         if old[0] != aggregate_root:
             raise LineageBudgetHold('control_budget_parent_changed')
-        return
     intent = payload['planning_intent']
     state = intent.get('task') or {}
     declared = state.get('fracture_promotion') or state.get('fracture_scope') or {}
@@ -140,6 +139,8 @@ def _bind_control_budget(conn, root, aggregate_root, payload):
             or not parent.get('research_due') or len(_budget_group(conn, aggregate_root)) > 32
             or _budget_group(conn, aggregate_root)[0] != aggregate_root):
         raise LineageBudgetHold('control_budget_parent_not_due')
+    if old:
+        return
     if conn.execute('SELECT 1 FROM planning428_budget_members WHERE lineage_root=?', (root,)).fetchone():
         raise LineageBudgetHold('control_budget_parent_requires_fresh_lineage')
     conn.execute('INSERT INTO planning428_budget_control_parents VALUES(?,?)', (root, aggregate_root))
@@ -369,6 +370,14 @@ def _live_quality_hold(conn, job_id, root):
         mode = conn.execute('PRAGMA planning_budget_ledger.journal_mode').fetchone()[0]
         if mode not in ('delete', 'truncate', 'persist'):
             return 'attempt_ledger_snapshot_not_fenced'
+        group = _budget_group(conn, root)
+        if group[0] != root:
+            row = conn.execute('SELECT state_json FROM planning_budget_ledger.task428_lineages WHERE root=?',
+                               (group[0],)).fetchone()
+            parent = json.loads(row[0]) if row else {}
+            if (parent.get('stage') != 'PIVOT_RESEARCH' or not parent.get('research_due')
+                    or parent.get('failures') not in (10, 20)):
+                return 'quality_research_or_lock_required'
         row = conn.execute('SELECT state_json FROM planning_budget_ledger.task428_lineages '
                            'WHERE root=?', (root,)).fetchone()
         state = json.loads(row[0]) if row else {}

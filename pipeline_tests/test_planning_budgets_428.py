@@ -248,6 +248,21 @@ def test_control_parent_requires_due_boundary_and_cannot_rebind(env):
         generation(env, 'rebound', member='control', aggregate='other')
 
 
+@pytest.mark.parametrize('stage,failures', [('READY',10), ('LOCKED',30)])
+def test_queued_promotion_controls_stop_when_original_boundary_closes(env, stage, failures):
+    quality_failures(env, 10)
+    env['ledger'].create('control', 4)
+    job, _ = generation(env, 'bound', member='control', aggregate=env['root'])
+    with env['ledger']._write() as conn:
+        state = env['ledger']._read(conn, env['root'])
+        state.update(stage=stage, failures=failures, research_due=stage=='LOCKED')
+        env['ledger']._save(conn, state)
+    with env['store']._write() as conn:
+        assert lineage_unavailability(conn, job['job_id'], env['clock'][0]) == 'quality_research_or_lock_required'
+    with pytest.raises(LineageBudgetHold, match='parent_not_due'):
+        generation(env, 'late', member='control', aggregate=env['root'])
+
+
 @pytest.mark.parametrize('stage,failures', [('PIVOT_RESEARCH',10),('PIVOT_RESEARCH',20),('LOCKED',30)])
 def test_queued_sibling_rechecks_live_quality_boundary_without_spending(env,stage,failures):
     first, _ = generation(env, 'queued-a', cap=50)

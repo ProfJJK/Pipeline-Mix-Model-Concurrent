@@ -133,7 +133,7 @@ def validate_fracture_plan(payload, output):
     ancestors = _dag(children)
     impl_ids = {child['id'] for child in implementations}
     assembly, final = assemblies[0], finals[0]
-    floor = min(10, scope['parent_floor'] + 1)
+    floor = max(min(10, scope['parent_floor'] + 1), scope.get('minimum_assembly_complexity', 1))
     if (not impl_ids <= ancestors[assembly['id']] or assembly['id'] not in ancestors[final['id']]
             or any(set(child['requirement_ids']) != reqs for child in (assembly, final))
             or any(child['complexity'] < floor for child in (assembly, final))
@@ -163,7 +163,7 @@ def fracture_contract(payload):
         return dict(accepted=True, plan_sha256=intent['fracture_plan_sha256'], findings=[])
     scope = intent['task']['fracture_scope']
     reqs = scope['requirement_ids']
-    floor = min(10, scope['parent_floor'] + 1)
+    floor = max(min(10, scope['parent_floor'] + 1), scope.get('minimum_assembly_complexity', 1))
     assembly_paths = ([] if scope.get('failed_role') == 'final_test' else scope['deliverables']) + ['fragment-a.txt', 'fragment-b.txt']
     final_paths = scope['deliverables'] if scope.get('failed_role') == 'final_test' else ['verification.txt']
     def child(cid, role, tier, paths, deps):
@@ -197,7 +197,7 @@ class PlanningFractureRuntime:
         original = source['payload']['planning_intent']
         intent = dict(schema='cochem-planning-intent/4.2.8', action='model_stage', stage=stage,
             task_id=original['task_id'], version=original['version'], state_sha256=digest(task_state),
-            catalog_sha256=original['catalog_sha256'], srs_sha256=original['srs_sha256'], task=task_state,
+            catalog_sha256=original['catalog_sha256'], srs_sha256=task_state.get('srs_sha256', original['srs_sha256']), task=task_state,
             complexity=tier, task_types=tags, candidate_profiles=[item['profile_id'] for item in candidates[:5]],
             execution_authorized=False, **(extra or {}))
         intent['attempt_lineage_id'] = 'fracture-control428-' + digest(dict(task=original['task_id'],
@@ -217,7 +217,8 @@ class PlanningFractureRuntime:
                 if result['payload'] != payload:
                     raise ValueError('Fracture control capture cannot be rebound')
             else:
-                budget = capture_lineage_budget(conn, job_id, payload, policy, attempt_ledger=accounting)
+                budget = capture_lineage_budget(conn, job_id, payload, policy, attempt_ledger=accounting,
+                    aggregate_lineage_root=task_state['fracture_scope']['lineage_root'])
                 self.store._insert(conn, root_id, root_id, None, 'MACRO_PLANNING_REQUEST', 'IN_PROGRESS',
                                    dict(workflow_type='planning428', intent_sha256=key))
                 routes.capture_workflow(conn, root_id, policy, max_dispatches=budget.max_dispatches)
@@ -232,10 +233,9 @@ class PlanningFractureRuntime:
 
     def step(self, task_id, boundary, source, pivot_job, pivot_result):
         from .planning_gateway import PlanningGateway
+        from .fracture_promotion_428 import begin_promotion, promotion_scope, activate_promotion
         root, number = boundary['lineage_root'], boundary['boundary']
         source_intent, failed = source['payload']['planning_intent'], source['payload'].get('microtask_node')
-        if not failed:
-            return dict(status='FRACTURE_SCOPE_PROMOTION_REQUIRED')
         if self.journal.status(task_id)['stage'] == 'CANCELLED':
             return dict(status='FRACTURE_CANCELLED')
         captured = self.fracture_runtime
@@ -249,24 +249,37 @@ class PlanningFractureRuntime:
             accepted = captured.accepted_record(root, number)
             if accepted is None or accepted['fracture_id'] != row['fracture_id']:
                 raise ValueError('Fracture projection has no committed graph')
+            if not failed:
+                activate_promotion(self.journal, task_id, accepted)
             return dict(status='FRACTURE_READY_NEW_CAPTURE', fracture_id=row['fracture_id'])
         ledger = captured.ledger.status(root)
-        task_state = deepcopy(pivot_job['payload']['planning_intent']['task'])
-        scope = dict(scope_id=failed['microtask_id'], failed_role=failed['role'], lineage_root=root, parent_floor=ledger['floor'],
-            last_failed_model=ledger['last_model'], requirement_ids=failed['requirement_ids'],
-            deliverables=failed['deliverables'], release_criteria=failed['release_criteria'])
+        if not failed:
+            task_state = begin_promotion(self.journal, task_id, boundary, source, pivot_job, pivot_result,
+                ledger, self.outcomes.dossier_store.get_dossier(root, number))
+            if task_state['stage'] != 'FRACTURE_PROMOTION_READY':
+                return dict(status='WAITING_FOR_FRACTURE_PROMOTION', stage=task_state['stage'])
+            # A graph commit can precede its projection; retain the original
+            # plan scope instead of demanding that the now-READY ledger reopen.
+            scope = (self.store.get(row['plan_job_id'])['payload']['planning_intent']['task']['fracture_scope']
+                     if row else promotion_scope(task_state, ledger))
+        else:
+            task_state = deepcopy(pivot_job['payload']['planning_intent']['task'])
+            scope = dict(scope_id=failed['microtask_id'], failed_role=failed['role'], lineage_root=root, parent_floor=ledger['floor'],
+                last_failed_model=ledger['last_model'], requirement_ids=failed['requirement_ids'],
+                deliverables=failed['deliverables'], release_criteria=failed['release_criteria'])
         task_state.update(fracture_scope=scope, fracture_recommendation=pivot_result['output'])
-        tier = min(10, ledger['floor'] + 1)
+        tier = max(min(10, ledger['floor'] + 1), scope.get('minimum_assembly_complexity', 1))
+        plan_tags = task_state['assessment']['task_types'] if not failed else source_intent['task_types']
         if row:
             plan_job = self.store.get(row['plan_job_id'])
         else:
-            candidates = select_pivot_candidates(captured.catalog, source_intent['task_types'], tier,
+            candidates = select_pivot_candidates(captured.catalog, plan_tags, tier,
                                                 last_failed_model=ledger['last_model'])
             if not candidates:
                 return dict(status='CAPABILITY_HOLD')
             try:
                 plan_job = self._submit(source, stage='FRACTURE_PLAN', task_state=task_state,
-                    tier=tier, tags=source_intent['task_types'], candidates=candidates)
+                    tier=tier, tags=plan_tags, candidates=candidates)
             except LineageBudgetHold as hold:
                 return dict(status='FRACTURE_PLAN_BUDGET_HOLD', reason=hold.reason)
         if row is None:
@@ -345,7 +358,26 @@ class PlanningFractureRuntime:
         with self.journal._write() as conn:
             conn.execute('UPDATE planning428_fracture_plans SET status=?,fracture_id=? WHERE lineage_root=? AND boundary=?',
                          ('FRACTURE_READY_NEW_CAPTURE', existing['fracture_id'], root, number))
+        if not failed:
+            activate_promotion(self.journal, task_id, existing)
         return dict(status='FRACTURE_READY_NEW_CAPTURE', fracture_id=existing['fracture_id'])
+
+    def promoted_record(self, task_id, state):
+        binding = state.get('promoted_fracture')
+        if not binding:
+            raise ValueError('Task has no registered whole-task promotion')
+        with self.journal._write() as conn:
+            row = conn.execute('SELECT * FROM planning428_fracture_plans WHERE task_id=? AND lineage_root=? AND boundary=?',
+                (task_id, binding['lineage_root'], binding['after_failures'])).fetchone()
+        if row is None or row['fracture_id'] != binding['fracture_id'] or row['status'] != 'FRACTURE_READY_NEW_CAPTURE':
+            raise ValueError('Whole-task graph lacks its committed promotion projection')
+        source = self.store.get(row['source_job_id'])
+        if source['payload'].get('microtask_node') or source['job_id'] != state['fracture_promotion']['source_job_id']:
+            raise ValueError('Promoted graph belongs to a different original task scope')
+        record = self.fracture_runtime.accepted_record(binding['lineage_root'], binding['after_failures'])
+        if record is None or record['fracture_id'] != binding['fracture_id']:
+            raise ValueError('Promoted graph lacks registered authority')
+        return record
 
     def cancellation_targets(self, task_id):
         with self.journal._write() as conn:

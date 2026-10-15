@@ -267,7 +267,13 @@ class MicrotaskBoardRuntime:
             state = json.loads(row["state_json"])
             catalog = json.loads(row["catalog_json"])
             limit = row["flash_context_limit"]
-        nodes = compile_reassessed_microtask_plan(state)
+        if state.get('promoted_fracture'):
+            if self.fracture_planning is None:
+                raise ValueError('Whole-task promotion requires its registered fracture authority')
+            from .fracture_promotion_428 import compile_promoted_graph
+            nodes = compile_promoted_graph(state, self.fracture_planning.promoted_record(task_id, state))
+        else:
+            nodes = compile_reassessed_microtask_plan(state)
         gen_sha = self._plan_generation_sha256(state, catalog)
         if self.fracture_planning is not None:
             nodes = self._overlay_fractures(nodes, self.fracture_planning.records_for_task(task_id, gen_sha))
