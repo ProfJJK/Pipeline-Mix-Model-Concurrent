@@ -330,6 +330,24 @@ def _live_quality_hold(conn, job_id, root):
         if (state.get('root') != root or state.get('stage') != 'READY' or state.get('research_due')
                 or type(failures) is not int or not 0 <= failures < 30):
             return 'quality_research_or_lock_required'
+        # Outcomes are projected after native cleanup/physical verification.
+        # Reserve the remaining potential failure places as well: at 9/19/29
+        # failures, four queued siblings must not all launch before the next
+        # result is reconciled. This is a temporary capacity wait, not a failure.
+        from .attempt_runtime_428 import AVAILABILITY_CATEGORIES
+        harmless = sorted(AVAILABILITY_CATEGORIES | {'output_format_correction', 'Cancelled by operator'})
+        marks = ','.join('?' for _ in harmless)
+        reconciled = conn.execute("SELECT 1 FROM planning_budget_ledger.sqlite_master "
+                                  "WHERE type='table' AND name='attempt428_outbox'").fetchone()
+        done = ("AND NOT EXISTS (SELECT 1 FROM planning_budget_ledger.attempt428_outbox o "
+                "WHERE o.job_id=r.job_id AND o.attempt_id=r.attempt_id AND o.fencing_token=r.fencing_token "
+                "AND o.status='RECONCILED')") if reconciled else ''
+        outstanding = conn.execute('SELECT count(*) FROM pipeline_route_reservations r '
+            'JOIN planning428_budget_members m USING(job_id) WHERE m.lineage_root=? '
+            f'AND (r.release_reason IS NULL OR r.release_reason NOT IN ({marks})) ' + done,
+            (root, *harmless)).fetchone()[0]
+        if outstanding >= 10 - failures % 10:
+            return 'quality_window_in_flight'
         job = conn.execute('SELECT payload_json FROM pipeline_jobs WHERE job_id=?', (job_id,)).fetchone()
         payload = json.loads(job[0])
         intent = payload['planning_intent']

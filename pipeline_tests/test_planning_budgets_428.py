@@ -246,6 +246,26 @@ def test_live_quality_gate_preserves_read_only_preview(env):
         assert lineage_unavailability(conn, job['job_id'], env['clock'][0]) is None
 
 
+def test_queued_siblings_cannot_overrun_tenth_failure_while_outcome_is_in_flight(env):
+    generation(env, 'window-a', cap=50)
+    second, _ = generation(env, 'window-b', cap=50)
+    quality_failures(env, 9)
+    first = env['store'].claim('fixture', worker_slot='slot1', allowed_kinds=['TASK_PLAN'], requires_cleanup=True)
+    assert first is not None
+    assert env['store'].claim('fixture', worker_slot='slot2', allowed_kinds=['TASK_PLAN'], requires_cleanup=True) is None
+    pending = env['store'].get(second['job_id'])
+    assert pending['status'] == 'PENDING'
+    assert pending['routing']['wait_reason'] == 'quality_window_in_flight'
+    with env['store']._connection() as conn:
+        assert conn.execute('SELECT count(*) FROM pipeline_route_reservations').fetchone()[0] == 1
+    assert env['ledger'].status(env['root'])['failures'] == 9
+    env['store'].clear_execution_quarantine(first['job_id'],first['attempt_id'],first['fencing_token'])
+    env['store'].fail(first['job_id'],first['attempt_id'],first['fencing_token'],'quota',category='quota')
+    env['clock'][0] += 2
+    with env['store']._connection() as conn:
+        assert lineage_unavailability(conn, second['job_id'], env['clock'][0]) is None
+
+
 def test_insertion_rejects_reset_quality_or_dispatch_budget(env):
     payload = deepcopy(env['original']['payload'])
     policy = env['original']['routing']['policy']
