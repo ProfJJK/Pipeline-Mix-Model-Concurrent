@@ -190,3 +190,21 @@ def test_runtime_admission_pause_preserves_active_work_and_emergency_still_termi
     else:
         assert not cancelled.is_set() and terminated == [] and failed == []
         assert telemetry[-1]['action'] == 'pause_admission'
+
+
+def test_owner_acceptance_tick_samples_guards_without_admitting_existing_jobs():
+    from pipeline_tests.test_controller_guard import fake_monitor, tick_runtime
+    monitor, _ = fake_monitor()
+    runtime, telemetry = tick_runtime(monitor)
+    capacities, maintenance = [], []
+    runtime.admission = SimpleNamespace(update_capacity=capacities.append)
+    runtime._container_maintenance = maintenance.append
+    def forbidden(*args, **kwargs):
+        raise AssertionError('Owner acceptance must not dispatch normal work or poll another catalog')
+    runtime.catalog = SimpleNamespace(step=forbidden)
+    runtime._planning_maintenance = forbidden
+    runtime.store.claim = forbidden
+    runtime.tick(admit_jobs=False, catalog_poll=False)
+    assert capacities == [4] and maintenance == [4]
+    assert telemetry[-1]['capacity'] == 4
+    assert runtime.last_capacity == 4 and runtime.active == {}

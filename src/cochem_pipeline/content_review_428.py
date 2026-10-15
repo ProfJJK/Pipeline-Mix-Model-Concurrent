@@ -84,7 +84,8 @@ def validate_content_review(payload, output, model):
 
 
 class ContentReviewRuntime:
-    def __init__(self, journal, store):
+    def __init__(self, journal, store, *, attempt_accounting=None):
+        self.attempt_accounting = attempt_accounting
         self.journal, self.store = journal, store
         with store._write() as conn:
             conn.executescript('''
@@ -126,7 +127,7 @@ class ContentReviewRuntime:
         validate_stage_output(reviewer['payload'], reviewer['output'], reviewer['route'])
         return verdict
 
-    def ensure(self, task_id, *, state, generation, producers, physical):
+    def ensure(self, task_id, *, state, generation, producers, physical, scope_producer_id=None):
         """Queue once; then return only committed, cleaned independent review.
 
         All bindings come from controller custody and the journal. This is not
@@ -160,9 +161,25 @@ class ContentReviewRuntime:
                                  attempt_id=job['attempt_id'], fencing_token=job['fencing_token']))
         if not families:
             raise ValueError('Content review needs a producer to remain independent')
+        requirements = deepcopy(state['document']['requirements'])
+        criteria = deepcopy(state['document']['release_criteria'])
+        scope_tier = state['assessment']['complexity']
+        if scope_producer_id is not None:
+            if scope_producer_id not in producers or verifier['payload']['producer_job_id'] != scope_producer_id:
+                raise ValueError('Scoped content review must bind its physically verified producer')
+            scope_job = self.store.get(scope_producer_id)
+            scope_node = scope_job['payload'].get('microtask_node') or {}
+            required_ids = set(scope_node.get('requirement_ids', []))
+            if (scope_node.get('role') != 'final_test' or not required_ids
+                    or not required_ids <= {r['id'] for r in requirements}
+                    or scope_job['payload']['planning_intent']['plan_generation_sha256'] != generation):
+                raise ValueError('Scoped review requires a final-test node from this exact SRS generation')
+            requirements = [r for r in requirements if r['id'] in required_ids]
+            criteria = deepcopy(scope_node['release_criteria'])
+            scope_tier = max(scope_tier, scope_node['complexity'])
         files = self.store.coding_files(physical['source_snapshot_sha256'])
         artifacts = {path: value.decode('utf-8') for path, value in sorted(files.items())}
-        tier = min(10, state['assessment']['complexity'] + 1)
+        tier = min(10, scope_tier + 1)
         options = five_model_options(catalog, state['assessment']['task_types'], tier)
         candidates = [o['model_id'] for o in options if o['meets_floor']
                       and catalog['models'][o['model_id']]['family'] not in families
@@ -174,8 +191,9 @@ class ContentReviewRuntime:
                        srs_sha256=state['srs_sha256'], source_snapshot_sha256=physical['source_snapshot_sha256'],
                        physical_job_id=physical['job_id'], physical_output_sha256=digest(physical['output']),
                        producer_families=sorted(families), producers=bindings, review_tier=tier,
-                       requirements=deepcopy(state['document']['requirements']),
-                       release_criteria=deepcopy(state['document']['release_criteria']), artifacts=artifacts)
+                       requirements=requirements, release_criteria=criteria, artifacts=artifacts)
+        if scope_producer_id is not None:
+            binding['scope_producer_id'] = scope_producer_id
         intent = dict(schema='cochem-planning-intent/4.2.8', action='model_stage', stage='CONTENT_REVIEW',
                       task_id=task_id, version=version, state_sha256=digest(state), task=state,
                       catalog_sha256=digest(catalog), srs_sha256=state['srs_sha256'], complexity=tier,
@@ -186,13 +204,22 @@ class ContentReviewRuntime:
         prompt_contract(payload)
         key = digest(payload)
         root_id, job_id = 'content428-' + key[:40], 'content428-node-' + key[:40]
+        if self.attempt_accounting is not None:
+            from .planning_outcomes_428 import PlanningOutcomeRuntime
+            self.attempt_accounting.ensure_lineage(PlanningOutcomeRuntime.lineage_for_job(task_id, payload),
+                                                   complexity=tier)
         with self.store._write() as conn:
             old = conn.execute('SELECT 1 FROM pipeline_jobs WHERE job_id=?', (job_id,)).fetchone()
             if old is None:
+                from .planning_budgets_428 import capture_lineage_budget
+                policy = scoped_policy(self.store.routing_policy, intent, catalog)
+                budget = (capture_lineage_budget(conn, job_id, payload, policy,
+                    attempt_ledger=self.attempt_accounting) if self.attempt_accounting is not None else None)
                 self.store._insert(conn, root_id, root_id, None, 'MACRO_PLANNING_REQUEST', 'IN_PROGRESS',
                                    dict(workflow_type='planning428', task_id=task_id))
-                routes.capture_workflow(conn, root_id, scoped_policy(self.store.routing_policy, intent, catalog))
-                self.store._insert(conn, job_id, root_id, root_id, 'TASK_PLAN', 'PENDING', payload, max_attempts=10)
+                routes.capture_workflow(conn, root_id, policy, max_dispatches=budget.max_dispatches if budget else None)
+                self.store._insert(conn, job_id, root_id, root_id, 'TASK_PLAN', 'PENDING', payload,
+                                   max_attempts=budget.max_attempts if budget else 10)
             job = self.store._get(conn, job_id)
             if job['payload'] != payload:
                 raise ValueError('Existing content review has different immutable input')

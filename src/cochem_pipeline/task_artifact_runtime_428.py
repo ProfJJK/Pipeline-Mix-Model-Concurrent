@@ -50,6 +50,12 @@ class TaskArtifactRuntime:
                 CREATE TRIGGER IF NOT EXISTS task428_fragment_no_delete BEFORE DELETE ON task428_fragment_attempts
                 BEGIN SELECT RAISE(ABORT,'task fragment evidence is immutable'); END;
             ''')
+            from .fracture_artifacts_428 import initialize
+            initialize(conn)
+
+    def fracture_join(self, task_id, failed_node, fracture_record, completed_children):
+        from .fracture_artifacts_428 import join
+        return join(self, task_id, failed_node, fracture_record, completed_children)
 
     def cancel_task(self, task_id):
         """Fence verification roots durably without terminating any process.
@@ -135,6 +141,9 @@ class TaskArtifactRuntime:
             return dict(row)
 
     def _accepted_dependency(self, intent, dep, output):
+        if output.get('fracture_join_id'):
+            from .fracture_artifacts_428 import resolve
+            return resolve(self, intent, dep, output)
         with self.store._connection() as conn:
             rows = conn.execute('''SELECT j.job_id,j.attempt_id,j.fencing_token FROM task428_fragment_attempts a
                 JOIN pipeline_jobs j ON j.job_id=a.job_id AND j.attempt_id=a.attempt_id
@@ -204,7 +213,8 @@ class TaskArtifactRuntime:
                 # implementation ancestors. Siblings still require assembly;
                 # list order or a newer timestamp never chooses a winner.
                 winners = [(dep, data) for dep, data in versions
-                    if prior_nodes[dep]['payload']['microtask_node']['role'] == 'assembly'
+                    if (prior_nodes[dep]['payload']['microtask_node']['role'] == 'assembly'
+                        or predecessors[dep].get('fracture_join_id'))
                     and all(other == dep or prior_nodes[other]['job_id'] in
                             self._dependency_ancestors(prior_nodes[dep], cache=ancestry)
                             for other, _ in versions)]

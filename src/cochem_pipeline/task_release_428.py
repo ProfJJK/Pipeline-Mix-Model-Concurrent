@@ -46,7 +46,8 @@ class TaskReleaseRuntime:
         self.artifact_runtime = artifact_runtime
         self.delivery_runtime = delivery_runtime
         from .content_review_428 import ContentReviewRuntime
-        self.content_review = ContentReviewRuntime(journal, store)
+        self.content_review = ContentReviewRuntime(journal, store,
+            attempt_accounting=getattr(board, 'attempt_accounting', None))
         self.board = board or MicrotaskBoardRuntime(
             journal,
             store,
