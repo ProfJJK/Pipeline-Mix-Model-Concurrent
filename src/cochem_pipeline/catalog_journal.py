@@ -190,7 +190,8 @@ def active_task_catalog(conn):
 
 
 def publish_task_catalog(conn, plan, native_receipts, *, request_id: str,
-                         pointer_sha256: str, proposal_sha256: str, generation_override=None):
+                         pointer_sha256: str, proposal_sha256: str, generation_override=None,
+                         unprobed_holds=None, allow_partial_publication=False):
     """Atomically validate native receipts and publish a new 4.2.8 task catalog generation."""
     from .task_catalog_428 import activate_task_catalog
     from .task_routing import digest as task_digest
@@ -204,6 +205,8 @@ def publish_task_catalog(conn, plan, native_receipts, *, request_id: str,
         pointer_sha256=pointer_sha256,
         proposal_sha256=proposal_sha256,
         generation_override=generation_override,
+        unprobed_holds=unprobed_holds,
+        allow_partial_publication=allow_partial_publication,
     )
     sha = task_digest(catalog)
     prior = conn.execute('''SELECT catalog_sha256, plan_digest, pointer_sha256, proposal_sha256, proof_json

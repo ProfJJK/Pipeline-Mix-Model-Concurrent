@@ -12,6 +12,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 import hashlib
 import json
+import math
 import re
 import time
 from typing import Any
@@ -207,7 +208,10 @@ def compile_task_catalog_plan(
         policy_raw["tiers"]["1"][0]["model"],
         policy_raw["tiers"]["1"][0]["reasoning_effort"],
     )
-    required = tuple(sorted((selected_targets - tier_targets) | {control}))
+    # Tier membership alone is not evidence that the currently bound CLI binary
+    # accepted this exact effort. A fresh task-catalog publication proves all
+    # selected profiles, including identities already in the older tier catalog.
+    required = tuple(sorted(selected_targets | {control}))
     return TaskCatalogBindingPlan(
         previous_policy_digest=current_policy.digest,
         previous_task_catalog_sha256=prev_sha,
@@ -230,6 +234,8 @@ def activate_task_catalog(
     pointer_sha256: str,
     proposal_sha256: str,
     generation_override: str | None = None,
+    unprobed_holds: list[dict[str, Any]] | None = None,
+    allow_partial_publication: bool = False,
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     """Bind verified native probe receipts to produce an accepted 4.2.8 task catalog."""
     if not isinstance(plan, TaskCatalogBindingPlan):
@@ -242,7 +248,12 @@ def activate_task_catalog(
         raise ValueError("Task catalog proposal_sha256 must be 64 lowercase hex chars")
 
     expected = set(plan.required_targets) | {plan.control_target}
-    if not isinstance(native_receipts, list) or len(native_receipts) != len(expected):
+    if type(allow_partial_publication) is not bool:
+        raise ValueError('Explicit task catalog partial publication policy required')
+    holds = unprobed_holds or []
+    if not isinstance(holds, list) or (holds and not allow_partial_publication):
+        raise ValueError('Unprobed target holds require reviewed partial publication policy')
+    if not isinstance(native_receipts, list) or len(native_receipts) + len(holds) != len(expected):
         raise ValueError("Task catalog native receipts must cover every required target exactly once")
 
     seen: set[tuple[str, str, str]] = set()
@@ -255,13 +266,16 @@ def activate_task_catalog(
         if (any(not isinstance(v, str) or not v for v in key)
                 or key not in expected
                 or key in seen
-                or receipt.get("status") != "NATIVE_SELECTOR_ACCEPTED"
+                or receipt.get("status") not in ("NATIVE_SELECTOR_ACCEPTED", "AVAILABILITY_WAIT")
                 or receipt.get("cleanup_verified") is not True
                 or receipt.get("plan_digest") != plan.digest
                 or receipt.get("request_id") != request_id
                 or not isinstance(receipt.get("reservation_id"), str) or not receipt["reservation_id"]
                 or type(receipt.get("fencing_token")) is not int or receipt["fencing_token"] < 1):
             raise ValueError("Task catalog native receipt identity, cleanup or reservation binding differs")
+        if (receipt['status'] == 'AVAILABILITY_WAIT'
+                and (not allow_partial_publication or receipt.get('failure_category') not in ('quota', 'busy', 'provider'))):
+            raise ValueError('Task catalog deferral requires typed provider availability evidence')
         provider = key[0]
         expected_bin_sha = plan.binary_bindings[provider]["sha256"]
         if receipt.get("binary_sha256") != expected_bin_sha:
@@ -272,13 +286,50 @@ def activate_task_catalog(
             "model": key[1],
             "reasoning_effort": key[2],
             "binary_sha256": expected_bin_sha,
-            "status": "NATIVE_SELECTOR_ACCEPTED",
+            "status": receipt['status'],
             "cleanup_verified": True,
             "plan_digest": plan.digest,
             "request_id": request_id,
             "reservation_id": receipt["reservation_id"],
             "fencing_token": receipt["fencing_token"],
         }
+        if receipt['status'] == 'AVAILABILITY_WAIT':
+            sanitized['failure_category'] = receipt['failure_category']
+        if 'execution_binding' in receipt:
+            binding = receipt['execution_binding']
+            if (not isinstance(binding,dict) or set(binding) != {
+                    'provider_contract_sha256','agent_contract_sha256','worker_profiles_sha256'}
+                    or any(not isinstance(binding.get(name),str) or not _HEX64.fullmatch(binding[name])
+                           for name in ('provider_contract_sha256','worker_profiles_sha256'))
+                    or (key[0]=='gemini' and (not isinstance(binding.get('agent_contract_sha256'),str)
+                        or not _HEX64.fullmatch(binding['agent_contract_sha256'])))
+                    or (key[0]!='gemini' and binding.get('agent_contract_sha256') is not None)):
+                raise ValueError('Native receipt provider/agent/profile contract differs')
+            sanitized['execution_binding'] = deepcopy(binding)
+        verified_by_target[key] = sanitized
+        sanitized_proofs.append(sanitized)
+
+    # These are controller hold snapshots, never native success receipts. The
+    # publication coordinator binds them to protected Chapter 06 hold rows.
+    for hold in holds:
+        key = (hold.get('provider'), hold.get('model'), hold.get('reasoning_effort'))
+        scope = hold.get('scope')
+        resources = {'model': ':'.join(key) if all(isinstance(v,str) for v in key) else None,
+                     'provider': key[0],
+                     'pool': plan.policy.as_dict()['provider_limits'].get(key[0],{}).get('quota_pool')}
+        if (key not in expected or key in seen or hold.get('status') != 'AVAILABILITY_WAIT_UNTESTED'
+                or hold.get('request_id') != request_id or hold.get('plan_digest') != plan.digest
+                or hold.get('failure_category') not in ('quota','busy','provider')
+                or scope not in resources or hold.get('resource_key') != resources[scope]
+                or type(hold.get('until_at')) not in (int,float) or not math.isfinite(hold['until_at'])
+                or type(hold.get('updated_at')) not in (int,float) or not math.isfinite(hold['updated_at'])
+                or hold['until_at'] <= hold['updated_at']
+                or hold.get('native_probe_executed') is not False):
+            raise ValueError('Unprobed task catalog target lacks a bound availability hold')
+        sanitized = {name: hold[name] for name in (
+            'provider','model','reasoning_effort','status','request_id','plan_digest',
+            'scope','resource_key','failure_category','until_at','updated_at','native_probe_executed')}
+        seen.add(key)
         verified_by_target[key] = sanitized
         sanitized_proofs.append(sanitized)
 
@@ -291,20 +342,29 @@ def activate_task_catalog(
 
     for pid, model in sorted(catalog["models"].items()):
         target = (model["provider"], model["model"], model.get("effort"))
-        if pid in plan.selected_profile_ids and target not in retired_set:
+        if (pid in plan.selected_profile_ids and target not in retired_set
+                and verified_by_target.get(target, {}).get('status') == 'NATIVE_SELECTOR_ACCEPTED'):
             proof = verified_by_target.get(target)
             bin_info = plan.binary_bindings[model["provider"]]
             model["native_acceptance"] = "ACCEPTED"
             model["accepted_binary_path"] = bin_info["executable"]
             model["accepted_binary_sha256"] = bin_info["sha256"]
             model["accepted_binary_version"] = bin_info["version"]
-            model["accepted_receipt_sha256"] = digest(proof) if proof is not None else digest(
-                {"inherited_from_policy_digest": plan.policy.digest, "target": list(target)}
-            )
+            model["accepted_receipt_sha256"] = digest(proof)
+            if 'execution_binding' in proof:
+                model['accepted_execution_binding'] = deepcopy(proof['execution_binding'])
             accepted_profile_ids.append(pid)
             accepted_targets.add(target)
         else:
-            model["native_acceptance"] = "RETIRED" if target in retired_set else "NOT_ACCEPTED"
+            deferred = verified_by_target.get(target, {}).get('status') in (
+                'AVAILABILITY_WAIT', 'AVAILABILITY_WAIT_UNTESTED')
+            model["native_acceptance"] = ("RETIRED" if target in retired_set else
+                                          "AVAILABILITY_WAIT" if deferred else "NOT_ACCEPTED")
+            if deferred:
+                model['availability_category'] = verified_by_target[target]['failure_category']
+                model['availability_evidence'] = verified_by_target[target]['status']
+    if not accepted_profile_ids:
+        raise ValueError('Task catalog publication requires at least one accepted profile')
 
     for tag, spec in catalog["task_types"].items():
         for tier_str, row in spec["tiers"].items():
@@ -321,6 +381,8 @@ def activate_task_catalog(
     catalog.update(
         generation=generation,
         host_accepted=True,
+        publication_policy=dict(allow_partial_publication=allow_partial_publication,
+                                unprobed_held_targets=len(holds)),
         policy_digest=plan.policy.digest,
         previous_task_catalog_sha256=plan.previous_task_catalog_sha256,
         request_id=request_id,
