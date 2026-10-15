@@ -119,6 +119,43 @@ $t.LastTaskResult=2;$ended=Test-OpTaskTerminal $t $now
     assert row==dict(queued=False,running=False,ended=True)
 
 
+@pytest.mark.parametrize('fault', ['none', 'nonce', 'exited', 'identity'])
+def test_phase_ack_is_atomic_and_follows_retained_identity(tmp_path, fault):
+    body=r"""
+$script:seen=[Collections.Generic.List[string]]::new()
+$script:start=[pscustomobject]@{schema='cochem-owner-task-catalog-start/4.2.8';nonce=('a'*32);pid=123;
+    bootstrap_sha256=('b'*64);request_sha256=('c'*64);started_at=[DateTimeOffset]::UtcNow.ToUnixTimeSeconds()}
+if('FAULT' -ceq 'nonce'){$script:start.nonce='wrong'}
+function Get-428FileSha256 {param($p)return ('d'*64)}
+function Open-428Pin {param($p,$h)return [IO.MemoryStream]::new()}
+function Read-OpPrivateRecord {param($p)return $script:start}
+function Assert-OpOneShot {param($h,$running)$script:seen.Add('task')}
+function Open-OpOneShotProcess {param($h,$id)
+    $script:seen.Add('handles');if('FAULT' -ceq 'identity'){throw 'identity mismatch'}
+    $p=[pscustomobject]@{HasExited=('FAULT' -ceq 'exited')};$p|Add-Member ScriptMethod Dispose {}
+    return ,@($p,$p)
+}
+function Write-OpRecord {param($p,$record)
+    $script:seen.Add('ack');[IO.File]::WriteAllText($p,($record|ConvertTo-Json -Compress))
+    if(Test-Path -LiteralPath (Join-Path 'ROOT' 'phase-start-ack.json')){throw 'Ack visible before flush'}
+}
+$held=$false
+try{$null=Confirm-OpPhaseStart @{started=[DateTime]::UtcNow} (Join-Path 'ROOT' 'phase-started.json') ('a'*32) $script:start}
+catch{$held=$true}
+$ack=$null;$path=Join-Path 'ROOT' 'phase-start-ack.json'
+if(Test-Path -LiteralPath $path){$ack=Get-Content -LiteralPath $path -Raw|ConvertFrom-Json}
+@{held=$held;seen=@($script:seen);ack=$ack;pending=(Test-Path -LiteralPath (Join-Path 'ROOT' 'phase-start-ack.pending'))}|ConvertTo-Json -Depth 5 -Compress
+"""
+    result=inert_ps(body.replace('ROOT',str(tmp_path).replace("'","''")).replace('FAULT',fault))
+    if fault=='none':
+        assert result['seen']==['task','handles','ack']
+        assert not result['held'] and not result['pending']
+        assert result['ack']==dict(schema='cochem-owner-task-catalog-start-ack/4.2.8',nonce='a'*32,
+            start_sha256='d'*64,pid=123,bootstrap_sha256='b'*64,request_sha256='c'*64)
+    else:
+        assert result['held'] and result['ack'] is None and 'ack' not in result['seen']
+
+
 @pytest.fixture
 def package(tmp_path,monkeypatch):
     payload=tmp_path/'payload';payload.mkdir()

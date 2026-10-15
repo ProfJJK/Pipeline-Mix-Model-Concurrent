@@ -220,6 +220,30 @@ function Open-OpOneShotProcess {
     }catch{foreach($p in $held){$p.Dispose()};throw}
 }
 
+function Confirm-OpPhaseStart {
+    param($Handle,[string]$StartPath,[string]$Nonce,$Manifest)
+    $pin=Get-428FileSha256 $StartPath;$retained=Open-428Pin $StartPath $pin
+    $processes=$null
+    try{
+        $start=Read-OpPrivateRecord $StartPath
+        if($Nonce -cnotmatch '^[0-9a-f]{32}$' -or $start.schema -cne 'cochem-owner-task-catalog-start/4.2.8' -or
+            $start.nonce -cne $Nonce -or $start.bootstrap_sha256 -cne $Manifest.bootstrap_sha256 -or $start.request_sha256 -cne $Manifest.request_sha256 -or
+            [double]$start.started_at -lt ([DateTimeOffset]$Handle.started).ToUnixTimeSeconds()-2 -or
+            [double]$start.started_at -gt [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()+2){throw 'Catalog phase start identity differs.'}
+        $null=Assert-OpOneShot $Handle $true
+        $processes=Open-OpOneShotProcess $Handle ([int]$start.pid)
+        foreach($p in $processes){if($p.HasExited){throw 'Catalog phase exited before custody acknowledgment.'}}
+        $ack=@{schema='cochem-owner-task-catalog-start-ack/4.2.8';nonce=$Nonce;start_sha256=$pin;pid=[int]$start.pid;
+            bootstrap_sha256=$Manifest.bootstrap_sha256;request_sha256=$Manifest.request_sha256}
+        # The phase polls this final name; publish only flushed complete bytes.
+        $pending=Join-Path (Split-Path -Parent $StartPath) 'phase-start-ack.pending'
+        Write-OpRecord $pending $ack
+        [IO.File]::Move($pending,(Join-Path (Split-Path -Parent $StartPath) 'phase-start-ack.json'))
+        return ,$processes
+    }catch{if($null -ne $processes){foreach($p in $processes){$p.Dispose()}};throw}
+    finally{$retained.Dispose()}
+}
+
 function Start-OpFence {
     param([string]$Label)
     $root=Join-Path $script:OpPrivate ($Label+'-'+[Guid]::NewGuid().ToString('N'));New-OpPrivateDirectory $root
@@ -440,8 +464,9 @@ function Invoke-OperationalLaunch {
         $actions.catalog_acceptance={param($state)
             Write-OpStatus $state.phase;Assert-428PortFree
             $root=Join-Path $script:OpPrivate 'catalog-phase';New-OpPrivateDirectory $root;$state.phase_root=$root
+            $nonce=[Guid]::NewGuid().ToString('N')
             $args='-I -B -m cochem_pipeline.owner_task_catalog_428 --bootstrap-config "'+(Join-Path $script:OpRoot 'pipeline.json')+'" --bootstrap-sha256 '+$m.bootstrap_sha256+
-                ' --request "'+$script:OpRequest+'" --request-sha256 '+$m.request_sha256+' --output-root "'+$root+'" --timeout-seconds 7200'
+                ' --request "'+$script:OpRequest+'" --request-sha256 '+$m.request_sha256+' --output-root "'+$root+'" --timeout-seconds 7200 --start-gate --start-nonce '+$nonce
             $handle=New-OpOneShot $script:OpScheduler $script:OpFolder ('CoChem-4.2.8-Catalog-'+[Guid]::NewGuid().ToString('N')) $args 7500
             $startPath=Join-Path $root 'phase-started.json';$startDeadline=[DateTime]::UtcNow.AddSeconds(90)
             while(-not (Test-Path -LiteralPath $startPath)){
@@ -449,10 +474,7 @@ function Invoke-OperationalLaunch {
                 if((Test-OpTaskTerminal $task $handle.started) -or [DateTime]::UtcNow -gt $startDeadline){throw 'Catalog phase started identity is unavailable; publication is unknown.'}
                 Start-Sleep -Milliseconds 200
             }
-            $start=Read-OpPrivateRecord $startPath
-            if($start.schema -cne 'cochem-owner-task-catalog-start/4.2.8' -or $start.bootstrap_sha256 -cne $m.bootstrap_sha256 -or $start.request_sha256 -cne $m.request_sha256 -or
-                [double]$start.started_at -lt ([DateTimeOffset]$handle.started).ToUnixTimeSeconds()-2 -or [double]$start.started_at -gt [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()+2){throw 'Catalog phase start identity differs.'}
-            $state.phase_processes=Open-OpOneShotProcess $handle ([int]$start.pid)
+            $state.phase_processes=Confirm-OpPhaseStart $handle $startPath $nonce $m
             $code=Wait-OpOneShot $handle 7530;$state.acceptance_exited=$true
             foreach($p in $state.phase_processes){if(-not $p.WaitForExit(5000)){$state.acceptance_exited=$false;throw 'Catalog phase native process remains; preserve state.'}}
             $path=Join-Path $root $(if($code -eq 0){'result.json'}else{'held.json'})

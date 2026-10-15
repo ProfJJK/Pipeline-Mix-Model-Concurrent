@@ -124,7 +124,8 @@ def wait_start_gate(output_root, started_path, started_record, *, timeout_second
     deadline = time.monotonic() + timeout_seconds
     expected = dict(schema='cochem-owner-task-catalog-start-ack/4.2.8',
         start_sha256=hashlib.sha256(started_path.read_bytes()).hexdigest(), pid=started_record['pid'],
-        bootstrap_sha256=started_record['bootstrap_sha256'], request_sha256=started_record['request_sha256'])
+        bootstrap_sha256=started_record['bootstrap_sha256'], request_sha256=started_record['request_sha256'],
+        nonce=started_record['nonce'])
     while not acknowledgement.exists():
         if time.monotonic() >= deadline:
             raise TimeoutError('Owner process custody acknowledgment was not received')
@@ -135,12 +136,24 @@ def wait_start_gate(output_root, started_path, started_record, *, timeout_second
             raise ValueError('Owner process custody acknowledgment differs from this phase')
 
 
+def write_start_record(path, record):
+    # Publish only complete bytes: the launcher polls for the final name.
+    # Windows rename refuses an existing destination in this fresh held root.
+    pending = path.with_suffix('.pending')
+    raw = write_fresh(pending, record)
+    pending.rename(path)
+    return raw
+
+
 def run_owner_phase(bootstrap_config, bootstrap_sha256, request_path, request_sha256,
                     output_root, *, timeout_seconds=7200, poll_seconds=1,
-                    flash_context_limit=None, runtime_factory=None, start_gate=False):
+                    flash_context_limit=None, runtime_factory=None, start_gate=False, start_nonce=None):
     """The SYSTEM-only API. runtime_factory is an in-process test seam only."""
     if type(start_gate) is not bool:
         raise ValueError('Owner start gate must be boolean')
+    if (start_gate and (not isinstance(start_nonce, str) or not re.fullmatch('[0-9a-f]{32}', start_nonce))
+            or not start_gate and start_nonce is not None):
+        raise ValueError('A gated start requires its fresh owner nonce')
     windows.require_system()
     windows.validate_code_path(Path(__file__))
     windows.validate_code_path(Path(sys.executable))
@@ -166,8 +179,8 @@ def run_owner_phase(bootstrap_config, bootstrap_sha256, request_path, request_sh
         started_path = output_root / 'phase-started.json'
         started_record = dict(schema='cochem-owner-task-catalog-start/4.2.8',
             bootstrap_sha256=bootstrap_sha256, request_sha256=request_sha256,
-            pid=os.getpid(), started_at=time.time())
-        write_fresh(started_path, started_record)
+            pid=os.getpid(), started_at=time.time(), nonce=start_nonce)
+        write_start_record(started_path, started_record)
         try:
             if start_gate:
                 phase = 'process_custody'
@@ -313,11 +326,13 @@ def main(argv=None):
     parser.add_argument('--poll-seconds', type=float, default=1)
     parser.add_argument('--flash-context-limit', type=int)
     parser.add_argument('--start-gate', action='store_true')
+    parser.add_argument('--start-nonce')
     args = parser.parse_args(argv)
     try:
         result = run_owner_phase(args.bootstrap_config, args.bootstrap_sha256, args.request,
             args.request_sha256, args.output_root, timeout_seconds=args.timeout_seconds,
-            poll_seconds=args.poll_seconds, flash_context_limit=args.flash_context_limit, start_gate=args.start_gate)
+            poll_seconds=args.poll_seconds, flash_context_limit=args.flash_context_limit,
+            start_gate=args.start_gate, start_nonce=args.start_nonce)
     except BaseException as exc:
         result = dict(schema='cochem-owner-task-catalog-result/4.2.8', status='TASK_CATALOG_PRECONDITION_HELD',
             error_type=type(exc).__name__, cutover_requested=False, automatic_retry=False, late_prompt=False)

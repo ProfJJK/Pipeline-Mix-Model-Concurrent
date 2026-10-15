@@ -18,6 +18,14 @@ The owner wrapper supplies these arguments to the protected Python runtime:
 
 Optional arguments are `--poll-seconds` (0.01–5, default 1) and
 `--flash-context-limit`. The overall deadline must be 1–14400 seconds.
+The owner launcher also supplies `--start-gate --start-nonce <fresh hex32>`.
+The phase atomically publishes its start receipt and waits at most ninety seconds
+before creating Runtime or accessing the board. The launcher first retains both
+exact native process identities, then atomically publishes `phase-start-ack.json`.
+Its exact schema `cochem-owner-task-catalog-start-ack/4.2.8` binds `nonce`, `pid`,
+`start_sha256` (the raw start receipt bytes), `bootstrap_sha256`, and
+`request_sha256`. Missing, expired, or mismatched acknowledgment holds without
+running probes. This prevents a fast or cached phase exiting before custody.
 The bootstrap must enable catalog activation, disable task planning, and retain
 four shared execution seats. The wrapper owns singleton, task/process containment,
 initial authentication, stopped prior-runtime proof, and final task selection.
