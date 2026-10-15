@@ -92,7 +92,8 @@ class ProjectRegistry:
         if project_id in self.static_projects:
             raise ValueError('Registration cannot override an operator-configured project')
         fixture = self.static_projects.get('windows-acceptance')
-        if fixture and os.path.normcase(str(fixture.repository)) == os.path.normcase(str(project.repository)):
+        if fixture and (os.path.normcase(str(fixture.repository.resolve())) == os.path.normcase(str(project.repository.resolve()))
+                        or (fixture.repository.exists() and os.path.samefile(fixture.repository,project.repository))):
             raise ValueError('Acceptance fixture cannot be aliased as a production repository')
         from .coding import safe_path
         context = raw.get('context_paths', [])
@@ -106,7 +107,12 @@ class ProjectRegistry:
             if existing:
                 if existing[0] != request_digest:
                     raise ValueError('Project ID already binds a different source or scope')
-                return json.loads(existing[1])
+                proof=json.loads(existing[1])
+                current=prepare_isolated_project(project,self.root/'repositories',context,
+                    git_executable=self.git_executable,inspect_only=True)
+                if any(current[key]!=proof.get(key) for key in ('source_commit','working_snapshot_sha256')):
+                    raise ValueError('Source changed since preparation; use a new project snapshot ID')
+                return proof
             prepared, evidence = prepare_isolated_project(project, self.root / 'repositories', context,
                                                           git_executable=self.git_executable)
             proof = dict(evidence, project_id=project_id, request_digest=request_digest,

@@ -7,7 +7,7 @@ receipts before calling :meth:`GitStager.integrate`.
 """
 from __future__ import annotations
 
-from contextlib import contextmanager, nullcontext
+from contextlib import contextmanager, nullcontext, ExitStack
 from contextvars import ContextVar
 from dataclasses import dataclass
 from dataclasses import replace
@@ -353,7 +353,7 @@ def capture_repository(repository: Path, branch: str, *, max_files=10000,
 
 
 @_using_capture_git
-def prepare_isolated_project(project, destination, context_paths=(), *, git_executable=None):
+def prepare_isolated_project(project, destination, context_paths=(), *, git_executable=None, inspect_only=False):
     """Copy a bounded committed baseline plus scoped working bytes to private Git.
 
     Does not run repository programs, filters or hooks and never updates source
@@ -361,8 +361,24 @@ def prepare_isolated_project(project, destination, context_paths=(), *, git_exec
     """
     from .coding import within, validate_project_files
     deadline = _GIT_DEADLINE.set(time.monotonic() + 120)
+    custody = ExitStack()
+    held = set()
+    def retain(path, directory):
+        if path in held or os.name != 'nt':
+            return
+        import ctypes
+        from . import windows as win
+        handle=win._api()['kernel32'].CreateFileW(str(path),1 if directory else 0x80000000,
+            3 if directory else 1,None,3,0x02200000,None)
+        if handle in (None,0,ctypes.c_void_p(-1).value):
+            raise GitSafetyError('Source path is busy or cannot be held against replacement')
+        custody.callback(win._close,handle)
+        held.add(path)
+        _reject_links(path)
     try:
-        baseline = capture_repository(project.repository, project.branch, git_executable=git_executable)
+        for ancestor in reversed((project.repository,*project.repository.parents)):
+            retain(ancestor,True)
+        baseline = capture_repository(project.repository, project.branch, max_bytes=16*1024*1024, git_executable=git_executable)
         roots = (*project.allowed_paths, *project.test_paths, *context_paths)
         repository = Path(baseline.repository)
         if _git(repository, 'rev-parse', '--is-bare-repository').strip() != b'false':
@@ -372,7 +388,7 @@ def prepare_isolated_project(project, destination, context_paths=(), *, git_exec
 
         def capture_working():
             files = dict(baseline.files)
-            extra = _git(repository, 'ls-files', '--others', '--exclude-standard', '-z').decode('utf-8').split('\0')
+            extra = _git(repository, 'ls-files', '--cached', '--others', '--exclude-standard', '-z').decode('utf-8').split('\0')
             names = set(baseline.files) | {name for name in extra if name and within(name, roots)}
             if len(names) > 10000:
                 raise GitSafetyError('Working source exceeds its file limit')
@@ -388,6 +404,10 @@ def prepare_isolated_project(project, destination, context_paths=(), *, git_exec
                 except FileNotFoundError:
                     files.pop(name, None)
                     continue
+                for parent in reversed(path.parents):
+                    retain(parent,True)
+                retain(path,False)
+                before = path.stat(follow_symlinks=False)
                 import stat
                 if not stat.S_ISREG(before.st_mode) or before.st_nlink != 1 or before.st_size > 8388608:
                     raise GitSafetyError('Working source must contain bounded regular unlinked files')
@@ -399,21 +419,33 @@ def prepare_isolated_project(project, destination, context_paths=(), *, git_exec
                 if identity(before) != identity(opened) or identity(opened) != identity(after):
                     raise GitSafetyError('Working source changed during capture')
                 files[name] = content
+            _validate_files(files,max_bytes=16*1024*1024)
             validate_project_files(files)
             return files
 
         files = capture_working()
-        if files != capture_working() or _current_commit(repository, baseline.ref) != baseline.commit:
+        if (files != capture_working() or _current_commit(repository, baseline.ref) != baseline.commit
+                or _git(repository,'symbolic-ref','-q','HEAD').decode().strip()!=baseline.ref):
             raise GitSafetyError('Source changed while preparing the isolated project')
         working_digest = snapshot_digest(files)
+        if inspect_only:
+            return {'source_commit':baseline.commit,'working_snapshot_sha256':working_digest}
         identity = hashlib.sha256((project.project_id + working_digest + baseline.commit).encode()).hexdigest()
         staged = GitStager(Path(destination), git_executable=git_executable).stage(
             baseline, files, workflow_id='prepare-' + identity, chunk_id='input',
             message='Capture scoped working inputs for coding', max_changed_lines=None)
+        if (_current_commit(repository, baseline.ref)!=baseline.commit
+                or _git(repository,'symbolic-ref','-q','HEAD').decode().strip()!=baseline.ref):
+            raise GitSafetyError('Source branch changed before publishing prepared inputs')
         private_repo = Path(staged['staging_repository'])
         # This branch exists only inside the private prepared bare repository.
         branch = 'prepared-input'
-        _git(private_repo, 'update-ref', 'refs/heads/' + branch, staged['result_commit'], '0' * len(staged['result_commit']))
+        ref='refs/heads/'+branch
+        existing=_current_commit(private_repo,ref)
+        if existing not in (None,staged['result_commit']):
+            raise GitSafetyError('Prepared input branch changed; preserve prior evidence')
+        if existing is None:
+            _git(private_repo, 'update-ref', ref, staged['result_commit'], '0' * len(staged['result_commit']))
         prepared = replace(project, repository=private_repo, branch=branch, auto_integrate=True)
         return prepared, {'schema':'cochem-prepared-project/1', 'status':'PREPARED',
             'source_repository':str(repository), 'source_branch':project.branch,
@@ -422,6 +454,7 @@ def prepare_isolated_project(project, destination, context_paths=(), *, git_exec
             'working_snapshot_sha256':working_digest, 'captured_paths':list(roots),
             'changed_paths':sorted(name for name in set(files)|set(baseline.files) if files.get(name)!=baseline.files.get(name))}
     finally:
+        custody.close()
         _GIT_DEADLINE.reset(deadline)
 
 

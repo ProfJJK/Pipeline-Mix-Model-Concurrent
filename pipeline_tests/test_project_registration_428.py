@@ -15,12 +15,14 @@ def make_registry(tmp_path, monkeypatch):
     registry = ProjectRegistry(tmp_path/'private', RegistrationPolicy((sources,)), git_executable='unused', static_projects={})
     calls = []
     def prepare(project, destination, context, **kwargs):
+        if kwargs.get('inspect_only'):
+            return {'source_commit':'a'*40,'working_snapshot_sha256':'b'*64}
         calls.append(project)
         private = destination/'prepared'
         private.mkdir(parents=True)
         return replace(project, repository=private, auto_integrate=True), {
             'source_repository':str(project.repository), 'prepared_repository':str(private),
-            'changed_paths':['src/main.py'], 'source_commit':'a'*40}
+            'changed_paths':['src/main.py'], 'source_commit':'a'*40,'working_snapshot_sha256':'b'*64}
     monkeypatch.setattr('cochem_pipeline.coding_git.prepare_isolated_project', prepare)
     raw = {'repository':str(repository),'branch':'main','allowed_paths':['src'],'test_paths':['tests']}
     return registry, raw, calls
@@ -76,7 +78,7 @@ def test_preparation_preserves_scoped_dirty_new_and_deleted_bytes(tmp_path,monke
     snap=git.RepositorySnapshot(str(source),'main','refs/heads/main','a'*40,original,{}, {},'b'*64)
     monkeypatch.setattr(git,'_trusted_git_executable',lambda value:'unused')
     monkeypatch.setattr(git,'capture_repository',lambda *a,**kw:snap)
-    monkeypatch.setattr(git,'_current_commit',lambda *a:'a'*40)
+    monkeypatch.setattr(git,'_current_commit',lambda repository,ref:'a'*40 if repository==source else None)
     calls=[]
     def plumbing(repo,*args,**kw):
         if args[:2]==('rev-parse','--is-bare-repository'): return b'false\n'
