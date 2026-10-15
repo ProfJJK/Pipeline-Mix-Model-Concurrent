@@ -48,6 +48,7 @@ def begin_promotion(journal, task_id, boundary, source, pivot_job, pivot_result,
             assessment=classification, pivot_reasoning_floor=minimum,
             planning_attempt_lineage_id=promotion['control_lineage'],
             review=None, research=None, approval=None,
+            failure_dossier=deepcopy(dossier),
             fracture_recommendation=deepcopy(pivot_result['output']))
         for key in ('planning_pivot_routes', 'execution_pivot', 'promoted_fracture'):
             updated.pop(key, None)
