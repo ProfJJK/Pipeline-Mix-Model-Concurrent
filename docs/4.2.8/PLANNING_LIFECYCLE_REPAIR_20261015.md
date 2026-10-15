@@ -106,3 +106,13 @@ microtask dependency, pivot, planning lifecycle and release suites. The recovery
 fixtures use the real temporary SQLite board and attempt ledger with inert
 verifier ports. These tests do not attest native provider or host deployment
 acceptance, and do not activate aggregate swarm execution.
+
+High-tier child pivots now use the existing authenticated owner approval path.
+The journal records a request tied to the exact review hash, boundary, tier,
+task types and original SRS/microtask scope. The board exposes that request as
+`HOLD_OWNER_APPROVAL`; the existing `approve_child_microtask` operation records
+the matching authenticated receipt. The pivot bridge resumes that reviewed
+boundary after approval and restart, retaining all ten failures. Changed review
+evidence needs a new approval. This does not change the parent generation or
+invalidate unrelated completed children. Fifteen serialized child approval,
+pivot and microtask board tests passed; no owner action was performed.

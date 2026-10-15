@@ -833,6 +833,10 @@ class MicrotaskBoardRuntime:
             node_key = f"{gen_sha[:32]}::{mt_id}"
             lstate = None
             node_for_route = dict(node)
+            pending_approval = (state.get('microtask_pivot_approvals') or {}).get(node['attempt_lineage_id'])
+            if pending_approval and not pending_approval.get('owner_approval'):
+                node_for_route['needs_owner_approval'] = True
+                node_for_route['pending_pivot_approval'] = pending_approval
             if self.attempt_accounting is not None:
                 lstate = self.attempt_accounting.ensure_lineage(
                     node["attempt_lineage_id"],
@@ -875,7 +879,7 @@ class MicrotaskBoardRuntime:
                 continue
 
             deps_ready = all(dep in completed_by_id for dep in node["depends_on"])
-            if node["needs_owner_approval"]:
+            if enriched_node["needs_owner_approval"]:
                 with self.journal._write() as conn:
                     self._release_node_file_locks(conn, node_key)
                     self._upsert_node_row(
@@ -1525,6 +1529,27 @@ class MicrotaskBoardRuntime:
         self.owner_broker._authenticate_owner_token(owner_token)
         state = self.journal.status(task_id)
         expected_version = state["journal_version"]
+        lineage = f'{task_id}.mt.{microtask_id}'
+        pending = (state.get('microtask_pivot_approvals') or {}).get(lineage)
+        if pending is not None and pending.get('owner_approval'):
+            return self.materialize(task_id)
+        if pending is not None and not pending.get('owner_approval'):
+            _text(notes, 'Owner notes', 8000) if notes else None
+            receipt = dict(receipt_id='mtpivotowner428-' + digest(dict(
+                request_sha256=pending['request_sha256'], notes=notes))[:40],
+                request_sha256=pending['request_sha256'], actor_kind='human_owner', notes=notes)
+            def approve_pivot(row):
+                current = json.loads(row['state_json'])
+                entry = current.get('microtask_pivot_approvals', {}).get(lineage)
+                if (current['stage'] != 'MICROTASKS_READY' or entry is None
+                        or entry['request_sha256'] != pending['request_sha256']
+                        or entry['srs_sha256'] != current['srs_sha256']
+                        or entry['microtasks_sha256'] != current['microtasks_sha256']):
+                    raise ValueError('Child pivot approval belongs to a stale scope')
+                entry['owner_approval'] = receipt
+                return current
+            self.journal._transition(task_id, expected_version, receipt['receipt_id'], receipt, approve_pivot)
+            return self.materialize(task_id)
         receipt_id = "mtownercpt428-" + digest(
             {
                 "task_id": task_id,
@@ -1598,6 +1623,7 @@ class MicrotaskBoardRuntime:
                     "release_criteria": json.loads(r["release_criteria_json"]),
                     "depends_on": json.loads(r["depends_on_json"]),
                     "candidate_profiles": json.loads(r["candidate_profiles_json"]),
+                    "pending_pivot_approval": node_meta.get("pending_pivot_approval"),
                     "status": r["status"],
                     "job_id": r["job_id"],
                     "batch_id": node_meta.get("batch_id"),

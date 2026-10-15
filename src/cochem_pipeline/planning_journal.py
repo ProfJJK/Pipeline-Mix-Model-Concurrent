@@ -188,6 +188,41 @@ class PlanningJournal:
         event = 'pivot.' + digest({'root': context['lineage_root'], 'boundary': context['boundary']})[:40]
         return self._transition(task_id, expected_version, event, evidence, transition)
 
+    def request_microtask_pivot_approval(self, task_id, source_intent, *, lineage_root,
+                                        boundary, review_job_id, review_sha256, classification):
+        """Capture the exact changed child scope for the existing owner approval adapter."""
+        classification = workflow.assessment(classification)
+        if source_intent['stage'] != 'MICROTASK_EXECUTION' or classification['complexity'] < 8:
+            raise ValueError('Only newly reviewed high-tier child pivots need this approval')
+        if (lineage_root != f"{task_id}.mt.{source_intent['microtask_id']}"
+                or boundary not in (10, 20) or type(boundary) is not int):
+            raise ValueError('Child pivot approval requires its exact existing lineage and boundary')
+        request = dict(microtask_id=source_intent['microtask_id'], lineage_root=lineage_root,
+            boundary=boundary, review_job_id=review_job_id, review_sha256=workflow._sha(review_sha256),
+            assessment=classification, srs_sha256=source_intent['srs_sha256'],
+            microtasks_sha256=source_intent['task']['microtasks_sha256'])
+        request['request_sha256'] = digest(request)
+        state = self.status(task_id)
+        if state['stage'] != 'MICROTASKS_READY':
+            raise ValueError('Child pivot approval belongs to an inactive task scope')
+        prior = (state.get('microtask_pivot_approvals') or {}).get(lineage_root)
+        if prior and prior['boundary'] > boundary:
+            raise ValueError('Child pivot approval cannot restore an older failure boundary')
+        if prior and prior['request_sha256'] == request['request_sha256']:
+            return deepcopy(prior)
+        def transition(row):
+            updated = json.loads(row['state_json'])
+            if (updated['stage'] != 'MICROTASKS_READY'
+                    or updated['srs_sha256'] != request['srs_sha256']
+                    or updated['microtasks_sha256'] != request['microtasks_sha256']
+                    or not any(m['id'] == request['microtask_id'] for m in updated['microtasks'])):
+                raise ValueError('Child pivot approval belongs to a stale task scope')
+            updated.setdefault('microtask_pivot_approvals', {})[lineage_root] = deepcopy(request)
+            return updated
+        result = self._transition(task_id, state['journal_version'],
+            'child-pivot-request.' + request['request_sha256'][:40], request, transition)
+        return deepcopy(result['microtask_pivot_approvals'][lineage_root])
+
     def apply_simple_execution_pivot(self, task_id, expected_version, source_intent, context, classification):
         """Preserve the failed execution lineage while promoting changed scope through SRS gates."""
         classification = workflow.assessment(classification)

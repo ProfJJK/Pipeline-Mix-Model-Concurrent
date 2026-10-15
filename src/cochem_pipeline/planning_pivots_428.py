@@ -129,7 +129,7 @@ class PlanningPivotRuntime:
             raise ValueError('Pivot review polling must be bounded to 1..8')
         if self.journal.status(task_id)['stage'] == 'CANCELLED':
             return 0
-        eligible = {'WAITING_FOR_PIVOT_REVIEW', 'WAITING_FOR_PIVOT_BOARD'}
+        eligible = {'WAITING_FOR_PIVOT_REVIEW', 'WAITING_FOR_PIVOT_BOARD', 'PIVOT_OWNER_APPROVAL_REQUIRED'}
         boundaries = [b for b in self.outcomes.status(task_id) if b['status'] in eligible][:limit]
         for boundary in boundaries:
             root, number = boundary['lineage_root'], boundary['boundary']
@@ -167,9 +167,15 @@ class PlanningPivotRuntime:
             if prior_pivot is not None:
                 effective_tier = prior_pivot['proposal']['complexity']
             source_node = job['payload']['planning_intent']['task']['failing_microtask']
-            if source_node and effective_tier >= 8 and not (source_node.get('owner_approval') or {}).get('receipt_id'):
-                self._set_status(root, number, 'PIVOT_OWNER_APPROVAL_REQUIRED', output_sha=sha)
-                continue
+            if source_node and effective_tier >= 8:
+                approval = self.journal.request_microtask_pivot_approval(task_id, source_intent,
+                    lineage_root=root, boundary=number, review_job_id=job['job_id'], review_sha256=sha,
+                    classification=dict(output['assessment'], complexity=effective_tier))
+                receipt = approval.get('owner_approval') or {}
+                if not (receipt.get('actor_kind') == 'human_owner' and receipt.get('receipt_id')
+                        and receipt.get('request_sha256') == approval['request_sha256']):
+                    self._set_status(root, number, 'PIVOT_OWNER_APPROVAL_REQUIRED', output_sha=sha)
+                    continue
             # Recover the window after ledger.pivot committed but before our
             # dispatch marker: existing pivot evidence is authoritative.
             existing = captured_runtime.get_pivot_record(root, number)
