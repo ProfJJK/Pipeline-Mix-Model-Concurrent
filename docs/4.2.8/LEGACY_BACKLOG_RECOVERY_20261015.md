@@ -44,7 +44,7 @@ quota, attempt and approval authority still applies.
 Private review root on this host:
 `C:\Users\ansac\Documents\Codex\2026-10-06\the-github-repository-is-located-at\backlog-preparation-20261015\review-v1`.
 
-The five readable legacy databases produced 4,023 rows across seven tables:
+The five readable legacy databases produced 4,086 rows across seven tables:
 
 | Disposition | Rows |
 | --- | ---: |
