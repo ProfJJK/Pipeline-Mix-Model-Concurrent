@@ -142,14 +142,21 @@ def validate_simple_execution_output(
     }
 
 
+class ExecutionRetryHold(ValueError):
+    def __init__(self, status):
+        super().__init__(status)
+        self.status = status
+
+
 class SimpleTaskExecutionRuntime:
     """Materializes and imports single-node executions for `READY` simple 4.2.8 tasks."""
 
-    def __init__(self, journal, store, *, clock=time.time, artifact_runtime=None):
+    def __init__(self, journal, store, *, clock=time.time, artifact_runtime=None, attempt_accounting=None):
         self.journal = journal
         self.store = store
         self.clock = clock
         self.artifact_runtime = artifact_runtime
+        self.attempt_accounting = attempt_accounting
         with self.journal._write() as conn:
             conn.executescript(
                 """
@@ -190,6 +197,12 @@ class SimpleTaskExecutionRuntime:
         candidates = [opt["model_id"] for opt in options if opt["meets_floor"]]
         if not candidates:
             raise ValueError("No eligible execution profiles meet the task floor")
+        pivot = state.get('execution_pivot')
+        if pivot:
+            if (pivot['complexity'] != tier or pivot['task_types'] != tags
+                    or pivot['selected_profile_id'] not in candidates):
+                raise ValueError('Simple execution pivot does not meet its captured reasoning floor')
+            candidates = [pivot['selected_profile_id']]
 
         intent = {
             "schema": "cochem-planning-intent/4.2.8",
@@ -210,6 +223,24 @@ class SimpleTaskExecutionRuntime:
                 "requirement_evidence, and release_criteria_results."
             ),
         }
+        if pivot:
+            intent['attempt_lineage_id'] = pivot['lineage_root']
+        feedback = self.artifact_runtime.retry_feedback(task_id) if self.artifact_runtime else None
+        if feedback:
+            if self.attempt_accounting is None:
+                raise ExecutionRetryHold('WAITING_FOR_FAILURE_ACCOUNTING')
+            prior = self.store.get(feedback['producer_job_id'])
+            with self.attempt_accounting.ledger._write() as conn:
+                accounted = conn.execute('SELECT status,staged_outcome FROM attempt428_outbox '
+                    'WHERE job_id=? AND attempt_id=? AND fencing_token=?',
+                    (prior['job_id'], prior['attempt_id'], prior['fencing_token'])).fetchone()
+            if (accounted is None or accounted['status'] != 'RECONCILED'
+                    or accounted['staged_outcome'] != 'quality_failure'):
+                raise ExecutionRetryHold('WAITING_FOR_FAILURE_ACCOUNTING')
+            lineage = self.attempt_accounting.ledger.status(feedback['lineage_root'])
+            if lineage['stage'] != 'READY' or lineage['research_due'] or lineage['failures'] >= 30:
+                raise ExecutionRetryHold('EXECUTION_LINEAGE_' + lineage['stage'])
+            intent['physical_retry'] = deepcopy(feedback)
         return intent, catalog, limit
 
     def materialize(self, task_id: str) -> dict[str, Any]:
@@ -384,7 +415,10 @@ class SimpleTaskExecutionRuntime:
 
     def step_ready_task(self, task_id: str) -> dict[str, Any]:
         """Advance a `READY` simple task on the board and import its verified artifact."""
-        job = self.materialize(task_id)
+        try:
+            job = self.materialize(task_id)
+        except ExecutionRetryHold as exc:
+            return dict(status=exc.status, delay=1)
         job_id = job["job_id"]
         if job["status"] == "COMPLETED":
             check = None

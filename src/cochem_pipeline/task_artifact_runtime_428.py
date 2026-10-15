@@ -141,6 +141,7 @@ class TaskArtifactRuntime:
                    if capture['project'] is not None else None)
         baseline = self.store.coding_files(capture['snapshot_sha256'])
         before, writers, conflicts = dict(baseline), {}, []
+        sealed_tests = {}
         predecessors = payload.get('predecessor_outputs', {})
         if intent['stage'] == 'MICROTASK_EXECUTION':
             declared = set(payload['microtask_node'].get('depends_on', []))
@@ -150,10 +151,16 @@ class TaskArtifactRuntime:
                 raise ValueError('Task workspace requires exactly its assigned predecessor commitments')
         for dep, output in sorted(predecessors.items()):
             with self.store._connection() as conn:
-                rows = conn.execute('''SELECT j.job_id FROM task428_fragment_attempts a JOIN pipeline_jobs j
+                rows = conn.execute('''SELECT j.job_id,j.attempt_id,j.fencing_token FROM task428_fragment_attempts a JOIN pipeline_jobs j
                     ON j.job_id=a.job_id AND j.attempt_id=a.attempt_id AND j.fencing_token=a.fencing_token
                     WHERE a.task_id=? AND a.microtask_id=? AND a.generation=? AND j.status='COMPLETED' ''',
                     (intent['task_id'], dep, intent['plan_generation_sha256'])).fetchall()
+            # Retry generations preserve the same microtask/plan identity.
+            # Select only the controller-assigned winner, never the newest
+            # snapshot or a coincidentally matching narrative hash.
+            if output.get('producer_job_id'):
+                rows = [row for row in rows if all(row[key] == output.get('producer_' + key)
+                        for key in ('job_id', 'attempt_id', 'fencing_token'))]
             if len(rows) != 1:
                 raise ValueError('Assigned predecessor lacks one accepted physical snapshot')
             prior = self.store.get(rows[0]['job_id'])
@@ -178,13 +185,58 @@ class TaskArtifactRuntime:
                 conflicts.append(path)
                 for dep, data in versions:
                     before['conflicts_428/' + dep + '/' + path] = data
+        recovery = payload.get('microtask_node', {}).get('physical_retry')
+        simple_retry = intent.get('physical_retry') if intent['stage'] == 'SIMPLE_EXECUTION' else None
+        if simple_retry:
+            prior = self.store.get(simple_retry['producer_job_id'])
+            prior_intent = prior['payload']['planning_intent']
+            proof = self.verification_outcome(prior)
+            if (prior_intent['task_id'] != intent['task_id'] or prior_intent['stage'] != 'SIMPLE_EXECUTION'
+                    or proof['status'] != 'REJECTED' or proof['failure'] != simple_retry['failure']
+                    or proof['verification_job_id'] != simple_retry['verification_job_id']):
+                raise ValueError('Simple retry requires the exact rejected producer proof')
+            before = self.store.coding_files(self.accepted_snapshot(prior)['snapshot_sha256'])
+            if project and proof['failure'].get('test_phase') == 'green':
+                sealed_tests.update({p: data for p, data in before.items() if within(p, project.test_paths)})
+        if recovery:
+            if (recovery.get('schema') != 'cochem-microtask-physical-recovery/4.2.8'
+                    or not isinstance(recovery.get('sealed_test_producer_ids'), list)
+                    or len(recovery['sealed_test_producer_ids']) > 64
+                    or len(set(recovery['sealed_test_producer_ids'])) != len(recovery['sealed_test_producer_ids'])):
+                raise ValueError('Physical recovery needs bounded exact producer identities')
+            checks = {item['producer_job_id']: item for item in recovery['failed_checks']}
+            for producer_id in recovery['sealed_test_producer_ids']:
+                prior = self.store.get(producer_id)
+                prior_intent = prior['payload']['planning_intent']
+                proof = self.verification_outcome(prior)
+                check = checks.get(producer_id, {})
+                if (prior_intent['task_id'] != intent['task_id']
+                        or prior_intent.get('plan_generation_sha256') != intent['plan_generation_sha256']
+                        or prior['payload'].get('microtask_node', {}).get('role') != 'final_test'
+                        or proof['status'] != 'REJECTED' or proof['failure'] != check.get('failure')
+                        or proof['verification_job_id'] != check.get('verification_job_id')
+                        or not (proof['failure'].get('test_phase') == 'green'
+                                or proof['failure'].get('category') == 'content_review')):
+                    raise ValueError('Recovery test custody requires the exact rejected final producer')
+                if project:
+                    inherited = self.store.coding_files(self.accepted_snapshot(prior)['snapshot_sha256'])
+                    for path, data in inherited.items():
+                        if within(path, project.test_paths):
+                            if path in sealed_tests and sealed_tests[path] != data:
+                                raise ValueError('Recovery has conflicting sealed tests')
+                            sealed_tests[path] = data
+            for path, data in sealed_tests.items():
+                if path in before and before[path] != data:
+                    raise ValueError('Recovery cannot overwrite a sealed requirement test')
+                before[path] = data
         validate_project_files(before)
         packet = dict(schema='cochem-task-artifact-staging/4.2.8', workspace_files=before,
-                      workspace_manifest=manifest(before), assembly_input_sha256=digest(manifest(before)))
+                      workspace_manifest=manifest(before), assembly_input_sha256=digest(manifest(before)),
+                      sealed_test_paths=sorted(sealed_tests))
         return capture, project, baseline, before, conflicts, packet
 
     def execution_context(self, payload):
-        _, project, _, before, conflicts, _ = self._inputs({'payload': payload})
+        _, project, _, before, conflicts, packet = self._inputs({'payload': payload})
         intent, micro = payload['planning_intent'], payload.get('microtask_node')
         reqs = micro['requirement_ids'] if micro else [r['id'] for r in intent['task']['document']['requirements']]
         extra = self.planning_context(intent['task_id'])
@@ -194,6 +246,7 @@ class TaskArtifactRuntime:
                          test_rule='Final-test nodes must provide new Python tests with these exact function names, '
                          'real assertions that fail on the original baseline and pass on assembled code. Never edit existing tests.')
         extra['conflicting_paths'] = conflicts
+        extra['sealed_test_paths'] = packet['sealed_test_paths']
         return extra
 
     def run(self, node, slot, context, heartbeat, launched, cancel_event, *, on_native_start, on_native_end):
@@ -230,7 +283,8 @@ class TaskArtifactRuntime:
             proposed = validate_fragment_deliverables(desc, output['deliverables'], project=project)
         if set(conflicts) - proposed.keys():
             raise ValueError('Assembly must explicitly resolve every conflicting file')
-        if project and any(within(path, project.test_paths) and path in baseline and baseline[path] != data
+        protected_tests = {**baseline, **{p: before[p] for p in packet['sealed_test_paths']}}
+        if project and any(within(path, project.test_paths) and path in protected_tests and protected_tests[path] != data
                            for path, data in proposed.items()):
             raise ValueError('Task execution cannot modify existing protected tests')
         after = {path: data for path, data in before.items() if not path.startswith('conflicts_428/')}

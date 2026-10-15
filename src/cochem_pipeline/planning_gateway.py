@@ -307,6 +307,10 @@ def prompt_contract(payload, *, check_context=True):
             'approach. Choose fracture only when decomposition is needed and supply its reason. Do not '
             'claim a pivot has executed or create new attempts. The controller preserves all prior failures.')
     task_payload = deepcopy(task_state)
+    if stage == 'SIMPLE_EXECUTION' and intent.get('physical_retry'):
+        task_payload['physical_retry'] = deepcopy(intent['physical_retry'])
+        instruction += (' The controller rejected the previous proposal using the captured verification evidence. '
+                        'Address those failures in the inherited source. Preserve sealed tests; do not weaken checks.')
     if stage == 'MICROTASK_EXECUTION':
         task_payload['microtask_node'] = deepcopy(payload['microtask_node'])
         task_payload['predecessor_outputs'] = deepcopy(payload.get('predecessor_outputs', {}))

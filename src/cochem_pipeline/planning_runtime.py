@@ -86,6 +86,8 @@ class PlanningController:
         self.release_runtime = release_runtime
         self.attempt_ledger = attempt_ledger
         self.attempt_runtime = attempt_runtime
+        if execution_runtime is not None and attempt_runtime is not None:
+            execution_runtime.attempt_accounting = attempt_runtime
         self.dossier_store = dossier_store
         self.pivot_runtime = pivot_runtime
         self.fracture_runtime = fracture_runtime
@@ -195,7 +197,8 @@ class PlanningController:
         att_runtime = AttemptAccountingRuntime(ledger, store=runtime.store)
         artifact_runtime = getattr(runtime, 'task_artifacts', None)
         artifact_args = {'artifact_runtime': artifact_runtime} if artifact_runtime is not None else {}
-        exec_runtime = SimpleTaskExecutionRuntime(journal, runtime.store, **artifact_args)
+        exec_runtime = SimpleTaskExecutionRuntime(journal, runtime.store,
+                                                 attempt_accounting=att_runtime, **artifact_args)
         board = MicrotaskBoardRuntime(journal, runtime.store, owner_broker=owner_broker,
                                       attempt_ledger=att_runtime, **artifact_args)
         rel_runtime = TaskReleaseRuntime(journal, runtime.store, board=board,
