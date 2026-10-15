@@ -99,9 +99,10 @@ def validate_stage_output(payload, output, route):
 
 
 class PlanningGateway:
-    def __init__(self, journal, store, *, artifact_runtime=None):
+    def __init__(self, journal, store, *, artifact_runtime=None, attempt_accounting=None):
         self.journal, self.store = journal, store
         self.artifact_runtime = artifact_runtime
+        self.attempt_accounting = attempt_accounting
 
     def submit(self, task_id):
         # Re-read from the durable journal. Never accept an agent-supplied
@@ -120,6 +121,10 @@ class PlanningGateway:
         if self.artifact_runtime is not None:
             payload['execution_context'] = self.artifact_runtime.planning_context(task_id)
         prompt_contract(payload)
+        if self.attempt_accounting is not None:
+            from .planning_outcomes_428 import PlanningOutcomeRuntime
+            lineage = PlanningOutcomeRuntime.lineage_for_job(task_id, payload)
+            self.attempt_accounting.ensure_lineage(lineage, complexity=intent['complexity'])
         with self.store._write() as conn:
             existing=conn.execute('SELECT job_id FROM pipeline_jobs WHERE job_id=?',(job_id,)).fetchone()
             if existing:
@@ -127,10 +132,14 @@ class PlanningGateway:
                 if prior['payload']!=payload:
                     raise ValueError('Existing planning job has different immutable input')
                 return prior
+            from .planning_budgets_428 import capture_lineage_budget
+            budget = (capture_lineage_budget(conn, job_id, payload, policy,
+                attempt_ledger=self.attempt_accounting) if self.attempt_accounting is not None else None)
             self.store._insert(conn,root_id,root_id,None,'MACRO_PLANNING_REQUEST','IN_PROGRESS',
                                dict(workflow_type='planning428',intent_sha256=identity))
-            routes.capture_workflow(conn,root_id,policy)
-            self.store._insert(conn,job_id,root_id,root_id,'TASK_PLAN','PENDING',payload,max_attempts=10)
+            routes.capture_workflow(conn,root_id,policy,max_dispatches=budget.max_dispatches if budget else None)
+            self.store._insert(conn,job_id,root_id,root_id,'TASK_PLAN','PENDING',payload,
+                               max_attempts=budget.max_attempts if budget else 10)
             self.store._event(conn,self.store._get(conn,root_id),'PLANNING_INTENT_SUBMITTED',
                               task_id=task_id,intent_sha256=identity)
             return self.store._get(conn,job_id)

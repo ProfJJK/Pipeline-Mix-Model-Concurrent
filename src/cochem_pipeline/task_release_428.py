@@ -38,11 +38,13 @@ class TaskReleaseRuntime:
         owner_broker=None,
         clock=time.time,
         artifact_runtime=None,
+        delivery_runtime=None,
     ):
         self.journal = journal
         self.store = store
         self.clock = clock
         self.artifact_runtime = artifact_runtime
+        self.delivery_runtime = delivery_runtime
         from .content_review_428 import ContentReviewRuntime
         self.content_review = ContentReviewRuntime(journal, store)
         self.board = board or MicrotaskBoardRuntime(
@@ -286,6 +288,7 @@ class TaskReleaseRuntime:
         # final-test response cannot manufacture a controller test receipt.
         content_reviews = []
         physical_results = []
+        deliveries = []
         if self.artifact_runtime is not None:
             for ft in ft_nodes:
                 check = self.artifact_runtime.ensure_verification(self.store.get(ft['job_id']), ft['requirement_ids'])
@@ -305,6 +308,11 @@ class TaskReleaseRuntime:
                     plan_generation_sha256=gen_sha,
                     assembly_hashes={n['microtask_id']: n['artifact_sha256'] for n in asm_nodes},
                     final_test_artifact_sha256=ft['artifact_sha256'])
+                if self.delivery_runtime is not None:
+                    delivery = self.delivery_runtime.enqueue(ft['job_id'])
+                    if delivery['status'] not in ('EXPORTED_FOR_REVIEW','INTEGRATED_ISOLATED_REPOSITORY'):
+                        return {'ready': False, **delivery, 'blocking_microtask_id': ft['microtask_id']}
+                    deliveries.append(delivery)
 
         # 4. Verify controller-owned final-test receipts for every final_test node
         assembly_hashes = {n["microtask_id"]: n["artifact_sha256"] for n in asm_nodes}
@@ -411,6 +419,7 @@ class TaskReleaseRuntime:
                 "test_receipts": [r["receipt_id"] for r in verified_test_receipts],
                 "content_reviews": content_reviews,
                 "physical_results": physical_results,
+                "deliveries": deliveries,
             }
         )[:40]
 
@@ -428,13 +437,15 @@ class TaskReleaseRuntime:
             "controller_test_receipts": verified_test_receipts,
             "independent_content_reviews": content_reviews,
             "physical_verification": physical_results,
+            "deliveries": deliveries,
             "deliverables": [produced_deliverables[k] for k in sorted(produced_deliverables)],
             "verified_requirements": sorted(all_srs_reqs),
             "release_criteria_results": satisfied_criteria,
             "verification_status": "verified",
             "verification_scope": "content_integrity_and_independent_model_review" if content_reviews
                                   else "executed_requirement_tests",
-            "original_repository_integration": "NOT_APPLICABLE" if content_reviews else "REVIEW_REQUIRED",
+            "original_repository_integration": "NOT_APPLICABLE" if content_reviews else
+                                               "NOT_ATTEMPTED" if deliveries else "REVIEW_REQUIRED",
         }
         return {
             "ready": True,

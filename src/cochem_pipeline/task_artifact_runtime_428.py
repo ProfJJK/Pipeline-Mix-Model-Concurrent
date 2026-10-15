@@ -64,7 +64,7 @@ class TaskArtifactRuntime:
                          (task_id, 'Cancelled by operator'))
             roots = [row[0] for row in conn.execute(
                 "SELECT job_id FROM pipeline_jobs WHERE kind='MACRO_PLANNING_REQUEST' "
-                "AND json_extract(payload_json,'$.workflow_type')='task_verification428' "
+                "AND json_extract(payload_json,'$.workflow_type') IN ('task_verification428','task_delivery428') "
                 "AND json_extract(payload_json,'$.task_id')=? ORDER BY job_id", (task_id,))]
         for root in roots:
             self.store.cancel_workflow(root)

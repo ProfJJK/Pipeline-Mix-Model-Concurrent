@@ -151,12 +151,14 @@ class ExecutionRetryHold(ValueError):
 class SimpleTaskExecutionRuntime:
     """Materializes and imports single-node executions for `READY` simple 4.2.8 tasks."""
 
-    def __init__(self, journal, store, *, clock=time.time, artifact_runtime=None, attempt_accounting=None):
+    def __init__(self, journal, store, *, clock=time.time, artifact_runtime=None, attempt_accounting=None,
+                 delivery_runtime=None):
         self.journal = journal
         self.store = store
         self.clock = clock
         self.artifact_runtime = artifact_runtime
         self.attempt_accounting = attempt_accounting
+        self.delivery_runtime = delivery_runtime
         with self.journal._write() as conn:
             conn.executescript(
                 """
@@ -262,6 +264,10 @@ class SimpleTaskExecutionRuntime:
         if self.artifact_runtime is not None:
             payload['execution_context'] = self.artifact_runtime.execution_context(payload)
         prompt_contract(payload)
+        if self.attempt_accounting is not None:
+            from .planning_outcomes_428 import PlanningOutcomeRuntime
+            self.attempt_accounting.ensure_lineage(PlanningOutcomeRuntime.lineage_for_job(task_id, payload),
+                                                   complexity=intent['complexity'])
         with self.store._write() as conn:
             existing = conn.execute(
                 "SELECT job_id FROM pipeline_jobs WHERE job_id=?",
@@ -272,6 +278,9 @@ class SimpleTaskExecutionRuntime:
                 if prior["payload"] != payload:
                     raise ValueError("Existing simple execution job has different immutable input")
                 return prior
+            from .planning_budgets_428 import capture_lineage_budget
+            budget = (capture_lineage_budget(conn, job_id, payload, policy,
+                attempt_ledger=self.attempt_accounting) if self.attempt_accounting is not None else None)
             self.store._insert(
                 conn,
                 root_id,
@@ -281,7 +290,7 @@ class SimpleTaskExecutionRuntime:
                 "IN_PROGRESS",
                 {"workflow_type": "planning428", "execution_role": "simple_execution", "intent_sha256": identity},
             )
-            routes.capture_workflow(conn, root_id, policy)
+            routes.capture_workflow(conn, root_id, policy, max_dispatches=budget.max_dispatches if budget else None)
             self.store._insert(
                 conn,
                 job_id,
@@ -290,7 +299,7 @@ class SimpleTaskExecutionRuntime:
                 "TASK_PLAN",
                 "PENDING",
                 payload,
-                max_attempts=10,
+                max_attempts=budget.max_attempts if budget else 10,
             )
             self.store._event(
                 conn,
@@ -313,6 +322,7 @@ class SimpleTaskExecutionRuntime:
         with self.journal._write() as conn:
             state = json.loads(self.journal._read(conn, task_id)['state_json'])
         physical = (state.get('execution_artifact') or {}).get('physical_verification')
+        delivery = (state.get('execution_artifact') or {}).get('delivery')
         return {
             "schema": "cochem-task-artifact-manifest/4.2.8",
             "artifact_id": row["artifact_id"],
@@ -327,13 +337,15 @@ class SimpleTaskExecutionRuntime:
             "release_criteria_results": json.loads(row["release_criteria_json"]),
             "verification_status": "verified",
             "physical_verification": physical,
+            "delivery": delivery,
             "verification_scope": ('executed_requirement_tests' if physical and
                 physical['output']['verification_kind'] == 'coding_green' else 'content_integrity'),
             "external_actions_verified": False,
-            "original_repository_integration": physical.get('integration_status') if physical else 'NOT_VERIFIED',
+            "original_repository_integration": delivery.get('original_repository_integration') if delivery
+                else physical.get('integration_status') if physical else 'NOT_VERIFIED',
         }
 
-    def _import_completed_execution(self, task_id: str, job: dict[str, Any], physical=None) -> dict[str, Any] | None:
+    def _import_completed_execution(self, task_id: str, job: dict[str, Any], physical=None, delivery=None) -> dict[str, Any] | None:
         from .planning_gateway import validate_stage_output
 
         job_id = job["job_id"]
@@ -369,6 +381,7 @@ class SimpleTaskExecutionRuntime:
             "requirement_evidence": validated["requirement_evidence"],
             "release_criteria_results": validated["release_criteria_results"],
             "physical_verification": physical,
+            "delivery": delivery,
         }
 
         def transition(row):
@@ -387,6 +400,7 @@ class SimpleTaskExecutionRuntime:
                 "requirement_evidence": validated["requirement_evidence"],
                 "release_criteria_results": validated["release_criteria_results"],
                 "physical_verification": physical,
+                "delivery": delivery,
                 "verification_scope": ('executed_requirement_tests' if physical and
                     physical['output']['verification_kind'] == 'coding_green' else 'content_integrity'),
                 "external_actions_verified": False,
@@ -422,12 +436,17 @@ class SimpleTaskExecutionRuntime:
         job_id = job["job_id"]
         if job["status"] == "COMPLETED":
             check = None
+            delivery = None
             if self.artifact_runtime is not None:
                 check = self.artifact_runtime.ensure_verification(job,
                     [r['id'] for r in job['payload']['planning_intent']['task']['document']['requirements']])
                 if check['status'] != 'VERIFIED':
                     return {**check, 'delay': 1}
-            artifact = self._import_completed_execution(task_id, job, check)
+                if self.delivery_runtime is not None:
+                    delivery = self.delivery_runtime.enqueue(job_id)
+                    if delivery['status'] not in ('NOT_APPLICABLE','EXPORTED_FOR_REVIEW','INTEGRATED_ISOLATED_REPOSITORY'):
+                        return {**delivery, 'delay': 1}
+            artifact = self._import_completed_execution(task_id, job, check, delivery)
             if artifact is None:
                 return {"status": "WAITING_FOR_NATIVE_CLEANUP", "job_id": job_id, "delay": 1}
             return {

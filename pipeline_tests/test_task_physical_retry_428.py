@@ -38,6 +38,8 @@ def test_retry_waits_for_accounting_preserves_proposal_and_is_idempotent(simple_
     outcomes.reconcile_task('task')
     retry = execution.materialize('task')
     assert retry['job_id'] != producer['job_id']
+    assert retry['max_attempts'] == 9
+    assert retry['routing']['expires_at'] == producer['routing']['expires_at']
     assert execution.materialize('task')['job_id'] == retry['job_id']
     context = retry['payload']['execution_context']
     assert context['sealed_test_paths'] == (['tests/test_bound.py'] if value == 2 else [])

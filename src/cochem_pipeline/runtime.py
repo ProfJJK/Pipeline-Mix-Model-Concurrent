@@ -202,11 +202,14 @@ class Runtime:
         self.pool = ThreadPoolExecutor(max_workers=min(getattr(config,'max_execution_slots',4),len(config.workers)),thread_name_prefix='pipeline')
         self.owner_approval_broker = None; self.task_planning = None
         self.task_artifacts = None
+        self.task_delivery = None
         if getattr(config, 'task_planning', None) is not None:
             if self.ramdisk is None:
                 raise ValueError('Task execution requires verified RAM staging')
             from .task_artifact_runtime_428 import TaskArtifactRuntime
             self.task_artifacts = TaskArtifactRuntime(self)
+            from .task_artifact_delivery_428 import TaskArtifactDeliveryRuntime
+            self.task_delivery = TaskArtifactDeliveryRuntime(self)
             from .planning_runtime import PlanningController
             self.task_planning = PlanningController.from_runtime(self)
         self.catalog=None
@@ -298,6 +301,7 @@ class Runtime:
             artifacts = getattr(self, 'task_artifacts', None)
             task_fragment = artifacts is not None and artifacts.handles(node)
             task_verifier = node['kind'] in ('TASK_VERIFY', 'TASK_TEST')
+            task_delivery = node['kind'] == 'TASK_DELIVER'
             def native_watch_start(workspace):
                 observer.schedule(SlotMonitor(self.oracle,job_id),str(workspace),recursive=True)
                 observer.start()
@@ -307,7 +311,7 @@ class Runtime:
                     observer.join(timeout=10)
                     if observer.is_alive():
                         raise WorkerCleanupError('Native filesystem monitor did not stop before controller staging')
-            if not coding and not task_fragment and not task_verifier:
+            if not coding and not task_fragment and not task_verifier and not task_delivery:
                 if self.ramdisk is not None:
                     descriptor=self.ramdisk.workspace(slot)
                     descriptor.validate(identity=descriptor.identity)
@@ -332,6 +336,10 @@ class Runtime:
                 output,receipt,evidence,files = self.coding.run(node,slot,context,heartbeat,launched,
                     self.active[job_id]['cancel_event'],on_native_start=native_watch_start,on_native_end=native_watch_end,
                     container_reservation=self.active[job_id].get('container_reservation'))
+            elif task_delivery:
+                if getattr(self, 'task_delivery', None) is None:
+                    raise ProviderFailure('configuration')
+                output,receipt,evidence = self.task_delivery.run(node,heartbeat,self.active[job_id]['cancel_event'])
             elif task_fragment:
                 output,receipt = artifacts.run(node,slot,context,heartbeat,launched,
                     self.active[job_id]['cancel_event'],on_native_start=native_watch_start,on_native_end=native_watch_end)
@@ -355,6 +363,8 @@ class Runtime:
                 if coding:
                     self.store.complete_coding(job_id,node['attempt_id'],node['fencing_token'],output,receipt,
                                                evidence=evidence,files=files)
+                elif task_delivery:
+                    self.task_delivery.complete(node,output,receipt,evidence=evidence)
                 elif task_verifier:
                     self.store.complete_task_verification(job_id,node['attempt_id'],node['fencing_token'],
                                                           output,receipt,evidence=evidence)
@@ -486,7 +496,7 @@ class Runtime:
                         current_active.get('cancel_event',threading.Event()).set()
                 self.runner.terminate(previous['job_id'])
 
-    def tick(self):
+    def tick(self, *, admit_jobs=True, catalog_poll=True):
         for event in self.store.event_batch(self.event_cursor):
             self.event_cursor = event['id']
             node = self.store.get(event['job_id'])
@@ -544,11 +554,11 @@ class Runtime:
             self.admission.update_capacity(ceiling)
         self._container_maintenance(ceiling)
         self.last_capacity = ceiling
-        if getattr(self,'catalog',None) is not None:
+        if catalog_poll and getattr(self,'catalog',None) is not None:
             with self.lock:
                 busy={value['slot'] for value in self.active.values()}
                 self.catalog.step([s for s in self.config.slot_roots if s not in busy and s not in self.quarantined],ceiling)
-        if ceiling<=0:
+        if ceiling<=0 or not admit_jobs:
             return
         self._planning_maintenance()
         with self.lock:
@@ -649,7 +659,7 @@ class Runtime:
                           else job['payload']['docker']['commands'])
                 docker=max(docker,sum(command['timeout_seconds'] for command in commands)+180)
         return {'native':native,'CODE_TEST':min(86400,docker),'TASK_TEST':min(86400,docker),
-                'TASK_VERIFY':180,'CODE_INTEGRATE':1200}
+                'TASK_VERIFY':180,'TASK_DELIVER':1200,'CODE_INTEGRATE':1200}
 
     def coding_projects(self):
         return self.coding.projects() if self.coding is not None else self.config.coding_projects
@@ -736,30 +746,32 @@ class Runtime:
                                                'hardware':self.guard.latest_snapshot() if hasattr(self.guard,'latest_snapshot') else self.guard.snapshot(),'components':dict(self.components),'execution_bounds':self.execution_bounds()})
                 self.stop_event.wait(.1)
         finally:
-            self.stop_event.set()
-            with self.lock:
-                ids = list(self.active)
-                for active in self.active.values():
-                    active.get('cancel_event',threading.Event()).set()
-            for job_id in ids:
-                self.runner.terminate(job_id)
-            self.pool.shutdown(wait=True)
-            if getattr(self,'task_planning',None) is not None and hasattr(self.task_planning,'close'):self.task_planning.close()
-            if getattr(self,'catalog',None) is not None:self.catalog.close()
-            if getattr(self,'objectives',None) is not None:
-                try:
-                    self.objectives.close()
-                except Exception as error:
-                    # Lost metric samples must not prevent containment cleanup.
-                    LOG.error('Operational observation queue could not drain: %s',type(error).__name__)
-            if self._maintenance_thread is not None:
-                self._maintenance_thread.join(timeout=120)
-            if self.docker is not None:
-                # Prepared, unused containers survive controller restarts. The
-                # durable pool reconciles their actual identity and health on
-                # the next startup; active/orphan attempts are still removed.
-                self.docker.reap_orphans(active_attempt_ids=set(),include_warm=False)
-            self.oracle.close()
-            if getattr(self,'knowledge',None) is not None:
-                self.knowledge.close()
-            self.store.close()
+            self.close()
+
+    def close(self):
+        """Drain this controller's owned work before releasing private state."""
+        self.stop_event.set()
+        with self.lock:
+            ids = list(self.active)
+            for active in self.active.values():
+                active.get('cancel_event',threading.Event()).set()
+        for job_id in ids:
+            self.runner.terminate(job_id)
+        self.pool.shutdown(wait=True)
+        if getattr(self,'task_planning',None) is not None and hasattr(self.task_planning,'close'):self.task_planning.close()
+        if getattr(self,'catalog',None) is not None:self.catalog.close()
+        if getattr(self,'objectives',None) is not None:
+            try:
+                self.objectives.close()
+            except Exception as error:
+                LOG.error('Operational observation queue could not drain: %s',type(error).__name__)
+        if self._maintenance_thread is not None:
+            self._maintenance_thread.join(timeout=120)
+            if self._maintenance_thread.is_alive():
+                raise RuntimeError('Controller maintenance has not drained; preserve its state')
+        if self.docker is not None:
+            self.docker.reap_orphans(active_attempt_ids=set(),include_warm=False)
+        self.oracle.close()
+        if getattr(self,'knowledge',None) is not None:
+            self.knowledge.close()
+        self.store.close()

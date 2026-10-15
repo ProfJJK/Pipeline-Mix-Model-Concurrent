@@ -126,6 +126,34 @@ def test_static_project_auto_flag_cannot_write_registered_repository(verified):
         assert conn.execute('SELECT count(*) FROM task428_delivery_results').fetchone()[0] == 1
 
 
+def test_simple_task_waits_for_export_before_reporting_completion(verified, simple_env):
+    delivery, runtime, producer, git, original = verified
+    execution = simple_env[1]
+    execution.delivery_runtime = delivery
+    pending = execution.step_ready_task('task')
+    assert pending['status'] == 'WAITING_FOR_TASK_DELIVERY'
+    assert simple_env[2].status('task')['stage'] == 'READY'
+    assert execution.get_artifact('task') is None
+    node = claim(delivery, runtime, producer)
+    result = delivery.run(node, lambda: True, threading.Event())
+    publish(delivery, runtime, node, result)
+    assert execution.step_ready_task('task')['status'] == 'EXECUTION_COMPLETED'
+    artifact = execution.get_artifact('task')
+    assert artifact['delivery']['patch_sha256'] == result[0]['patch_sha256']
+    assert artifact['delivery']['status'] == 'EXPORTED_FOR_REVIEW'
+    assert artifact['delivery']['original_checkout_modified'] is False
+
+
+def test_cancellation_fences_pending_delivery_workflow(verified):
+    delivery, runtime, producer, _, _ = verified
+    pending = delivery.enqueue(producer['job_id'])
+    runtime.task_artifacts.cancel_task('task')
+    job = runtime.store.get(pending['job_id'])
+    assert job['status'] == 'FAILED'
+    assert runtime.store.claim('inert', allowed_kinds=['TASK_DELIVER'], worker_slot='slot2') is None
+    assert delivery.enqueue(producer['job_id'])['status'] == 'TASK_DELIVERY_CANCELLED'
+
+
 def use_private_registry(runtime, original):
     registry = RegistryPort(runtime.coding.projects()['fixture-project'], original)
     runtime.coding.registry = registry

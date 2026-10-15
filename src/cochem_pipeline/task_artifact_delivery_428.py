@@ -92,6 +92,9 @@ class TaskArtifactDeliveryRuntime:
     def enqueue(self, producer_job_id):
         producer = self.store.get(_id(producer_job_id))
         task_id = producer['payload']['planning_intent']['task_id']
+        with self.store._connection() as conn:
+            if conn.execute('SELECT 1 FROM task428_cancelled_tasks WHERE task_id=?', (task_id,)).fetchone():
+                return dict(status='TASK_DELIVERY_CANCELLED', task_id=task_id)
         if self.artifacts._capture(task_id)['project'] is None:
             return dict(status='NOT_APPLICABLE', original_repository_integration='NOT_APPLICABLE')
         binding = self._binding(producer_job_id)

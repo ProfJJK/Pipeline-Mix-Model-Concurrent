@@ -109,7 +109,8 @@ class PlanningController:
             if self.release_runtime is not None:
                 self.release_runtime.board.pivot_context_provider = self.pivot_bridge.dispatch_context
         self._research_thread = None
-        self.gateway = PlanningGateway(journal, store, artifact_runtime=artifact_runtime)
+        self.gateway = PlanningGateway(journal, store, artifact_runtime=artifact_runtime,
+                                       attempt_accounting=attempt_runtime)
         self.journal.model_result = self.gateway.model_result
         if research_runtime is not None and self.journal.search_result is None:
             self.journal.search_result = research_runtime.evidence_store.load_for_journal
@@ -198,11 +199,11 @@ class PlanningController:
         artifact_runtime = getattr(runtime, 'task_artifacts', None)
         artifact_args = {'artifact_runtime': artifact_runtime} if artifact_runtime is not None else {}
         exec_runtime = SimpleTaskExecutionRuntime(journal, runtime.store,
-                                                 attempt_accounting=att_runtime, **artifact_args)
+            attempt_accounting=att_runtime, delivery_runtime=getattr(runtime, 'task_delivery', None), **artifact_args)
         board = MicrotaskBoardRuntime(journal, runtime.store, owner_broker=owner_broker,
                                       attempt_ledger=att_runtime, **artifact_args)
         rel_runtime = TaskReleaseRuntime(journal, runtime.store, board=board,
-                                        owner_broker=owner_broker, **artifact_args)
+            owner_broker=owner_broker, delivery_runtime=getattr(runtime, 'task_delivery', None), **artifact_args)
         dos_store = FailureDossierStore(ledger)
         piv_runtime = PivotRuntime(ledger, catalog, dossier_store=dos_store)
         frac_runtime = FractureRuntime(ledger, catalog, dossier_store=dos_store, job_store=runtime.store)
@@ -538,7 +539,10 @@ class PlanningController:
                     # A malformed task cannot kill the Warden tick or expose
                     # raw model/provider text to operator status.
                     version = self.journal.status(task_id)['journal_version']
-                    self._record(task_id, version, 'PLANNING_ERROR', error_type=type(error).__name__, delay=60)
+                    from .planning_budgets_428 import LineageBudgetHold
+                    self._record(task_id, version, 'HELD_BUDGET' if isinstance(error, LineageBudgetHold)
+                        else 'PLANNING_ERROR', error_type=error.reason if isinstance(error, LineageBudgetHold)
+                        else type(error).__name__, delay=60)
                 with self.journal._write() as conn:
                     conn.execute('INSERT INTO planning428_cursor VALUES(1,?) '
                         'ON CONFLICT(singleton) DO UPDATE SET task_id=excluded.task_id', (task_id,))
