@@ -36,9 +36,10 @@ authority publication, and Warden cutover in one sitting:
 3. **Unattended Stopped Runtime Installation (`offline_install`):**
    Invokes `install_428_runtime.ps1 -Apply` with `-NonInteractive` to install the
    offline 4.2.8 wheel and locked runtime dependencies into
-   `C:\Program Files\CoChem\Pipeline4.2.8-windows-20261014-r3` using the protected
+   `C:\Program Files\CoChem\Pipeline4.2.8-windows-20261014-r4` using the protected
    toolchain (`Toolchain4.2.7-windows-20261006`), while preserving the earlier
-   `Pipeline4.2.8-windows-20261014-r1` and `Pipeline4.2.8-windows-20261014-r2` roots untouched.
+   `Pipeline4.2.8-windows-20261014-r1`, `Pipeline4.2.8-windows-20261014-r2`, and
+   `Pipeline4.2.8-windows-20261014-r3` roots untouched.
 4. **Pre-Cutover Native Acceptance (`native_acceptance`):**
    Invokes `accept_428_native.py --mode accept --apply` under the new 4.2.8
    interpreter to verify canonical R5/R6 source repairs, replay the saved target-23
@@ -48,7 +49,7 @@ authority publication, and Warden cutover in one sitting:
    `SYSTEM`), and record sanitized pre-cutover acceptance evidence in the sitting directory.
 5. **Controller Quiescence & Stop (`idle` $\rightarrow$ `stop`):**
    Confirms two consecutive idle observations of the live controller on
-   `127.0.0.1:47824` (via `/health` routing counts on R4 or `/operator` on R6/R7), verifies process and parent process ownership (`S-1-5-18`),
+   `127.0.0.1:47824` (via `/health` routing counts on R4 or `/operator` on R6/R7/4.2.8), verifies process and parent process ownership (`S-1-5-18`),
    disables the logon trigger (or preserves 0-trigger R4 task state), stops `CoChem-4.2.7-Warden`, and verifies port `47824`
    is free.
 6. **Versioned SYSTEM State Migration (`migration`):**
@@ -56,12 +57,14 @@ authority publication, and Warden cutover in one sitting:
    against `C:\ProgramData\CoChemPipeline427\private`, preserving a full pre-cutover
    snapshot + SHA-256 inventory and verifying row/hash preservation across all
    existing 4.2.7 tables before applying additive 4.2.8 tables, and validating the
-   private receipt under `C:\Program Files\CoChem\Migration4.2.8-windows-20261014-v3`.
+   private receipt under `C:\Program Files\CoChem\Migration4.2.8-windows-20261014-v4`
+   (or skipping repeat migration when recovering from the already-migrated `Pipeline4.2.8-windows-20261014-r3` baseline).
 7. **Catalog Authority & Cutover (`cutover` $\rightarrow$ `catalog_publication`):**
-   Copies `proposal.json` and `pointer.json` to
-   `C:\Program Files\CoChem\RoutingCatalog4.2.8`, retargets `CoChem-4.2.7-Warden`
-   to `C:\Program Files\CoChem\Pipeline4.2.8-windows-20261014-r3`, starts the
-   4.2.8 controller (which records `mark_cutover_428` on startup), verifies `SYSTEM` process identity and health, ensures and re-enables the
+   Copies `proposal.json` and atomically replaces `current-request.json` via
+   `Set-428CatalogPointer` in `C:\Program Files\CoChem\RoutingCatalog4.2.8` (backing up
+   any prior pointer for pre-start rollback), retargets `CoChem-4.2.7-Warden`
+   to `C:\Program Files\CoChem\Pipeline4.2.8-windows-20261014-r4`, starts the
+   4.2.8 controller (which prewarms CLI binary digests and records `mark_cutover_428` on startup), verifies `SYSTEM` process identity and health, ensures and re-enables the
    `AETHERDESK\ansac` `PT1M` logon trigger, and waits for catalog publication (`PUBLISHED_IN_CALLER_TRANSACTION`
    or `ALREADY_PUBLISHED`).
 
@@ -75,7 +78,8 @@ authority publication, and Warden cutover in one sitting:
   or reused.
 - **Failure after stopping the live controller and before starting the new 4.2.8 controller (`migration`, `catalog_authority`, pre-start `cutover`):**
   `Restore-428BeforeStart` automatically runs `cochem_pipeline.migration_428 --rollback`
-  (if migration completed) to restore the byte-identical pre-cutover SQLite files,
+  (if migration ran in this sitting) to restore the byte-identical pre-cutover SQLite files,
+  restores any previous `current-request.json` catalog pointer via `Restore-428CatalogPointer`,
   restores the original `CoChem-4.2.7-Warden` XML and SDDL, restarts the previous
   runtime, and verifies `SYSTEM` health (`PREVIOUS_RUNTIME_RESTORED_HEALTH_VERIFIED`).
   If migration completion itself is uncertain, the script holds in the stopped state
@@ -88,18 +92,18 @@ authority publication, and Warden cutover in one sitting:
 
 ## 3. Read-Only Plan vs Owner Execution Commands
 
-- **Frozen source commit (`P428-SWARM` + Fable envelope replay + R4 post-reboot stopped-baseline/idle/migration fixes):** `0b046c6f907e17f538735151bb00d9168105bebf` (`0b046c6`)
-- **Immutable release bundle:** `C:\Users\ansac\CoChem427\r428-bundle-0b046c6` (prior bundles `r428-bundle-49d65d4`, `r428-bundle-4a87f33`, `r428-bundle-4cc3460`, `r428-bundle-b862701`, `r428-bundle-491e4a3`, `r428-bundle-4ddf611`, and `r428-bundle-ffe41ba` preserved intact)
-- **Launch manifest SHA-256:** `3205b61eafa30a5e09720b5d98e47e95a20c692ef9cdcd1ce6a036a94df1797c`
-- **Install manifest SHA-256:** `5a72414bd3ef2678fe5485a64bb36e2c020aff1c27709d7a3b8e9efd2f981f06`
+- **Frozen source commit (`P428-SWARM` + Fable envelope replay + R4/r3 recovery, 7% / 10 s rolling CPU window, prewarmed CLI binary digests, and catalog probe lease stability):** `3dab7f2375121e0bdb82c13dc3b0add9d45179bb` (`3dab7f2`)
+- **Immutable release bundle:** `C:\Users\ansac\CoChem427\r428-bundle-3dab7f2` (prior bundles `r428-bundle-49d65d4`, `r428-bundle-4a87f33`, `r428-bundle-4cc3460`, `r428-bundle-b862701`, `r428-bundle-491e4a3`, `r428-bundle-4ddf611`, `r428-bundle-ffe41ba`, and `r428-bundle-0b046c6` preserved intact)
+- **Launch manifest SHA-256:** `ac43248ab659e8597df38820c65c318cfeb724c7b43105ce89c39424cb277383`
+- **Install manifest SHA-256:** `fdf93bcbec72533eca5577b2bf5fded8da11dde38e71a13b79bd58af5ca40fa3`
 
 ### A. Read-Only Plan (Safe in Engineering / Non-Admin Sessions)
 
 ```powershell
 & "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive `
-  -File "C:\Users\ansac\CoChem427\r428-bundle-0b046c6\run_428_launch.ps1" `
-  -LaunchManifest "C:\Users\ansac\CoChem427\r428-bundle-0b046c6\launch-manifest.json" `
-  -LaunchManifestSha256 "3205b61eafa30a5e09720b5d98e47e95a20c692ef9cdcd1ce6a036a94df1797c"
+  -File "C:\Users\ansac\CoChem427\r428-bundle-3dab7f2\run_428_launch.ps1" `
+  -LaunchManifest "C:\Users\ansac\CoChem427\r428-bundle-3dab7f2\launch-manifest.json" `
+  -LaunchManifestSha256 "ac43248ab659e8597df38820c65c318cfeb724c7b43105ce89c39424cb277383"
 ```
 
 ### B. Single Owner Sitting Command (`P428-28`, 64-bit Administrator Windows PowerShell 5.1 as `AETHERDESK\ansac`)
@@ -108,9 +112,9 @@ See `docs/4.2.8/RELEASE_REVIEW.md` for the complete independent release-package 
 
 ```powershell
 & "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile `
-  -File "C:\Users\ansac\CoChem427\r428-bundle-0b046c6\run_428_launch.ps1" `
-  -LaunchManifest "C:\Users\ansac\CoChem427\r428-bundle-0b046c6\launch-manifest.json" `
-  -LaunchManifestSha256 "3205b61eafa30a5e09720b5d98e47e95a20c692ef9cdcd1ce6a036a94df1797c" `
+  -File "C:\Users\ansac\CoChem427\r428-bundle-3dab7f2\run_428_launch.ps1" `
+  -LaunchManifest "C:\Users\ansac\CoChem427\r428-bundle-3dab7f2\launch-manifest.json" `
+  -LaunchManifestSha256 "ac43248ab659e8597df38820c65c318cfeb724c7b43105ce89c39424cb277383" `
   -Apply
 ```
 
@@ -119,8 +123,9 @@ See `docs/4.2.8/RELEASE_REVIEW.md` for the complete independent release-package 
 - **Sanitized sitting status directory:**
   `C:\Program Files\CoChem\R428Sitting-windows-20261014-<guid>\status-*.json`
 - **Completion / hold receipts:**
-  - `C:\Program Files\CoChem\Pipeline4.2.8-windows-20261014-r3\r428-complete.json`
-  - `C:\Program Files\CoChem\Pipeline4.2.8-windows-20261014-r3\r428-held.json`
+  - `C:\Program Files\CoChem\Pipeline4.2.8-windows-20261014-r4\r428-complete.json`
+  - `C:\Program Files\CoChem\Pipeline4.2.8-windows-20261014-r4\r428-held.json`
 - **Protected migration evidence & pre-cutover backup:**
-  `C:\Program Files\CoChem\Migration4.2.8-windows-20261014-v3\migration-428.json`
+  `C:\Program Files\CoChem\Migration4.2.8-windows-20261014-v3\migration-428.json` (initial `-r3` migration) or `C:\Program Files\CoChem\Migration4.2.8-windows-20261014-v4\migration-428.json`
+
 
