@@ -281,12 +281,20 @@ class PlanningController:
         cancelled_jobs = set()
         if job_id:
             cancelled_jobs.add(job_id)
+        # A content reviewer or verification producer may no longer be the
+        # single progress-row job. Its captured task identity is authoritative.
+        with self.store._connection() as conn:
+            cancelled_jobs.update(row[0] for row in conn.execute(
+                "SELECT job_id FROM pipeline_jobs WHERE kind='TASK_PLAN' "
+                "AND json_extract(payload_json,'$.planning_intent.task_id')=?", (task_id,)))
         if self.release_runtime is not None and hasattr(self.release_runtime, 'board'):
             snap = self.release_runtime.board.board_status(task_id)
             for node in list(snap.get('nodes') or ()) + list(snap.get('batches') or ()):
                 if node.get('job_id'):
                     cancelled_jobs.add(node['job_id'])
         targets = [(jid, 'job') for jid in sorted(cancelled_jobs)]
+        if self.artifact_runtime is not None:
+            targets.append((task_id, 'artifacts'))
         research_id = (current.get('controller') or {}).get('research_id')
         if research_id:
             targets.append((research_id, 'research'))
@@ -309,6 +317,10 @@ class PlanningController:
                 if target['kind'] == 'job':
                     job = self.store.get(target['target_id'])
                     self.store.cancel_workflow(job['workflow_id'])
+                elif target['kind'] == 'artifacts':
+                    if self.artifact_runtime is None:
+                        raise RuntimeError('Artifact cancellation port is not configured')
+                    self.artifact_runtime.cancel_task(target['target_id'])
                 elif self.research_runtime is not None:
                     self.research_runtime.cancel(target['target_id'])
                 else:

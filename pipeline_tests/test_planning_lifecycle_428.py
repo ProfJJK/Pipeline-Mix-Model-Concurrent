@@ -68,6 +68,31 @@ def test_failed_cancellation_is_durable_and_reconciles_after_restart(pump, monke
         assert conn.execute('SELECT count(*) FROM planning428_cancel_targets WHERE done=0').fetchone()[0] == 0
 
 
+def test_artifact_cancellation_is_durable_and_retries_after_restart(pump):
+    called = []
+    def interrupted(task_id):
+        called.append(task_id)
+        raise OSError('private failure')
+    pump.artifact_runtime = SimpleNamespace(cancel_task=interrupted)
+    assert pump.cancel('task')['controller']['status'] == 'CANCELLATION_PENDING'
+    with pump.journal._write() as conn:
+        row = conn.execute("SELECT * FROM planning428_cancel_targets WHERE kind='artifacts'").fetchone()
+        assert row['done'] == 0 and row['error_type'] == 'OSError'
+    reopened = PlanningController(pump.journal, pump.store, clock=lambda: 1000.,
+        artifact_runtime=SimpleNamespace(cancel_task=lambda task_id: called.append(task_id)))
+    reopened.step()
+    assert called == ['task', 'task']
+    assert reopened.task_status('task')['controller']['status'] == 'CANCELLED'
+
+
+def test_cancellation_finds_captured_task_jobs_not_in_progress_row(pump):
+    poll(pump)
+    job = pump.gateway.submit('task')
+    pump._record('task', pump.journal.status('task')['journal_version'], 'WAITING_ON_REVIEW')
+    assert pump.cancel('task')['controller']['status'] == 'CANCELLED'
+    assert pump.store.get(job['job_id'])['status'] == 'FAILED'
+
+
 def test_completed_simple_task_enqueues_once_without_claiming_audit_pass(simple_env, tmp_path):
     controller, execution, journal, store = simple_env
     doc = _advance_to_ready(controller)

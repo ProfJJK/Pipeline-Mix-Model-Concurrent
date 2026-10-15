@@ -22,7 +22,7 @@ from pipeline_tests.test_task_execution_428 import simple_env, _advance_to_ready
 
 @pytest.fixture
 def staged(simple_env, tmp_path, monkeypatch):
-    controller, _, journal, store = simple_env
+    controller, execution, journal, store = simple_env
     project = CodingProject.from_dict('fixture-project', dict(repository=str(tmp_path / 'repo'),
         branch='main', allowed_paths=['src'], test_paths=['tests']))
     baseline = {'src/value.py': b'value = 0\n'}
@@ -40,6 +40,7 @@ def staged(simple_env, tmp_path, monkeypatch):
                                private_root=tmp_path, operator_name='fixture', lease_seconds=30))
     artifacts = TaskArtifactRuntime(runtime)
     artifacts.prepare_task('task', 'fixture-project')
+    execution.artifact_runtime = artifacts
     document = _advance_to_ready(controller, 'task', tier=2)
     controller.test_clock[0] += 2; controller.step()
     node = store.claim('fixture', allowed_kinds=['TASK_PLAN'], worker_slot='slot1', requires_cleanup=True)
@@ -135,6 +136,51 @@ def test_staging_red_then_green_to_durable_controller_completion(staged, monkeyp
         assert conn.execute('SELECT count(*) FROM coding_attempt_evidence').fetchone()[0] == 2
     reopened = TaskArtifactRuntime(runtime)
     assert reopened.ensure_verification(producer, requirements) == checkpoint
+
+
+def test_task_cancellation_fences_claim_and_preserves_cleanup_barrier(staged, monkeypatch):
+    artifacts, runtime, producer, requirements, _ = staged
+    first = artifacts.ensure_verification(producer, requirements)
+    node, (output, receipt, evidence), _ = verify_next(artifacts, runtime.store, monkeypatch)
+    artifacts.cancel_task('task')
+    with pytest.raises(ValueError):
+        runtime.store.complete_task_verification(node['job_id'], node['attempt_id'], node['fencing_token'],
+                                                 output, receipt, evidence=evidence)
+    with runtime.store._connection() as conn:
+        assert conn.execute('SELECT cleared_at FROM pipeline_execution_cleanup WHERE job_id=?',
+                            (node['job_id'],)).fetchone()[0] is None
+        assert conn.execute('SELECT count(*) FROM coding_attempt_evidence').fetchone()[0] == 1
+    assert runtime.store.get(first['job_id'])['status'] == 'FAILED'
+    assert runtime.store.get(producer['job_id'])['status'] == 'COMPLETED'
+    reopened = TaskArtifactRuntime(runtime)
+    assert reopened.ensure_verification(producer, requirements)['status'] == 'TASK_VERIFICATION_CANCELLED'
+    assert reopened.cancel_task('task')['status'] == 'TASK_VERIFICATION_CANCELLED'
+    with runtime.store._connection() as conn:
+        assert conn.execute("SELECT count(*) FROM pipeline_jobs WHERE kind='TASK_TEST'").fetchone()[0] == 1
+
+
+def test_cancel_tombstone_precedes_fallible_workflow_cancellation(staged, monkeypatch):
+    artifacts, runtime, producer, requirements, _ = staged
+    first = artifacts.ensure_verification(producer, requirements)
+    original = runtime.store.cancel_workflow
+    monkeypatch.setattr(runtime.store, 'cancel_workflow', lambda *_: (_ for _ in ()).throw(OSError('interrupted')))
+    with pytest.raises(OSError):
+        artifacts.cancel_task('task')
+    assert artifacts.ensure_verification(producer, requirements)['status'] == 'TASK_VERIFICATION_CANCELLED'
+    monkeypatch.setattr(runtime.store, 'cancel_workflow', original)
+    TaskArtifactRuntime(runtime).cancel_task('task')
+    assert runtime.store.get(first['job_id'])['status'] == 'FAILED'
+    with pytest.raises(sqlite3.IntegrityError, match='immutable'):
+        with runtime.store._write() as conn:
+            conn.execute('DELETE FROM task428_cancelled_tasks')
+
+
+def test_cancel_before_first_verification_never_materializes_a_child(staged):
+    artifacts, runtime, producer, requirements, _ = staged
+    artifacts.cancel_task('task')
+    assert artifacts.ensure_verification(producer, requirements)['status'] == 'TASK_VERIFICATION_CANCELLED'
+    with runtime.store._connection() as conn:
+        assert not conn.execute("SELECT 1 FROM pipeline_jobs WHERE kind IN ('TASK_VERIFY','TASK_TEST')").fetchone()
 
 
 @pytest.mark.parametrize('cancel,cleanup', [(True, True), (False, False)])

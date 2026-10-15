@@ -18,6 +18,7 @@ from .coding import (CodingProject, bind_test_identities, digest, manifest,
 from .task_artifacts_428 import stage_fragment_workspace, validate_fragment_deliverables
 from .task_verification_428 import (requirement_test_names, verify_artifact_evidence,
                                     verify_task_test_evidence)
+from .workflow_428 import _id
 
 
 class TaskArtifactRuntime:
@@ -34,6 +35,12 @@ class TaskArtifactRuntime:
                     evidence_json TEXT NOT NULL, PRIMARY KEY(job_id,attempt_id,fencing_token));
                 CREATE INDEX IF NOT EXISTS task428_fragment_lookup ON
                     task428_fragment_attempts(task_id,microtask_id,generation);
+                CREATE TABLE IF NOT EXISTS task428_cancelled_tasks(
+                    task_id TEXT PRIMARY KEY, reason TEXT NOT NULL);
+                CREATE TRIGGER IF NOT EXISTS task428_cancelled_no_update BEFORE UPDATE ON task428_cancelled_tasks
+                BEGIN SELECT RAISE(ABORT,'task cancellation is immutable'); END;
+                CREATE TRIGGER IF NOT EXISTS task428_cancelled_no_delete BEFORE DELETE ON task428_cancelled_tasks
+                BEGIN SELECT RAISE(ABORT,'task cancellation is immutable'); END;
                 CREATE TRIGGER IF NOT EXISTS task428_source_no_update BEFORE UPDATE ON task428_source_captures
                 BEGIN SELECT RAISE(ABORT,'task source capture is immutable'); END;
                 CREATE TRIGGER IF NOT EXISTS task428_source_no_delete BEFORE DELETE ON task428_source_captures
@@ -43,6 +50,25 @@ class TaskArtifactRuntime:
                 CREATE TRIGGER IF NOT EXISTS task428_fragment_no_delete BEFORE DELETE ON task428_fragment_attempts
                 BEGIN SELECT RAISE(ABORT,'task fragment evidence is immutable'); END;
             ''')
+
+    def cancel_task(self, task_id):
+        """Fence verification roots durably without terminating any process.
+
+        The tombstone and new-verifier insertion use the same database lock.
+        An interruption leaves a retryable controller cancellation obligation,
+        while the tombstone already prevents additional verification dispatch.
+        """
+        _id(task_id)
+        with self.store._write() as conn:
+            conn.execute('INSERT OR IGNORE INTO task428_cancelled_tasks VALUES(?,?)',
+                         (task_id, 'Cancelled by operator'))
+            roots = [row[0] for row in conn.execute(
+                "SELECT job_id FROM pipeline_jobs WHERE kind='MACRO_PLANNING_REQUEST' "
+                "AND json_extract(payload_json,'$.workflow_type')='task_verification428' "
+                "AND json_extract(payload_json,'$.task_id')=? ORDER BY job_id", (task_id,))]
+        for root in roots:
+            self.store.cancel_workflow(root)
+        return dict(status='TASK_VERIFICATION_CANCELLED', task_id=task_id)
 
     def prepare_task(self, task_id, project_id):
         with self.store._connection() as conn:
@@ -268,6 +294,9 @@ class TaskArtifactRuntime:
         prerequisite = None
         for phase, phase_files in phases:
             with self.store._write() as conn:
+                if conn.execute('SELECT 1 FROM task428_cancelled_tasks WHERE task_id=?',
+                                (intent['task_id'],)).fetchone():
+                    return dict(status='TASK_VERIFICATION_CANCELLED', task_id=intent['task_id'])
                 payload = {**base, 'test_phase': phase, 'prerequisite_job_id': prerequisite,
                            'source_snapshot_sha256': self.store._snapshot(conn, phase_files)}
                 key = digest(payload)
