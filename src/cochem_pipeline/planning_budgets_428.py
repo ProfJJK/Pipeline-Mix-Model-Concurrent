@@ -53,8 +53,11 @@ def _schema(conn):
                  'ON planning428_budget_members(lineage_root)')
     conn.execute('''CREATE TABLE IF NOT EXISTS planning428_budget_ledger_bindings(
         lineage_root TEXT PRIMARY KEY, ledger_path TEXT NOT NULL)''')
+    conn.execute('''CREATE TABLE IF NOT EXISTS planning428_budget_control_parents(
+        lineage_root TEXT PRIMARY KEY, aggregate_root TEXT NOT NULL,
+        CHECK(lineage_root != aggregate_root))''')
     for table in ('planning428_budget_members', 'planning428_budget_captures',
-                  'planning428_budget_ledger_bindings'):
+                  'planning428_budget_ledger_bindings', 'planning428_budget_control_parents'):
         for operation in ('UPDATE', 'DELETE'):
             conn.execute(f'''CREATE TRIGGER IF NOT EXISTS {table}_{operation.lower()}_immutable
                 BEFORE {operation} ON {table} BEGIN
@@ -105,6 +108,43 @@ def _map(conn, job_id, root):
         conn.execute('INSERT INTO planning428_budget_members VALUES(?,?)', (job_id, root))
 
 
+def _budget_group(conn, root):
+    present = conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' "
+                           "AND name='planning428_budget_control_parents'").fetchone()
+    if not present:
+        return [root]
+    parent = conn.execute('SELECT aggregate_root FROM planning428_budget_control_parents '
+                          'WHERE lineage_root=?', (root,)).fetchone()
+    aggregate = parent[0] if parent else root
+    return [aggregate, *(row[0] for row in conn.execute(
+        'SELECT lineage_root FROM planning428_budget_control_parents WHERE aggregate_root=?', (aggregate,)))]
+
+
+def _bind_control_budget(conn, root, aggregate_root, payload):
+    """Controller-only economic link; never merges or reopens quality ledgers."""
+    old = conn.execute('SELECT aggregate_root FROM planning428_budget_control_parents '
+                       'WHERE lineage_root=?', (root,)).fetchone()
+    if old:
+        if old[0] != aggregate_root:
+            raise LineageBudgetHold('control_budget_parent_changed')
+        return
+    intent = payload['planning_intent']
+    state = intent.get('task') or {}
+    declared = state.get('fracture_promotion') or state.get('fracture_scope') or {}
+    row = conn.execute('SELECT state_json FROM planning_budget_ledger.task428_lineages WHERE root=?',
+                       (aggregate_root,)).fetchone()
+    parent = json.loads(row[0]) if row else {}
+    if (aggregate_root == root or declared.get('lineage_root') != aggregate_root
+            or intent['stage'] not in ('SRS', 'REVISING_SRS', 'PLAN_REVIEW', 'WBS', 'FRACTURE_PLAN', 'FRACTURE_REVIEW')
+            or parent.get('failures') not in (10, 20) or parent.get('stage') != 'PIVOT_RESEARCH'
+            or not parent.get('research_due') or len(_budget_group(conn, aggregate_root)) > 32
+            or _budget_group(conn, aggregate_root)[0] != aggregate_root):
+        raise LineageBudgetHold('control_budget_parent_not_due')
+    if conn.execute('SELECT 1 FROM planning428_budget_members WHERE lineage_root=?', (root,)).fetchone():
+        raise LineageBudgetHold('control_budget_parent_requires_fresh_lineage')
+    conn.execute('INSERT INTO planning428_budget_control_parents VALUES(?,?)', (root, aggregate_root))
+
+
 def _compiled_fracture_member(conn, payload, member, root):
     """Lower fragment tiers come from the controller's compiled graph only."""
     node = payload.get('microtask_node') or {}
@@ -153,7 +193,7 @@ def _compiled_fracture_member(conn, payload, member, root):
     return row['role'] == 'implementation' and not row['escalated_scope']
 
 
-def capture_lineage_budget(conn, job_id, payload, policy, *, attempt_ledger, now=None):
+def capture_lineage_budget(conn, job_id, payload, policy, *, attempt_ledger, now=None, aggregate_lineage_root=None):
     """Capture remaining finite limits once; never use zero to mean exhausted.
 
     max_dispatches=None means unlimited, matching routing_store's SQL capture.
@@ -185,6 +225,9 @@ def capture_lineage_budget(conn, job_id, payload, policy, *, attempt_ledger, now
     root = _resolve_root(conn, member)
     if root is None:
         raise LineageBudgetHold('attempt_lineage_not_initialized')
+    if aggregate_lineage_root is not None:
+        _bind_control_budget(conn, root, aggregate_lineage_root, payload)
+    group = _budget_group(conn, root)
     ledger_path = str(Path(ledger.path).resolve())
     binding = conn.execute('SELECT ledger_path FROM planning428_budget_ledger_bindings '
                            'WHERE lineage_root=?', (root,)).fetchone()
@@ -219,13 +262,14 @@ def capture_lineage_budget(conn, job_id, payload, policy, *, attempt_ledger, now
     for historical in rows:
         old_payload = json.loads(historical['payload_json'])
         old_member = PlanningOutcomeRuntime.lineage_for_job(task_id, old_payload)
-        if old_member and _resolve_root(conn, old_member) == root:
-            _map(conn, historical['job_id'], root)
+        old_root = _resolve_root(conn, old_member) if old_member else None
+        if old_root in group:
+            _map(conn, historical['job_id'], old_root)
     history = conn.execute('''SELECT r.*,c.total_dispatch_limit AS captured_total,
         c.job_id AS captured_job FROM planning428_budget_members m
         JOIN pipeline_routing_jobs r USING(job_id)
         LEFT JOIN planning428_budget_captures c USING(job_id)
-        WHERE m.lineage_root=?''', (root,)).fetchall()
+        WHERE m.lineage_root IN (''' + ','.join('?' for _ in group) + ')', group).fetchall()
     spent = sum(row['dispatches'] for row in history)
     ceilings = [snapshot.get('max_dispatches', 0) or None]
     ceilings.extend(row['captured_total'] if row['captured_job'] else row['max_dispatches'] for row in history)
@@ -274,14 +318,16 @@ def lineage_unavailability(conn, job_id, now):
                           (job_id,)).fetchone()
     if member is None:
         return None
+    group = _budget_group(conn, member[0])
+    placeholders = ','.join('?' for _ in group)
     limits = conn.execute('SELECT min(total_dispatch_limit),min(expires_at) '
-        'FROM planning428_budget_captures WHERE lineage_root=?', (member[0],)).fetchone()
+        f'FROM planning428_budget_captures WHERE lineage_root IN ({placeholders})', group).fetchone()
     if limits[1] is not None and now >= limits[1]:
         return 'lineage_routing_time_exhausted'
     if limits[0] is not None:
         spent = conn.execute('SELECT coalesce(sum(r.dispatches),0) '
             'FROM planning428_budget_members m JOIN pipeline_routing_jobs r USING(job_id) '
-            'WHERE m.lineage_root=?', (member[0],)).fetchone()[0]
+            f'WHERE m.lineage_root IN ({placeholders})', group).fetchone()[0]
         if spent >= limits[0]:
             return 'lineage_dispatch_budget_exhausted'
     return _live_quality_hold(conn, job_id, member[0])

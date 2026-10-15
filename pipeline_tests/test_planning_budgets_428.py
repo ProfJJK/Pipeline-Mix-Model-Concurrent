@@ -31,7 +31,7 @@ def env(pump, tmp_path, monkeypatch):
     return dict(store=pump.store, original=original, ledger=ledger, root=root, clock=clock)
 
 
-def generation(env, name, *, cap=0, seconds=0, member=None, complexity=None, first_family=None):
+def generation(env, name, *, cap=0, seconds=0, member=None, complexity=None, first_family=None, aggregate=None):
     payload = deepcopy(env['original']['payload'])
     intent = payload['planning_intent']
     intent['physical_retry'] = name
@@ -39,6 +39,8 @@ def generation(env, name, *, cap=0, seconds=0, member=None, complexity=None, fir
         intent['attempt_lineage_id'] = member
     if complexity:
         intent['complexity'] = complexity
+    if aggregate:
+        intent['task']['fracture_promotion'] = {'lineage_root': aggregate}
     if first_family:
         intent['candidate_profiles'] = [key for key, model in payload['task_catalog']['models'].items()
                                         if model['family'] == first_family][:1]
@@ -47,7 +49,7 @@ def generation(env, name, *, cap=0, seconds=0, member=None, complexity=None, fir
     job_id, root_id = 'job-'+name, 'flow-'+name
     with env['store']._write() as conn:
         budget = capture_lineage_budget(conn, job_id, payload, policy,
-            attempt_ledger=env['ledger'], now=env['clock'][0])
+            attempt_ledger=env['ledger'], now=env['clock'][0], aggregate_lineage_root=aggregate)
         env['store']._insert(conn, root_id, root_id, None, 'MACRO_PLANNING_REQUEST', 'IN_PROGRESS', {})
         routes.capture_workflow(conn, root_id, policy, max_dispatches=budget.max_dispatches)
         env['store']._insert(conn, job_id, root_id, root_id, 'TASK_PLAN', 'PENDING', payload,
@@ -205,6 +207,45 @@ def test_fracture_siblings_share_live_aggregate_guard(env):
         with pytest.raises(LineageBudgetHold, match='lineage_dispatch_budget_exhausted'):
             routes.reserve(conn, second, {}, 'slot1')
     assert env['store'].get(second['job_id'])['routing']['dispatches'] == 0
+
+
+@pytest.mark.parametrize('boundary', [10, 20])
+def test_promotion_controls_share_dispatch_and_time_without_resuming_quality(env, boundary):
+    first, initial = generation(env, 'before-promotion', cap=30, seconds=100)
+    spend(env, first['job_id'], boundary)
+    with env['ledger']._write() as conn:
+        state = env['ledger']._read(conn, env['root'])
+        state.update(stage='PIVOT_RESEARCH', failures=boundary, research_due=True)
+        env['ledger']._save(conn, state)
+    env['ledger'].create('control', 4)
+    env['clock'][0] += 20
+    control, budget = generation(env, 'control-a', cap=40, seconds=1000, member='control', aggregate=env['root'])
+    assert budget.max_dispatches == 30-boundary and budget.expires_at == initial.expires_at
+    with env['store']._write() as conn:
+        assert lineage_unavailability(conn, first['job_id'], env['clock'][0]) == 'quality_research_or_lock_required'
+        assert lineage_unavailability(conn, control['job_id'], env['clock'][0]) is None
+    spend(env, control['job_id'], 2)
+    env['ledger'] = AttemptLedger(env['ledger'].path)
+    next_job, later = generation(env, 'control-b', member='control', aggregate=env['root'])
+    assert later.max_dispatches == 28-boundary and later.expires_at == initial.expires_at
+    assert env['ledger'].status(env['root'])['failures'] == boundary
+    spend(env, next_job['job_id'], 28-boundary)
+    with env['store']._write() as conn:
+        assert lineage_unavailability(conn, control['job_id'], env['clock'][0]) == 'lineage_dispatch_budget_exhausted'
+        with pytest.raises(LineageBudgetHold, match='dispatch_budget'):
+            routes.reserve(conn, control, {}, 'slot1')
+    assert env['ledger'].status('control')['failures'] == 0
+
+
+def test_control_parent_requires_due_boundary_and_cannot_rebind(env):
+    env['ledger'].create('control', 4)
+    with pytest.raises(LineageBudgetHold, match='parent_not_due'):
+        generation(env, 'too-early', member='control', aggregate=env['root'])
+    quality_failures(env, 10)
+    generation(env, 'bound', member='control', aggregate=env['root'])
+    env['ledger'].create('other', 4)
+    with pytest.raises(LineageBudgetHold, match='parent_changed'):
+        generation(env, 'rebound', member='control', aggregate='other')
 
 
 @pytest.mark.parametrize('stage,failures', [('PIVOT_RESEARCH',10),('PIVOT_RESEARCH',20),('LOCKED',30)])
