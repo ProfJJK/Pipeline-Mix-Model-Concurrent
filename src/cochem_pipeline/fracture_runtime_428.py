@@ -278,14 +278,6 @@ class FractureRuntime:
             "children": [c["id"] for c in enriched_children],
         }
 
-        updated_state = self.ledger.fracture_lineage(
-            lineage_root,
-            dossier["research"],
-            proposal,
-            dossier["dossier_sha256"],
-            child_models=child_models,
-        )
-
         outbox_payload = {
             "fracture_id": fracture_id,
             "lineage_root": lineage_root,
@@ -303,6 +295,12 @@ class FractureRuntime:
         }
         now = float(self.clock())
         with self.ledger._write() as conn:
+            # Membership, inherited counters and the complete child graph must
+            # commit together. A crash cannot leave READY members without a
+            # recoverable graph outbox.
+            updated_state = self.ledger.fracture_lineage(
+                lineage_root, dossier["research"], proposal, dossier["dossier_sha256"],
+                child_models=child_models, _connection=conn)
             conn.execute(
                 "INSERT OR REPLACE INTO task428_fracture_outbox VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
                 (

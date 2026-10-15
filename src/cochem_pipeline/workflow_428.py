@@ -8,7 +8,7 @@ attest that a search, a model call or a human approval happened.
 """
 from __future__ import annotations
 
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from copy import deepcopy
 import json
 from pathlib import Path
@@ -554,7 +554,7 @@ class AttemptLedger:
             self._save(conn, state)
             return state
 
-    def fracture_lineage(self, root, research, proposal, evidence_sha256, *, child_models=None):
+    def fracture_lineage(self, root, research, proposal, evidence_sha256, *, child_models=None, _connection=None):
         """Register a fracture child graph into the shared lineage without resetting quality budgets (`P428-17`)."""
         research = validate_research(research)
         _sha(evidence_sha256)
@@ -572,7 +572,9 @@ class AttemptLedger:
             raise ValueError('Invalid fracture membership')
         for child in children:
             _id(child)
-        with self._write() as conn:
+        if _connection is not None and not _connection.in_transaction:
+            raise ValueError('Fracture requires the caller ledger write transaction')
+        with (self._write() if _connection is None else nullcontext(_connection)) as conn:
             state = self._read(conn, root)
             if state['root'] != root or state['failures'] >= 30 or state['stage'] == 'LOCKED':
                 raise ValueError('Lineage is locked or invalid for fracture')
