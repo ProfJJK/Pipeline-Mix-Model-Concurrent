@@ -221,3 +221,44 @@ def test_external_dependency_helper_rejects_uncaptured_input(env):
     altered['microtask_node']['fracture_external_predecessors'] = {'unrelated': {'artifact_sha256': '0'*64}}
     with pytest.raises(ValueError, match='capture changed'):
         validated_external_predecessors(planner, altered)
+
+
+def test_registered_physical_retry_reopens_exact_children_once(env):
+    from types import SimpleNamespace
+    from cochem_pipeline.task_routing import digest
+    _, boundary, _, _ = prepare_fracture(env)
+    attach_board(env)
+    store, _, ledger, board, outcomes, _ = env
+    for _ in range(4):
+        board.materialize('task')
+        job = store.claim('inert-child', worker_slot='slot1', allowed_kinds=['TASK_PLAN'], requires_cleanup=True)
+        _complete_claimed_job_for_node(store, job, job['payload']['microtask_node'])
+        outcomes.reconcile_task('task')
+    before = board.materialize('task')
+    assembly = next(n for n in before['nodes'] if n['lineage_kind'] == 'FAILURE_FRACTURE' and n['role'] == 'assembly')
+    final = next(n for n in before['nodes'] if n['lineage_kind'] == 'FAILURE_FRACTURE' and n['role'] == 'final_test')
+    producer = store.get(final['job_id'])
+    root = boundary['lineage_root']
+    item = dict(retry_generation=1, producer_job_id=producer['job_id'], verification_job_id='physical-rejection',
+        lineage_root=final['attempt_lineage_id'], failure=dict(category='content_review', test_phase='content',
+            reason='REQUIREMENTS_NOT_SATISFIED', evidence_sha256=digest('verified-rejection')))
+    profile = producer['payload']['task_catalog']['models'][producer['payload']['planning_intent']['candidate_profiles'][0]]
+    outcomes.accounting.start_board_attempt(producer['job_id'], producer['attempt_id'], producer['fencing_token'],
+        lineage_root=root, member_id=final['attempt_lineage_id'], model_family=profile['family'], complexity=final['complexity'])
+    outcomes.accounting.record_board_outcome(producer['job_id'], producer['attempt_id'], producer['fencing_token'],
+        category='quality_failure', evidence_sha256=digest(item))
+    board.artifact_runtime = SimpleNamespace(retry_feedback=lambda task, microtask: item if microtask == final['microtask_id'] else None,
+        execution_context=lambda payload: {}, fracture_join=lambda *args: dict(status='WAITING_FOR_VERIFICATION'))
+    after = board.materialize('task')
+    repaired = next(n for n in after['nodes'] if n['microtask_id'] == assembly['microtask_id'])
+    assert repaired['status'] == 'DISPATCHED' and repaired['job_id'] != assembly['job_id']
+    assert board.fracture_runtime.get_fracture_child(assembly['microtask_id'])['status'] == 'READY'
+    assert board.fracture_runtime.get_fracture_child(final['microtask_id'])['status'] == 'BLOCKED_DAG'
+    assert ledger.status(root)['failures'] == 11
+    assert board.materialize('task')['nodes'] == after['nodes']
+    job = store.claim('inert-repair', worker_slot='slot1', allowed_kinds=['TASK_PLAN'], requires_cleanup=True)
+    _complete_claimed_job_for_node(store, job, job['payload']['microtask_node'])
+    after = board.materialize('task')
+    final_retry = next(n for n in after['nodes'] if n['microtask_id'] == final['microtask_id'])
+    assert final_retry['status'] == 'DISPATCHED' and final_retry['job_id'] != final['job_id']
+    assert ledger.status(root)['failures'] == 11

@@ -742,7 +742,7 @@ class MicrotaskBoardRuntime:
                 accounted = conn.execute("SELECT lineage_root FROM attempt428_outbox WHERE job_id=? "
                     "AND attempt_id=? AND fencing_token=? AND status='RECONCILED' AND staged_outcome='quality_failure'",
                     (producer['job_id'], producer['attempt_id'], producer['fencing_token'])).fetchone()
-            if accounted is None or accounted['lineage_root'] != feedback['lineage_root']:
+            if accounted is None or accounted['lineage_root'] != self.attempt_accounting.ledger.status(feedback['lineage_root'])['root']:
                 continue
             if self.attempt_accounting.ledger.status(accounted['lineage_root'])['stage'] != 'READY':
                 continue
@@ -750,7 +750,9 @@ class MicrotaskBoardRuntime:
             affected = {final['microtask_id']}
             if code_repair:
                 assembly = {n['microtask_id'] for n in nodes if n['role'] == 'assembly'
-                            and n['microtask_id'] in final['ancestors']}
+                            and n['microtask_id'] in final['ancestors']
+                            and (not final.get('fracture_context') or
+                                 n.get('fracture_context', {}).get('fracture_id') == final['fracture_context']['fracture_id'])}
                 if not assembly:
                     raise ValueError('Failed final verification has no assigned assembly ancestor')
                 affected |= assembly
@@ -782,11 +784,13 @@ class MicrotaskBoardRuntime:
             use_swarm_batches = False
         ordered_nodes = self._topological_nodes(compiled_nodes)
         recovery = self._physical_recovery_contexts(task_id, ordered_nodes)
+        from .fracture_recovery_428 import reopen_physical_children
+        reopen_physical_children(self, ordered_nodes, recovery)
         for node in ordered_nodes:
             context = recovery.get(node['microtask_id'])
             if context is not None:
                 node['physical_retry'] = context
-                if node['role'] == 'assembly':
+                if node['role'] == 'assembly' and not node.get('fracture_context'):
                     # Assembly can repair its assigned implementation fragments;
                     # test ownership stays with final_test and sealed tests persist.
                     node['deliverables'] = sorted(set(node['deliverables']).union(*(
