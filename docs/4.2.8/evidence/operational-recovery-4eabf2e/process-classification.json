@@ -1,0 +1,225 @@
+{
+  "schema": "cochem-428-recovery-process-classification-read-only/1",
+  "source_commit": "4eabf2e9e385cefd2204559eeb4cc355e9b17b6b",
+  "launcher_sha256": "c7234bfc529d4132486114796ad284b6364103713b77871b4f0c16f7d3b90ea6",
+  "captured_utc": "2026-10-15T21:32:24.8545193Z",
+  "processes_inspected": 526,
+  "modern_mcp": 20,
+  "legacy_mcp": 4,
+  "rejected_count": 2,
+  "accepted": [
+    {
+      "pid": 14332,
+      "parent_pid": 26328,
+      "name": "python.exe",
+      "reason": "PROTECTED_PYTHON",
+      "command_sha256": "c6f8806ac97d2cb9fe07ee3b23e04090e73f9c468a7f5e4e79080ce71003e633",
+      "role": "legacy_mcp"
+    },
+    {
+      "pid": 25976,
+      "parent_pid": 26328,
+      "name": "python.exe",
+      "reason": "PROTECTED_PYTHON",
+      "command_sha256": "eedfe2db242aea18d8f2bc946fd0f4cc37b598e814c900ee495f3ddabcdcaf45",
+      "role": "legacy_mcp"
+    },
+    {
+      "pid": 24200,
+      "parent_pid": 14332,
+      "name": "python.exe",
+      "reason": "PROTECTED_PYTHON",
+      "command_sha256": "52607ade5390b19d05282a7feb26071454a59032d1fc69c2217475bbc205c42b",
+      "role": "legacy_mcp"
+    },
+    {
+      "pid": 23904,
+      "parent_pid": 25976,
+      "name": "python.exe",
+      "reason": "PROTECTED_PYTHON",
+      "command_sha256": "dec2c5e8bb0b4d7820bc32f5ac9cb51137f825f96bae083e13f2eadc8f4c60be",
+      "role": "legacy_mcp"
+    },
+    {
+      "pid": 24060,
+      "parent_pid": 26328,
+      "name": "python.exe",
+      "reason": "PROTECTED_PYTHON",
+      "command_sha256": "6119e3f1d4ee3bd6802ee2d05c3bca418a33a3120a06dd128744997f78ffa70e",
+      "role": "modern_mcp"
+    },
+    {
+      "pid": 24556,
+      "parent_pid": 24060,
+      "name": "python.exe",
+      "reason": "PROTECTED_PYTHON",
+      "command_sha256": "a48bf2be5353afb0f064b0866d091e61b9ba25189d332ad1060ded7e2350cfcc",
+      "role": "modern_mcp"
+    },
+    {
+      "pid": 30820,
+      "parent_pid": 40440,
+      "name": "python.exe",
+      "reason": "PROTECTED_PYTHON",
+      "command_sha256": "6119e3f1d4ee3bd6802ee2d05c3bca418a33a3120a06dd128744997f78ffa70e",
+      "role": "modern_mcp"
+    },
+    {
+      "pid": 30868,
+      "parent_pid": 30820,
+      "name": "python.exe",
+      "reason": "PROTECTED_PYTHON",
+      "command_sha256": "a48bf2be5353afb0f064b0866d091e61b9ba25189d332ad1060ded7e2350cfcc",
+      "role": "modern_mcp"
+    },
+    {
+      "pid": 37524,
+      "parent_pid": 40440,
+      "name": "python.exe",
+      "reason": "PROTECTED_PYTHON",
+      "command_sha256": "6119e3f1d4ee3bd6802ee2d05c3bca418a33a3120a06dd128744997f78ffa70e",
+      "role": "modern_mcp"
+    },
+    {
+      "pid": 28956,
+      "parent_pid": 37524,
+      "name": "python.exe",
+      "reason": "PROTECTED_PYTHON",
+      "command_sha256": "a48bf2be5353afb0f064b0866d091e61b9ba25189d332ad1060ded7e2350cfcc",
+      "role": "modern_mcp"
+    },
+    {
+      "pid": 40224,
+      "parent_pid": 29072,
+      "name": "python.exe",
+      "reason": "PROTECTED_PYTHON",
+      "command_sha256": "b11677d59c0928a73b11c4174b510c68f6ff37286e25cf8f426a24abc395333e",
+      "role": "modern_mcp"
+    },
+    {
+      "pid": 41792,
+      "parent_pid": 40224,
+      "name": "python.exe",
+      "reason": "PROTECTED_PYTHON",
+      "command_sha256": "a48bf2be5353afb0f064b0866d091e61b9ba25189d332ad1060ded7e2350cfcc",
+      "role": "modern_mcp"
+    },
+    {
+      "pid": 20592,
+      "parent_pid": 29072,
+      "name": "python.exe",
+      "reason": "PROTECTED_PYTHON",
+      "command_sha256": "b11677d59c0928a73b11c4174b510c68f6ff37286e25cf8f426a24abc395333e",
+      "role": "modern_mcp"
+    },
+    {
+      "pid": 6860,
+      "parent_pid": 29072,
+      "name": "python.exe",
+      "reason": "PROTECTED_PYTHON",
+      "command_sha256": "b11677d59c0928a73b11c4174b510c68f6ff37286e25cf8f426a24abc395333e",
+      "role": "modern_mcp"
+    },
+    {
+      "pid": 30860,
+      "parent_pid": 29072,
+      "name": "python.exe",
+      "reason": "PROTECTED_PYTHON",
+      "command_sha256": "b11677d59c0928a73b11c4174b510c68f6ff37286e25cf8f426a24abc395333e",
+      "role": "modern_mcp"
+    },
+    {
+      "pid": 40076,
+      "parent_pid": 20592,
+      "name": "python.exe",
+      "reason": "PROTECTED_PYTHON",
+      "command_sha256": "a48bf2be5353afb0f064b0866d091e61b9ba25189d332ad1060ded7e2350cfcc",
+      "role": "modern_mcp"
+    },
+    {
+      "pid": 43040,
+      "parent_pid": 29072,
+      "name": "python.exe",
+      "reason": "PROTECTED_PYTHON",
+      "command_sha256": "b11677d59c0928a73b11c4174b510c68f6ff37286e25cf8f426a24abc395333e",
+      "role": "modern_mcp"
+    },
+    {
+      "pid": 29284,
+      "parent_pid": 6860,
+      "name": "python.exe",
+      "reason": "PROTECTED_PYTHON",
+      "command_sha256": "a48bf2be5353afb0f064b0866d091e61b9ba25189d332ad1060ded7e2350cfcc",
+      "role": "modern_mcp"
+    },
+    {
+      "pid": 31488,
+      "parent_pid": 30860,
+      "name": "python.exe",
+      "reason": "PROTECTED_PYTHON",
+      "command_sha256": "a48bf2be5353afb0f064b0866d091e61b9ba25189d332ad1060ded7e2350cfcc",
+      "role": "modern_mcp"
+    },
+    {
+      "pid": 33928,
+      "parent_pid": 43040,
+      "name": "python.exe",
+      "reason": "PROTECTED_PYTHON",
+      "command_sha256": "a48bf2be5353afb0f064b0866d091e61b9ba25189d332ad1060ded7e2350cfcc",
+      "role": "modern_mcp"
+    },
+    {
+      "pid": 20100,
+      "parent_pid": 29072,
+      "name": "python.exe",
+      "reason": "PROTECTED_PYTHON",
+      "command_sha256": "b11677d59c0928a73b11c4174b510c68f6ff37286e25cf8f426a24abc395333e",
+      "role": "modern_mcp"
+    },
+    {
+      "pid": 40368,
+      "parent_pid": 20100,
+      "name": "python.exe",
+      "reason": "PROTECTED_PYTHON",
+      "command_sha256": "a48bf2be5353afb0f064b0866d091e61b9ba25189d332ad1060ded7e2350cfcc",
+      "role": "modern_mcp"
+    },
+    {
+      "pid": 30984,
+      "parent_pid": 29072,
+      "name": "python.exe",
+      "reason": "PROTECTED_PYTHON",
+      "command_sha256": "b11677d59c0928a73b11c4174b510c68f6ff37286e25cf8f426a24abc395333e",
+      "role": "modern_mcp"
+    },
+    {
+      "pid": 44192,
+      "parent_pid": 30984,
+      "name": "python.exe",
+      "reason": "PROTECTED_PYTHON",
+      "command_sha256": "a48bf2be5353afb0f064b0866d091e61b9ba25189d332ad1060ded7e2350cfcc",
+      "role": "modern_mcp"
+    }
+  ],
+  "rejected": [
+    {
+      "pid": 3132,
+      "parent_pid": 2768,
+      "name": "python.exe",
+      "reason": "UNINSPECTABLE_PYTHON",
+      "command_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "pid": 9612,
+      "parent_pid": 3132,
+      "name": "python.exe",
+      "reason": "UNINSPECTABLE_PYTHON",
+      "command_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "protected_acl_attested": false,
+  "full_quiescence_attested": false,
+  "host_mutations": 0,
+  "provider_commands_executed": 0,
+  "note": "Pure classifier replay against one read-only process snapshot. Assert-ProtectedPath was stubbed; owner entrypoint retains real ACL and all protected evidence checks."
+}

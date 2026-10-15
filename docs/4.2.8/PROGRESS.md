@@ -3,17 +3,18 @@
 The owner has now run `r428-op-recovery-01f782a`; it stopped in preconditions and
 is spent. The process check omitted the already-reviewed legacy Codex/Claude MCP
 bridge form. Read-only current process metadata reproduces that category;
-no new fence, task change or cutover was reached. The focused correction and a
-fresh recovery package are in preparation. Preserve both failed packages and
-all evidence. No sign-in or new owner diagnostic is needed for this defect.
+no new fence, task change or cutover was reached. The focused correction at
+`4eabf2e` passed 233 source/inert tests and its fresh packaged read-only plan
+passed. The [replacement owner command](OPERATIONAL_CLIENT_RECOVERY_20261015.md)
+reuses the installation and sign-ins; owner execution remains pending. Preserve
+both failed packages and all evidence. No new owner diagnostic is needed.
 
 The delivered operational r5 launch has run and is spent. Installation and Codex
 preflight passed, then admission fencing held before catalog acceptance/cutover.
 The received diagnostic proves fence expiry without a release request and an
 ended r4 Warden, with no listener. Source cleanup/task-transition repairs are
-committed. The [exact-attempt continuation](OPERATIONAL_RECOVERY_DELIVERY_20261015.md)
-reuses the completed installation; its root regression passed 200 tests and its
-actual packaged read-only plan passed. Owner execution is pending. See also
+committed. The [first continuation](OPERATIONAL_RECOVERY_DELIVERY_20261015.md)
+is also spent; the corrected replacement above is now the owner entrypoint. See also
 [the hold evidence](OPERATIONAL_FENCE_HOLD_20261015.md). Do not repeat the original
 owner command or treat source tests as deployment acceptance.
 

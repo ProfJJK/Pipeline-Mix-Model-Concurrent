@@ -1,6 +1,7 @@
 SPENT — DO NOT RUN THIS COMMAND AGAIN.
-The owner run held in the process check before task changes. A corrected package
-is being prepared. Preserve this historical sheet and the failed package.
+The owner run held in the process check before task changes. Use the separate
+RETURN_SETUP_428_OPERATIONAL_RECOVERY_4eabf2e.txt replacement sheet.
+Preserve this historical sheet and the failed package.
 
 PIPELINE 4.2.8 — INSTALLED R5 RECOVERY
 

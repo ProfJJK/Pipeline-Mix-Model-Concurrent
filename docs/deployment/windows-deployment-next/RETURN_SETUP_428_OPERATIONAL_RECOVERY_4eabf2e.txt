@@ -1,0 +1,24 @@
+PIPELINE 4.2.8 — CORRECTED MCP CLIENT RECOGNITION
+
+Paste the following command once into Administrator Windows PowerShell.
+Do not repeat either previous operational launch/recovery command.
+
+Existing Codex/Claude MCP clients can stay open. The completed r5 installation
+and existing sign-ins are reused. No browser, sign-in, choices, reboot or later
+input is planned. Leave PowerShell and the computer running while protected
+checks and native acceptance finish unattended.
+
+C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -File "C:\Users\ansac\CoChem427\r428-op-recovery-4eabf2e\run_operational_428_launch.ps1" -LaunchManifest "C:\Users\ansac\CoChem427\r428-op-recovery-4eabf2e\launch-manifest.json" -LaunchManifestSha256 c4f0a26ad04e1a53a810c8fd6d3370ab637906e57d312cdecaff3d09f37fd9f2 -Apply
+
+Success: R428_OPERATIONAL_RUNNING_VERIFIED.
+If held: preserve the final sanitized JSON and send it to this chat. Do not
+rerun the one-use command, repeat sign-in, delete evidence or stop processes.
+
+Status directory:
+C:\Program Files\CoChem\R428OperationalRecovery-20261015-a62bffb278044fffbaf21207a866ff81-515bacb6893f4453822944b1e3235f1b
+
+Validation: 233 source/inert tests passed; actual packaged read-only plan passed.
+Administrator process/evidence checks remain required. Ordinary-session checks
+could not inspect two SYSTEM Python command lines and did not exempt them.
+These tests are not deployment or useful-job acceptance. Apply is owner-only.
+Preserve all original r428-op input directories and every prior package.

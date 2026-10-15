@@ -3,7 +3,8 @@
 > legacy Codex/Claude `cochem_mcp` bridge clients. No fence, task change, catalog
 > acceptance or cutover was reached. See
 > [saved public status and process metadata](evidence/operational-recovery-01f782a-hold.json).
-> A separately packaged correction is being prepared. This delivery record is historical.
+> The [corrected replacement command](OPERATIONAL_CLIENT_RECOVERY_20261015.md)
+> is now available. This delivery record is historical.
 
 # Operational r5 continuation — 15 October 2026
 

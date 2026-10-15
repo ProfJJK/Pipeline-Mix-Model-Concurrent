@@ -1,0 +1,11 @@
+{
+  "schema": "cochem-428-operational-recovery-source-tests/1",
+  "launcher_source_commit": "4eabf2e9e385cefd2204559eeb4cc355e9b17b6b",
+  "runtime_source_commit": "865a29b113a8b59c822f6aa4d921a45c18407fe5",
+  "runner": "scripts/run_source_tests_428.py",
+  "status": "PASSED",
+  "passed": 233,
+  "failed": 0,
+  "source_test_report_sha256": "db3033022d8e633083dd7384d072ce48e592bbed3de52187fa5bc12031b29e74",
+  "host_acceptance_executed": false
+}
