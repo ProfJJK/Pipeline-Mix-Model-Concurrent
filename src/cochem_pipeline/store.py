@@ -195,7 +195,7 @@ BEGIN
             WHERE j.workflow_id=NEW.workflow_id AND j.kind='TASK_DELIVER'
             AND j.status='COMPLETED' AND j.parent_job_id=NEW.job_id
             AND json_extract(o.receipt_json,'$.executor')='task_delivery'
-            AND json_extract(o.output_json,'$.status') IN ('EXPORTED_FOR_REVIEW','INTEGRATED')))
+            AND json_extract(o.output_json,'$.status') IN ('EXPORTED_FOR_REVIEW','INTEGRATED_ISOLATED_REPOSITORY')))
         THEN RAISE(ABORT,'root completion requires synthesis') END;
     SELECT CASE WHEN NEW.kind='CODE_REQUEST'
         AND NOT EXISTS(SELECT 1 FROM pipeline_jobs j JOIN pipeline_outputs o USING(job_id)

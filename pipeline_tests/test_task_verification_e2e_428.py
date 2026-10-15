@@ -20,13 +20,17 @@ from pipeline_tests.test_planning_gateway_428 import accepted_receipt
 from pipeline_tests.test_task_execution_428 import simple_env, _advance_to_ready
 
 
-def _stage_proposal(simple_env, tmp_path, monkeypatch, proposed_value=1):
+def _stage_proposal(simple_env, tmp_path, monkeypatch, proposed_value=1, *, auto_integrate=False):
     controller, execution, journal, store = simple_env
     project = CodingProject.from_dict('fixture-project', dict(repository=str(tmp_path / 'repo'),
-        branch='main', allowed_paths=['src'], test_paths=['tests']))
+        branch='main', allowed_paths=['src'], test_paths=['tests'], auto_integrate=auto_integrate))
     baseline = {'src/value.py': b'value = 0\n'}
-    snap = SimpleNamespace(files=baseline, modes={'src/value.py': '100644'},
-                           as_dict=lambda: {'fixture': 'no Git execution'})
+    from cochem_pipeline.coding_git import RepositorySnapshot, snapshot_digest
+    modes = {'src/value.py': '100644'}
+    blobs = {path: hashlib.sha1(b'blob ' + str(len(content)).encode() + b'\0' + content).hexdigest()
+             for path, content in baseline.items()}
+    snap = RepositorySnapshot(str(project.repository), 'main', 'refs/heads/main', 'a' * 40,
+        baseline, modes, blobs, snapshot_digest(baseline, modes))
     monkeypatch.setattr('cochem_pipeline.coding_git.capture_repository', lambda *a, **k: snap)
     spaces = []
     def workspace(_):

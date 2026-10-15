@@ -22,6 +22,7 @@ def make_registry(tmp_path, monkeypatch):
         private.mkdir(parents=True)
         return replace(project, repository=private, auto_integrate=True), {
             'source_repository':str(project.repository), 'prepared_repository':str(private),
+            'source_branch':project.branch, 'captured_paths':['src','tests'],
             'changed_paths':['src/main.py'], 'source_commit':'a'*40,'working_snapshot_sha256':'b'*64}
     monkeypatch.setattr('cochem_pipeline.coding_git.prepare_isolated_project', prepare)
     raw = {'repository':str(repository),'branch':'main','allowed_paths':['src'],'test_paths':['tests']}
@@ -39,6 +40,42 @@ def test_exact_registration_is_durable_and_idempotent(tmp_path, monkeypatch):
     assert proof['source_integration']=='REVIEW_REQUIRED'
     with pytest.raises(ValueError,match='different source or scope'):
         restarted.prepare('example',dict(raw,allowed_paths=['lib']))
+
+
+def test_delivery_requires_private_provenance_and_rechecks_original_scoped_snapshot(tmp_path, monkeypatch):
+    registry, raw, _ = make_registry(tmp_path, monkeypatch)
+    assert registry.delivery_provenance('missing') is None
+    registry.static_projects['static'] = CodingProject.from_dict('static', dict(raw, auto_integrate=True))
+    assert registry.delivery_provenance('static') is None
+    registry.prepare('example', raw)
+    provenance = registry.delivery_provenance('example')
+    assert provenance['source_project']['repository'] == raw['repository']
+    assert provenance['prepared_project']['repository'] != raw['repository']
+    assert provenance['source_project']['auto_integrate'] is False
+    assert registry.verify_delivery_source('example')['status'] == 'SOURCE_CAPTURE_MATCHES'
+    observed = []
+    def changed(project, destination, context, **kwargs):
+        observed.append((project, context, kwargs))
+        return {'source_commit':'a'*40, 'working_snapshot_sha256':'c'*64}
+    monkeypatch.setattr('cochem_pipeline.coding_git.prepare_isolated_project', changed)
+    with pytest.raises(ValueError, match='changed after preparation'):
+        registry.verify_delivery_source('example')
+    assert observed[0][0].repository == registry.policy.authorize(raw['repository'])
+    assert observed[0][2]['inspect_only'] is True
+
+
+@pytest.mark.parametrize('field,value', [('captured_paths', ['src']),
+    ('prepared_repository', 'wrong-path'), ('original_checkout_modified', True)])
+def test_delivery_provenance_refuses_changed_registration_authority(tmp_path, monkeypatch, field, value):
+    import json
+    import sqlite3
+    registry, raw, _ = make_registry(tmp_path, monkeypatch)
+    proof = registry.prepare('example', raw)
+    proof[field] = value
+    with sqlite3.connect(registry.db) as conn:
+        conn.execute('UPDATE projects SET evidence=? WHERE project_id=?', (json.dumps(proof), 'example'))
+    with pytest.raises(ValueError):
+        registry.delivery_provenance('example')
 
 
 @pytest.mark.parametrize('name',['Gdrive','Google Drive','OneDrive','Dropbox'])

@@ -82,6 +82,55 @@ class ProjectRegistry:
                 projects[project_id] = project
         return projects
 
+    def delivery_provenance(self, project_id):
+        """Return reviewed private preparation authority, never infer it by path.
+
+        Static project registration alone does not authorize automatic writes to
+        its repository. Only an exact durable private-preparation record can do so.
+        """
+        if project_id in self.static_projects:
+            return None
+        with sqlite3.connect(self.db) as conn:
+            row = conn.execute('SELECT descriptor,evidence FROM projects WHERE project_id=?', (project_id,)).fetchone()
+        if row is None:
+            return None
+        prepared = validate_production_coding_project(CodingProject.from_dict(project_id, json.loads(row[0])))
+        proof = json.loads(row[1])
+        source = self.policy.authorize(proof['source_repository'])
+        if (self.root not in prepared.repository.parents or prepared.repository == source
+                or str(prepared.repository) != proof.get('prepared_repository')
+                or proof.get('original_checkout_modified') is not False):
+            raise ValueError('Private project delivery provenance differs')
+        from .coding import safe_path
+        captured = proof.get('captured_paths')
+        if not isinstance(captured, list) or not captured:
+            raise ValueError('Private project is missing captured source scope')
+        captured = [safe_path(path) for path in captured]
+        required = {*prepared.allowed_paths, *prepared.test_paths}
+        if not required <= set(captured):
+            raise ValueError('Private project captured scope omits registered paths')
+        raw = prepared.as_dict()
+        raw.update(repository=str(source), branch=proof['source_branch'], auto_integrate=False)
+        original = CodingProject.from_dict(project_id, raw)
+        return dict(prepared_project=prepared.as_dict(), source_project=original.as_dict(),
+                    context_paths=sorted(set(captured) - required), preparation=proof)
+
+    def verify_delivery_source(self, project_id):
+        """Re-read source branch, head and scoped dirty bytes without modifying it."""
+        provenance = self.delivery_provenance(project_id)
+        if provenance is None:
+            raise ValueError('Automatic delivery requires an isolated prepared project')
+        from .coding_git import prepare_isolated_project
+        original = CodingProject.from_dict(project_id, provenance['source_project'])
+        observed = prepare_isolated_project(original, self.root / 'repositories', provenance['context_paths'],
+                                            git_executable=self.git_executable, inspect_only=True)
+        if any(observed[key] != provenance['preparation'].get(key)
+               for key in ('source_commit', 'working_snapshot_sha256')):
+            raise ValueError('Source branch or scoped working files changed after preparation')
+        return dict(status='SOURCE_CAPTURE_MATCHES', source_commit=observed['source_commit'],
+                    working_snapshot_sha256=observed['working_snapshot_sha256'],
+                    captured_paths=provenance['preparation']['captured_paths'])
+
     def prepare(self, project_id, raw):
         from .coding_git import prepare_isolated_project
         if not isinstance(raw, dict) or set(raw) - {'repository', 'branch', 'allowed_paths', 'test_paths', 'context_paths'}:
