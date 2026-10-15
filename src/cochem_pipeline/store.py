@@ -355,7 +355,11 @@ class JobStore(CodingStoreMixin):
             names = ','.join(columns)
             conn.execute('CREATE TEMP TABLE coding_migration_jobs AS SELECT * FROM pipeline_jobs')
             conn.execute('DROP TABLE pipeline_jobs')
-            table_sql = SCHEMA.split(';', 1)[0]
+            # Other tables may precede jobs as the schema evolves. Rebuild the
+            # named table, never the first statement in the schema string.
+            table_sql = next(statement for statement in SCHEMA.split(';')
+                             if statement.strip().startswith(
+                                 'CREATE TABLE IF NOT EXISTS pipeline_jobs ('))
             conn.execute(table_sql)
             conn.execute('INSERT INTO pipeline_jobs('+names+') SELECT '+names+' FROM coding_migration_jobs')
             conn.execute('DROP TABLE coding_migration_jobs')
