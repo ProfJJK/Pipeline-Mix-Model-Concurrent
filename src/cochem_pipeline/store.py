@@ -40,6 +40,9 @@ def artifact_digest(text: str) -> str:
 
 
 SCHEMA = """
+CREATE TABLE IF NOT EXISTS pipeline_format_corrections (
+    job_id TEXT PRIMARY KEY, corrections INTEGER NOT NULL CHECK(corrections BETWEEN 1 AND 2),
+    feedback_json TEXT NOT NULL, attempt_id TEXT NOT NULL, updated_at REAL NOT NULL);
 CREATE TABLE IF NOT EXISTS pipeline_jobs (
     job_id TEXT PRIMARY KEY,
     workflow_id TEXT NOT NULL REFERENCES pipeline_jobs(job_id),
@@ -479,6 +482,9 @@ class JobStore(CodingStoreMixin):
         result['routing'] = routes.get_state(conn, job_id)
         result['routing_policy'] = result['routing']['policy'] if result['routing'] is not None else None
         result['route'] = routes.get_route(conn, job_id)
+        correction=conn.execute('SELECT feedback_json FROM pipeline_format_corrections WHERE job_id=?',(job_id,)).fetchone()
+        if correction is not None:
+            result['output_format_feedback']=json.loads(correction[0])
         if result['route'] is not None and result['worker_slot'] is None:
             result['worker_slot'] = result['route'].get('worker_slot')
         if result['worker_slot'] is None and result['attempt_id'] is not None:
@@ -921,6 +927,8 @@ class JobStore(CodingStoreMixin):
                     raise ValueError('Completion receipt reports a different reasoning effort')
                 if effort is not None and receipt.get('selected_route',{}).get('reasoning_effort') != effort:
                     raise ValueError('Completion receipt does not match reserved reasoning effort')
+            from .output_contracts import validate_output_format
+            validate_output_format(job, output)
             chapters = None
             if job["kind"] == "MANIFEST_GENERATOR":
                 chapters = self._manifest(job, output)
@@ -1049,6 +1057,47 @@ class JobStore(CodingStoreMixin):
                    'wbs_tasks_by_chapter': {job['chapter_id']: job['output']['wbs_tasks_defined'] for job in completed},
                    'coverage_report': coverage, 'coverage_report_sha256': output_digest(coverage)}
         return payload
+
+    def correct_output_format(self, job_id, attempt_id, fencing_token, feedback):
+        """Grant at most two schema corrections without resetting any budget.
+
+        None means the ordinary failure path must account for this rejection;
+        False means a stale attempt. Routing/cleanup ownership never transfers
+        until the normal runtime has verified native teardown.
+        """
+        if (not isinstance(feedback,dict) or feedback.get('schema')!='cochem-output-format-feedback/1'
+                or not re.fullmatch(r'[0-9a-f]{64}',str(feedback.get('contract_sha256','')))
+                or not isinstance(feedback.get('issues'),list) or not 1<=len(feedback['issues'])<=100
+                or len(canonical_json(feedback))>16384):
+            raise ValueError('Expected bounded structured output-format feedback')
+        with self._write() as conn:
+            job=self._get(conn,job_id)
+            if not self._owned(job,attempt_id,fencing_token):
+                return False
+            if job['kind'] in CONTROLLER_KINDS:
+                return None
+            barrier=conn.execute('SELECT 1 FROM pipeline_execution_cleanup WHERE job_id=? AND attempt_id=? AND cleared_at IS NULL',
+                                 (job_id,attempt_id)).fetchone()
+            if barrier:
+                raise ValueError('Output correction requires verified native cleanup')
+            prior=conn.execute('SELECT corrections FROM pipeline_format_corrections WHERE job_id=?',(job_id,)).fetchone()
+            count=prior[0] if prior else 0
+            state=job['routing']
+            if count>=2 or (state is None and job['attempts']>=job['max_attempts']):
+                return None
+            if state is not None and ((state['max_dispatches'] is not None and state['dispatches']>=state['max_dispatches'])
+                    or (state['expires_at'] is not None and time.time()>=state['expires_at'])
+                    or state['failure_count']>=job['max_attempts']):
+                return None
+            value=dict(feedback,correction_attempt=count+1)
+            conn.execute('INSERT INTO pipeline_format_corrections VALUES(?,?,?,?,?) ON CONFLICT(job_id) DO UPDATE SET corrections=excluded.corrections,feedback_json=excluded.feedback_json,attempt_id=excluded.attempt_id,updated_at=excluded.updated_at',
+                         (job_id,count+1,canonical_json(value),attempt_id,time.time()))
+            routes.release(conn,job_id,'output_format_correction','READY')
+            conn.execute("UPDATE pipeline_jobs SET status='PENDING_RETRY',lease_owner=NULL,lease_expires_at=NULL,error='Output format correction required',updated_at=? WHERE job_id=?",
+                         (time.time(),job_id))
+            self._event(conn,job,'OUTPUT_FORMAT_CORRECTION',correction_attempt=count+1,
+                        contract_sha256=feedback['contract_sha256'],issues=feedback['issues'])
+            return True
 
     def fail(self, job_id: str, attempt_id: str, fencing_token: int, error: str, retry: bool = False,
              *, category: str = 'code', retry_after_seconds: float | None = None,

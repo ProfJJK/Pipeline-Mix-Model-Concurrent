@@ -419,6 +419,11 @@ class Runtime:
                 and (not isinstance(exc,ExecutionRevokedError) or active.get('resource_tripped'))):
             retry = True
         retry_after = exc.retry_after_seconds if isinstance(exc,ProviderFailure) else 30 if readiness_error and category=='resource' else None
+        from .output_contracts import OutputFormatError
+        if retry and isinstance(exc,OutputFormatError):
+            corrected=self.store.correct_output_format(job_id,node['attempt_id'],node['fencing_token'],exc.as_feedback())
+            if corrected is not None:
+                return corrected
         hold_scope = 'job' if readiness_error and category!='resource' else exc.hold_scope if isinstance(exc,ProviderFailure) else None
         accepted = self.store.fail(job_id,node['attempt_id'],node['fencing_token'],
                                    f'{type(exc).__name__}: {exc}',retry=retry,
