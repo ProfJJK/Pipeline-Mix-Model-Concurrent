@@ -164,8 +164,20 @@ def test_guard_cancel_and_deadline_hold_without_candidate_or_secret_details(phas
     assert result['catalog_published'] is False and result['automatic_retry'] is False
     assert result['publication_state'] == 'NOT_COMMITTED'
     assert 'secret-provider-payload' not in json.dumps(result)
+    assert result['failure']['error_type'] == 'RuntimeError'
+    assert result['failure']['frames'][-1]['function'] == 'failed'
     assert not (env.args[-1] / 'pipeline.json').exists()
     assert env.runtime.closed == 1 and not env.held
+
+
+def test_failure_projection_omits_raw_message_paths_and_untrusted_target():
+    error = ValueError('secret access_token and C:\\private\\owner.txt')
+    error.catalog_target = dict(provider='claude', model='fable-5.1', effort='max')
+    clean = owner.sanitized_failure(error)
+    assert clean['target'] == error.catalog_target
+    assert 'secret' not in json.dumps(clean) and 'private' not in json.dumps(clean)
+    error.catalog_target['model'] = 'private/path?token=secret'
+    assert 'target' not in owner.sanitized_failure(error)
 
 
 def test_existing_outputs_or_bad_pin_never_start_runtime(phase_env):

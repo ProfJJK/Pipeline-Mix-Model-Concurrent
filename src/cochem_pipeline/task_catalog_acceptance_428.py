@@ -495,9 +495,11 @@ def run_acceptance(runtime, request):
             with runtime.store._write() as conn:
                 record_result(conn,request,target,token,output=output,receipt=receipt,
                               binary_sha256=binding['sha256'],cleanup_verified=cleaned,availability=availability)
-        except Exception:
+        except Exception as exc:
             # Validation failure after physical closure is still a failed probe,
             # but does not leak its seat. Unknown cleanup stays occupied.
+            # This target comes from the reviewed request, never provider text.
+            exc.catalog_target = dict(zip(('provider', 'model', 'effort'), target))
             with runtime.store._write() as conn:
                 row=conn.execute('SELECT cleanup_at FROM pipeline_catalog_probes WHERE reservation_id=?',
                                  (token['reservation_id'],)).fetchone()

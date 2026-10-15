@@ -299,6 +299,7 @@ def run_owner_phase(bootstrap_config, bootstrap_sha256, request_path, request_sh
             result = dict(schema='cochem-owner-task-catalog-result/4.2.8',
                 status='TASK_CATALOG_HELD_PRESERVE_EVIDENCE', phase=phase,
                 error_type=type(error).__name__ if error else 'ResourceDrainUnverified',
+                failure=sanitized_failure(error) if error else None,
                 monitor_error_types=monitor_failures, cleanup_verified=False, runtime_resources_closed=closed,
                 request_sha256=request_sha256, bootstrap_sha256=bootstrap_sha256,
                 publication_state=publication['state'], publication_proof=publication,
@@ -318,6 +319,22 @@ def run_owner_phase(bootstrap_config, bootstrap_sha256, request_path, request_sh
         return result
 
 
+def sanitized_failure(error):
+    """Publish code locations and reviewed target identity, never raw error text."""
+    from .crash import crash_envelope
+    envelope = crash_envelope(error, getattr(error, 'category', 'code'))
+    result = dict(error_type=envelope['exception_type'], category=envelope['category'],
+                  frames=[dict(function=frame['function'], line=frame['lineno'])
+                          for frame in envelope['frames'][-8:]])
+    target = getattr(error, 'catalog_target', None)
+    if (isinstance(target, dict) and set(target) == {'provider', 'model', 'effort'}
+            and target['provider'] in {'codex', 'claude', 'gemini'}
+            and isinstance(target['model'], str) and re.fullmatch('[A-Za-z0-9_.:-]{1,128}', target['model'])
+            and target['effort'] in {'low', 'medium', 'high', 'xhigh', 'max', None}):
+        result['target'] = dict(target)
+    return result
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     for name in ('bootstrap-config', 'bootstrap-sha256', 'request', 'request-sha256', 'output-root'):
@@ -335,7 +352,8 @@ def main(argv=None):
             start_gate=args.start_gate, start_nonce=args.start_nonce)
     except BaseException as exc:
         result = dict(schema='cochem-owner-task-catalog-result/4.2.8', status='TASK_CATALOG_PRECONDITION_HELD',
-            error_type=type(exc).__name__, cutover_requested=False, automatic_retry=False, late_prompt=False)
+            error_type=type(exc).__name__, failure=sanitized_failure(exc),
+            cutover_requested=False, automatic_retry=False, late_prompt=False)
     print(json.dumps(result, sort_keys=True))
     return 0 if result['status'] == 'TASK_CATALOG_CANDIDATE_READY' else 2
 

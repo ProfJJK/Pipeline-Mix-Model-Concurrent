@@ -42,7 +42,9 @@ function New-OpResultRecord {
         codex_session_refresh_required=($null -ne (Get-OpProperty $State 'integration'));
         all_routes_usable=(Get-OpProperty $State.acceptance 'all_routes_usable' $false);
         coverage_holds=(Get-OpProperty $State.acceptance 'coverage_holds');
-        error_type=(Get-OpProperty $State 'error_type');late_prompt=$false;automatic_retry=$false;useful_job_acceptance=$false}
+        error_type=(Get-OpProperty $State 'error_type');
+        acceptance_failure=(Get-OpProperty $State.acceptance 'failure');
+        late_prompt=$false;automatic_retry=$false;useful_job_acceptance=$false}
 }
 
 function Test-OpRestoreAuthority {

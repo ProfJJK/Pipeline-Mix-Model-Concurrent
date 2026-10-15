@@ -307,8 +307,9 @@ def test_coordinator_failure_never_publishes_or_retries(environment,tmp_path,mon
     failure={'cleanup':WorkerCleanupError('inert cleanup failure'),
              'configuration':ProviderFailure('configuration'),'unknown':RuntimeError('inert unknown')}[fault]
     rt,calls,clears=inert_runtime(store,request,tmp_path,monkeypatch,failure=failure)
-    with pytest.raises(type(failure)):run_acceptance(rt,request)
+    with pytest.raises(type(failure)) as captured:run_acceptance(rt,request)
     assert len(calls)==1
+    assert captured.value.catalog_target == dict(zip(('provider', 'model', 'effort'), calls[0]))
     with store._connection() as conn:
         assert catalog_journal.active_task_catalog(conn) is None
         assert catalog_slots.occupancy(conn)==(0 if fault=='configuration' else 1)
