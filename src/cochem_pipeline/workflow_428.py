@@ -521,9 +521,11 @@ class AttemptLedger:
         _sha(evidence_sha256)
         if any(x['status'] == 'unavailable' for x in research.values()):
             raise ValueError('Pivot research is incomplete')
-        if not isinstance(proposal, dict) or set(proposal) != {
-                'strategy', 'task_types', 'complexity', 'rationale', 'next_model', 'children'}:
+        fields = {'strategy', 'task_types', 'complexity', 'rationale', 'next_model', 'children'}
+        if not isinstance(proposal, dict) or set(proposal) not in (fields, fields | {'selected_profile_id'}):
             raise ValueError('Pivot requires reassessment and an explicit strategy')
+        if 'selected_profile_id' in proposal:
+            _id(proposal['selected_profile_id'])
         assessment({key: proposal[key] for key in ('complexity', 'task_types', 'rationale')})
         _id(proposal['next_model'])
         children = proposal['children']

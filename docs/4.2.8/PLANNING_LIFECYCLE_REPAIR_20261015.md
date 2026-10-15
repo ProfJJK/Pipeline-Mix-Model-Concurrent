@@ -42,3 +42,31 @@ format separation, exact ten-failure research registration, cancellation
 restart, audit deduplication and interrupted lease recovery. These are source
 tests, not host acceptance or evidence that automatic pivot review execution
 has been completed.
+
+## Reviewed microtask pivot dispatch
+
+The next bounded slice connects a ten-failure microtask dossier and published
+three-channel research to a `PIVOT_REVIEW` job on the same board. Its captured
+model family differs from the failed family and meets the next-tier floor.
+The typed result supplies a new assessment, evidence-based cause synthesis,
+hypotheses and a concrete changed approach. Only the controller applies it.
+
+An accepted pivot creates a new microtask job capture with the exact selected
+profile, effective complexity, reassessed tags, dossier and changed approach.
+It never resumes the old blocked job. The original lineage retains its full
+failure count: 10 and 20 allow researched pivots; 30 stays locked. Review
+availability does not charge the failed task's quality budget. The exact
+selected profile is committed with the ledger pivot, allowing restart recovery
+if the secondary pivot projection was not written. Unmeasured model families
+cannot bypass the reasoning floor through the previous family-name fallback.
+
+An existing swarm test had chosen Flash for tier 6 despite lacking a qualifying
+measured score. The test now selects a qualifying different family; a separate
+regression proves that the unsupported selection is rejected.
+
+Explicit remaining adapters: fracture proposals retain their evidence in
+`FRACTURE_PLAN_REQUIRED`; a newly high-tier child without an approval receipt
+holds as `PIVOT_OWNER_APPROVAL_REQUIRED`. Planning-stage and simple-execution
+pivots hold as `PIVOT_SCOPE_ADAPTER_REQUIRED` pending their reclassification and
+approval-aware journal adapters. These states are not completed work or live
+acceptance. Review jobs and failure research are included in durable cancellation.

@@ -220,6 +220,7 @@ class PivotRuntime:
             "complexity": effective_tier,
             "rationale": check["rationale"],
             "next_model": chosen["family"],
+            "selected_profile_id": chosen["profile_id"],
             "children": children_list,
         }
         updated_state = self.ledger.pivot(
@@ -262,6 +263,28 @@ class PivotRuntime:
             "children": children_list,
             "lineage_state": updated_state,
         }
+
+    def recover_pivot_record(self, lineage_root: str, boundary: int) -> dict[str, Any]:
+        """Repair only the projection after the ledger's authoritative pivot commit."""
+        state = self.ledger.status(lineage_root)
+        committed = next((p for p in state['pivots'] if p['after_failures'] == boundary), None)
+        dossier = self.dossier_store.get_dossier(lineage_root, boundary)
+        if not committed or not dossier or committed['evidence_sha256'] != dossier['dossier_sha256']:
+            raise ValueError('Pivot recovery lacks its exact committed dossier')
+        proposal = committed['proposal']
+        selected = proposal.get('selected_profile_id')
+        candidates = select_pivot_candidates(self.catalog, proposal['task_types'], proposal['complexity'],
+                                            last_failed_model=dossier['last_failed_model'])
+        chosen = next((c for c in candidates if c['profile_id'] == selected
+                       and c['family'] == proposal['next_model']), None)
+        if chosen is None:
+            raise ValueError('Pivot recovery lacks the exact accepted profile commitment')
+        with self.ledger._write() as conn:
+            conn.execute('INSERT OR IGNORE INTO task428_pivots VALUES(?,?,?,?,?,?,?,?,?,?,?,?)',
+                (f'{lineage_root}::{boundary}', lineage_root, boundary, dossier['dossier_id'], proposal['strategy'],
+                 proposal['complexity'], json.dumps(proposal['task_types']), selected, chosen['family'], chosen['effort'],
+                 json.dumps(proposal['children']), float(self.clock())))
+        return self.get_pivot_record(lineage_root, boundary)
 
     def get_pivot_record(self, lineage_root: str, boundary: int) -> dict[str, Any] | None:
         _id(lineage_root)

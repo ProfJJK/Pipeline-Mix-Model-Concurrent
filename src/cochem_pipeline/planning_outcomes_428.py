@@ -36,7 +36,7 @@ class PlanningOutcomeRuntime:
         intent = payload['planning_intent']
         if intent['task_id'] != task_id:
             raise ValueError('Outcome belongs to another planning task')
-        if intent['stage'] == 'MICROTASK_SWARM_BATCH':
+        if intent['stage'] in ('MICROTASK_SWARM_BATCH', 'PIVOT_REVIEW'):
             # Individual outcomes are fenced by complete_swarm_batch; charging
             # this aggregate reservation would double-charge its children.
             return None
@@ -75,7 +75,8 @@ class PlanningOutcomeRuntime:
             payload = job['payload']
             lineage = self.lineage_for_job(task_id, payload)
             if lineage is None:
-                disposition = 'SWARM_CHILD_ACCOUNTING'
+                disposition = ('PIVOT_REVIEW_CONTROL' if payload['planning_intent']['stage'] == 'PIVOT_REVIEW'
+                               else 'SWARM_CHILD_ACCOUNTING')
                 lineage = task_id
             else:
                 reason = reservation['release_reason']

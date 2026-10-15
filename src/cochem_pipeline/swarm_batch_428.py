@@ -130,25 +130,24 @@ def resolve_microtask_route_tier(
     explicit_primary = node.get("routed_profile_id")
     pivot_model = node.get("pivot_model")
     if isinstance(pivot_model, str) and pivot_model:
-        if pivot_model in models_map:
-            explicit_primary = pivot_model
-        else:
-            matching_candidates = [
-                cid
-                for cid in candidates
-                if models_map.get(cid, {}).get("model") == pivot_model
-                or models_map.get(cid, {}).get("family") == pivot_model
-            ]
-            if matching_candidates:
-                explicit_primary = matching_candidates[0]
-            else:
-                matching_all = [
-                    cid
-                    for cid, spec in models_map.items()
-                    if spec.get("model") == pivot_model or spec.get("family") == pivot_model
-                ]
-                if matching_all:
-                    explicit_primary = matching_all[0]
+        eligible = []
+        for cid in dict.fromkeys(candidates + list(models_map)):
+            spec = models_map[cid]
+            if pivot_model not in (cid, spec.get('model'), spec.get('family')):
+                continue
+            if not all(spec.get('scores', {}).get(tag) is not None
+                       and spec['scores'][tag] >= catalog['task_types'][tag]['tiers'][str(effective_complexity)]['floor']
+                       for tag in node['task_types']):
+                continue
+            if effective_complexity == 10 and spec['effort'] != ('high' if spec['provider'] == 'gemini' else 'max'):
+                continue
+            eligible.append(cid)
+        if not eligible:
+            raise ValueError('Pivot profile does not meet the captured reasoning floor')
+        # The first post-pivot attempt must use the committed different family.
+        # Availability waits do not silently spend that attempt on another route.
+        explicit_primary = eligible[0]
+        candidates = [explicit_primary]
     if isinstance(explicit_primary, str) and explicit_primary in models_map:
         primary_id = explicit_primary
         if primary_id not in candidates:

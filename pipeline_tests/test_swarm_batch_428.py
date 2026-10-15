@@ -1235,7 +1235,10 @@ def test_attempt_ledger_10_20_30_pivot_model_and_floor_escalation(tmp_path: Path
     assert lstate_20["failures"] == 20
     assert lstate_20["stage"] == "PIVOT_RESEARCH"
 
-    # Pivot at 20 failures to gemini-3.8-flash (floor escalates from 5 -> 6)
+    # Use a measured tier-6 profile. Flash has no eligible tier-6 measurement;
+    # the earlier fixture accidentally exercised an unvalidated family fallback.
+    from cochem_pipeline.pivot_runtime_428 import select_pivot_candidates
+    pivot_20 = select_pivot_candidates(catalog, ['COD-TERM'], 6, last_failed_model='claude-sonnet-5-5')[0]
     ledger.pivot(
         lineage_id,
         pivot_research,
@@ -1243,20 +1246,19 @@ def test_attempt_ledger_10_20_30_pivot_model_and_floor_escalation(tmp_path: Path
             "strategy": "pivot",
             "task_types": ["COD-TERM"],
             "complexity": 6,
-            "rationale": "Escalate to Gemini 3.8 Flash after 20 failures",
-            "next_model": "gemini-3.8-flash",
+            "rationale": "Escalate to a measured different tier-6 model after 20 failures",
+            "next_model": pivot_20['family'],
             "children": [],
         },
         digest("pivot-20-evidence"),
     )
 
-    # Attempts 21..30 route to gemini-3.8-flash -> attempt 30 transitions to LOCKED
+    # Attempts 21..30 use the accepted different family, then lock at 30.
     for attempt in range(21, 31):
         snap = runtime.dispatch_batches("task428-esc")
         node = {n["microtask_id"]: n for n in snap["nodes"]}["mt-esc-1"]
         assert node["status"] == "DISPATCHED"
-        assert node["provider_family"] == "gemini"
-        assert node["routed_model"] == "gemini-3.8-flash"
+        assert node["routed_model"] == catalog['models'][pivot_20['profile_id']]['model']
         bad_out = _valid_microtask_output(node)
         bad_out["deliverables"][0]["sha256"] = f"{attempt:064x}"
         snap_after = runtime.complete_batch("task428-esc", node["batch_id"], {"mt-esc-1": bad_out})

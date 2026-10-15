@@ -99,6 +99,12 @@ class PlanningController:
             outcome_runtime = PlanningOutcomeRuntime(journal, store, attempt_runtime,
                 research_runtime=research_runtime, dossier_store=dossier_store, decision_store=decision_store)
         self.outcome_runtime = outcome_runtime
+        self.pivot_bridge = None
+        if outcome_runtime is not None and pivot_runtime is not None:
+            from .planning_pivots_428 import PlanningPivotRuntime
+            self.pivot_bridge = PlanningPivotRuntime(journal, store, outcome_runtime, pivot_runtime)
+            if self.release_runtime is not None:
+                self.release_runtime.board.pivot_context_provider = self.pivot_bridge.dispatch_context
         self._research_thread = None
         self.gateway = PlanningGateway(journal, store, artifact_runtime=artifact_runtime)
         self.journal.model_result = self.gateway.model_result
@@ -292,12 +298,17 @@ class PlanningController:
             for node in list(snap.get('nodes') or ()) + list(snap.get('batches') or ()):
                 if node.get('job_id'):
                     cancelled_jobs.add(node['job_id'])
+        if self.pivot_bridge is not None:
+            cancelled_jobs.update(self.pivot_bridge.cancellation_targets(task_id))
         targets = [(jid, 'job') for jid in sorted(cancelled_jobs)]
         if self.artifact_runtime is not None:
             targets.append((task_id, 'artifacts'))
         research_id = (current.get('controller') or {}).get('research_id')
         if research_id:
             targets.append((research_id, 'research'))
+        if self.outcome_runtime is not None:
+            targets.extend((row['research_id'], 'research') for row in self.outcome_runtime.status(task_id)
+                           if row.get('research_id'))
         # Persist cancellation obligations before changing the task stage. A
         # process interruption cannot turn an unfinished cancellation into success.
         with self.journal._write() as conn:
@@ -397,6 +408,8 @@ class PlanningController:
     def _step_task(self, task_id):
         if self.outcome_runtime is not None:
             self.outcome_runtime.reconcile_task(task_id)
+        if self.pivot_bridge is not None:
+            self.pivot_bridge.step(task_id)
         intent = self.journal.intent(task_id)
         version, action = intent['version'], intent['action']
         if intent.get('stage') == 'CANCELLED':

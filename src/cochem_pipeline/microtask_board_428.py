@@ -326,7 +326,7 @@ class MicrotaskBoardRuntime:
             "state_sha256": digest(state),
             "catalog_sha256": digest(catalog),
             "srs_sha256": state["srs_sha256"],
-            "complexity": node["complexity"],
+            "complexity": node.get("effective_complexity", node["complexity"]),
             "task_types": node["task_types"],
             "candidate_profiles": candidates,
             "task": state,
@@ -339,6 +339,7 @@ class MicrotaskBoardRuntime:
                 "microtask_id": node["microtask_id"],
                 "candidates": candidates,
                 "pred_hashes": pred_hashes,
+                "pivot_context": node.get("pivot_context"),
             }
         )
         root_id = "mt428-" + identity[:40]
@@ -777,6 +778,16 @@ class MicrotaskBoardRuntime:
                 if not pivot_model and lstate.get("pivots"):
                     last_prop = lstate["pivots"][-1].get("proposal") or {}
                     pivot_model = last_prop.get("next_model")
+                if lstate.get("pivots"):
+                    node_for_route["task_types"] = lstate["pivots"][-1]["proposal"]["task_types"]
+                    proposal = lstate["pivots"][-1]["proposal"]
+                    if proposal.get("selected_profile_id"):
+                        pivot_model = proposal["selected_profile_id"]
+                    context_provider = getattr(self, "pivot_context_provider", None)
+                    if context_provider is not None:
+                        context = context_provider(lstate["root"])
+                        if context is not None:
+                            node_for_route["pivot_context"] = context
                 node_for_route["effective_complexity"] = eff_complexity
                 if pivot_model:
                     node_for_route["pivot_model"] = pivot_model
@@ -1114,10 +1125,14 @@ class MicrotaskBoardRuntime:
                         now=now,
                     )
             else:
+                execution_node = dict(compiled_by_id[mt_id])
+                for key in ('effective_complexity', 'task_types', 'pivot_model', 'pivot_context'):
+                    if key in admitted_node:
+                        execution_node[key] = deepcopy(admitted_node[key])
                 board_job = self._submit_board_job_for_node(
                     task_id,
                     gen_sha,
-                    compiled_by_id[mt_id],
+                    execution_node,
                     state,
                     catalog,
                     limit,
