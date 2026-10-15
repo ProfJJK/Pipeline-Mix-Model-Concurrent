@@ -20,8 +20,7 @@ from pipeline_tests.test_planning_gateway_428 import accepted_receipt
 from pipeline_tests.test_task_execution_428 import simple_env, _advance_to_ready
 
 
-@pytest.fixture
-def staged(simple_env, tmp_path, monkeypatch, request):
+def _stage_proposal(simple_env, tmp_path, monkeypatch, proposed_value=1):
     controller, execution, journal, store = simple_env
     project = CodingProject.from_dict('fixture-project', dict(repository=str(tmp_path / 'repo'),
         branch='main', allowed_paths=['src'], test_paths=['tests']))
@@ -39,7 +38,7 @@ def staged(simple_env, tmp_path, monkeypatch, request):
         config=SimpleNamespace(git_executable='unused', docker=DockerPolicy.from_dict(enabled()),
                                private_root=tmp_path, operator_name='fixture', lease_seconds=30))
     artifacts = TaskArtifactRuntime(runtime)
-    artifacts.prepare_task('task', 'fixture-project')
+    artifacts.prepare_task('task', None if proposed_value == 'content' else 'fixture-project')
     execution.artifact_runtime = artifacts
     document = _advance_to_ready(controller, 'task', tier=2)
     controller.test_clock[0] += 2; controller.step()
@@ -48,14 +47,17 @@ def staged(simple_env, tmp_path, monkeypatch, request):
     source = 'from pathlib import Path\n' + ''.join(
         f'def {name}():\n    assert (Path(__file__).parents[1] / "src/value.py").read_text() == "value = 1\\n"\n'
         for name in names.values())
-    proposed_value = getattr(request, 'param', 1)
     if proposed_value == 0:
         source = source.replace('value = 1', 'value = 0')
     files = {'src/value.py': f'value = {proposed_value}\n', 'tests/test_bound.py': source}
+    if proposed_value == 'missing_tests':
+        files = {'src/value.py': 'value = 1\n'}
+    elif proposed_value == 'content':
+        files = {'report.md': 'A bounded content deliverable.\n'}
     output = dict(artifact_text='Concrete proposal',
         deliverables=[dict(name=p, content=text, sha256=hashlib.sha256(text.encode()).hexdigest())
                       for p, text in files.items()],
-        requirement_evidence=[dict(requirement_id=key, deliverable_name='src/value.py',
+        requirement_evidence=[dict(requirement_id=key, deliverable_name=next(iter(files)),
                                    verification_evidence='Bound regression proposed') for key in names],
         release_criteria_results=[dict(criterion=c, passed=True, evidence='Proposal is ready for physical verification')
                                   for c in document['release_criteria']])
@@ -65,6 +67,21 @@ def staged(simple_env, tmp_path, monkeypatch, request):
     store.clear_execution_quarantine(node['job_id'], node['attempt_id'], node['fencing_token'])
     store.complete(node['job_id'], node['attempt_id'], node['fencing_token'], result, receipt)
     return artifacts, runtime, store.get(node['job_id']), sorted(names), spaces
+
+
+@pytest.fixture
+def staged(simple_env, tmp_path, monkeypatch, request):
+    return _stage_proposal(simple_env, tmp_path, monkeypatch, getattr(request, 'param', 1))
+
+
+def test_missing_requirement_tests_fail_before_producer_publication(simple_env, tmp_path, monkeypatch):
+    with pytest.raises(ValueError):
+        _stage_proposal(simple_env, tmp_path, monkeypatch, 'missing_tests')
+    store = simple_env[-1]
+    with store._connection() as conn:
+        assert not conn.execute('SELECT 1 FROM task428_fragment_attempts').fetchone()
+        assert not conn.execute("SELECT 1 FROM pipeline_outputs o JOIN pipeline_jobs j USING(job_id) "
+            "WHERE json_extract(j.payload_json,'$.planning_intent.stage')='SIMPLE_EXECUTION'").fetchone()
 
 
 class FixtureEngine:
@@ -265,6 +282,22 @@ def test_verified_physical_checks_commit_only_one_original_success(staged, simpl
         rows = conn.execute('SELECT * FROM attempt428_outbox WHERE job_id=?', (producer['job_id'],)).fetchall()
         assert len(rows) == 1 and rows[0]['staged_outcome'] == 'success'
     assert artifacts.retry_feedback('task') is None
+
+
+@pytest.mark.parametrize('staged', ['content'], indirect=True)
+def test_low_tier_content_keeps_owner_single_model_integrity_only_scope(staged):
+    artifacts, runtime, producer, requirements, _ = staged
+    artifacts.ensure_verification(producer, requirements)
+    node = runtime.store.claim('fixture', allowed_kinds=['TASK_VERIFY'], worker_slot='slot2', requires_cleanup=True)
+    output, receipt, evidence = artifacts.run_verification(node, 'slot2', lambda: True, threading.Event())
+    runtime.store.clear_execution_quarantine(node['job_id'], node['attempt_id'], node['fencing_token'])
+    runtime.store.complete_task_verification(node['job_id'], node['attempt_id'], node['fencing_token'],
+                                             output, receipt, evidence=evidence)
+    proof = artifacts.verification_outcome(producer)
+    assert proof['status'] == 'VERIFIED'
+    assert proof['verification_scope'] == 'content_integrity'
+    assert 'content_review' not in proof
+    assert output['verified_requirements'] == []
 
 
 def test_cancelled_verification_never_becomes_a_quality_failure(staged, simple_env, tmp_path):

@@ -237,6 +237,14 @@ class TaskArtifactRuntime:
         after.update(proposed)
         from .coding_checks import validate_generated_files
         validate_generated_files(after, list(proposed))
+        if project is not None and self.requires_terminal_verification(node['payload']):
+            reqs = micro['requirement_ids'] if micro else [r['id'] for r in intent['task']['document']['requirements']]
+            test_paths = [p for p in after if within(p, project.test_paths) and p not in baseline]
+            # Invalid test definitions are a producer semantic failure while
+            # its original native fence is still current, not an unrepairable
+            # controller hold after the proposal was marked completed.
+            bind_test_identities(after, test_paths,
+                                 [{'name': name} for name in requirement_test_names(reqs).values()])
         # Stage the proposal in a second fresh directory and observe its bytes.
         result_root = descriptor.root / 'task-result'
         result_root.mkdir()
@@ -403,9 +411,33 @@ class TaskArtifactRuntime:
         if result['status'] in ('VERIFIED', 'TASK_VERIFICATION_REJECTED'):
             proof = self._committed_verification(result['job_id'])
             if proof['verification_kind'] == 'artifact_integrity':
-                # Byte integrity does not yet establish content correctness.
-                # The independent-review adapter must bind its committed verdict.
-                return dict(status='WAITING_FOR_INDEPENDENT_CONTENT_VERIFICATION', physical_verification=proof)
+                if intent['stage'] == 'SIMPLE_EXECUTION' and intent['complexity'] <= 3:
+                    # The owner's low-tier single-model path completes captured
+                    # content with explicit integrity-only scope.
+                    return dict(proof, verification_scope='content_integrity')
+                from .content_review_428 import ContentReviewRuntime
+                review = ContentReviewRuntime.committed_result(self.store, job['job_id'])
+                if review is None:
+                    return dict(status='WAITING_FOR_INDEPENDENT_CONTENT_VERIFICATION', physical_verification=proof)
+                if (review['producer_job_id'] != job['job_id']
+                        or review['producer_output_sha256'] != proof['producer_output_sha256']
+                        or review['physical_job_id'] != proof['verification_job_id']
+                        or review['source_snapshot_sha256'] != proof['source_snapshot_sha256']):
+                    raise ValueError('Content review does not bind the physical producer result')
+                proof.update(status='VERIFIED' if review['accepted'] else 'REJECTED', passed=review['accepted'],
+                    verification_scope='content_integrity_and_independent_model_review',
+                    content_review=dict(job_id=review['review_job_id'], output_sha256=review['review_output_sha256'],
+                                        binding_sha256=review['binding_sha256']))
+                if not review['accepted']:
+                    proof['failure'] = dict(schema='cochem-task-verification-feedback/4.2.8',
+                        category='content_review', reason='REQUIREMENTS_NOT_SATISFIED',
+                        findings=[item[:2000] for item in review['findings'][:20]],
+                        findings_truncated=len(review['findings']) > 20,
+                        requirements=[dict(requirement_id=item['requirement_id'], satisfied=item['satisfied'],
+                                           assessment=item['assessment'][:1000]) for item in review['assessments'][:40]],
+                        requirements_truncated=len(review['assessments']) > 40,
+                        review_output_sha256=review['review_output_sha256'],
+                        source_snapshot_sha256=proof['source_snapshot_sha256'])
             return proof
         return result
 
@@ -422,17 +454,31 @@ class TaskArtifactRuntime:
         with self.store._connection() as conn:
             if conn.execute('SELECT 1 FROM task428_cancelled_tasks WHERE task_id=?', (task_id,)).fetchone():
                 return None
-            rows = list(conn.execute("SELECT j.job_id FROM pipeline_jobs j JOIN pipeline_outputs o USING(job_id) "
+            sql = ("SELECT j.job_id AS observed_job_id,0 AS content,o.created_at AS observed_at "
+                "FROM pipeline_jobs j JOIN pipeline_outputs o USING(job_id) "
                 "WHERE j.kind IN ('TASK_TEST','TASK_VERIFY') AND j.status='COMPLETED' "
                 "AND json_extract(j.payload_json,'$.task_id')=? "
                 "AND json_extract(j.payload_json,'$.microtask_id') IS ? "
-                "AND json_extract(o.output_json,'$.status')='REJECTED' "
-                'ORDER BY o.created_at,j.job_id LIMIT 129', (task_id, microtask_id)))
+                "AND json_extract(o.output_json,'$.status')='REJECTED' ")
+            params = [task_id, microtask_id]
+            if conn.execute("SELECT 1 FROM sqlite_master WHERE name='task428_content_review_results'").fetchone():
+                sql += ("UNION ALL SELECT j.job_id AS observed_job_id,1 AS content,o.created_at AS observed_at "
+                    "FROM task428_content_review_results r "
+                    'JOIN pipeline_jobs j ON j.job_id=r.producer_job_id '
+                    'JOIN pipeline_outputs o ON o.job_id=r.review_job_id '
+                    "WHERE json_extract(j.payload_json,'$.planning_intent.task_id')=? "
+                    "AND json_extract(j.payload_json,'$.planning_intent.microtask_id') IS ? "
+                    "AND json_extract(r.verdict_json,'$.accepted')=0 ")
+                params += [task_id, microtask_id]
+            rows = list(conn.execute(sql + 'ORDER BY observed_at,observed_job_id LIMIT 129', params))
         if len(rows) > 128:
             raise ValueError('Verification history exceeds bounded lineage reconciliation')
         rejected = {}
         for row in rows:
-            result = self._committed_verification(row['job_id'])
+            result = (self.verification_outcome({'job_id': row['observed_job_id']}) if row['content']
+                      else self._committed_verification(row['observed_job_id']))
+            if result['status'] != 'REJECTED':
+                continue
             key = (result['producer_job_id'], result['producer_attempt_id'], result['producer_fencing_token'])
             rejected.setdefault(key, result)
         if not rejected:
