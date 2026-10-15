@@ -1,5 +1,54 @@
 # 4.2.8 source progress
 
+## Current operational repair — 15 October 2026
+
+The owner-approved seven-part repair is on `fix/428-operational-repair`, based
+on `c714854506c736431e6a0d5aaea2471aba8ab5ff`, in the separate local
+`Pipeline-Mix-Model-Concurrent-428-repair` checkout. The installed runtime is
+unchanged by this engineering session. The earlier implementation summary below
+is historical and does not prove that the installed planning path is enabled.
+
+Implemented source work includes corrected CPU admission units and recovery from
+transient pressure; scoped repository preparation; initial output contracts and
+deterministic handoff forms; two bounded format corrections; legacy snapshot and
+submission-ledger tools; and a scoped, reversible Codex integration update.
+Planning now connects actual board claims, native receipt reconciliation,
+controller-owned file/test verification, independent content review and final
+delivery. Researched pivots and typed fracture plans preserve original quality,
+dispatch and elapsed-time budgets. Nested scope proofs cannot substitute for the
+parent's final release criteria. Research parks pending siblings without charging
+another attempt; the thirtieth quality failure remains locked.
+
+The current owner-package design is documented in
+[OPERATIONAL_OWNER_LAUNCH_R5.md](OPERATIONAL_OWNER_LAUNCH_R5.md). It upgrades the
+verified 4.2.8 r4 baseline to a fresh r5 runtime, accepts an exact task catalog,
+and enables the connected planning configuration only after protected evidence
+checks. It contains no sign-in or late prompt. The installed catalog, provider
+quotas, SYSTEM execution and useful-job completion still require actual host
+acceptance. No old R5/R6/R7 command is an operational r5 deployment command.
+
+The broader source regression at `affa811` passed **746 tests**, with one skip
+and two native/real-process exclusions. A later focused slice at `a156f7a`
+passed **42 tests**, including temporary SQLite and real-file fracture/release
+flows with inert provider ports. These results are not deployment acceptance.
+See [VALIDATION.md](VALIDATION.md) for the verification boundary.
+
+Known limits remain explicit. The strict published reasoning floors leave some
+task-type/tier combinations without eligible routes or a different-family
+reviewer. [OPERATIONAL_CATALOG_CANDIDATE_20261015.json](OPERATIONAL_CATALOG_CANDIDATE_20261015.json)
+records the proposed 27 contract-bound profiles and every held comparison;
+benchmark scores alone do not establish installed CLI support. Automatic
+completion-audit dispatch and isolated repair callbacks are not configured in
+the production controller. Their fixture implementations are not operational
+self-healing. Specialist exam, YouTube and Antigravity integrations are unchanged.
+
+Three selected existing quick-reference jobs are prepared for useful-work
+acceptance after deployment, with input hashes and a durable submission ledger.
+They have not been submitted by this repair session. Original legacy rows,
+completed work, credentials and all earlier runtime packages are preserved.
+
+## Historical implementation handoff
+
 Current coding handoff: [root handoff](../../PIPELINE_4.2.8_AGENT_HANDOFF.md),
 [implementation plan](../../tasks/plan.md), [remaining tasks](../../tasks/todo.md),
 [owner launch runbook](OWNER_LAUNCH.md), and [release review](RELEASE_REVIEW.md).

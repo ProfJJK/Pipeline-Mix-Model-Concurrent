@@ -1,5 +1,32 @@
 # Pipeline 4.2.8 — Integrated Validation & Regression Evidence (`P428-24`)
 
+## Operational repair source verification — 15 October 2026
+
+The current repair checkout is `Pipeline-Mix-Model-Concurrent-428-repair`, branch
+`fix/428-operational-repair`. Tests use the repository Python 3.12 interpreter
+and `scripts/run_source_tests_428.py`, serialized with the shared host lock.
+
+At `affa811`, all modified test modules since baseline `c714854` except
+`pipeline_tests/test_service.py` were run. The selection excluded
+`real_process_cleanup`, `fresh_process`, and `actual_native_controller_priority`:
+**746 passed, 1 skipped, 2 deselected in 166.43 seconds**. The service module was
+not included because its broader fixtures include real child launches.
+
+At `a156f7a`, the budget and physical fracture-board suites passed **42 tests in
+33.14 seconds**. These exercise actual temporary files, snapshots and SQLite
+transactions, but provider responses and native receipt ports are inert. They
+cover parent release after fracture of an implementation or final-test scope,
+external predecessors, nested aliases, failure-research parking and unchanged
+dispatch/time/quality limits. Owner-launch tests execute selected pure functions
+in PowerShell with host lifecycle and process ports replaced by forbidden or
+inert ports. No installer Apply, task start, native provider command, protected
+write, or live deployment was performed by these tests.
+
+These results supersede claims that the historical 525-test fixture sweep alone
+proves the newly connected production path. Live installed native acceptance,
+SYSTEM cutover, refreshed Codex MCP visibility and useful-job deliverables must
+each have their own receipts. Earlier evidence is retained below as history.
+
 ## 1. Scope & Provenance
 
 - **Branch:** `feature/4.2.8-task-routing`

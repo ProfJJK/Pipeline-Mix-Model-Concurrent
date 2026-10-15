@@ -58,12 +58,15 @@ remain immutable. Source verification and actual host acceptance are distinct.
 
 ## Repair sequence and evidence
 
-- [ ] Repository registration and acceptance-fixture boundary.
-- [ ] Initial output contracts, handoff forms and bounded correction accounting.
-- [ ] CPU units, transient admission recovery and explicit pressure reasons.
-- [ ] Actual 4.2.8 planning configuration and execution acceptance coverage.
-- [ ] Legacy inventory, useful-work acceptance plan, snapshots and import ledger.
-- [ ] Sanitized integration inventory, reviewed immutable release and owner script.
+- [x] Repository registration and acceptance-fixture boundary: source and fixtures.
+- [x] Initial output contracts, handoff forms and bounded correction accounting.
+- [x] CPU units, transient admission recovery and explicit pressure reasons.
+- [x] Connected 4.2.8 planning configuration and execution source/fixture coverage.
+- [x] Legacy inventory, useful-work acceptance plan, snapshots and import ledger.
+- [x] Sanitized integration templates and owner-launch implementation.
+- [ ] Final immutable package and packaged read-only verification.
+- [ ] Owner-run protected installation, native catalog acceptance and cutover.
+- [ ] Refreshed Codex MCP submission and verified useful-job deliverables.
 
 Baseline: c714854506c736431e6a0d5aaea2471aba8ab5ff. Add implementation commits,
 focused/regression test evidence and remaining host acceptance requirements as
