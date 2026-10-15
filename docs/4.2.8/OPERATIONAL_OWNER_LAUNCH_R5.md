@@ -19,6 +19,8 @@ owner's explicit `-Apply` reaches these stages:
    code/interpreter, exact Warden task ACL/action/invariants and SYSTEM health.
 2. Install the fresh r5 payload offline while the old runtime continues running.
    Executed installer scripts are staged under the protected sitting first.
+   Verify the Codex integration's current target hashes and transformations
+   without writing them, so existing configuration drift is found before stop.
 3. Run a bounded SYSTEM admission fence against the exact configured board.
    `BEGIN IMMEDIATE` prevents a competing claim between the idle check and stop.
    Active leaves, leases, route reservations, uncleared containment, and catalog
@@ -36,7 +38,7 @@ owner's explicit `-Apply` reaches these stages:
    Verify SYSTEM source identity, task instance, planning execution connectivity,
    and nonzero guarded admission before restoring the original logon trigger.
 7. If included, apply only the scoped Codex integration update as the owner.
-   Its prior-byte pins preserve concurrent user edits. A failure keeps the new
+   Recheck its prior-byte pins to preserve edits made since preflight. A failure keeps the new
    runtime and reports the integration hold; a fresh Codex session is required.
 
 All input is front-loaded at UAC. The script contains no planned authentication,

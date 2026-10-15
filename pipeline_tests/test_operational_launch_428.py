@@ -66,7 +66,7 @@ TRANSACTION=r"""
 $seen=[Collections.Generic.List[string]]::new()
 $state=@{phase='package';stopped=$false;stop_requested=$false;cutover_requested=$false;acceptance_started=$false;acceptance_exited=$false;acceptance=$null;rollback='NOT_REQUIRED';error_type=$null}
 $actions=@{}
-foreach($name in @('preconditions','offline_install','admission_fence','stop_previous','release_fence','catalog_acceptance','cutover','verify_running','enable_trigger','codex_integration')){
+foreach($name in @('preconditions','offline_install','codex_preflight','admission_fence','stop_previous','release_fence','catalog_acceptance','cutover','verify_running','enable_trigger','codex_integration')){
     $actions[$name]={param($s)
         $seen.Add($s.phase)
         if($s.phase -eq 'stop_previous'){$s.stopped=$true}
@@ -85,12 +85,12 @@ def test_complete_sequence_and_strict_mode_success_projection():
     result=inert_ps(TRANSACTION.replace('PUB','COMMITTED').replace('FAIL','none'))
     assert result['status']=='R428_OPERATIONAL_RUNNING_VERIFIED'
     assert result['error_type'] is None
-    assert result['seen']==['preconditions','offline_install','admission_fence','stop_previous',
+    assert result['seen']==['preconditions','offline_install','codex_preflight','admission_fence','stop_previous',
                            'release_fence','catalog_acceptance','cutover','verify_running','enable_trigger','codex_integration']
 
 
 @pytest.mark.parametrize('failure,pub,restore',[
-    ('offline_install','UNKNOWN',False),('admission_fence','UNKNOWN',False),
+    ('offline_install','UNKNOWN',False),('codex_preflight','UNKNOWN',False),('admission_fence','UNKNOWN',False),
     ('release_fence','UNKNOWN',True),('catalog_acceptance','NOT_COMMITTED',True),
     ('catalog_acceptance','COMMITTED',False),('catalog_acceptance','UNKNOWN',False),
     ('cutover','COMMITTED',False),('verify_running','COMMITTED',False),('enable_trigger','COMMITTED',False),('codex_integration','COMMITTED',False),

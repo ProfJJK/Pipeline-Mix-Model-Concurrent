@@ -116,7 +116,7 @@ def prepare(export, user_home, runtime_root, client_config):
                 provider_commands_executed=0, other_integrations_changed=False)
 
 
-def apply(manifest, *, replace=os.replace):
+def _capture_update(manifest):
     if (manifest.get('schema') != 'cochem-codex-integration-update/1'
             or set(manifest.get('expected', {})) != set(FILES)
             or set(manifest.get('templates', {})) != set(TEMPLATES)):
@@ -131,6 +131,18 @@ def apply(manifest, *, replace=os.replace):
     updated = {key: text.encode('utf-8') for key, text in manifest['templates'].items()}
     updated['config'] = patch_config(originals['config'], manifest['runtime_root'], manifest['client_config'])
     updated['rules'] = patch_rules(originals['rules'], updated['rules'])
+    return home, paths, originals, updated
+
+
+def verify_plan(manifest):
+    """Validate existing targets and transformations without writing any file."""
+    _capture_update(manifest)
+    return dict(status='CODEX_UPDATE_PLAN_VERIFIED', source_commit=manifest['source_commit'],
+                refresh_required=True, files_changed=0, current_session_tools_loaded=False)
+
+
+def apply(manifest, *, replace=os.replace):
+    home, paths, originals, updated = _capture_update(manifest)
     backups = home / '.codex' / ('pipeline-integration-backup-' + uuid.uuid4().hex)
     backups.mkdir()
     for key, raw in originals.items():
@@ -186,8 +198,7 @@ def main():
     if sha(raw) != args.manifest_sha256:
         raise ValueError('Codex update manifest differs from reviewed pin')
     manifest = json.loads(raw)
-    print(json.dumps(apply(manifest) if args.apply else dict(status='CODEX_UPDATE_PLAN_ONLY',
-        source_commit=manifest['source_commit'], refresh_required=True, files_changed=0)))
+    print(json.dumps(apply(manifest) if args.apply else verify_plan(manifest)))
 
 
 if __name__ == '__main__':

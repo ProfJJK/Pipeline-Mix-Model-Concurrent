@@ -42,6 +42,22 @@ def test_only_managed_settings_change_and_manifest_has_no_personal_config(prepar
         assert (Path(result['backup_root']) / (key + '.original')).read_bytes() == value
 
 
+def test_read_only_preflight_validates_targets_and_rechecks_drift_at_apply(prepared):
+    home, manifest, old = prepared
+    result = integration.verify_plan(manifest)
+    assert result['status'] == 'CODEX_UPDATE_PLAN_VERIFIED'
+    assert result['files_changed'] == 0
+    assert all((home / integration.FILES[key]).read_bytes() == value for key, value in old.items())
+    assert not list((home / '.codex').glob('pipeline-integration-backup-*'))
+    target = home / integration.FILES['metadata']
+    target.write_bytes(b'Late specialist edit')
+    for operation in (integration.verify_plan, integration.apply):
+        with pytest.raises(ValueError, match='changed since preparation'):
+            operation(manifest)
+    assert target.read_bytes() == b'Late specialist edit'
+    assert (home / integration.FILES['config']).read_bytes() == old['config']
+
+
 def test_changed_settings_hold_before_any_write(prepared):
     home, manifest, old = prepared
     target = home / integration.FILES['metadata']; target.write_bytes(b'New specialist edit')

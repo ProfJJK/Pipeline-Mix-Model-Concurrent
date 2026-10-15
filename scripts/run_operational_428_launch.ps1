@@ -61,7 +61,7 @@ function Invoke-OpTransaction {
     # COM/tasks/processes. Host adapters below are used only by owner -Apply.
     param([hashtable]$Actions,[hashtable]$State)
     try{
-        foreach($phase in @('preconditions','offline_install','admission_fence','stop_previous','release_fence','catalog_acceptance','cutover','verify_running','enable_trigger','codex_integration')){
+        foreach($phase in @('preconditions','offline_install','codex_preflight','admission_fence','stop_previous','release_fence','catalog_acceptance','cutover','verify_running','enable_trigger','codex_integration')){
             $State.phase=$phase
             if($phase -ceq 'stop_previous'){$State.stop_requested=$true}
             if($phase -ceq 'catalog_acceptance'){$State.acceptance_started=$true}
@@ -511,7 +511,7 @@ function Invoke-OperationalLaunch {
             $null=$script:OpFolder.RegisterTaskDefinition('CoChem-4.2.7-Warden',$d,20,'SYSTEM',$null,5,$script:OpOriginalSddl)
             Assert-428WardenTask ($script:OpFolder.GetTask('CoChem-4.2.7-Warden')) $script:OpOriginalXml $script:OpOriginalSddl $script:OpRoot $state.final_arguments $true $true 1
         }
-        $actions.codex_integration={param($state)
+        $actions.codex_preflight={param($state)
             if($null -eq (Get-OpProperty $m 'integration_manifest')){return}
             Write-OpStatus $state.phase
             if($m.integration_manifest -cne 'codex-integration.json' -or $m.integration_sha256 -cnotmatch '^[a-f0-9]{64}$'){throw 'Scoped Codex integration manifest differs.'}
@@ -521,6 +521,18 @@ function Invoke-OperationalLaunch {
                 $integration.client_config -cne 'C:\Users\ansac\CoChem427\pipeline-client-r3.json'){throw 'Scoped Codex integration identity differs.'}
             $path=Join-Path $script:OpPrivate 'codex-integration.json'
             Copy-VerifiedPayload ([pscustomobject]@{source=$source;destination=$path;sha256=$m.integration_sha256;length=(Get-Item -LiteralPath $source).Length})
+            $saved=$script:targetRoot
+            try{$script:targetRoot=$script:OpPrivate
+                Invoke-428Native (Join-Path $script:OpRoot '.venv\Scripts\python.exe') @('-I','-B','-m','cochem_pipeline.codex_integration_428',
+                    '--manifest',$path,'--manifest-sha256',$m.integration_sha256) 'codex-preflight' 120
+            }finally{$script:targetRoot=$saved}
+            $result=Read-OpPrivateRecord (Join-Path $script:OpPrivate 'codex-preflight.stdout.log')
+            if($result.status -cne 'CODEX_UPDATE_PLAN_VERIFIED' -or $result.files_changed -ne 0){throw 'Codex integration preflight did not verify.'}
+        }
+        $actions.codex_integration={param($state)
+            if($null -eq (Get-OpProperty $m 'integration_manifest')){return}
+            Write-OpStatus $state.phase
+            $path=Join-Path $script:OpPrivate 'codex-integration.json'
             $saved=$script:targetRoot
             try{$script:targetRoot=$script:OpPrivate
                 Invoke-428Native (Join-Path $script:OpRoot '.venv\Scripts\python.exe') @('-I','-B','-m','cochem_pipeline.codex_integration_428',
