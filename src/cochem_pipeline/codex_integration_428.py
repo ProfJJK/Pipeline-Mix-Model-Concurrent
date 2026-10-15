@@ -152,15 +152,18 @@ def apply(manifest, *, replace=os.replace):
             raise ValueError('Codex update verification changed')
     except BaseException:
         for key in reversed(changed):
-            if read(paths[key]) != updated[key]:
-                conflicts.append(key)
-                continue
-            temporary = paths[key].with_name(paths[key].name + '.restore-' + uuid.uuid4().hex)
-            with temporary.open('xb') as stream:
-                stream.write(originals[key]); stream.flush(); os.fsync(stream.fileno())
             try:
+                if read(paths[key]) != updated[key]:
+                    conflicts.append(key)
+                    continue
+                temporary = paths[key].with_name(paths[key].name + '.restore-' + uuid.uuid4().hex)
+                with temporary.open('xb') as stream:
+                    stream.write(originals[key]); stream.flush(); os.fsync(stream.fileno())
                 replace(temporary, paths[key]); restored.append(key)
-            except OSError:
+            except (OSError, ValueError):
+                # A concurrent deletion/redirect or an inaccessible backup must
+                # not prevent recovery of other unchanged files or hide the
+                # original failure. Leave this path and its backup for review.
                 conflicts.append(key)
         (backups / 'held.json').write_text(json.dumps(dict(status='HELD_PRESERVE_EVIDENCE',
             changed=changed, restored=restored, concurrent_or_restore_conflicts=conflicts)), encoding='utf-8')

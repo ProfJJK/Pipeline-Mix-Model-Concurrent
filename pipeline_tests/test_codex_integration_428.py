@@ -66,6 +66,24 @@ def test_failed_replacement_restores_only_its_own_changes(prepared):
     assert len(list((home / '.codex').glob('pipeline-integration-backup-*/held.json'))) == 1
 
 
+def test_concurrent_missing_file_does_not_abort_other_file_recovery(prepared):
+    home, manifest, old = prepared
+    removed = home / integration.FILES['rules']
+    def fail_metadata(source, destination):
+        if destination == home / integration.FILES['metadata']:
+            removed.unlink()  # Simulate an unrelated editor's concurrent delete.
+            raise OSError('original replacement failure')
+        integration.os.replace(source, destination)
+    with pytest.raises(OSError, match='original replacement failure'):
+        integration.apply(manifest, replace=fail_metadata)
+    assert not removed.exists()
+    for key in ('config', 'skill', 'metadata'):
+        assert (home / integration.FILES[key]).read_bytes() == old[key]
+    held = json.loads(next((home / '.codex').glob('pipeline-integration-backup-*/held.json')).read_text())
+    assert held['concurrent_or_restore_conflicts'] == ['rules']
+    assert set(held['restored']) == {'config', 'skill'}
+
+
 @pytest.mark.parametrize('extra', ['[mcp_servers."cochem-pipeline".env]\nTOKEN="private"\n',
                                   '[mcp_servers."cochem-pipeline"]\ncommand="duplicate"\n'])
 def test_unreviewed_nested_or_duplicate_server_settings_refuse(extra):
