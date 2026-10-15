@@ -7,6 +7,7 @@ is a separate consumer; READY here means the plan, not the deliverable, is ready
 """
 from dataclasses import dataclass
 import hashlib
+import json
 from pathlib import Path
 import threading
 import time
@@ -76,6 +77,7 @@ class PlanningController:
         repair_queue=None,
         audit_runtime=None,
         owner_approval_broker=None,
+        artifact_runtime=None,
     ):
         self.journal, self.store, self.clock = journal, store, clock
         self.research_runtime = research_runtime
@@ -90,6 +92,7 @@ class PlanningController:
         self.repair_queue = repair_queue
         self.audit_runtime = audit_runtime
         self.owner_approval_broker = owner_approval_broker
+        self.artifact_runtime = artifact_runtime
         self._research_thread = None
         self.gateway = PlanningGateway(journal, store)
         self.journal.model_result = self.gateway.model_result
@@ -106,6 +109,12 @@ class PlanningController:
                     error_type TEXT, checked_at REAL NOT NULL, next_check_at REAL NOT NULL);
                 CREATE TABLE IF NOT EXISTS planning428_cursor(
                     singleton INTEGER PRIMARY KEY CHECK(singleton=1), task_id TEXT NOT NULL);
+                CREATE TABLE IF NOT EXISTS planning428_cancel_targets(
+                    task_id TEXT NOT NULL, target_id TEXT NOT NULL, kind TEXT NOT NULL,
+                    done INTEGER NOT NULL DEFAULT 0, error_type TEXT,
+                    PRIMARY KEY(task_id,target_id,kind));
+                CREATE TABLE IF NOT EXISTS planning428_completion_audits(
+                    task_id TEXT PRIMARY KEY, result_json TEXT NOT NULL);
             ''')
 
     @classmethod
@@ -124,10 +133,13 @@ class PlanningController:
         from .task_decisions_428 import LockedTaskDecisionStore
         from .task_execution_428 import SimpleTaskExecutionRuntime
         from .task_release_428 import TaskReleaseRuntime
+        from .microtask_board_428 import MicrotaskBoardRuntime
         from .workflow_428 import AttemptLedger
 
         spec = runtime.config.task_planning
-        catalog = spec.read_catalog()
+        catalog = getattr(runtime, 'accepted_task_catalog', None)
+        if catalog is None:
+            catalog = spec.read_catalog()
         secret_file = runtime.config.private_root / 'owner_approval.secret'
         shared_tokens = set()
         token_file = getattr(runtime.config, 'token_file', None)
@@ -166,10 +178,15 @@ class PlanningController:
             knowledge_service=getattr(runtime, 'knowledge', None),
             knowledge_authority=getattr(runtime, 'knowledge_authority', None),
         )
-        exec_runtime = SimpleTaskExecutionRuntime(journal, runtime.store)
-        rel_runtime = TaskReleaseRuntime(journal, runtime.store, owner_broker=owner_broker)
         ledger = AttemptLedger(runtime.config.private_root / 'attempts428.db')
         att_runtime = AttemptAccountingRuntime(ledger, store=runtime.store)
+        artifact_runtime = getattr(runtime, 'task_artifacts', None)
+        artifact_args = {'artifact_runtime': artifact_runtime} if artifact_runtime is not None else {}
+        exec_runtime = SimpleTaskExecutionRuntime(journal, runtime.store, **artifact_args)
+        board = MicrotaskBoardRuntime(journal, runtime.store, owner_broker=owner_broker,
+                                      attempt_ledger=att_runtime)
+        rel_runtime = TaskReleaseRuntime(journal, runtime.store, board=board,
+                                        owner_broker=owner_broker, **artifact_args)
         dos_store = FailureDossierStore(ledger)
         piv_runtime = PivotRuntime(ledger, catalog, dossier_store=dos_store)
         frac_runtime = FractureRuntime(ledger, catalog, dossier_store=dos_store, job_store=runtime.store)
@@ -183,8 +200,8 @@ class PlanningController:
                 'repair_agy': {'provider': 'gemini', 'quota_pool': 'google'},
             },
             normal_profile_ids={'slot1', 'slot2', 'slot3', 'slot4', 'slot5', 'slot6'},
-            verify_reservation=lambda _: None,
-            verify_commit=lambda c, t: None,
+            verify_reservation=cls._unconfigured_repair_verifier,
+            verify_commit=cls._unconfigured_repair_verifier,
         )
         aud_runtime = CompletionAuditRuntime(runtime.config.private_root / 'audit428.db', catalog, rep_queue)
         return cls(
@@ -202,7 +219,12 @@ class PlanningController:
             repair_queue=rep_queue,
             audit_runtime=aud_runtime,
             owner_approval_broker=owner_broker,
+            artifact_runtime=artifact_runtime,
         )
+
+    @staticmethod
+    def _unconfigured_repair_verifier(*_args):
+        raise RuntimeError('Independent repair execution authority is not configured')
 
     def kick_research_worker(self) -> bool:
         if self.research_runtime is None or not hasattr(self.research_runtime, 'has_due_work'):
@@ -241,6 +263,8 @@ class PlanningController:
     def submit(self, objective, task_id=None, *, project_id=None):
         # No catalog, tier, approval, profile or dispatch arguments are accepted.
         task_id = _id(task_id if task_id is not None else 'task428-' + uuid.uuid4().hex)
+        if self.artifact_runtime is not None:
+            self.artifact_runtime.prepare_task(task_id, project_id)
         self.journal.create(task_id, objective, project_id=project_id)
         return self.task_status(task_id)
 
@@ -248,26 +272,51 @@ class PlanningController:
         _id(task_id)
         current = self.task_status(task_id)
         job_id = (current.get('controller') or {}).get('job_id')
-        state = self.journal.cancel(task_id)
         cancelled_jobs = set()
         if job_id:
             cancelled_jobs.add(job_id)
         if self.release_runtime is not None and hasattr(self.release_runtime, 'board'):
-            try:
-                snap = self.release_runtime.board.snapshot(task_id)
-                for node in (snap or {}).get('nodes') or ():
-                    if node.get('job_id'):
-                        cancelled_jobs.add(node['job_id'])
-            except Exception:
-                pass
-        for jid in cancelled_jobs:
-            try:
-                job = self.store.get(jid)
-                self.store.cancel_workflow(job['workflow_id'])
-            except (ValueError, KeyError):
-                pass
-        self._record(task_id, state['journal_version'], 'CANCELLED', job_id=job_id, delay=3600)
+            snap = self.release_runtime.board.board_status(task_id)
+            for node in list(snap.get('nodes') or ()) + list(snap.get('batches') or ()):
+                if node.get('job_id'):
+                    cancelled_jobs.add(node['job_id'])
+        targets = [(jid, 'job') for jid in sorted(cancelled_jobs)]
+        research_id = (current.get('controller') or {}).get('research_id')
+        if research_id:
+            targets.append((research_id, 'research'))
+        # Persist cancellation obligations before changing the task stage. A
+        # process interruption cannot turn an unfinished cancellation into success.
+        with self.journal._write() as conn:
+            conn.executemany('INSERT OR IGNORE INTO planning428_cancel_targets(task_id,target_id,kind) '
+                             'VALUES(?,?,?)', [(task_id, target, kind) for target, kind in targets])
+        state = self.journal.cancel(task_id)
+        self._reconcile_cancellation(task_id, state['journal_version'])
         return self.task_status(task_id)
+
+    def _reconcile_cancellation(self, task_id, version):
+        with self.journal._write() as conn:
+            targets = conn.execute('SELECT target_id,kind FROM planning428_cancel_targets '
+                                   'WHERE task_id=? AND done=0', (task_id,)).fetchall()
+        pending = False
+        for target in targets:
+            try:
+                if target['kind'] == 'job':
+                    job = self.store.get(target['target_id'])
+                    self.store.cancel_workflow(job['workflow_id'])
+                elif self.research_runtime is not None:
+                    self.research_runtime.cancel(target['target_id'])
+                else:
+                    raise RuntimeError('Research cancellation port is not configured')
+                error_type = None
+            except Exception as error:
+                pending = True
+                error_type = type(error).__name__
+            with self.journal._write() as conn:
+                conn.execute('UPDATE planning428_cancel_targets SET done=?,error_type=? '
+                             'WHERE task_id=? AND target_id=? AND kind=?',
+                             (int(error_type is None), error_type, task_id, target['target_id'], target['kind']))
+        self._record(task_id, version, 'CANCELLATION_PENDING' if pending else 'CANCELLED',
+                     delay=5 if pending else 3600)
 
     def notify_job_changed(self, job_id):
         if not isinstance(job_id, str) or not job_id:
@@ -292,6 +341,11 @@ class PlanningController:
             rel = self.release_runtime.get_release(task_id)
             if rel is not None:
                 result['release'] = rel
+        with self.journal._write() as conn:
+            audit = conn.execute('SELECT result_json FROM planning428_completion_audits WHERE task_id=?',
+                                 (task_id,)).fetchone()
+        if audit is not None:
+            result['completion_audit'] = json.loads(audit[0])
         if self.decision_store is not None and self.attempt_ledger is not None:
             try:
                 lstate = self.attempt_ledger.status(task_id)
@@ -322,7 +376,9 @@ class PlanningController:
     def _step_task(self, task_id):
         intent = self.journal.intent(task_id)
         version, action = intent['version'], intent['action']
-        if action == 'model_stage':
+        if intent.get('stage') == 'CANCELLED':
+            self._reconcile_cancellation(task_id, version)
+        elif action == 'model_stage':
             job = self.gateway.submit(task_id)
             if job['status'] == 'COMPLETED':
                 if self.gateway.model_result(job['job_id']) is None:
@@ -356,12 +412,64 @@ class PlanningController:
             res = self.release_runtime.step_microtask_task(task_id)
             self._record(task_id, version, res['status'], job_id=res.get('job_id'), delay=res.get('delay', 1))
         elif intent.get('stage') == 'COMPLETED':
-            self._record(task_id, version, 'EXECUTION_COMPLETED', delay=3600)
+            audit = self._enqueue_completion_audits(task_id)
+            self._record(task_id, version, 'EXECUTION_COMPLETED',
+                         delay=30 if audit == 'SKIPPED_AUDIT_CAPACITY' else 3600)
         else:
             status = {'owner_review': 'WAITING_FOR_OWNER_APPROVAL',
                       'jobboard_submission': 'PLAN_READY_EXECUTION_PENDING',
                       'capability_hold': 'CAPABILITY_HOLD'}.get(action, 'PLANNING_HELD')
             self._record(task_id, version, status, delay=30)
+
+    def _enqueue_completion_audits(self, task_id):
+        """Enqueue independently sampled work; never manufacture an audit verdict."""
+        if self.audit_runtime is None:
+            return 'NOT_CONFIGURED'
+        with self.journal._write() as conn:
+            row = self.journal._read(conn, task_id)
+            state, catalog = json.loads(row['state_json']), json.loads(row['catalog_json'])
+        if state.get('stage') != 'COMPLETED':
+            return 'NOT_COMPLETE'
+        artifacts = []
+        if self.execution_runtime is not None:
+            artifact = self.execution_runtime.get_artifact(task_id)
+            if artifact:
+                artifacts.append(dict(job_id=artifact['job_id'], profile_id=artifact['profile_id'],
+                    output_sha256=artifact['artifact_sha256'], task_types=state['assessment']['task_types'],
+                    expected_requirements=[r['id'] for r in state['document']['requirements']]))
+        if self.release_runtime is not None and self.release_runtime.get_release(task_id):
+            for node in self.release_runtime.board.board_status(task_id)['nodes']:
+                if node['status'] == 'COMPLETED' and node.get('job_id'):
+                    artifacts.append(dict(job_id=node['job_id'],
+                        profile_id=(node.get('output') or {}).get('profile_id'),
+                        output_sha256=node['artifact_sha256'], task_types=node['task_types'],
+                        expected_requirements=node['requirement_ids']))
+        if not artifacts:
+            raise ValueError('Completed task has no recorded execution evidence for audit')
+        results = []
+        for item in artifacts:
+            job_id = item['job_id']
+            with self.store._connection() as conn:
+                job = self.store._get(conn, job_id)
+                cleanup = conn.execute('SELECT cleared_at FROM pipeline_execution_cleanup '
+                    'WHERE job_id=? AND attempt_id=? AND fencing_token=?',
+                    (job_id, job['attempt_id'], job['fencing_token'])).fetchone()
+            if job['status'] != 'COMPLETED' or not job.get('receipt') or cleanup is None or cleanup[0] is None:
+                raise ValueError('Completion audit requires a committed result and verified native cleanup')
+            profile = catalog['models'].get(item.pop('profile_id'))
+            if profile is None:
+                raise ValueError('Completion producer is absent from the task catalog capture')
+            result = self.audit_runtime.enqueue_completion(task_id=task_id,
+                producer_model_family=profile['family'], **item)
+            results.append({'audit_key': result['audit_key'], 'status': result['status'],
+                            'sampled': result['sampled']})
+        # Status says QUEUED/NOT_SAMPLED, never audited merely because it was enqueued.
+        with self.journal._write() as conn:
+            conn.execute('INSERT INTO planning428_completion_audits VALUES(?,?) '
+                         'ON CONFLICT(task_id) DO UPDATE SET result_json=excluded.result_json',
+                         (task_id, json.dumps(results, sort_keys=True)))
+        return ('SKIPPED_AUDIT_CAPACITY' if any(r['status'] == 'SKIPPED_AUDIT_CAPACITY' for r in results)
+                else 'ENQUEUED')
 
     def step(self, limit=8):
         if type(limit) is not int or not 1 <= limit <= 32:
