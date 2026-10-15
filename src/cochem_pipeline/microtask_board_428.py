@@ -311,6 +311,9 @@ class MicrotaskBoardRuntime:
                     # The physical snapshot still inherits the original, exact
                     # external dependency capture, without rewriting graph deps.
                     ancestors=sorted(set(child['ancestors']) | set(failed['ancestors'])))
+                for key in ('fracture_route_amendment', 'fracture_route_context'):
+                    if key not in child:
+                        by_id[cid].pop(key, None)
                 for key in ('physical_retry', 'pivot_context', 'effective_complexity', 'pivot_model', 'fracture_join'):
                     by_id[cid].pop(key, None)
             failed['fracture_join'] = dict(record, failed_node=dict(deepcopy(source['microtask_node']),
@@ -897,6 +900,19 @@ class MicrotaskBoardRuntime:
                     "SELECT * FROM microtask428_nodes WHERE node_key=?",
                     (node_key,),
                 ).fetchone()
+            if existing is not None and node.get('fracture_route_amendment'):
+                old_meta = json.loads(existing['node_json'])
+                if old_meta.get('fracture_route_amendment') != node['fracture_route_amendment']:
+                    prior_job = self.store.get(existing['job_id']) if existing['job_id'] else None
+                    if prior_job is not None:
+                        with self.store._connection() as conn:
+                            cleanup = conn.execute('SELECT 1 FROM pipeline_execution_cleanup WHERE job_id=? '
+                                'AND cleared_at IS NULL', (prior_job['job_id'],)).fetchone()
+                        if prior_job['status'] == 'RUNNING' or cleanup:
+                            raise ValueError('Reviewed route awaits prior capture cleanup')
+                        if prior_job['status'] not in ('COMPLETED', 'FAILED', 'BLOCKED'):
+                            self._cancel_stale_board_job(prior_job['job_id'])
+                    existing = None
             if existing is not None:
                 prior_context = json.loads(existing['node_json']).get('physical_retry')
                 if node.get('physical_retry') is not None and prior_context != node['physical_retry']:

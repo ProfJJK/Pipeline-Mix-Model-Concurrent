@@ -101,6 +101,14 @@ def join(artifacts, task_id, failed_node, fracture_record, completed_children):
         nested = row.get('output', {}).get('fracture_join_id')
         spec = (_alias_binding(artifacts, nested)['failed_node'] if nested
                 else job['payload']['microtask_node'])
+        from .fracture_routes_428 import effective_registration
+        with ledger._write() as conn:
+            registration = effective_registration(conn, registration,
+                amendment_id=spec.get('fracture_route_amendment'))
+        if spec.get('fracture_route_context') != registration.get('fracture_route_context'):
+            raise ValueError('Fracture child reviewed context differs from its exact route')
+        if registration.get('route_catalog_sha256') and digest(job['payload']['task_catalog']) != registration['route_catalog_sha256']:
+            raise ValueError('Fracture child catalog differs from its reviewed route')
         if row['role'] != registration['role']:
             raise ValueError('Fracture child role differs from compiled scope')
         for key in ('role', 'complexity'):

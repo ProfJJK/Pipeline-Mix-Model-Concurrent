@@ -2,6 +2,9 @@
 import hashlib
 import json
 import threading
+import sqlite3
+
+import pytest
 from types import SimpleNamespace
 import pytest
 
@@ -70,7 +73,7 @@ def execute_one(store, artifacts, *, reject_review=False, job=None):
     return job
 
 
-def fracture_after_physical_predecessors(env, artifacts, failed_id, *, failure_count=10):
+def fracture_after_physical_predecessors(env, artifacts, failed_id, *, failure_count=10, strategy='fracture', complexity=2):
     store, _, ledger, board, outcomes, bridge = env
     failures = 0
     while failures < failure_count:
@@ -94,8 +97,11 @@ def fracture_after_physical_predecessors(env, artifacts, failed_id, *, failure_c
         evidence.record_channel(boundary['research_id'], channel, query=request['query'], status='no_results', sources=[])
     evidence.publish(boundary['research_id'])
     outcomes.reconcile_task('task')
-    complete_review(env, strategy='fracture')
+    complete_review(env, strategy=strategy, complexity=complexity)
     bridge.step('task')
+    if strategy == 'pivot':
+        attach_board(env)
+        return job, boundary
     finish_control(env, 'FRACTURE_PLAN')
     bridge.step('task')
     finish_control(env, 'FRACTURE_REVIEW')
@@ -223,3 +229,77 @@ def test_nested_physical_alias_advances_old_registered_child_without_rewriting_a
     assert store.get(failed['job_id'])['status'] == 'BLOCKED'
     again = board.materialize('task')
     assert next(row for row in again['nodes'] if row['microtask_id'] == child['microtask_id'])['output'] == projected['output']
+
+    # The outer graph remains immutable; only new assembly/final captures may
+    # consume the accepted boundary-20 route overlay.
+    from cochem_pipeline.fracture_routes_428 import effective_registration
+    with ledger._write() as conn:
+        before_graphs = [tuple(row) for row in conn.execute(
+            'SELECT fracture_id,graph_json,graph_sha256 FROM task428_fractures ORDER BY fracture_id')]
+        amendments = [dict(row) for row in conn.execute(
+            'SELECT * FROM task428_fracture_route_amendments ORDER BY child_id,boundary')]
+        assert len(amendments) == 2
+        for amendment in amendments:
+            registration = conn.execute('SELECT * FROM task428_fracture_nodes WHERE child_id=?',
+                                       (amendment['child_id'],)).fetchone()
+            effective = effective_registration(conn, registration,
+                amendment_id=amendment['amendment_id'], latest=True)
+            assert registration['complexity'] == 5 and effective['complexity'] == 6
+            assert effective['selected_model_family'] != json.loads(amendment['binding_json'])['authority']['excluded_family']
+            with pytest.raises(ValueError, match='stale'):
+                effective_registration(conn, registration, latest=True)
+            with pytest.raises(ValueError, match='no immutable'):
+                effective_registration(conn, registration, amendment_id='invented')
+            altered = dict(registration)
+            changed_node = json.loads(altered['node_json']); changed_node['deliverables'] = ['unapproved.txt']
+            altered['node_json'] = json.dumps(changed_node)
+            with pytest.raises(ValueError, match='source differs'):
+                effective_registration(conn, altered, amendment_id=amendment['amendment_id'])
+        with pytest.raises(sqlite3.IntegrityError, match='immutable'):
+            conn.execute('UPDATE task428_fracture_route_amendments SET boundary=10')
+        state_before = ledger._read(conn, first['lineage_root'])
+    board.materialize('task'); board.materialize('task')
+    with ledger._write() as conn:
+        assert ledger._read(conn, first['lineage_root']) == state_before
+        assert conn.execute('SELECT count(*) FROM task428_fracture_route_amendments').fetchone()[0] == 2
+    release, completed_jobs = finish_physical_task(env, artifacts)
+    assert release.get_release('task')
+    amended_jobs = [job for job in completed_jobs
+                   if job['payload'].get('microtask_node', {}).get('fracture_route_amendment')]
+    assert {job['payload']['microtask_node']['role'] for job in amended_jobs} == {'assembly', 'final_test'}
+    assert all(job['payload']['planning_intent']['complexity'] == 6 for job in amended_jobs)
+    assert ledger.status(first['lineage_root'])['failures'] == 20
+    with ledger._write() as conn:
+        assert [tuple(row) for row in conn.execute(
+            'SELECT fracture_id,graph_json,graph_sha256 FROM task428_fractures ORDER BY fracture_id')] == before_graphs
+
+
+def test_registered_child_pivot_captures_reviewed_route_and_reaches_parent_release(env, tmp_path):
+    artifacts = install_artifact_port(env, tmp_path)
+    _, first, _, _ = prepare_fracture(env)
+    attach_board(env)
+    store, _, ledger, board, outcomes, _ = env
+    start = board.materialize('task')
+    child = next(row for row in start['nodes'] if row['lineage_kind'] == 'FAILURE_FRACTURE'
+                 and row['role'] == 'implementation')
+    first_attempt = store.claim('inert-pivot-first', worker_slot='slot1', allowed_kinds=['TASK_PLAN'], requires_cleanup=True)
+    assert first_attempt['payload']['microtask_node']['microtask_id'] == child['microtask_id']
+    execute_one(store, artifacts)
+    store.clear_execution_quarantine(first_attempt['job_id'], first_attempt['attempt_id'], first_attempt['fencing_token'])
+    store.fail(first_attempt['job_id'], first_attempt['attempt_id'], first_attempt['fencing_token'],
+               'Inert compiled child failure', retry=True, category='code')
+    failed, boundary = fracture_after_physical_predecessors(env, artifacts, child['microtask_id'],
+                                                           failure_count=9, strategy='pivot')
+    assert boundary['lineage_root'] == first['lineage_root']
+    assert ledger.status(first['lineage_root'])['failures'] == 20
+    release, jobs = finish_physical_task(env, artifacts)
+    assert release.get_release('task')
+    replacement = next(job for job in jobs if job['payload'].get('microtask_node', {}).get('microtask_id') == child['microtask_id'])
+    assert replacement['job_id'] != failed['job_id']
+    assert replacement['payload']['microtask_node']['fracture_route_amendment']
+    route_context = replacement['payload']['microtask_node']['fracture_route_context']
+    assert route_context['failure_dossier']['boundary'] == 20
+    assert route_context['reviewed_output']['approach']
+    assert replacement['payload']['planning_intent']['complexity'] == 6
+    assert replacement['payload']['planning_intent']['candidate_profiles'] != failed['payload']['planning_intent']['candidate_profiles']
+    assert ledger.status(first['lineage_root'])['failures'] == 20

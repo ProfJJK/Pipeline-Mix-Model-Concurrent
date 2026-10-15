@@ -400,4 +400,5 @@ class PlanningFractureRuntime:
             if record is None or record['fracture_id'] != row['fracture_id']:
                 raise ValueError('Fracture task projection has no committed matching graph')
             records.append(dict(record, source_job=source))
-        return records
+        from .fracture_routes_428 import amend_records
+        return amend_records(self, task_id, records)

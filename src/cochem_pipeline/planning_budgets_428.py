@@ -158,6 +158,13 @@ def _compiled_fracture_member(conn, payload, member, root):
         if declared:
             raise LineageBudgetHold('compiled_fracture_member_missing')
         return False
+    from .fracture_routes_428 import effective_registration
+    row = effective_registration(conn, row, schema='planning_budget_ledger',
+        amendment_id=node.get('fracture_route_amendment'), latest=True)
+    if node.get('fracture_route_context') != row.get('fracture_route_context'):
+        raise LineageBudgetHold('compiled_fracture_route_review_mismatch')
+    if row.get('route_catalog_sha256') and digest(payload['task_catalog']) != row['route_catalog_sha256']:
+        raise LineageBudgetHold('compiled_fracture_route_catalog_mismatch')
     intent = payload['planning_intent']
     context = node.get('fracture_context') or {}
     expected_context = dict(fracture_id=row['fracture_id'], graph_sha256=row['graph_sha256'],
@@ -413,9 +420,9 @@ def _live_quality_hold(conn, job_id, root):
         member = PlanningOutcomeRuntime.lineage_for_job(intent['task_id'], payload)
         if _resolve_root(conn, member) != root:
             return 'physical_job_lineage_changed'
-        if intent['complexity'] < state['floor']:
-            if not _compiled_fracture_member(conn, payload, member, root):
-                return 'retained_reasoning_floor'
+        lower_fragment = _compiled_fracture_member(conn, payload, member, root)
+        if intent['complexity'] < state['floor'] and not lower_fragment:
+            return 'retained_reasoning_floor'
         expected = (state.get('fracture_child_models') or {}).get(member, state.get('next_model'))
         if expected is not None:
             profiles = intent['candidate_profiles']
