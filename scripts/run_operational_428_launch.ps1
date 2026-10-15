@@ -1,0 +1,533 @@
+#Requires -Version 5.1
+<# Owner-only fresh 4.2.8 r4 -> r5 sitting. Default is an offline read-only plan.
+   No sign-in, late prompt, reboot, database restoration, automatic retry, or
+   old bundle modification. Only an explicit -Apply reaches host operations. #>
+[CmdletBinding()]
+param([string]$LaunchManifest,[string]$LaunchManifestSha256,[switch]$Apply)
+
+function Import-OpHelpers {
+    param([string]$Directory)
+    $path=Join-Path $Directory 'reviewed_428_launch_helpers.ps1'
+    $stream=[IO.File]::Open($path,'Open','Read','Read')
+    try{
+        $sha=[Security.Cryptography.SHA256]::Create()
+        try{$pin=[BitConverter]::ToString($sha.ComputeHash($stream)).Replace('-','').ToLowerInvariant()}finally{$sha.Dispose()}
+        if($pin -cne 'e4ac275f8bc32e41c6503e0c04472139dce10930768fbfcada3e3d1e5fcd9dcd'){throw 'Reviewed pure launch helper differs.'}
+        $stream.Position=0;$reader=[IO.StreamReader]::new($stream)
+        try{$source=$reader.ReadToEnd()}finally{$reader.Dispose()}
+        $tokens=$null;$errors=$null;$ast=[Management.Automation.Language.Parser]::ParseInput($source,[ref]$tokens,[ref]$errors)
+        if($errors.Count){throw 'Reviewed helper syntax differs.'}
+        foreach($name in @('Open-428Pin','Read-428Json','Import-428Installer','Assert-428TaskAcl',
+            'Get-428InvariantDefinition','Assert-428WardenTask','Get-428Health','Assert-428Health',
+            'Assert-428PortFree','Get-428FileSha256','Start-428AwakeLease','Stop-428AwakeLease')){
+            $nodes=@($ast.FindAll({param($n)$n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -ceq $name},$false))
+            if($nodes.Count -ne 1){throw 'Reviewed helper is missing or duplicated.'};$nodes[0].Extent.Text
+        }
+    }finally{$stream.Dispose()}
+}
+
+function Get-OpProperty {
+    param($Object,[string]$Name,$Default=$null)
+    if($Object -is [Collections.IDictionary]){if($Object.Contains($Name)){return $Object[$Name]};return $Default}
+    if($null -ne $Object -and $null -ne $Object.PSObject.Properties[$Name]){return $Object.$Name};return $Default
+}
+
+function New-OpResultRecord {
+    param([hashtable]$State,$Manifest,[string]$ManifestHash)
+    return @{schema='cochem-428-operational-owner-result/1';status=$State.status;phase=$State.phase;rollback=$State.rollback;
+        source_commit=$Manifest.source_commit;launch_manifest_sha256=$ManifestHash;request_sha256=$Manifest.request_sha256;
+        publication_state=(Get-OpProperty $State.acceptance 'publication_state' 'UNKNOWN');cutover_requested=$State.cutover_requested;
+        runtime_health_verified=($null -ne (Get-OpProperty $State 'health'));
+        codex_integration_status=(Get-OpProperty (Get-OpProperty $State 'integration') 'status' 'NOT_APPLIED');
+        codex_session_refresh_required=($null -ne (Get-OpProperty $State 'integration'));
+        all_routes_usable=(Get-OpProperty $State.acceptance 'all_routes_usable' $false);
+        coverage_holds=(Get-OpProperty $State.acceptance 'coverage_holds');
+        error_type=(Get-OpProperty $State 'error_type');late_prompt=$false;automatic_retry=$false;useful_job_acceptance=$false}
+}
+
+function Test-OpRestoreAuthority {
+    # Absence, a crash after commit, or an uncertain process is never permission.
+    param($Receipt,[bool]$PhaseStarted,[bool]$PhaseExited,[bool]$CutoverRequested)
+    if($CutoverRequested){return $false}
+    if(-not $PhaseStarted){return $true}
+    $proof=Get-OpProperty $Receipt 'publication_proof'
+    return ($PhaseExited -and (Get-OpProperty $Receipt 'publication_state') -ceq 'NOT_COMMITTED' -and
+        (Get-OpProperty $Receipt 'runtime_resources_closed' $false) -eq $true -and
+        (Get-OpProperty $proof 'catalog_probe_cleanup_verified' $false) -eq $true)
+}
+
+function Invoke-OpTransaction {
+    # Inert action seam: tests exercise real ordering and failure branches without
+    # COM/tasks/processes. Host adapters below are used only by owner -Apply.
+    param([hashtable]$Actions,[hashtable]$State)
+    try{
+        foreach($phase in @('preconditions','offline_install','admission_fence','stop_previous','release_fence','catalog_acceptance','cutover','verify_running','enable_trigger','codex_integration')){
+            $State.phase=$phase
+            if($phase -ceq 'stop_previous'){$State.stop_requested=$true}
+            if($phase -ceq 'catalog_acceptance'){$State.acceptance_started=$true}
+            if($phase -ceq 'cutover'){$State.cutover_requested=$true}
+            & $Actions[$phase] $State
+        }
+        $State.status='R428_OPERATIONAL_RUNNING_VERIFIED'
+    }catch{
+        $State.error_type=$_.Exception.GetType().Name
+        $State.status='R428_OPERATIONAL_HELD_PRESERVE_EVIDENCE'
+        $State.rollback='NOT_REQUIRED'
+        if($State.stopped -and (Test-OpRestoreAuthority $State.acceptance $State.acceptance_started $State.acceptance_exited $State.cutover_requested)){
+            try{& $Actions.restore_previous $State;$State.rollback='PREVIOUS_RUNTIME_RESTORED_HEALTH_VERIFIED'}
+            catch{$State.rollback='HELD_PRESERVE_STOPPED_OR_RUNNING_STATE';$State.recovery_error_type=$_.Exception.GetType().Name}
+        }elseif($State.stop_requested -or $State.acceptance_started -or $State.cutover_requested){
+            $State.rollback='HELD_PRESERVE_STOPPED_OR_RUNNING_STATE'
+        }
+    }
+    return $State
+}
+
+function New-OpPrivateAcl {
+    param([bool]$Directory)
+    $acl=New-CodeAcl $Directory
+    foreach($rule in @($acl.GetAccessRules($true,$false,[Security.Principal.SecurityIdentifier]))){
+        if($rule.IdentityReference.Value -ceq 'S-1-5-32-545'){$acl.RemoveAccessRuleSpecific($rule)}
+    };return $acl
+}
+
+function New-OpPrivateDirectory {
+    param([string]$Path)
+    if(Test-Path -LiteralPath $Path){throw 'Preserve existing owner evidence directory.'}
+    Assert-ProtectedPath (Split-Path -Parent $Path)
+    [IO.DirectoryInfo]::new($Path).Create((New-OpPrivateAcl $true));Assert-ProtectedPath $Path
+}
+
+function Write-OpRecord {
+    param([string]$Path,$Record,[bool]$Public=$false)
+    Assert-ProtectedPath (Split-Path -Parent $Path)
+    $acl=if($Public){New-CodeAcl $false}else{New-OpPrivateAcl $false}
+    $s=[IO.FileStream]::new($Path,[IO.FileMode]::CreateNew,[Security.AccessControl.FileSystemRights]::Write,[IO.FileShare]::None,4096,[IO.FileOptions]::None,$acl)
+    try{$raw=[Text.UTF8Encoding]::new($false).GetBytes(($Record|ConvertTo-Json -Depth 20));$s.Write($raw,0,$raw.Length);$s.Flush($true)}finally{$s.Dispose()}
+}
+
+function Write-OpStatus {
+    param([string]$Phase,[string]$Status='RUNNING',$Result=$null)
+    if(-not $script:OpSitting){return}
+    Write-OpRecord (Join-Path $script:OpSitting ('status-'+[DateTime]::UtcNow.ToString('yyyyMMddTHHmmssfffffff')+'-'+[Guid]::NewGuid().ToString('N')+'.json')) `
+        @{schema='cochem-428-operational-status/1';phase=$Phase;status=$Status;utc=[DateTime]::UtcNow.ToString('o');result=$Result;late_prompt=$false;automatic_retry=$false} $true
+}
+
+function Read-OpPrivateRecord {
+    param([string]$Path)
+    Assert-ProtectedPath $Path
+    $pin=Get-428FileSha256 $Path;$s=Open-VerifiedFile $Path $pin (Get-Item -LiteralPath $Path).Length
+    try{return Read-428Json $s}finally{$s.Dispose()}
+}
+
+function Get-OpDaemonArguments {
+    param([string]$Config,[string]$PrivateRoot)
+    return '-I -B -m cochem_pipeline daemon --config "'+$Config+'" --queue-launch-output-root "'+(Join-Path $PrivateRoot 'queue-launch-428')+'" --docker-wait-seconds 900'
+}
+
+function Assert-OpIdleHealth {
+    param($Health,[int]$ExpectedPid,[string]$ExpectedInstance)
+    if($Health.pid -ne $ExpectedPid -or $Health.instance_id -cne $ExpectedInstance -or
+        @($Health.active).Count -or @($Health.quarantined_slots.PSObject.Properties).Count){throw 'Previous controller changed or is not idle.'}
+}
+
+function Open-OpProcessProof {
+    param($Health,[string]$Root,[string]$Config)
+    $process=Get-CimInstance Win32_Process -Filter ('ProcessId='+[int]$Health.pid)
+    if($null -eq $process -or $process.ExecutablePath -cne $script:python -or
+        ([string]$process.CommandLine).IndexOf('daemon --config "'+$Config+'"',[StringComparison]::Ordinal) -lt 0 -or
+        (Invoke-CimMethod -InputObject $process -MethodName GetOwnerSid).Sid -cne 'S-1-5-18'){throw 'Controller native identity differs.'}
+    $parent=Get-CimInstance Win32_Process -Filter ('ProcessId='+[int]$process.ParentProcessId)
+    if($null -eq $parent -or $parent.ExecutablePath -cne (Join-Path $Root '.venv\Scripts\python.exe') -or
+        ([string]$parent.CommandLine).IndexOf('daemon --config "'+$Config+'"',[StringComparison]::Ordinal) -lt 0 -or
+        (Invoke-CimMethod -InputObject $parent -MethodName GetOwnerSid).Sid -cne 'S-1-5-18'){throw 'Controller launcher identity differs.'}
+    $listeners=@(Get-NetTCPConnection -LocalPort 47824 -State Listen -ErrorAction SilentlyContinue)
+    if(-not $listeners.Count -or @($listeners|Where-Object{$_.OwningProcess -ne $Health.pid}).Count){throw 'Controller listener ownership differs.'}
+    $held=[Collections.Generic.List[Diagnostics.Process]]::new()
+    try{
+        foreach($row in @($process,$parent)){
+            $p=[Diagnostics.Process]::GetProcessById([int]$row.ProcessId);$null=$p.Handle
+            if($p.HasExited -or [Math]::Abs(($p.StartTime.ToUniversalTime()-([DateTime]$row.CreationDate).ToUniversalTime()).TotalSeconds) -gt 1){$p.Dispose();throw 'Native process creation changed.'}
+            $held.Add($p)
+        };return ,$held
+    }catch{foreach($p in $held){$p.Dispose()};throw}
+}
+
+function New-OpOneShot {
+    param($Scheduler,$Folder,[string]$Name,[string]$Arguments,[int]$Seconds)
+    $d=$Scheduler.NewTask(0);$d.Principal.UserId='SYSTEM';$d.Principal.LogonType=5;$d.Principal.RunLevel=1
+    $d.Settings.Enabled=$false;$d.Settings.AllowDemandStart=$true;$d.Settings.MultipleInstances=2
+    $d.Settings.RestartCount=0;$d.Settings.ExecutionTimeLimit='PT'+$Seconds+'S'
+    $a=$d.Actions.Create(0);$a.Path=Join-Path $script:OpRoot '.venv\Scripts\python.exe';$a.Arguments=$Arguments;$a.WorkingDirectory=$script:OpRoot
+    $task=$Folder.RegisterTaskDefinition($Name,$d,18,'SYSTEM',$null,5,'O:BAG:BAD:P(A;;FA;;;SY)(A;;FA;;;BA)')
+    Assert-428TaskAcl $task;$r=$task.Definition
+    if($r.Triggers.Count -ne 0 -or $r.Actions.Count -ne 1 -or $r.Actions.Item(1).Type -ne 0 -or
+        $r.Actions.Item(1).Path -cne $a.Path -or $r.Actions.Item(1).Arguments -cne $Arguments -or $r.Actions.Item(1).WorkingDirectory -cne $script:OpRoot -or
+        $r.Principal.UserId -notin @('SYSTEM','S-1-5-18') -or $r.Principal.LogonType -ne 5 -or $r.Principal.RunLevel -ne 1 -or
+        $r.Settings.RestartCount -ne 0 -or $r.Settings.MultipleInstances -ne 2 -or -not $r.Settings.AllowDemandStart -or
+        [Xml.XmlConvert]::ToTimeSpan($r.Settings.ExecutionTimeLimit).TotalSeconds -ne $Seconds -or $task.Enabled -or $task.GetInstances(0).Count){throw 'One-shot task readback differs.'}
+    $task.Enabled=$true;$requested=[DateTime]::UtcNow;$instance=$task.Run($null)
+    return @{name=$Name;task=$task;instance=[string]$instance.InstanceGuid;arguments=$Arguments;xml=$task.Xml;sddl=$task.GetSecurityDescriptor(7);started=$requested}
+}
+
+function Assert-OpOneShot {
+    param($Handle,[bool]$Running)
+    $t=$script:OpFolder.GetTask($Handle.name);Assert-428TaskAcl $t
+    if($t.Xml -cne $Handle.xml -or $t.GetSecurityDescriptor(7) -cne $Handle.sddl){throw 'One-shot identity changed.'}
+    $instances=$t.GetInstances(0)
+    if($Running -and ($instances.Count -ne 1 -or [string]$instances.Item(1).InstanceGuid -cne $Handle.instance)){throw 'One-shot is no longer the exact running instance.'}
+    return $t
+}
+
+function Wait-OpOneShot {
+    param($Handle,[int]$Seconds)
+    $deadline=[DateTime]::UtcNow.AddSeconds($Seconds)
+    do{
+        $task=Assert-OpOneShot $Handle $false
+        if(Test-OpTaskTerminal $task $Handle.started){$task.Enabled=$false;return [int64]$task.LastTaskResult}
+        Start-Sleep -Seconds 1
+    }while([DateTime]::UtcNow -lt $deadline)
+    throw 'One-shot exceeded its bound; preserve task/process state, no automatic termination or restart.'
+}
+
+function Test-OpTaskTerminal {
+    param($Task,[DateTime]$Requested)
+    # Run() can return before the registered task transitions from queued to
+    # running. No old LastTaskResult or initial zero-instance observation is exit.
+    return ($Task.GetInstances(0).Count -eq 0 -and [int64]$Task.LastTaskResult -ne 267009 -and
+        ([DateTime]$Task.LastRunTime).ToUniversalTime() -ge $Requested.AddSeconds(-2))
+}
+
+function Open-OpOneShotProcess {
+    param($Handle,[int]$ProcessId)
+    $child=Get-CimInstance Win32_Process -Filter ('ProcessId='+$ProcessId)
+    if($null -eq $child -or $child.ExecutablePath -cne $script:python -or
+        ([string]$child.CommandLine).IndexOf($Handle.arguments,[StringComparison]::Ordinal) -lt 0 -or
+        (Invoke-CimMethod -InputObject $child -MethodName GetOwnerSid).Sid -cne 'S-1-5-18' -or
+        ([DateTime]$child.CreationDate).ToUniversalTime() -lt $Handle.started.AddSeconds(-2)){throw 'One-shot native identity differs.'}
+    $parent=Get-CimInstance Win32_Process -Filter ('ProcessId='+[int]$child.ParentProcessId)
+    if($null -eq $parent -or $parent.ExecutablePath -cne (Join-Path $script:OpRoot '.venv\Scripts\python.exe') -or
+        ([string]$parent.CommandLine).IndexOf($Handle.arguments,[StringComparison]::Ordinal) -lt 0 -or
+        (Invoke-CimMethod -InputObject $parent -MethodName GetOwnerSid).Sid -cne 'S-1-5-18' -or
+        ([DateTime]$parent.CreationDate).ToUniversalTime() -lt $Handle.started.AddSeconds(-2)){throw 'One-shot launcher identity differs.'}
+    $held=[Collections.Generic.List[Diagnostics.Process]]::new()
+    try{
+        foreach($row in @($child,$parent)){
+            $p=[Diagnostics.Process]::GetProcessById([int]$row.ProcessId);$null=$p.Handle
+            if($p.HasExited -or [Math]::Abs(($p.StartTime.ToUniversalTime()-([DateTime]$row.CreationDate).ToUniversalTime()).TotalSeconds) -gt 1){$p.Dispose();throw 'One-shot creation identity changed.'}
+            $held.Add($p)
+        };return ,$held
+    }catch{foreach($p in $held){$p.Dispose()};throw}
+}
+
+function Start-OpFence {
+    param([string]$Label)
+    $root=Join-Path $script:OpPrivate ($Label+'-'+[Guid]::NewGuid().ToString('N'));New-OpPrivateDirectory $root
+    $nonce=[Guid]::NewGuid().ToString('N')
+    $args='-I -B -m cochem_pipeline.owner_admission_fence_428 --config "'+$script:OpOldConfig+'" --config-sha256 '+$script:OpManifest.previous_config_sha256+
+        ' --output-root "'+$root+'" --nonce '+$nonce+' --request-sha256 '+$script:OpManifest.request_sha256+' --wait-seconds 1800 --hold-seconds 240'
+    $handle=New-OpOneShot $script:OpScheduler $script:OpFolder ('CoChem-4.2.8-Fence-'+$nonce) $args 2100
+    $deadline=[DateTime]::UtcNow.AddSeconds(1830)
+    do{
+        if(Test-Path -LiteralPath (Join-Path $root 'ready.json')){
+            $ready=Read-OpPrivateRecord (Join-Path $root 'ready.json')
+            $fence=@{root=$root;handle=$handle;ready=$ready;nonce=$nonce;ready_pin=(Get-428FileSha256 (Join-Path $root 'ready.json'));released=$false;process=$null}
+            Assert-OpFence $fence;return $fence
+        }
+        $t=Assert-OpOneShot $handle $false
+        if(Test-OpTaskTerminal $t $handle.started){throw 'Admission fence ended without readiness.'}
+        Start-Sleep -Seconds 1
+    }while([DateTime]::UtcNow -lt $deadline)
+    throw 'Admission did not drain within the bound; old runtime is preserved.'
+}
+
+function Assert-OpFence {
+    param($Fence)
+    $r=$Fence.ready;$now=[DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+    if($Fence.released -or $r.schema -cne 'cochem-owner-admission-fence/4.2.8' -or $r.status -cne 'WRITER_FENCE_HELD' -or
+        $r.nonce -cne $Fence.nonce -or $r.config_sha256 -cne $script:OpManifest.previous_config_sha256 -or
+        $r.request_sha256 -cne $script:OpManifest.request_sha256 -or $r.database_path -cne (Join-Path $script:OpConfig.private_root 'job_board.db') -or
+        $r.ready_at -gt $now+2 -or $r.expires_at -lt $now+150 -or $r.expires_at-$r.ready_at -ne 240){throw 'Admission fence is absent, stale, or unbound.'}
+    foreach($p in $r.counts.PSObject.Properties){if($p.Value -ne 0){throw 'Admission fence contains active execution.'}}
+    $null=Assert-OpOneShot $Fence.handle $true
+    $native=Get-CimInstance Win32_Process -Filter ('ProcessId='+[int]$r.pid)
+    if($null -eq $native -or $native.ExecutablePath -cne $script:python -or
+        ([string]$native.CommandLine).IndexOf($Fence.handle.arguments,[StringComparison]::Ordinal) -lt 0 -or
+        (Invoke-CimMethod -InputObject $native -MethodName GetOwnerSid).Sid -cne 'S-1-5-18' -or
+        ([DateTime]$native.CreationDate).ToUniversalTime() -lt $Fence.handle.started.AddSeconds(-2)){throw 'Admission fence native identity differs.'}
+    if($null -eq $Fence.process){
+        $p=[Diagnostics.Process]::GetProcessById([int]$r.pid);$null=$p.Handle
+        if($p.HasExited -or [Math]::Abs(($p.StartTime.ToUniversalTime()-([DateTime]$native.CreationDate).ToUniversalTime()).TotalSeconds) -gt 1){$p.Dispose();throw 'Fence process creation changed.'}
+        $Fence.process=$p
+    }elseif($Fence.process.HasExited){throw 'The retained fence process has exited.'}
+}
+
+function Release-OpFence {
+    param($Fence)
+    if($Fence.released){return}
+    Write-OpRecord (Join-Path $Fence.root 'release.json') @{schema='cochem-owner-admission-release/4.2.8';nonce=$Fence.nonce;ready_sha256=$Fence.ready_pin;request_sha256=$script:OpManifest.request_sha256}
+    $code=Wait-OpOneShot $Fence.handle 30
+    $r=Read-OpPrivateRecord (Join-Path $Fence.root 'result.json')
+    if($code -ne 0 -or $r.status -cne 'LOCK_RELEASED' -or $r.nonce -cne $Fence.nonce -or
+        $r.ready_sha256 -cne $Fence.ready_pin -or $r.request_sha256 -cne $script:OpManifest.request_sha256 -or
+        $r.released -ne $true -or $r.lock_released -ne $true){throw 'Admission fence release did not verify.'}
+    if($null -ne $Fence.process -and -not $Fence.process.WaitForExit(5000)){throw 'Fence native process did not exit.'}
+    $Fence.released=$true
+}
+
+function Wait-OpHealth {
+    param([string]$Root,[bool]$RequirePlanning)
+    $deadline=[DateTime]::UtcNow.AddSeconds(300);$previous=$null
+    do{
+        try{
+            $health=Get-428Health;Assert-428Health $health $Root (-not $RequirePlanning)
+            if($health.version -cne '4.2.8'){throw 'Unexpected runtime version.'}
+            if($RequirePlanning -and ((Get-OpProperty $health.task_planning 'status') -cne 'ENABLED' -or
+                (Get-OpProperty $health.task_planning 'execution_materialization') -cne 'CONNECTED')){throw 'Task planning execution is not connected.'}
+            if($null -ne $previous -and $previous.pid -eq $health.pid -and $previous.instance_id -ceq $health.instance_id){return $health}
+            $previous=$health
+        }catch{$previous=$null}
+        Start-Sleep -Seconds 2
+    }while([DateTime]::UtcNow -lt $deadline)
+    throw 'Runtime health/planning/admission did not verify within its bound.'
+}
+
+function Restore-OpPrevious {
+    param($State)
+    if($null -ne $State.fence -and -not $State.fence.released){Release-OpFence $State.fence}
+    if($State.acceptance_started){
+        if(-not (Test-OpRestoreAuthority $State.acceptance $true $State.acceptance_exited $State.cutover_requested)){throw 'Catalog state does not authorize previous-runtime restoration.'}
+        # Exact pinned config and stopped task must still match. A fresh writer
+        # fence independently proves the board has no unreconciled native work.
+        $State.restore_fence=Start-OpFence 'restore-fence'
+        $before=$State.fence.ready.catalog;$after=$State.restore_fence.ready.catalog;$phase=$State.acceptance.publication_proof
+        foreach($key in @('active_policy_sha256','active_catalog_sha256')){
+            if((Get-OpProperty $before $key) -cne (Get-OpProperty $after $key) -or
+                (Get-OpProperty $before $key) -cne (Get-OpProperty $phase $key)){throw 'Old catalog authority is no longer compatible with restoration.'}
+        }
+    }
+    try{
+        Assert-428PortFree;$task=$script:OpFolder.GetTask('CoChem-4.2.7-Warden')
+        Assert-428WardenTask $task $script:OpOriginalXml $script:OpOriginalSddl $script:OpOldRoot $script:OpOldArgs $false $false 1
+        if($task.GetInstances(0).Count){throw 'A controller is still running.'}
+        $pin=Open-428Pin $script:OpOldConfig $script:OpManifest.previous_config_sha256;$pin.Dispose()
+        if($null -ne $State.restore_fence){Release-OpFence $State.restore_fence}
+        $definition=$script:OpScheduler.NewTask(0);$definition.XmlText=$script:OpOriginalXml;$definition.Triggers.Item(1).Enabled=$false
+        $null=$script:OpFolder.RegisterTaskDefinition('CoChem-4.2.7-Warden',$definition,20,'SYSTEM',$null,5,$script:OpOriginalSddl)
+        $task=$script:OpFolder.GetTask('CoChem-4.2.7-Warden');Assert-428WardenTask $task $script:OpOriginalXml $script:OpOriginalSddl $script:OpOldRoot $script:OpOldArgs $true $false 1
+        $instance=$task.Run($null);$health=Wait-OpHealth $script:OpOldRoot $false;$held=Open-OpProcessProof $health $script:OpOldRoot $script:OpOldConfig
+        try{
+            $task=$script:OpFolder.GetTask('CoChem-4.2.7-Warden')
+            if($task.GetInstances(0).Count -ne 1 -or $task.GetInstances(0).Item(1).InstanceGuid -cne $instance.InstanceGuid){throw 'Restored task instance differs.'}
+            $d=$task.Definition;$d.Triggers.Item(1).Enabled=$true
+            $null=$script:OpFolder.RegisterTaskDefinition('CoChem-4.2.7-Warden',$d,20,'SYSTEM',$null,5,$script:OpOriginalSddl)
+            Assert-428WardenTask ($script:OpFolder.GetTask('CoChem-4.2.7-Warden')) $script:OpOriginalXml $script:OpOriginalSddl $script:OpOldRoot $script:OpOldArgs $true $true 1
+        }finally{foreach($p in $held){$p.Dispose()}}
+    }finally{if($null -ne $State.restore_fence -and -not $State.restore_fence.released){try{Release-OpFence $State.restore_fence}catch{}}}
+}
+
+function Invoke-OperationalLaunch {
+    param([string]$ManifestPath,[string]$ManifestHash,[bool]$ApplyRequested,[string]$Directory)
+    $script:OpSitting=$null;$script:Headers428=$null;$pins=[Collections.Generic.List[IO.Stream]]::new()
+    $mutex=$null;$locked=$false;$awake=$null;$state=$null;$processes=$null
+    try{
+        foreach($text in @(Import-OpHelpers $Directory)){. ([scriptblock]::Create($text))}
+        $s=Open-428Pin $ManifestPath $ManifestHash;$pins.Add($s);$m=Read-428Json $s;$script:OpManifest=$m
+        $script:OpOldRoot='C:\Program Files\CoChem\Pipeline4.2.8-windows-20261014-r4'
+        $script:OpRoot='C:\Program Files\CoChem\Pipeline4.2.8-windows-20261015-r5'
+        $script:OpOldConfig=Join-Path $script:OpOldRoot 'pipeline.json'
+        if($m.schema -cne 'cochem-428-operational-launch/1' -or $m.previous_root -cne $script:OpOldRoot -or $m.target_root -cne $script:OpRoot -or
+            $m.revision -cne 'windows-20261015-428-v5' -or $m.previous_config_sha256 -cne 'daaa4b6a8c15aa49ed39af48c087bfe2fcfefdcbae14520b298d46287414509a' -or
+            $m.previous_install_sha256 -cne 'fdf93bcbec72533eca5577b2bf5fded8da11dde38e71a13b79bd58af5ca40fa3' -or
+            $m.source_commit -cnotmatch '^[a-f0-9]{40}$' -or $m.request_sha256 -cnotmatch '^[a-f0-9]{64}$' -or
+            $m.input_window_minutes -ne 20 -or $m.late_prompts -ne $false -or $m.catalog_timeout_seconds -ne 7200){throw 'Operational launch manifest identity differs.'}
+        $seen=@{}
+        foreach($row in @($m.files)){
+            if($row.name -cnotmatch '^[A-Za-z0-9_.-]+$' -or $seen.ContainsKey($row.name)){throw 'Unsafe/duplicate launch input.'}
+            $seen[$row.name]=$true;$pins.Add((Open-428Pin (Join-Path $Directory $row.name) $row.sha256 $row.length))
+        }
+        foreach($name in @('run_operational_428_launch.ps1','reviewed_428_launch_helpers.ps1','install_operational_428_runtime.ps1','stage_aetherdesk_427_payloads.ps1',
+            'pipeline.json','install-manifest.json','source-test-evidence.json','operational-release.json','task-catalog-request.json')){
+            if(-not $seen.ContainsKey($name)){throw 'Required operational launch input is missing.'}
+        }
+        foreach($text in @(Import-428Installer (Join-Path $Directory 'install_operational_428_runtime.ps1'))){. ([scriptblock]::Create($text))};Set-428Constants
+        $installPath=Join-Path $Directory 'install-manifest.json';$s=Open-428Pin $installPath $m.install_manifest_sha256;$pins.Add($s);$inventory=Read-428Json $s
+        $null=Get-428InstallFiles $inventory
+        if($inventory.source_commit -cne $m.source_commit){throw 'Installed source and launcher differ.'}
+        foreach($row in $inventory.files){$pins.Add((Open-428Pin $row.source $row.sha256 $row.length))}
+        $pins.Add((Open-428Pin (Join-Path $Directory 'pipeline.json') $m.bootstrap_sha256));$pins.Add((Open-428Pin (Join-Path $Directory 'task-catalog-request.json') $m.request_sha256))
+        if(-not $ApplyRequested){
+            @{schema='cochem-428-operational-launch-plan/1';status='READ_ONLY_PLAN_VERIFIED';source_commit=$m.source_commit;target_root=$script:OpRoot;
+                payload_files=@($inventory.files).Count;host_executed=$false;input_window_minutes=20;late_prompts=$false;maximum_shared_slots=4;pending_backlog_allowed=$true}|ConvertTo-Json;return
+        }
+        $identity=[Security.Principal.WindowsIdentity]::GetCurrent()
+        if($PSVersionTable.PSEdition -cne 'Desktop' -or -not [Environment]::Is64BitProcess -or $env:COMPUTERNAME -cne 'AETHERDESK' -or
+            $identity.Name -cne 'AETHERDESK\ansac' -or -not ([Security.Principal.WindowsPrincipal]::new($identity)).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)){
+            throw 'Run once in Administrator Windows PowerShell as AETHERDESK\ansac.'}
+        foreach($text in @(Import-R6CopyFunctions $Directory)){. ([scriptblock]::Create($text))};Initialize-FileIdentity
+        $mutex=[Threading.Mutex]::new($false,'Global\CoChem428-OwnerSitting')
+        try{$locked=$mutex.WaitOne(0)}catch [Threading.AbandonedMutexException]{$locked=$true;throw 'Earlier owner sitting was interrupted; preserve evidence.'}
+        if(-not $locked){throw 'Another owner sitting is running.'}
+        if(Test-Path -LiteralPath $script:OpRoot){throw 'Fresh r5 root already exists; preserve it, no automatic reuse.'}
+        $pins.Add((Open-VerifiedFile $script:python $script:pythonPin (Get-Item -LiteralPath $script:python).Length))
+        $awake=Start-428AwakeLease
+        $script:OpSitting='C:\Program Files\CoChem\R428Operational-20261015-'+[Guid]::NewGuid().ToString('N');New-ProtectedDirectory $script:OpSitting
+        $script:OpPrivate=Join-Path $script:OpSitting 'private';New-OpPrivateDirectory $script:OpPrivate
+        Write-Host ('Sanitized status reports: '+$script:OpSitting+'\status-*.json')
+        $state=@{phase='package';stopped=$false;stop_requested=$false;cutover_requested=$false;acceptance_started=$false;acceptance_exited=$false;acceptance=$null;fence=$null;restore_fence=$null;rollback='NOT_REQUIRED';error_type=$null;health=$null;integration=$null}
+        $actions=@{}
+        $actions.preconditions={param($state)
+            Write-OpStatus $state.phase
+            Assert-ProtectedPath $script:OpOldConfig
+            $s=Open-428Pin $script:OpOldConfig $m.previous_config_sha256;$pins.Add($s);$script:OpConfig=Read-428Json $s
+            $pins.Add((Open-428Pin (Join-Path $script:OpOldRoot 'install-manifest.json') $m.previous_install_sha256))
+            $saved=$script:targetRoot;try{$script:targetRoot=$script:OpOldRoot;$null=Assert-428Tree;Assert-428Interpreter}finally{$script:targetRoot=$saved}
+            $script:Headers428=@{Authorization='Bearer '+[IO.File]::ReadAllText([string]$script:OpConfig.token_file).Trim()}
+            $script:OpScheduler=New-Object -ComObject 'Schedule.Service';$script:OpScheduler.Connect();$script:OpFolder=$script:OpScheduler.GetFolder('\')
+            $task=$script:OpFolder.GetTask('CoChem-4.2.7-Warden');Assert-428TaskAcl $task;$d=$task.Definition
+            $script:OpOldArgs=Get-OpDaemonArguments $script:OpOldConfig $script:OpConfig.private_root
+            if($d.Principal.UserId -notin @('SYSTEM','S-1-5-18') -or $d.Principal.LogonType -ne 5 -or $d.Principal.RunLevel -ne 1 -or
+                $d.Settings.RestartCount -ne 0 -or $d.Settings.MultipleInstances -ne 2 -or $d.Triggers.Count -ne 1 -or
+                $d.Triggers.Item(1).Type -ne 9 -or $d.Triggers.Item(1).UserId -cne 'AETHERDESK\ansac' -or $task.GetInstances(0).Count -ne 1){throw 'Current r4 Warden invariants differ.'}
+            $script:OpOriginalXml=$task.Xml;$script:OpOriginalSddl=$task.GetSecurityDescriptor(7)
+            Assert-428WardenTask $task $script:OpOriginalXml $script:OpOriginalSddl $script:OpOldRoot $script:OpOldArgs $true $true 1
+            $health=Get-428Health;Assert-428Health $health $script:OpOldRoot $true
+            if($health.version -cne '4.2.8'){throw 'Current runtime version differs.'}
+            $state.baseline_processes=Open-OpProcessProof $health $script:OpOldRoot $script:OpOldConfig
+            $state.old_pid=$health.pid;$state.old_instance=$health.instance_id
+            Write-OpRecord (Join-Path $script:OpPrivate 'baseline.json') @{xml=$script:OpOriginalXml;sddl=$script:OpOriginalSddl;health=$health;config_sha256=$m.previous_config_sha256}
+            Write-Host 'Initial checks passed. Existing sign-ins are reused; no input or restart is planned. You can walk away.' -ForegroundColor Green
+        }
+        $actions.offline_install={param($state)
+            Write-OpStatus $state.phase;$saved=$script:targetRoot
+            foreach($name in @('install_operational_428_runtime.ps1','stage_aetherdesk_427_payloads.ps1','install-manifest.json')){
+                $row=@($m.files|Where-Object{$_.name -ceq $name})[0]
+                Copy-VerifiedPayload ([pscustomobject]@{source=(Join-Path $Directory $name);destination=(Join-Path $script:OpPrivate $name);sha256=$row.sha256;length=$row.length})
+            }
+            try{$script:targetRoot=$script:OpPrivate
+                Invoke-428Native (Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe') @('-NoProfile','-NonInteractive','-File',
+                    (Join-Path $script:OpPrivate 'install_operational_428_runtime.ps1'),'-Manifest',(Join-Path $script:OpPrivate 'install-manifest.json'),'-ManifestSha256',$m.install_manifest_sha256,'-Apply') 'offline-install' 1200
+            }finally{$script:targetRoot=$saved}
+            $null=Assert-428Tree;Assert-428Interpreter
+            $r=Read-OpPrivateRecord (Join-Path $script:OpRoot 'install-after.json')
+            if($r.status -cne 'STOPPED_RUNTIME_INSTALLED' -or $r.manifest_sha256 -cne $m.install_manifest_sha256 -or $r.source_commit -cne $m.source_commit){throw 'Fresh installation did not verify.'}
+            $script:OpRequest=Join-Path $script:OpPrivate 'task-catalog-request.json'
+            Copy-VerifiedPayload ([pscustomobject]@{source=(Join-Path $Directory 'task-catalog-request.json');destination=$script:OpRequest;sha256=$m.request_sha256;length=(Get-Item -LiteralPath (Join-Path $Directory 'task-catalog-request.json')).Length})
+        }
+        $actions.admission_fence={param($state)Write-OpStatus $state.phase;$state.fence=Start-OpFence 'stop-fence'}
+        $actions.stop_previous={param($state)
+            Write-OpStatus $state.phase;Assert-OpFence $state.fence
+            $health=Get-428Health;Assert-428Health $health $script:OpOldRoot $true
+            Assert-OpIdleHealth $health $state.old_pid $state.old_instance
+            $state.processes=Open-OpProcessProof $health $script:OpOldRoot $script:OpOldConfig
+            $task=$script:OpFolder.GetTask('CoChem-4.2.7-Warden')
+            if($task.Xml -cne $script:OpOriginalXml -or $task.GetSecurityDescriptor(7) -cne $script:OpOriginalSddl -or $task.GetInstances(0).Count -ne 1){throw 'Old task changed before stop.'}
+            Assert-OpFence $state.fence
+            $d=$task.Definition;$d.Triggers.Item(1).Enabled=$false
+            $null=$script:OpFolder.RegisterTaskDefinition('CoChem-4.2.7-Warden',$d,20,'SYSTEM',$null,5,$script:OpOriginalSddl)
+            $task=$script:OpFolder.GetTask('CoChem-4.2.7-Warden');Assert-428WardenTask $task $script:OpOriginalXml $script:OpOriginalSddl $script:OpOldRoot $script:OpOldArgs $true $false 1
+            Assert-OpFence $state.fence;$task.Stop(0)
+            $deadline=[DateTime]::UtcNow.AddSeconds(120)
+            do{
+                $task=$script:OpFolder.GetTask('CoChem-4.2.7-Warden');$gone=@($state.processes|Where-Object{-not $_.HasExited}).Count -eq 0
+                if($gone -and $task.GetInstances(0).Count -eq 0){break};Start-Sleep -Seconds 1
+            }while([DateTime]::UtcNow -lt $deadline)
+            if(-not $gone -or $task.GetInstances(0).Count){throw 'Exact old processes did not exit; preserve state.'}
+            $task.Enabled=$false;Assert-428WardenTask $task $script:OpOriginalXml $script:OpOriginalSddl $script:OpOldRoot $script:OpOldArgs $false $false 1
+            Assert-428PortFree;$state.stopped=$true
+        }
+        $actions.release_fence={param($state)Write-OpStatus $state.phase;Release-OpFence $state.fence}
+        $actions.catalog_acceptance={param($state)
+            Write-OpStatus $state.phase;Assert-428PortFree
+            $root=Join-Path $script:OpPrivate 'catalog-phase';New-OpPrivateDirectory $root;$state.phase_root=$root
+            $args='-I -B -m cochem_pipeline.owner_task_catalog_428 --bootstrap-config "'+(Join-Path $script:OpRoot 'pipeline.json')+'" --bootstrap-sha256 '+$m.bootstrap_sha256+
+                ' --request "'+$script:OpRequest+'" --request-sha256 '+$m.request_sha256+' --output-root "'+$root+'" --timeout-seconds 7200'
+            $handle=New-OpOneShot $script:OpScheduler $script:OpFolder ('CoChem-4.2.8-Catalog-'+[Guid]::NewGuid().ToString('N')) $args 7500
+            $startPath=Join-Path $root 'phase-started.json';$startDeadline=[DateTime]::UtcNow.AddSeconds(90)
+            while(-not (Test-Path -LiteralPath $startPath)){
+                $task=Assert-OpOneShot $handle $false
+                if((Test-OpTaskTerminal $task $handle.started) -or [DateTime]::UtcNow -gt $startDeadline){throw 'Catalog phase started identity is unavailable; publication is unknown.'}
+                Start-Sleep -Milliseconds 200
+            }
+            $start=Read-OpPrivateRecord $startPath
+            if($start.schema -cne 'cochem-owner-task-catalog-start/4.2.8' -or $start.bootstrap_sha256 -cne $m.bootstrap_sha256 -or $start.request_sha256 -cne $m.request_sha256 -or
+                [double]$start.started_at -lt ([DateTimeOffset]$handle.started).ToUnixTimeSeconds()-2 -or [double]$start.started_at -gt [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()+2){throw 'Catalog phase start identity differs.'}
+            $state.phase_processes=Open-OpOneShotProcess $handle ([int]$start.pid)
+            $code=Wait-OpOneShot $handle 7530;$state.acceptance_exited=$true
+            foreach($p in $state.phase_processes){if(-not $p.WaitForExit(5000)){$state.acceptance_exited=$false;throw 'Catalog phase native process remains; preserve state.'}}
+            $path=Join-Path $root $(if($code -eq 0){'result.json'}else{'held.json'})
+            $r=Read-OpPrivateRecord $path
+            if($r.schema -cne 'cochem-owner-task-catalog-result/4.2.8' -or $r.request_sha256 -cne $m.request_sha256 -or $r.bootstrap_sha256 -cne $m.bootstrap_sha256){throw 'Acceptance terminal receipt is unbound.'}
+            $state.acceptance=$r
+            if($code -ne 0 -or $r.status -cne 'TASK_CATALOG_CANDIDATE_READY' -or $r.cleanup_verified -ne $true -or $r.runtime_resources_closed -ne $true -or
+                $r.publication_state -cne 'COMMITTED' -or $r.publication_proof.catalog_probe_cleanup_verified -ne $true){throw 'Native catalog acceptance held; preserve its evidence.'}
+            if($r.configuration_path -cne (Join-Path $root 'pipeline.json') -or $r.catalog_path -cne (Join-Path $root 'accepted-catalog.json')){throw 'Final configuration/catalog paths differ.'}
+            $pins.Add((Open-428Pin $r.configuration_path $r.configuration_sha256));$pins.Add((Open-428Pin $r.catalog_path $r.catalog_sha256))
+            $state.final_config=$r.configuration_path;$state.final_arguments=Get-OpDaemonArguments $state.final_config $script:OpConfig.private_root
+        }
+        $actions.cutover={param($state)
+            Write-OpStatus $state.phase;Assert-428PortFree
+            $task=$script:OpFolder.GetTask('CoChem-4.2.7-Warden');Assert-428WardenTask $task $script:OpOriginalXml $script:OpOriginalSddl $script:OpOldRoot $script:OpOldArgs $false $false 1
+            if($task.GetInstances(0).Count){throw 'Unexpected task instance before cutover.'}
+            $d=$task.Definition;$a=$d.Actions.Item(1);$a.Path=Join-Path $script:OpRoot '.venv\Scripts\python.exe';$a.WorkingDirectory=$script:OpRoot;$a.Arguments=$state.final_arguments
+            $d.Settings.Enabled=$true;$d.Triggers.Item(1).Enabled=$false
+            $null=$script:OpFolder.RegisterTaskDefinition('CoChem-4.2.7-Warden',$d,20,'SYSTEM',$null,5,$script:OpOriginalSddl)
+            $task=$script:OpFolder.GetTask('CoChem-4.2.7-Warden');Assert-428WardenTask $task $script:OpOriginalXml $script:OpOriginalSddl $script:OpRoot $state.final_arguments $true $false 1
+            $instance=$task.Run($null);$state.new_instance=[string]$instance.InstanceGuid
+        }
+        $actions.verify_running={param($state)
+            Write-OpStatus $state.phase;$health=Wait-OpHealth $script:OpRoot $true
+            $state.new_processes=Open-OpProcessProof $health $script:OpRoot $state.final_config
+            $task=$script:OpFolder.GetTask('CoChem-4.2.7-Warden')
+            if($task.GetInstances(0).Count -ne 1 -or [string]$task.GetInstances(0).Item(1).InstanceGuid -cne $state.new_instance){throw 'New Warden instance differs.'}
+            $state.health=$health
+        }
+        $actions.enable_trigger={param($state)
+            Write-OpStatus $state.phase;$task=$script:OpFolder.GetTask('CoChem-4.2.7-Warden')
+            Assert-428WardenTask $task $script:OpOriginalXml $script:OpOriginalSddl $script:OpRoot $state.final_arguments $true $false 1
+            $d=$task.Definition;$d.Triggers.Item(1).Enabled=$true
+            $null=$script:OpFolder.RegisterTaskDefinition('CoChem-4.2.7-Warden',$d,20,'SYSTEM',$null,5,$script:OpOriginalSddl)
+            Assert-428WardenTask ($script:OpFolder.GetTask('CoChem-4.2.7-Warden')) $script:OpOriginalXml $script:OpOriginalSddl $script:OpRoot $state.final_arguments $true $true 1
+        }
+        $actions.codex_integration={param($state)
+            if($null -eq (Get-OpProperty $m 'integration_manifest')){return}
+            Write-OpStatus $state.phase
+            if($m.integration_manifest -cne 'codex-integration.json' -or $m.integration_sha256 -cnotmatch '^[a-f0-9]{64}$'){throw 'Scoped Codex integration manifest differs.'}
+            $source=Join-Path $Directory $m.integration_manifest;$s=Open-428Pin $source $m.integration_sha256;$pins.Add($s);$integration=Read-428Json $s
+            if($integration.schema -cne 'cochem-codex-integration-update/1' -or $integration.source_commit -cne $m.source_commit -or
+                $integration.user_home -cne 'C:\Users\ansac' -or $integration.runtime_root -cne $script:OpRoot -or
+                $integration.client_config -cne 'C:\Users\ansac\CoChem427\pipeline-client-r3.json'){throw 'Scoped Codex integration identity differs.'}
+            $path=Join-Path $script:OpPrivate 'codex-integration.json'
+            Copy-VerifiedPayload ([pscustomobject]@{source=$source;destination=$path;sha256=$m.integration_sha256;length=(Get-Item -LiteralPath $source).Length})
+            $saved=$script:targetRoot
+            try{$script:targetRoot=$script:OpPrivate
+                Invoke-428Native (Join-Path $script:OpRoot '.venv\Scripts\python.exe') @('-I','-B','-m','cochem_pipeline.codex_integration_428',
+                    '--manifest',$path,'--manifest-sha256',$m.integration_sha256,'--apply') 'codex-integration' 120
+            }finally{$script:targetRoot=$saved}
+            $result=Read-OpPrivateRecord (Join-Path $script:OpPrivate 'codex-integration.stdout.log')
+            if($result.status -cne 'CODEX_INTEGRATION_UPDATED_REFRESH_REQUIRED' -or $result.current_session_tools_loaded -ne $false){throw 'Codex integration did not verify.'}
+            $state.integration=$result
+        }
+        $actions.restore_previous={param($state)Restore-OpPrevious $state}
+        $state=Invoke-OpTransaction $actions $state
+        $record=New-OpResultRecord $state $m $ManifestHash
+        Write-OpRecord (Join-Path $script:OpPrivate 'owner-result.json') $record;Write-OpStatus $state.phase $state.status $record
+        $record|ConvertTo-Json -Depth 8
+        if($state.status -cne 'R428_OPERATIONAL_RUNNING_VERIFIED'){throw 'Operational upgrade held. Preserve reports; do not repeat this spent launch.'}
+    }finally{
+        if($null -ne $state){
+            foreach($key in @('baseline_processes','processes','new_processes','phase_processes')){if($state.ContainsKey($key)){foreach($p in $state[$key]){$p.Dispose()}}}
+            foreach($key in @('fence','restore_fence')){
+                if($null -ne $state[$key] -and -not $state[$key].released){try{Release-OpFence $state[$key]}catch{}}
+                if($null -ne $state[$key] -and $null -ne $state[$key].process){$state[$key].process.Dispose()}
+            }
+        }
+        foreach($s in $pins){$s.Dispose()}
+        if($locked){$mutex.ReleaseMutex()};if($null -ne $mutex){$mutex.Dispose()}
+        if($null -ne $awake){Stop-428AwakeLease $awake};$script:Headers428=$null
+    }
+}
+
+$ErrorActionPreference='Stop';Set-StrictMode -Version Latest
+if(-not $LaunchManifest){throw 'A pinned operational launch manifest is required.'}
+Invoke-OperationalLaunch ([IO.Path]::GetFullPath($LaunchManifest)) $LaunchManifestSha256 ([bool]$Apply) $PSScriptRoot

@@ -50,8 +50,23 @@ def assert_quiescent(conn):
     return counts
 
 
+def catalog_identity(conn):
+    """Snapshot only; absence is explicit and never initializes authority."""
+    tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    policy = catalog = None
+    if 'pipeline_catalog_active' in tables:
+        rows = conn.execute('SELECT policy_digest FROM pipeline_catalog_active WHERE singleton=1').fetchall()
+        if len(rows) != 1: raise ValueError('Active policy pointer is missing or ambiguous')
+        policy = rows[0][0]
+    if 'pipeline_task_catalog_active' in tables:
+        rows = conn.execute('SELECT catalog_sha256 FROM pipeline_task_catalog_active WHERE singleton=1').fetchall()
+        if len(rows) > 1: raise ValueError('Active task catalog pointer is ambiguous')
+        catalog = rows[0][0] if rows else None
+    return dict(active_policy_sha256=policy, active_catalog_sha256=catalog)
+
+
 @contextmanager
-def admission_fence(database, *, timeout=.2):
+def admission_fence(database, *, timeout=.2, include_catalog=False):
     """Reusable in-process seam; only reads and transaction control are permitted."""
     path = Path(database).absolute()
     conn = sqlite3.connect(path.as_uri()+'?mode=rw', uri=True, timeout=timeout, isolation_level=None)
@@ -60,7 +75,7 @@ def admission_fence(database, *, timeout=.2):
     try:
         conn.execute('BEGIN IMMEDIATE')
         counts = assert_quiescent(conn)
-        yield counts
+        yield dict(counts=counts, catalog=catalog_identity(conn)) if include_catalog else counts
     finally:
         if conn.in_transaction:
             conn.rollback()
@@ -127,10 +142,10 @@ def run(config_path, config_sha256, output_root, nonce, request_sha256, *, wait_
         try:
             while True:
                 try:
-                    with admission_fence(database) as counts:
+                    with admission_fence(database, include_catalog=True) as snapshot:
                         now = time.time()
                         raw = write_fresh(output_root/'ready.json', dict(base, status='WRITER_FENCE_HELD',
-                            counts=counts, ready_at=now, expires_at=now+hold_seconds))
+                            counts=snapshot['counts'], catalog=snapshot['catalog'], ready_at=now, expires_at=now+hold_seconds))
                         ready_pin = hashlib.sha256(raw).hexdigest()
                         expires = time.monotonic()+hold_seconds
                         while time.monotonic() < expires:

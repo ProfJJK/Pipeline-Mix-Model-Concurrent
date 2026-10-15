@@ -69,3 +69,14 @@ def test_missing_board_is_never_created(tmp_path):
     with pytest.raises(sqlite3.OperationalError):
         with admission_fence(path): pass
     assert not path.exists()
+
+
+def test_catalog_identity_is_captured_under_same_writer_fence_without_initialization(board):
+    with admission_fence(board,include_catalog=True) as before:
+        assert before['catalog']==dict(active_policy_sha256=None,active_catalog_sha256=None)
+    with sqlite3.connect(board) as conn:
+        conn.executescript("""CREATE TABLE pipeline_catalog_active(singleton INTEGER,policy_digest TEXT);
+            CREATE TABLE pipeline_task_catalog_active(singleton INTEGER,catalog_sha256 TEXT);
+            INSERT INTO pipeline_catalog_active VALUES(1,'policy');""")
+    with admission_fence(board,include_catalog=True) as value:
+        assert value['catalog']==dict(active_policy_sha256='policy',active_catalog_sha256=None)
