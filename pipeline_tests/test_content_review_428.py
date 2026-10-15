@@ -32,7 +32,8 @@ def prepared(tmp_path):
         store._insert(conn, 'integrity-root', 'integrity-root', None, 'MACRO_PLANNING_REQUEST', 'IN_PROGRESS',
                       dict(workflow_type='task_verification428'))
         payload = dict(schema='cochem-task-verification/4.2.8', task_id=task_id,
-                       verification_key='a' * 64, source_snapshot_sha256=snapshot, mode='artifact_integrity')
+                       verification_key='a' * 64, source_snapshot_sha256=snapshot, mode='artifact_integrity',
+                       producer_job_id=next(n['job_id'] for n in snap['nodes'] if n['role'] == 'final_test'))
         store._insert(conn, 'integrity-job', 'integrity-root', 'integrity-root', 'TASK_VERIFY', 'PENDING', payload)
     node = store.claim('fixture', allowed_kinds=['TASK_VERIFY'], requires_cleanup=True, worker_slot='slot1')
     output, receipt, evidence = completion(node, files)
@@ -82,6 +83,9 @@ def test_review_queues_once_uses_different_family_and_includes_artifacts(tmp_pat
     assert result['evidence']['kind'] == 'independent_model_content_review'
     assert result['evidence']['external_actions_verified'] is False
     assert result['evidence']['code_tests_executed'] is False
+    proof = review.committed_result(store, args['producers'][-1])
+    assert proof['accepted'] is True
+    assert proof['review_job_id'] == job['job_id']
     store.close()
 
 
@@ -121,6 +125,7 @@ def test_rejected_review_is_a_valid_result_not_a_success_or_format_retry(tmp_pat
                    accepted_receipt(claimed, output))
     assert review.ensure('content-task', **args)['status'] == 'CONTENT_REVIEW_REJECTED'
     assert store.get(job_id)['status'] == 'COMPLETED'
+    assert review.committed_result(store, args['producers'][-1])['accepted'] is False
     assert journal.status('content-task')['stage'] == 'MICROTASKS_READY'
     store.close()
 
