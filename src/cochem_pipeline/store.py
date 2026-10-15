@@ -1071,7 +1071,7 @@ class JobStore(CodingStoreMixin):
         """
         if (not isinstance(feedback,dict) or feedback.get('schema')!='cochem-output-format-feedback/1'
                 or not re.fullmatch(r'[0-9a-f]{64}',str(feedback.get('contract_sha256','')))
-                or not isinstance(feedback.get('issues'),list) or not 1<=len(feedback['issues'])<=100
+                or not isinstance(feedback.get('issues'),list) or not 1<=len(feedback['issues'])<=32
                 or len(canonical_json(feedback))>16384):
             raise ValueError('Expected bounded structured output-format feedback')
         with self._write() as conn:
@@ -1080,6 +1080,9 @@ class JobStore(CodingStoreMixin):
                 return False
             if job['kind'] in CONTROLLER_KINDS:
                 return None
+            from .output_contracts import prepare_output_contract, format_feedback_text
+            format_feedback_text({**job, 'output_format_feedback': dict(feedback, correction_attempt=1)},
+                                 prepare_output_contract(job)['contract_sha256'])
             barrier=conn.execute('SELECT 1 FROM pipeline_execution_cleanup WHERE job_id=? AND attempt_id=? AND cleared_at IS NULL',
                                  (job_id,attempt_id)).fetchone()
             if barrier:

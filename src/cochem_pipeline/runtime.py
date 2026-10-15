@@ -408,6 +408,7 @@ class Runtime:
                 self.store.clear_execution_quarantine(job_id,node['attempt_id'],node['fencing_token'])
                 active['process_cleanup_verified'] = True
             retry = not (self.stop_event.is_set() or active.get('tripped',False)
+                         or (active.get('cancel_event') is not None and active['cancel_event'].is_set())
                          or slot in self.quarantined or isinstance(exc,ExecutionRevokedError))
         readiness_error = isinstance(exc,(RamdiskError,ResourcePolicyError,WindowsIsolationError))
         category = ('resource' if active.get('resource_tripped') else
@@ -420,7 +421,7 @@ class Runtime:
             retry = True
         retry_after = exc.retry_after_seconds if isinstance(exc,ProviderFailure) else 30 if readiness_error and category=='resource' else None
         from .output_contracts import OutputFormatError
-        if retry and isinstance(exc,OutputFormatError):
+        if retry and category == 'code' and isinstance(exc,OutputFormatError):
             corrected=self.store.correct_output_format(job_id,node['attempt_id'],node['fencing_token'],exc.as_feedback())
             if corrected is not None:
                 return corrected
