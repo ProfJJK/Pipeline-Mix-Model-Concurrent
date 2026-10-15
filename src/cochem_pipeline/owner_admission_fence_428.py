@@ -21,7 +21,7 @@ import time
 from . import windows
 from .catalog_authority import _WindowsCustody
 from .config import load_config
-from .owner_task_catalog_428 import retained_path, pinned_bytes, write_fresh
+from .owner_task_catalog_428 import retained_path, pinned_bytes, write_fresh, write_start_record
 from .routing import _strict_json
 
 
@@ -144,7 +144,7 @@ def run(config_path, config_sha256, output_root, nonce, request_sha256, *, wait_
                 try:
                     with admission_fence(database, include_catalog=True) as snapshot:
                         now = time.time()
-                        raw = write_fresh(output_root/'ready.json', dict(base, status='WRITER_FENCE_HELD',
+                        raw = write_start_record(output_root/'ready.json', dict(base, status='WRITER_FENCE_HELD',
                             counts=snapshot['counts'], catalog=snapshot['catalog'], ready_at=now, expires_at=now+hold_seconds))
                         ready_pin = hashlib.sha256(raw).hexdigest()
                         expires = time.monotonic()+hold_seconds

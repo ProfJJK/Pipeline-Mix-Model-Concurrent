@@ -44,6 +44,97 @@ try{Assert-OpIdleHealth $health 123 'same'}catch{$held=$true}
     assert result==dict(idle_verified=True,quarantine_held=True)
 
 
+@pytest.mark.parametrize('scenario,held,stops', [
+    ('running', False, 1), ('ended', False, 0), ('exit_during_stop', False, 1),
+    ('other_instance', True, 0), ('later_run', True, 0), ('orphan', True, 0),
+    ('stop_error_still_running', True, 1), ('ended_before_fence', True, 0),
+])
+def test_fenced_stop_accepts_only_exact_retained_run_or_its_complete_exit(scenario, held, stops):
+    result = inert_ps(r"""
+$script:scenario='SCENARIO';$script:stops=0;$script:count=1
+$script:guid=if($script:scenario -eq 'other_instance'){'replacement'}else{'original'}
+$script:processes=@([pscustomobject]@{HasExited=$false;ExitTime=[DateTime]'2026-10-15T12:02:00Z'},[pscustomobject]@{HasExited=$false;ExitTime=[DateTime]'2026-10-15T12:02:00Z'})
+$when=[DateTime]'2026-10-15T12:00:00Z'
+$task=[pscustomobject]@{LastRunTime=$when}
+if($script:scenario -eq 'later_run'){$task.LastRunTime=$when.AddSeconds(1)}
+if($script:scenario -in @('ended','orphan','ended_before_fence')){
+    $script:count=0;$script:processes[0].HasExited=$true
+    $script:processes[1].HasExited=$script:scenario -ne 'orphan'
+    if($script:scenario -eq 'ended_before_fence'){$script:processes[0].ExitTime=$when}
+}
+$task|Add-Member ScriptMethod GetInstances {
+    param($flags)$c=[pscustomobject]@{Count=$script:count}
+    $c|Add-Member ScriptMethod Item {param($i)[pscustomobject]@{InstanceGuid=$script:guid}};return $c
+}
+$task|Add-Member ScriptMethod Stop {
+    param($flags)$script:stops++
+    if($script:scenario -eq 'stop_error_still_running'){throw 'stop rejected'}
+    $script:count=0;foreach($p in $script:processes){$p.HasExited=$true}
+    if($script:scenario -eq 'exit_during_stop'){throw 'exact old run already ended'}
+}
+$held=$false
+try{Stop-OpRetainedTask $task 'original' $when $script:processes ([DateTimeOffset]$when.AddMinutes(1)).ToUnixTimeSeconds()}catch{$held=$true}
+@{held=$held;stops=$script:stops}|ConvertTo-Json -Compress
+""".replace('SCENARIO', scenario))
+    assert result == dict(held=held, stops=stops)
+
+
+@pytest.mark.parametrize('ended_at_ready', [False, True])
+def test_real_stop_actions_never_request_health_after_writer_fence(ended_at_ready):
+    result = inert_ps(r"""
+$script:seen=[Collections.Generic.List[string]]::new();$script:fenced=$false;$script:count=1
+$script:endedAtReady=ENDED;$script:when=[DateTime]'2026-10-15T12:00:00Z'
+$script:processes=@([pscustomobject]@{HasExited=$false;ExitTime=$script:when.AddMinutes(2)},[pscustomobject]@{HasExited=$false;ExitTime=$script:when.AddMinutes(2)})
+$trigger=[pscustomobject]@{Enabled=$true};$triggers=[pscustomobject]@{trigger=$trigger}
+$triggers|Add-Member ScriptMethod Item {param($i)$this.trigger}
+$script:task=[pscustomobject]@{Xml='xml';LastRunTime=$script:when;Definition=[pscustomobject]@{Triggers=$triggers};Enabled=$true}
+$script:task|Add-Member ScriptMethod GetSecurityDescriptor {param($flags)'sddl'}
+$script:task|Add-Member ScriptMethod GetInstances {
+    param($flags)$c=[pscustomobject]@{Count=$script:count}
+    $c|Add-Member ScriptMethod Item {param($i)[pscustomobject]@{InstanceGuid='instance'}};return $c
+}
+$script:task|Add-Member ScriptMethod Stop {
+    param($flags)$script:seen.Add('stop');$script:count=0;foreach($p in $script:processes){$p.HasExited=$true}
+}
+$script:OpFolder=[pscustomobject]@{}
+$script:OpFolder|Add-Member ScriptMethod GetTask {param($name)$script:task}
+$script:OpFolder|Add-Member ScriptMethod RegisterTaskDefinition {param($name,$d,$flags,$owner,$pw,$type,$sddl)$script:seen.Add('disable-trigger')}
+$script:OpOldRoot='old';$script:OpOldConfig='old-config';$script:OpOldArgs='old-args'
+$script:OpOriginalXml='xml';$script:OpOriginalSddl='sddl'
+function Write-OpStatus {param($phase)}
+function Get-428Health {
+    if($script:fenced){throw 'HTTP health under SQLite fence'}
+    $script:seen.Add('health');[pscustomobject]@{pid=123;instance_id='runtime'}
+}
+function Assert-428Health {param($health,$root,$allow)}
+function Open-OpProcessProof {
+    param($health,$root,$config)
+    if($script:fenced){throw 'Native capture after fence'}
+    $script:seen.Add('handles');return ,$script:processes
+}
+function Start-OpFence {
+    param($label)$script:seen.Add('ready');$script:fenced=$true
+    if($script:endedAtReady){$script:count=0;foreach($p in $script:processes){$p.HasExited=$true}}
+    return @{released=$false;ready=@{ready_at=([DateTimeOffset]$script:when.AddMinutes(1)).ToUnixTimeSeconds()}}
+}
+function Assert-OpFence {param($fence)if(-not $script:fenced){throw 'Fence absent'}}
+function Assert-428WardenTask {param($task,$xml,$sddl,$root,$args,$enabled,$trigger,$count)}
+function Assert-428PortFree {$script:seen.Add('port-free')}
+$state=@{phase='admission_fence';old_pid=123;old_instance='runtime';old_task_instance='instance';old_task_last_run=$script:when;stopped=$false}
+foreach($name in @('admission_fence','stop_previous')){
+    $assignment=@($ast.FindAll({param($n)$n -is [Management.Automation.Language.AssignmentStatementAst] -and $n.Left.Extent.Text -ceq ('$actions.'+$name)},$true))
+    if($assignment.Count -ne 1){throw 'Expected one actual action'}
+    $text=$assignment[0].Right.Extent.Text.Trim();$action=[scriptblock]::Create($text.Substring(1,$text.Length-2))
+    & $action $state
+}
+@{seen=@($script:seen);stopped=$state.stopped}|ConvertTo-Json -Compress
+""".replace('ENDED', '$true' if ended_at_ready else '$false'))
+    expected = ['health', 'handles', 'ready', 'disable-trigger']
+    if not ended_at_ready:
+        expected.append('stop')
+    assert result == dict(seen=expected+['port-free'], stopped=True)
+
+
 @pytest.mark.parametrize('state,closed,clean,exited,cutover,expected',[
     ('NOT_COMMITTED',True,True,True,False,True),
     ('COMMITTED',True,True,True,False,False),

@@ -27,7 +27,12 @@ owner's explicit `-Apply` reaches these stages:
    probes must be absent. Pending jobs and unclaimed workflow roots are allowed.
    The fence changes no logical database rows or schema. A nonce-bound READY
    receipt expires after 240 seconds; a matching release file releases the lock.
-4. Retain native identities, recheck the task and fence, disable its logon trigger,
+4. Retain native identities and health before acquiring the fence, then recheck
+   the exact task and fence without requesting HTTP health while writers are
+   blocked. The old runtime's five-second writer timeout can make health wait or
+   end its exact task; an ended task is accepted only with unchanged last-run
+   identity and exit of both retained native processes after this fence's READY
+   timestamp. An earlier or uncertain exit holds. Disable its logon trigger,
    stop that exact Warden, verify process/port exit, then verify fence release.
 5. Run the protected catalog acceptance module once through the fresh runtime,
    preserving shared seats, all resource guards, actual native receipts, quota

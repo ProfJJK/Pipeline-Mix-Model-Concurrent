@@ -133,6 +133,39 @@ function Assert-OpIdleHealth {
         @($Health.active).Count -or @($Health.quarantined_slots.PSObject.Properties).Count){throw 'Previous controller changed or is not idle.'}
 }
 
+function Get-OpRetainedTaskState {
+    # The old runtime has a five-second SQLite writer timeout. Once the fence
+    # holds its board, HTTP health may wait behind that writer and is not a
+    # usable stop dependency. These native handles and task identity were
+    # captured while health was still available, before requesting the fence.
+    param($Task,[string]$Instance,[DateTime]$LastRunTime,$Processes,$FenceReadyAt=$null)
+    if(@($Processes).Count -ne 2 -or ([DateTime]$Task.LastRunTime).ToUniversalTime() -ne $LastRunTime.ToUniversalTime()){
+        throw 'Previous task run or retained native identities differ.'}
+    foreach($process in $Processes){
+        if($process.HasExited -and ($null -eq $FenceReadyAt -or
+            ([DateTimeOffset]$process.ExitTime.ToUniversalTime()).ToUnixTimeMilliseconds()/1000.0 -lt [double]$FenceReadyAt)){
+            throw 'A retained old process ended before this writer fence.'}
+    }
+    $instances=$Task.GetInstances(0)
+    if($instances.Count -eq 1){
+        if([string]$instances.Item(1).InstanceGuid -cne $Instance){throw 'Previous task instance changed.'}
+        return 'RUNNING'
+    }
+    if($instances.Count -ne 0 -or @($Processes|Where-Object{-not $_.HasExited}).Count){
+        throw 'Task ended without verified exit of both retained native processes.'}
+    return 'ENDED'
+}
+
+function Stop-OpRetainedTask {
+    param($Task,[string]$Instance,[DateTime]$LastRunTime,$Processes,$FenceReadyAt)
+    if((Get-OpRetainedTaskState $Task $Instance $LastRunTime $Processes $FenceReadyAt) -ceq 'ENDED'){return}
+    try{$Task.Stop(0)}catch{
+        # A writer timeout can end the exact old instance between readback and
+        # Stop(). Accept only its complete retained exit, never another run.
+        if((Get-OpRetainedTaskState $Task $Instance $LastRunTime $Processes $FenceReadyAt) -cne 'ENDED'){throw}
+    }
+}
+
 function Open-OpProcessProof {
     param($Health,[string]$Root,[string]$Config)
     $process=Get-CimInstance Win32_Process -Filter ('ProcessId='+[int]$Health.pid)
@@ -421,6 +454,7 @@ function Invoke-OperationalLaunch {
             if($health.version -cne '4.2.8'){throw 'Current runtime version differs.'}
             $state.baseline_processes=Open-OpProcessProof $health $script:OpOldRoot $script:OpOldConfig
             $state.old_pid=$health.pid;$state.old_instance=$health.instance_id
+            $state.old_task_instance=[string]$task.GetInstances(0).Item(1).InstanceGuid;$state.old_task_last_run=[DateTime]$task.LastRunTime
             Write-OpRecord (Join-Path $script:OpPrivate 'baseline.json') @{xml=$script:OpOriginalXml;sddl=$script:OpOriginalSddl;health=$health;config_sha256=$m.previous_config_sha256}
             Write-Host 'Initial checks passed. Existing sign-ins are reused; no input or restart is planned. You can walk away.' -ForegroundColor Green
         }
@@ -440,19 +474,30 @@ function Invoke-OperationalLaunch {
             $script:OpRequest=Join-Path $script:OpPrivate 'task-catalog-request.json'
             Copy-VerifiedPayload ([pscustomobject]@{source=(Join-Path $Directory 'task-catalog-request.json');destination=$script:OpRequest;sha256=$m.request_sha256;length=(Get-Item -LiteralPath (Join-Path $Directory 'task-catalog-request.json')).Length})
         }
-        $actions.admission_fence={param($state)Write-OpStatus $state.phase;$state.fence=Start-OpFence 'stop-fence'}
-        $actions.stop_previous={param($state)
-            Write-OpStatus $state.phase;Assert-OpFence $state.fence
+        $actions.admission_fence={param($state)
+            Write-OpStatus $state.phase
+            # Finish HTTP/native health verification before excluding writers.
+            # Active work may still drain during Start-OpFence; its locked
+            # durable accounting supplies the later idle/cleanup proof.
             $health=Get-428Health;Assert-428Health $health $script:OpOldRoot $true
-            Assert-OpIdleHealth $health $state.old_pid $state.old_instance
+            if($health.pid -ne $state.old_pid -or $health.instance_id -cne $state.old_instance){throw 'Previous controller changed before fencing.'}
             $state.processes=Open-OpProcessProof $health $script:OpOldRoot $script:OpOldConfig
             $task=$script:OpFolder.GetTask('CoChem-4.2.7-Warden')
-            if($task.Xml -cne $script:OpOriginalXml -or $task.GetSecurityDescriptor(7) -cne $script:OpOriginalSddl -or $task.GetInstances(0).Count -ne 1){throw 'Old task changed before stop.'}
+            if($task.Xml -cne $script:OpOriginalXml -or $task.GetSecurityDescriptor(7) -cne $script:OpOriginalSddl -or
+                (Get-OpRetainedTaskState $task $state.old_task_instance $state.old_task_last_run $state.processes) -cne 'RUNNING'){
+                throw 'Previous task changed before fencing.'}
+            $state.fence=Start-OpFence 'stop-fence'
+        }
+        $actions.stop_previous={param($state)
+            Write-OpStatus $state.phase;Assert-OpFence $state.fence
+            $task=$script:OpFolder.GetTask('CoChem-4.2.7-Warden')
+            if($task.Xml -cne $script:OpOriginalXml -or $task.GetSecurityDescriptor(7) -cne $script:OpOriginalSddl){throw 'Old task changed before stop.'}
+            $null=Get-OpRetainedTaskState $task $state.old_task_instance $state.old_task_last_run $state.processes $state.fence.ready.ready_at
             Assert-OpFence $state.fence
             $d=$task.Definition;$d.Triggers.Item(1).Enabled=$false
             $null=$script:OpFolder.RegisterTaskDefinition('CoChem-4.2.7-Warden',$d,20,'SYSTEM',$null,5,$script:OpOriginalSddl)
             $task=$script:OpFolder.GetTask('CoChem-4.2.7-Warden');Assert-428WardenTask $task $script:OpOriginalXml $script:OpOriginalSddl $script:OpOldRoot $script:OpOldArgs $true $false 1
-            Assert-OpFence $state.fence;$task.Stop(0)
+            Assert-OpFence $state.fence;Stop-OpRetainedTask $task $state.old_task_instance $state.old_task_last_run $state.processes $state.fence.ready.ready_at
             $deadline=[DateTime]::UtcNow.AddSeconds(120)
             do{
                 $task=$script:OpFolder.GetTask('CoChem-4.2.7-Warden');$gone=@($state.processes|Where-Object{-not $_.HasExited}).Count -eq 0
