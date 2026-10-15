@@ -11,6 +11,7 @@ from dataclasses import dataclass
 import json
 import math
 from pathlib import Path
+import sqlite3
 import time
 
 from .planning_outcomes_428 import PlanningOutcomeRuntime
@@ -50,7 +51,10 @@ def _schema(conn):
         CHECK(total_dispatch_limit IS NULL OR total_dispatch_limit > 0))''')
     conn.execute('CREATE INDEX IF NOT EXISTS planning428_budget_root '
                  'ON planning428_budget_members(lineage_root)')
-    for table in ('planning428_budget_members', 'planning428_budget_captures'):
+    conn.execute('''CREATE TABLE IF NOT EXISTS planning428_budget_ledger_bindings(
+        lineage_root TEXT PRIMARY KEY, ledger_path TEXT NOT NULL)''')
+    for table in ('planning428_budget_members', 'planning428_budget_captures',
+                  'planning428_budget_ledger_bindings'):
         for operation in ('UPDATE', 'DELETE'):
             conn.execute(f'''CREATE TRIGGER IF NOT EXISTS {table}_{operation.lower()}_immutable
                 BEFORE {operation} ON {table} BEGIN
@@ -177,10 +181,17 @@ def capture_lineage_budget(conn, job_id, payload, policy, *, attempt_ledger, now
     member = PlanningOutcomeRuntime.lineage_for_job(task_id, payload)
     if member is None:
         raise LineageBudgetHold('separate_control_or_swarm_accounting_required')
-    _attach_ledger(conn, attempt_ledger)
+    ledger = _attach_ledger(conn, attempt_ledger)
     root = _resolve_root(conn, member)
     if root is None:
         raise LineageBudgetHold('attempt_lineage_not_initialized')
+    ledger_path = str(Path(ledger.path).resolve())
+    binding = conn.execute('SELECT ledger_path FROM planning428_budget_ledger_bindings '
+                           'WHERE lineage_root=?', (root,)).fetchone()
+    if binding and binding[0] != ledger_path:
+        raise LineageBudgetHold('attempt_ledger_binding_changed')
+    if binding is None:
+        conn.execute('INSERT INTO planning428_budget_ledger_bindings VALUES(?,?)', (root, ledger_path))
     row = conn.execute('SELECT state_json FROM planning_budget_ledger.task428_lineages WHERE root=?',
                        (root,)).fetchone()
     state = json.loads(row[0]) if row else {}
@@ -273,4 +284,68 @@ def lineage_unavailability(conn, job_id, now):
             'WHERE m.lineage_root=?', (member[0],)).fetchone()[0]
         if spent >= limits[0]:
             return 'lineage_dispatch_budget_exhausted'
+    return _live_quality_hold(conn, job_id, member[0])
+
+
+def _live_quality_hold(conn, job_id, root):
+    """Pending siblings cannot outrun a newly reached research/lock boundary.
+
+    The same board transaction attaches the controller-bound quality database.
+    Its rollback journal read lock pins the observed state through reservation;
+    it is never inferred from the stale per-job insertion snapshot.
+    """
+    present = conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' "
+                           "AND name='planning428_budget_ledger_bindings'").fetchone()
+    if present is None:
+        return 'attempt_ledger_binding_missing'
+    binding = conn.execute('SELECT ledger_path FROM planning428_budget_ledger_bindings '
+                          'WHERE lineage_root=?', (root,)).fetchone()
+    if binding is None:
+        return 'attempt_ledger_binding_missing'
+    path = Path(binding[0])
+    try:
+        if not path.is_absolute() or not path.is_file():
+            return 'attempt_ledger_unavailable'
+        for item in (path, *path.parents):
+            info = item.lstat()
+            if item.is_symlink() or getattr(info, 'st_file_attributes', 0) & 0x400:
+                return 'attempt_ledger_binding_changed'
+        attached = {row[1]: row[2] for row in conn.execute('PRAGMA database_list')}
+        if 'planning_budget_ledger' in attached:
+            if Path(attached['planning_budget_ledger']).resolve() != path.resolve():
+                return 'attempt_ledger_binding_changed'
+        else:
+            # JobStore's connection does not enable URI filenames. A URI here
+            # is interpreted as a literal Windows filename and falsely holds
+            # every new read-only connection. The private existing path was
+            # checked above; this guard executes SELECTs only in that database.
+            conn.execute('ATTACH DATABASE ? AS planning_budget_ledger', (str(path),))
+        mode = conn.execute('PRAGMA planning_budget_ledger.journal_mode').fetchone()[0]
+        if mode not in ('delete', 'truncate', 'persist'):
+            return 'attempt_ledger_snapshot_not_fenced'
+        row = conn.execute('SELECT state_json FROM planning_budget_ledger.task428_lineages '
+                           'WHERE root=?', (root,)).fetchone()
+        state = json.loads(row[0]) if row else {}
+        failures = state.get('failures')
+        if (state.get('root') != root or state.get('stage') != 'READY' or state.get('research_due')
+                or type(failures) is not int or not 0 <= failures < 30):
+            return 'quality_research_or_lock_required'
+        job = conn.execute('SELECT payload_json FROM pipeline_jobs WHERE job_id=?', (job_id,)).fetchone()
+        payload = json.loads(job[0])
+        intent = payload['planning_intent']
+        member = PlanningOutcomeRuntime.lineage_for_job(intent['task_id'], payload)
+        if _resolve_root(conn, member) != root:
+            return 'physical_job_lineage_changed'
+        if intent['complexity'] < state['floor']:
+            if not _compiled_fracture_member(conn, payload, member, root):
+                return 'retained_reasoning_floor'
+        expected = (state.get('fracture_child_models') or {}).get(member, state.get('next_model'))
+        if expected is not None:
+            profiles = intent['candidate_profiles']
+            if any(payload['task_catalog']['models'][profile]['family'] != expected for profile in profiles):
+                return 'retained_pivot_model'
+    except LineageBudgetHold as error:
+        return error.reason
+    except (OSError, sqlite3.Error, ValueError, KeyError, TypeError):
+        return 'attempt_ledger_unverified'
     return None

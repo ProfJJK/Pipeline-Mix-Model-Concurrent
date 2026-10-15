@@ -207,6 +207,45 @@ def test_fracture_siblings_share_live_aggregate_guard(env):
     assert env['store'].get(second['job_id'])['routing']['dispatches'] == 0
 
 
+@pytest.mark.parametrize('stage,failures', [('PIVOT_RESEARCH',10),('PIVOT_RESEARCH',20),('LOCKED',30)])
+def test_queued_sibling_rechecks_live_quality_boundary_without_spending(env,stage,failures):
+    first, _ = generation(env, 'queued-a', cap=50)
+    second, _ = generation(env, 'queued-b', cap=50)
+    with env['ledger']._write() as conn:
+        state = env['ledger']._read(conn, env['root'])
+        state.update(stage=stage, failures=failures, research_due=True)
+        env['ledger']._save(conn, state)
+    with env['store']._write() as conn:
+        assert routes.preview_next_route(conn, second)['state'] == 'quality_research_or_lock_required'
+        with pytest.raises(LineageBudgetHold, match='quality_research_or_lock_required'):
+            routes.reserve(conn, second, {}, 'slot2')
+        assert routes.select(conn, second) == (None, True)
+    assert env['store'].get(first['job_id'])['routing']['dispatches'] == 0
+    assert env['store'].get(second['job_id'])['routing']['dispatches'] == 0
+
+
+def test_live_quality_snapshot_prevents_boundary_commit_during_reservation(env):
+    job, _ = generation(env, 'fenced')
+    writer = sqlite3.connect(env['ledger'].path, timeout=.01)
+    with env['store']._write() as conn:
+        assert lineage_unavailability(conn, job['job_id'], env['clock'][0]) is None
+        with pytest.raises(sqlite3.OperationalError,match='locked'):
+            writer.execute('BEGIN IMMEDIATE')
+            writer.execute('UPDATE task428_lineages SET state_json=state_json')
+            writer.commit()
+        writer.rollback()
+    writer.execute('BEGIN IMMEDIATE')
+    writer.execute('UPDATE task428_lineages SET state_json=state_json')
+    writer.commit(); writer.close()
+
+
+def test_live_quality_gate_preserves_read_only_preview(env):
+    job, _ = generation(env, 'query-only')
+    with env['store']._connection() as conn:
+        conn.execute('PRAGMA query_only=ON')
+        assert lineage_unavailability(conn, job['job_id'], env['clock'][0]) is None
+
+
 def test_insertion_rejects_reset_quality_or_dispatch_budget(env):
     payload = deepcopy(env['original']['payload'])
     policy = env['original']['routing']['policy']
