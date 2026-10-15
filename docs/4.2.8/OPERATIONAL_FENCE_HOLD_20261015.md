@@ -82,5 +82,7 @@ the application source at `865a29b` and replaces only the owner launcher, adding
 the pinned original manifest, exact-attempt recovery instructions and separate
 launcher test evidence. The recovery identifier names one new protected sitting;
 an existing sitting is spent and cannot be replayed. The preparer passed 32 inert
-fixture tests. Final integrated tests and the actual packaged read-only plan are
-recorded in the separate recovery delivery record when complete.
+fixture tests. The final root regression passed 200 tests, the actual packaged
+read-only plan passed, and independent review verified the package inputs.
+Use the [new recovery delivery record](OPERATIONAL_RECOVERY_DELIVERY_20261015.md).
+Owner execution and actual deployment acceptance are still pending.

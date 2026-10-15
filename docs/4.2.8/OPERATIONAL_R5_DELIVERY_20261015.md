@@ -1,4 +1,4 @@
-> **Spent owner attempt — do not rerun the command below.** The 15 October run installed r5 and passed Codex preflight, then held at `admission_fence` before cutover. The received diagnostic establishes fence expiry and an ended old Warden, with no listener. A separate installation-reuse continuation is being prepared; see [the current hold and recovery evidence](OPERATIONAL_FENCE_HOLD_20261015.md). The original delivery record is retained below.
+> **Spent owner attempt — do not rerun the command below.** The 15 October run installed r5 and passed Codex preflight, then held at `admission_fence` before cutover. The received diagnostic establishes fence expiry and an ended old Warden, with no listener. Use the separately reviewed [installation-reuse continuation](OPERATIONAL_RECOVERY_DELIVERY_20261015.md). The original delivery record is retained below.
 
 # Operational r5 delivery — 15 October 2026
 

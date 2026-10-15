@@ -4,9 +4,11 @@ The delivered operational r5 launch has run and is spent. Installation and Codex
 preflight passed, then admission fencing held before catalog acceptance/cutover.
 The received diagnostic proves fence expiry without a release request and an
 ended r4 Warden, with no listener. Source cleanup/task-transition repairs are
-committed; an exact-attempt continuation will reuse the completed installation.
-See [the current hold evidence](OPERATIONAL_FENCE_HOLD_20261015.md). Do not repeat
-the original owner command or treat source tests as deployment acceptance.
+committed. The [exact-attempt continuation](OPERATIONAL_RECOVERY_DELIVERY_20261015.md)
+reuses the completed installation; its root regression passed 200 tests and its
+actual packaged read-only plan passed. Owner execution is pending. See also
+[the hold evidence](OPERATIONAL_FENCE_HOLD_20261015.md). Do not repeat the original
+owner command or treat source tests as deployment acceptance.
 
 ## Current operational repair â€” 15 October 2026
 

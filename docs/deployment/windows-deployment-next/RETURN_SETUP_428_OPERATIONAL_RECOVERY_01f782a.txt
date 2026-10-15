@@ -1,0 +1,22 @@
+PIPELINE 4.2.8 — INSTALLED R5 RECOVERY
+
+Use this new command once in Administrator Windows PowerShell.
+Do not repeat r428-op-launch-865a29b.
+
+This continuation verifies and reuses the completed installation and existing
+sign-ins. No browser, sign-in, choice, reboot or later input is planned. You can
+leave it running after entering the command. Keep PowerShell and the computer on.
+Native acceptance may take considerably longer than the initial input window.
+
+C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -File "C:\Users\ansac\CoChem427\r428-op-recovery-01f782a\run_operational_428_launch.ps1" -LaunchManifest "C:\Users\ansac\CoChem427\r428-op-recovery-01f782a\launch-manifest.json" -LaunchManifestSha256 0069064b2b0fb5ffb3d79fe65f66efae517d004d1e1117a1a2c4e131b15a31b7 -Apply
+
+Success: R428_OPERATIONAL_RUNNING_VERIFIED.
+If held: preserve the final sanitized JSON and send it to this chat. Do not rerun
+this one-use command, repeat sign-in, delete evidence or stop processes.
+
+Status directory:
+C:\Program Files\CoChem\R428OperationalRecovery-20261015-a62bffb278044fffbaf21207a866ff81-53858b34c0c94c53ae7a3cdfbfec3fda
+
+Validation: 200 source/inert tests passed. Actual packaged read-only plan passed.
+These checks are not host deployment acceptance; Apply is reserved for the owner.
+Keep all existing r428-op input directories and the new recovery package in place.

@@ -96,8 +96,11 @@ acceptance or cutover. The received diagnostic proves an expired, unreleased
 fence and an ended r4 Warden (unchanged definition, exit 1, no instances or
 listener). Do not claim the previous runtime is healthy or rerun the installer.
 Read `docs/4.2.8/OPERATIONAL_FENCE_HOLD_20261015.md`. Cleanup and task-transition
-repairs are committed; a separately bound installation-reuse continuation is
-being prepared. Only the owner will execute the reviewed continuation.
+repairs are committed. The separately bound installation-reuse continuation is
+prepared at `r428-op-recovery-01f782a`; read
+`docs/4.2.8/OPERATIONAL_RECOVERY_DELIVERY_20261015.md` for its pinned command and
+200-test/read-only-plan evidence. Only the owner executes it. Do not assume Apply
+has run, restart the previous runtime, or submit jobs before verified recovery.
 
 2026-10-15: the owner-approved seven-part operational repair is integrated on
 `fix/428-operational-repair` in the separate local
