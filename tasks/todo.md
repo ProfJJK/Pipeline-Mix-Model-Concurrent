@@ -1,3 +1,5 @@
+> **Current status — 15 October 2026.** The historical checklist below is supplemented by the [owner-approved operational repair](../docs/4.2.8/OWNER_AMENDMENT_20261015_OPERATIONAL_REPAIR.md) and [current progress](../docs/4.2.8/PROGRESS.md). Source regression at `aa7706e`: 973 passed, 1 skipped, 8 deselected. Owner-run native acceptance and verified useful-job delivery remain pending. Do not infer operational self-healing from fixture-only repair callbacks.
+
 # 4.2.8 remaining work
 
 All items start open. Existing foundations are recorded in `docs/4.2.8/PROGRESS.md`.

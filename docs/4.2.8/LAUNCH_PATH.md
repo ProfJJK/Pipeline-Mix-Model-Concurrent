@@ -1,3 +1,5 @@
+> **Historical plan — superseded 15 October 2026.** The current branch is `fix/428-operational-repair`; see [PROGRESS.md](PROGRESS.md), [VALIDATION.md](VALIDATION.md), and [OPERATIONAL_OWNER_LAUNCH_R5.md](OPERATIONAL_OWNER_LAUNCH_R5.md). Statements below about no launch or the old R4 v11 baseline describe the original handoff, not current source readiness.
+
 # Getting 4.2.8 running
 
 For the implementable coding sequence, dependencies and acceptance tests, use the

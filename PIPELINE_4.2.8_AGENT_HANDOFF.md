@@ -1,3 +1,5 @@
+> **Current operational repair handoff — 15 October 2026.** Continue from `fix/428-operational-repair` in `C:\Users\ansac\source\repos\Pipeline-Mix-Model-Concurrent-428-repair`, preserving later commits. The seven approved source repairs and reviewed owner-launch implementation are integrated; the final source regression at `aa7706e` passed 973 tests. Read [current progress](docs/4.2.8/PROGRESS.md), [validation](docs/4.2.8/VALIDATION.md), and [operational launch](docs/4.2.8/OPERATIONAL_OWNER_LAUNCH_R5.md). The original swarm handoff below is historical. Native deployment and useful-job completion still need separate receipts.
+
 # Pipeline 4.2.8 coding handoff
 
 **Owner instruction:** complete the remaining 4.2.8 coding, testing and release

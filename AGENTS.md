@@ -90,6 +90,21 @@ This is the preferred interface, not a claim that all three adapters have been
 implemented or accepted on this host. Reuse verified sessions before asking for input.
 
 ## Current handoff
+2026-10-15: the owner-approved seven-part operational repair is integrated on
+`fix/428-operational-repair` in the separate local
+`C:\Users\ansac\source\repos\Pipeline-Mix-Model-Concurrent-428-repair` checkout.
+The final source/inert regression at `aa7706e` passed 973 tests, with one skip
+and eight documented exclusions. Read `docs/4.2.8/PROGRESS.md`, `VALIDATION.md`
+and `OPERATIONAL_OWNER_LAUNCH_R5.md` (all under `docs/4.2.8`). The final immutable
+package and owner command are recorded separately in
+`docs/4.2.8/OPERATIONAL_R5_DELIVERY_20261015.md` after package verification.
+Only the owner executes Apply. Do not replay old R5/R6/R7/4.2.8 commands.
+Source tests do not attest native acceptance, deployment or useful-job completion.
+Completion-audit dispatch and independent repair callbacks remain unconfigured;
+strict catalog coverage holds must not be weakened. Preserve other specialist
+integrations, all old packages and existing work. The following handoff is historical.
+
+## Historical handoff
 4.2.8 coding is handed over at implementation baseline
 `c33c7ea2a9d7c655b6998081080b4eae2273ee1b` on `feature/4.2.8-task-routing`.
 The root handoff and task list above are the current remaining-work authority.

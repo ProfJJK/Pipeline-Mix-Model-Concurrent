@@ -1,6 +1,33 @@
 # Pipeline 4.2.8 — Integrated Validation & Regression Evidence (`P428-24`)
 
-## Operational repair source verification — 15 October 2026
+## Final operational source regression — 15 October 2026
+
+At `aa7706e78abd7ab0d7eaec30e5c8f2858d51665c`, the integrated source sweep
+passed **973 tests, 1 skipped, 8 deselected in 281.64 seconds**. It selected every
+modified `pipeline_tests/test_*.py` since `c714854` except the broad service suite,
+plus `supervisor_tests/test_probes.py`, through the serialized Python 3.12 runner.
+The service's new exact-ID HTTP behavior is covered by the 20 inert loopback
+intake tests. The broad service module remains excluded because some fixtures
+start real child processes.
+
+The selection excludes `real_process_cleanup`, `fresh_process`, and
+`actual_native_controller_priority`, plus six pre-existing supervisor profile
+assertions named `test_protected_high_profile_cannot_claim_weaker_or_unrelated_native_thinking`.
+Those six still reject invalid profiles with ValueError, but expect the obsolete
+text `High reasoning profile`; the current validator reports the more specific
+explicit-reasoning error. An earlier lane run observed those six wording failures
+and 214 passes; they are not represented as passing in this integrated sweep.
+
+The final sweep includes actual temporary-file and SQLite flows through nested
+fracture, whole-task promotion, upward/different-model pivots, retained budgets,
+independent content review, and final release. Provider/process ports remain inert.
+The owner launcher, fence, startup handshake, restoration boundaries, sanitized
+failure projection, first-prompt formats, once-only selected-work submission and
+scoped Codex settings update all have source or inert PowerShell coverage.
+No native model, live submission, protected write, task lifecycle or deployment
+Apply was executed. Later documentation-only commits do not change tested source.
+
+## Earlier operational repair verification — 15 October 2026
 
 The current repair checkout is `Pipeline-Mix-Model-Concurrent-428-repair`, branch
 `fix/428-operational-repair`. Tests use the repository Python 3.12 interpreter

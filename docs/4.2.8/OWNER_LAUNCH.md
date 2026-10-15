@@ -1,3 +1,5 @@
+> **Historical launch sheet — superseded 15 October 2026.** Do not replay the old commands below. The current operational r4-to-r5 sequence is [OPERATIONAL_OWNER_LAUNCH_R5.md](OPERATIONAL_OWNER_LAUNCH_R5.md); its delivered, pinned command belongs in [OPERATIONAL_R5_DELIVERY_20261015.md](OPERATIONAL_R5_DELIVERY_20261015.md). Earlier packages remain preserved evidence.
+
 # Pipeline 4.2.8 — Single Owner Launch Sheet (`P428-26`)
 
 > [!IMPORTANT]

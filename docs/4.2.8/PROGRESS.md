@@ -27,10 +27,12 @@ checks. It contains no sign-in or late prompt. The installed catalog, provider
 quotas, SYSTEM execution and useful-job completion still require actual host
 acceptance. No old R5/R6/R7 command is an operational r5 deployment command.
 
-The broader source regression at `affa811` passed **746 tests**, with one skip
-and two native/real-process exclusions. A later focused slice at `a156f7a`
-passed **42 tests**, including temporary SQLite and real-file fracture/release
-flows with inert provider ports. These results are not deployment acceptance.
+The final integrated source regression at `aa7706e` passed **973 tests**, with
+one skip and eight documented exclusions, in 281.64 seconds. Tests include real
+temporary files and SQLite with inert provider/process ports. Independent review
+found no remaining launcher or exact-source package-coherence blocker. Fresh
+immutable packaging and packaged read-only verification follow this source
+checkpoint; the delivered pins are recorded in `OPERATIONAL_R5_DELIVERY_20261015.md`.
 See [VALIDATION.md](VALIDATION.md) for the verification boundary.
 
 Known limits remain explicit. The strict published reasoning floors leave some
