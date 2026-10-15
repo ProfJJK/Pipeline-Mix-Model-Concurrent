@@ -165,7 +165,9 @@ def output_contract_details(node: dict) -> tuple[dict, str, dict]:
                        'The controller verifies every quotation and binds your dossier to the three failed attempts.')
     elif kind == 'TASK_PLAN':
         from .planning_gateway import prompt_contract
-        contract, instruction, payload = prompt_contract(payload)
+        # Exact rendering is checked by node_prompt, with its selected route;
+        # a generic Flash preview must not block a larger eligible profile.
+        contract, instruction, payload = prompt_contract(payload, check_context=False)
     else:
         raise ValueError(f'Unsupported executable node kind: {kind}')
     if kind=='CODE_RESEARCH' and payload.get('planning_evidence', {}).get('external_sources'):

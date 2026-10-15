@@ -212,3 +212,62 @@ def test_swarm_form_uses_real_members_and_normalization_preserves_identity():
     assert normalized['batch_id'] == 'real-batch' and normalized['provider_family'] == 'codex'
     assert evidence['changes'][0]['sha256'] == hashlib.sha256(b'Actual content').hexdigest()
     assert form['subagent_outputs']['actual-task']['deliverables'][0]['sha256'] is None
+
+
+def context_node():
+    node = execution_node()
+    intent = node['payload']['planning_intent']
+    intent.update(complexity=8, candidate_profiles=['small', 'large'])
+    node['payload']['task_catalog'] = dict(models={
+        'small': dict(provider='gemini', model='gemini-3.8-flash', effort='high', context_limit=1000000),
+        'large': dict(provider='codex', model='gpt-6-astra', effort='max', context_limit=1000000)})
+    node['route'] = dict(provider='gemini', model='gemini-3.8-flash', reasoning_effort='high', score=8)
+    return node
+
+
+def test_rendered_context_counts_forms_feedback_baseline_and_output_reserve():
+    from cochem_pipeline.failures import ProviderFailure
+    from cochem_pipeline.planning_gateway import validate_rendered_prompt_context
+    node = context_node()
+    base = node_prompt(node, '<baseline>Mandatory instructions</baseline>')
+    budget = validate_rendered_prompt_context(node, base)
+    assert budget['rendered_prompt_bytes'] == len(base.encode('utf-8'))
+    assert budget['output_reserve'] >= 4096
+    total = budget['input_budget'] + budget['output_reserve']
+    node['payload']['task_catalog']['models']['small']['context_limit'] = total - 1
+    with pytest.raises(ProviderFailure) as caught:
+        node_prompt(node, '<baseline>Mandatory instructions</baseline>')
+    assert caught.value.category == 'context'
+    node['payload']['task_catalog']['models']['small']['context_limit'] = total
+    assert node_prompt(node, '<baseline>Mandatory instructions</baseline>') == base
+    # The correction text is extra actual input, not hidden inside a constant.
+    node['output_format_feedback'] = {**invalid_json_output(node).as_feedback(), 'correction_attempt': 1}
+    with pytest.raises(ProviderFailure) as caught:
+        node_prompt(node, '<baseline>Mandatory instructions</baseline>')
+    assert caught.value.category == 'context'
+
+
+def test_context_hold_never_lowers_the_reasoning_floor_or_changes_candidates():
+    from cochem_pipeline.failures import ProviderFailure
+    node = context_node()
+    before = deepcopy(node['payload']['planning_intent'])
+    node['payload']['flash_context_limit'] = 100
+    with pytest.raises(ProviderFailure) as caught:
+        node_prompt(node)
+    assert caught.value.category == 'context'
+    assert node['payload']['planning_intent'] == before
+    # Existing policy may fall back to the larger eligible tier-eight profile;
+    # Flash's smaller bound must not reject that different model.
+    node['route'] = dict(provider='codex', model='gpt-6-astra', reasoning_effort='max', score=8)
+    assert 'REQ-real' in node_prompt(node)
+    assert node['payload']['planning_intent'] == before
+    assert node['route']['score'] == 8 and node['route']['reasoning_effort'] == 'max'
+
+
+def test_unknown_selected_capacity_holds_instead_of_assuming_support():
+    from cochem_pipeline.failures import ProviderFailure
+    node = context_node()
+    node['payload']['task_catalog']['models']['small']['context_limit'] = None
+    with pytest.raises(ProviderFailure) as caught:
+        node_prompt(node)
+    assert caught.value.category == 'context'

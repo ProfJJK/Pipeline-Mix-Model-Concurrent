@@ -134,7 +134,63 @@ class PlanningGateway:
                 profile_id=profile,status='COMPLETED',cleanup_verified=True,output=job['output'])
 
 
-def prompt_contract(payload):
+def _captured_context_limit(payload, route=None):
+    """Return capacity from captured eligible profiles; never change their tier."""
+    intent = payload.get('planning_intent') or {}
+    catalog = payload.get('task_catalog')
+    if not isinstance(catalog, dict):
+        if route is not None:
+            return None
+        return payload.get('flash_context_limit')  # offline, unselected preview
+    models = [catalog['models'][key] for key in intent.get('candidate_profiles', [])]
+    if route is not None:
+        models = [model for model in models if (model['provider'], model['model'], model['effort']) ==
+                  (route.get('provider'), route.get('model'), route.get('reasoning_effort'))]
+        if len(models) != 1:
+            raise ValueError('Context check requires one exact eligible captured profile')
+    limits = []
+    for model in models:
+        limit = model.get('context_limit')
+        if type(limit) is not int or limit < 1:
+            continue
+        flash = payload.get('flash_context_limit')
+        if model['provider'] == 'gemini' and 'flash' in model['model'].casefold() and type(flash) is int:
+            limit = min(limit, flash)
+        limits.append(limit)
+    return max(limits) if limits else None
+
+
+def validate_rendered_prompt_context(node, prompt):
+    """Budget the exact schema, handoff, feedback, evidence and baseline bytes.
+
+    UTF-8 byte counting is a conservative token bound. Output capacity is also
+    reserved. Failure uses normal context routing; candidate order, complexity
+    and reasoning floors remain the immutable captured policy.
+    """
+    if node.get('kind') != 'TASK_PLAN':
+        return None
+    payload = node['payload']
+    limit = _captured_context_limit(payload, node.get('route'))
+    if limit is None:
+        if node.get('route') is not None or 'task_catalog' in payload:
+            from .failures import ProviderFailure
+            raise ProviderFailure('context')
+        return None  # a standalone form without execution authority
+    document = ((payload.get('planning_intent') or {}).get('task') or {}).get('document') or {}
+    declared_input = sum(value if type(value) is int and value >= 0 else 0 for value in
+                         (document.get('srs_tokens'), document.get('evidence_and_instruction_tokens')))
+    reserve = document.get('output_reserve_tokens', 4096)
+    reserve = max(4096, reserve) if type(reserve) is int else 4096
+    prompt_bytes = len(prompt.encode('utf-8'))
+    input_budget = max(prompt_bytes, declared_input)
+    if input_budget + reserve > limit:
+        from .failures import ProviderFailure
+        raise ProviderFailure('context')
+    return dict(rendered_prompt_bytes=prompt_bytes, input_budget=input_budget,
+                output_reserve=reserve, captured_context_limit=limit)
+
+
+def prompt_contract(payload, *, check_context=True):
     intent=payload['planning_intent']
     stage=intent['stage']
     task_state=intent['task']
@@ -144,8 +200,8 @@ def prompt_contract(payload):
         if 'research_excerpts' in task_state:
             from .research_evidence_428 import validate_research_excerpts
             validate_research_excerpts(task_state['research']['channels'], task_state['research_excerpts'])
-            limit = payload.get('flash_context_limit')
-            if limit is not None:
+            limit = _captured_context_limit(payload)
+            if check_context and limit is not None:
                 from .task_routing import context_fits
                 doc = task_state.get('document') or {}
                 content_budget = max(int(doc.get('srs_tokens', 0)), len(json.dumps(doc, ensure_ascii=False).encode('utf-8')))
