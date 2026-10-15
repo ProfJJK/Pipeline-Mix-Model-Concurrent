@@ -274,3 +274,39 @@ def test_unreadable_publication_journal_is_unknown_not_safe_to_restore(phase_env
     assert result['status'] == 'TASK_CATALOG_HELD_PRESERVE_EVIDENCE'
     assert result['publication_state'] == 'UNKNOWN'
     assert not (env.args[-1] / 'result.json').exists()
+
+
+@pytest.mark.parametrize('changed', [False, True])
+def test_start_gate_binds_acknowledgment_before_runtime_creation(phase_env, monkeypatch, changed):
+    env = phase_env
+    original = owner.write_fresh
+    def observed_write(path, record):
+        raw = original(path, record)
+        if path.name == 'phase-started.json':
+            assert env.runtime.closed == 0 and not env.calls and not env.loads
+            ack = dict(schema='cochem-owner-task-catalog-start-ack/4.2.8',
+                start_sha256=hashlib.sha256(path.read_bytes()).hexdigest(), pid=record['pid'],
+                bootstrap_sha256=record['bootstrap_sha256'], request_sha256=record['request_sha256'])
+            if changed:
+                ack['pid'] += 1
+            original(path.parent / 'phase-start-ack.json', ack)
+        return raw
+    monkeypatch.setattr(owner, 'write_fresh', observed_write)
+    result = invoke(env, start_gate=True)
+    assert result['status'] == ('TASK_CATALOG_HELD_PRESERVE_EVIDENCE' if changed else 'TASK_CATALOG_CANDIDATE_READY')
+    if changed:
+        assert not env.calls and not env.loads and env.runtime.closed == 0
+        assert result['phase'] == 'process_custody'
+        assert result['publication_state'] == 'UNKNOWN'
+
+
+def test_missing_start_ack_has_a_bounded_wait_without_runtime(phase_env, monkeypatch):
+    env = phase_env
+    path = env.args[-1] / 'phase-started.json'
+    record = dict(pid=123, bootstrap_sha256=env.args[1], request_sha256=env.args[3])
+    owner.write_fresh(path, record)
+    moments = iter([0, 91])
+    monkeypatch.setattr(owner.time, 'monotonic', lambda: next(moments))
+    with pytest.raises(TimeoutError, match='acknowledgment'):
+        owner.wait_start_gate(env.args[-1], path, record)
+    assert not env.calls and not env.loads

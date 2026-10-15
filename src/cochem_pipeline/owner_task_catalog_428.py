@@ -118,10 +118,29 @@ def publication_snapshot(store, request_sha256, baseline):
         return dict(state='UNKNOWN', catalog_probe_cleanup_verified=False)
 
 
+def wait_start_gate(output_root, started_path, started_record, *, timeout_seconds=90):
+    """Let the owner retain exact process handles before this phase can exit."""
+    acknowledgement = output_root / 'phase-start-ack.json'
+    deadline = time.monotonic() + timeout_seconds
+    expected = dict(schema='cochem-owner-task-catalog-start-ack/4.2.8',
+        start_sha256=hashlib.sha256(started_path.read_bytes()).hexdigest(), pid=started_record['pid'],
+        bootstrap_sha256=started_record['bootstrap_sha256'], request_sha256=started_record['request_sha256'])
+    while not acknowledgement.exists():
+        if time.monotonic() >= deadline:
+            raise TimeoutError('Owner process custody acknowledgment was not received')
+        time.sleep(.05)
+    with retained_path(acknowledgement) as custody:
+        raw = custody.read(acknowledgement, 16384)
+        if _strict_json(raw.decode('utf-8-sig')) != expected:
+            raise ValueError('Owner process custody acknowledgment differs from this phase')
+
+
 def run_owner_phase(bootstrap_config, bootstrap_sha256, request_path, request_sha256,
                     output_root, *, timeout_seconds=7200, poll_seconds=1,
-                    flash_context_limit=None, runtime_factory=None):
+                    flash_context_limit=None, runtime_factory=None, start_gate=False):
     """The SYSTEM-only API. runtime_factory is an in-process test seam only."""
+    if type(start_gate) is not bool:
+        raise ValueError('Owner start gate must be boolean')
     windows.require_system()
     windows.validate_code_path(Path(__file__))
     windows.validate_code_path(Path(sys.executable))
@@ -144,10 +163,16 @@ def run_owner_phase(bootstrap_config, bootstrap_sha256, request_path, request_sh
         if any(output_root.iterdir()):
             raise ValueError('Owner output directory must be fresh and empty')
         # Exclusive creation also fences a concurrent invocation using this root.
-        write_fresh(output_root / 'phase-started.json', dict(schema='cochem-owner-task-catalog-start/4.2.8',
+        started_path = output_root / 'phase-started.json'
+        started_record = dict(schema='cochem-owner-task-catalog-start/4.2.8',
             bootstrap_sha256=bootstrap_sha256, request_sha256=request_sha256,
-            pid=os.getpid(), started_at=time.time()))
+            pid=os.getpid(), started_at=time.time())
+        write_fresh(started_path, started_record)
         try:
+            if start_gate:
+                phase = 'process_custody'
+                wait_start_gate(output_root, started_path, started_record)
+            phase = 'preconditions'
             raw = _strict_json(pinned_bytes(input_custody, bootstrap_config, bootstrap_sha256).decode('utf-8-sig'))
             config = load_config(str(bootstrap_config))
             if (raw.get('task_planning') is not None or getattr(config, 'task_planning', None) is not None
@@ -287,11 +312,12 @@ def main(argv=None):
     parser.add_argument('--timeout-seconds', type=float, default=7200)
     parser.add_argument('--poll-seconds', type=float, default=1)
     parser.add_argument('--flash-context-limit', type=int)
+    parser.add_argument('--start-gate', action='store_true')
     args = parser.parse_args(argv)
     try:
         result = run_owner_phase(args.bootstrap_config, args.bootstrap_sha256, args.request,
             args.request_sha256, args.output_root, timeout_seconds=args.timeout_seconds,
-            poll_seconds=args.poll_seconds, flash_context_limit=args.flash_context_limit)
+            poll_seconds=args.poll_seconds, flash_context_limit=args.flash_context_limit, start_gate=args.start_gate)
     except BaseException as exc:
         result = dict(schema='cochem-owner-task-catalog-result/4.2.8', status='TASK_CATALOG_PRECONDITION_HELD',
             error_type=type(exc).__name__, cutover_requested=False, automatic_retry=False, late_prompt=False)
