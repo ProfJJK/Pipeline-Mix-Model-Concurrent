@@ -15,7 +15,10 @@ from .container_policy import DockerPolicy
 from .containers import DockerRunner,ContainerCapacityError,ContainerCleanupError,_prepared_provenance
 from .coding_store import CODING_KINDS
 
-_NATIVE_KINDS=tuple(kind for kind in ('MANIFEST_GENERATOR','CHAPTER_DRAFT','SYNTHESIS','PREFLIGHT_REQUEST','TASK_PLAN',*CODING_KINDS)
+_DOCKER_KINDS=('CODE_TEST','TASK_TEST')
+# This is the no-Docker seat group; CODE_INTEGRATE and TASK_VERIFY are local
+# controller work, not native model dispatches.
+_NATIVE_KINDS=tuple(kind for kind in ('MANIFEST_GENERATOR','CHAPTER_DRAFT','SYNTHESIS','PREFLIGHT_REQUEST','TASK_PLAN','TASK_VERIFY',*CODING_KINDS)
                     if kind not in {'CODE_REQUEST','CODE_TEST'})
 
 
@@ -50,7 +53,7 @@ class JointAdmission:
     def _native_active(self):
         from .catalog_slots import occupancy
         with self.store._connection() as conn:probes=occupancy(conn)
-        return sum(job['kind']!='CODE_TEST' for job in self.store.active_jobs())+probes+self._repair_slot_occupancy()
+        return sum(job['kind'] not in _DOCKER_KINDS for job in self.store.active_jobs())+probes+self._repair_slot_occupancy()
 
     def reserve_catalog(self, authority, target, *, worker_slot, containment_id, boot_id):
         """Reserve one native seat after warm Docker capacity has drained."""
@@ -113,12 +116,19 @@ class JointAdmission:
                 LEFT JOIN pipeline_routing_jobs r ON r.job_id=j.job_id
                 LEFT JOIN coding_controller_retries cr ON cr.job_id=j.job_id
                 WHERE j.status IN ('PENDING','PENDING_RETRY') AND root.status='IN_PROGRESS'
-                AND j.kind NOT IN ('CODE_REQUEST','MACRO_PLANNING_REQUEST','CODE_TEST')
+                AND j.kind NOT IN ('CODE_REQUEST','MACRO_PLANNING_REQUEST','CODE_TEST','TASK_TEST')
                 AND (r.state IS NULL OR (r.state NOT IN ('BLOCKED','FAILED','COMPLETED') AND coalesce(r.next_eligible_at,0)<=?))
                 AND coalesce(cr.next_eligible_at,0)<=? LIMIT 1''',(time.time(),time.time())).fetchone() is not None
 
     def _captured_runner(self,node):
-        captured=DockerPolicy.from_dict(self.store.coding_state(node['workflow_id'])['docker'])
+        if node['kind']=='TASK_TEST':
+            if node.get('payload',{}).get('mode')!='coding_tests':
+                raise ValueError('TASK_TEST requires captured coding_tests mode')
+            captured=DockerPolicy.from_dict(node['payload'].get('docker'))
+        elif node['kind']=='CODE_TEST':
+            captured=DockerPolicy.from_dict(self.store.coding_state(node['workflow_id'])['docker'])
+        else:
+            raise ValueError('Only Docker test kinds may reserve a Docker profile')
         current=self.docker.policy
         if captured.warm_pool_size<=0:
             raise ValueError('Production Docker testing requires preallocated warm capacity')
@@ -152,7 +162,7 @@ class JointAdmission:
               requires_cleanup=True,cleanup_boot_id=None,containment_id=None):
         """Nonblocking scheduler admission; return ``(node,reservation)`` or None.
 
-        A CODE_TEST transfers/reserves its exact captured Docker profile before
+        A CODE_TEST or TASK_TEST reserves its exact captured Docker profile before
         being exposed to a worker. Native jobs obtain a residual seat only after
         old idle containers have actually been drained by maintenance.
         """
@@ -177,7 +187,7 @@ class JointAdmission:
                 if census['owned']>residual:
                     self._request_drain(residual)
                     return None
-                node=self.store.claim(owner,lease_seconds,max_workers=capacity,allowed_kinds=('CODE_TEST',),**kwargs)
+                node=self.store.claim(owner,lease_seconds,max_workers=capacity,allowed_kinds=_DOCKER_KINDS,**kwargs)
                 if node is not None:
                     try:
                         runner=self._captured_runner(node)
@@ -227,6 +237,9 @@ class JointAdmission:
                     self._publish_locked()
             if node is None:
                 return None
+            if node['kind']=='TASK_VERIFY' and node.get('payload',{}).get('mode')!='artifact_integrity':
+                self._unstarted_failure(node,'TASK_VERIFY requires artifact_integrity mode',category='configuration')
+                return None
             with self._budget_lock:
                 if self._capacity<self._native_active()+(self.docker.census()['owned'] if self.docker is not None else 0):
                     self._unstarted_failure(node,'Hardware pressure revoked admission before worker handoff')
@@ -248,7 +261,7 @@ class JointAdmission:
             # Reaping performs slow engine calls without admission held. Each
             # removal decision rechecks current leases under the short lock.
             self.docker.reap_orphans(active_attempt_ids=lambda: {
-                job['attempt_id'] for job in self.store.active_jobs() if job['kind']=='CODE_TEST'},
+                job['attempt_id'] for job in self.store.active_jobs() if job['kind'] in _DOCKER_KINDS},
                 admission_lock=self.lock)
             self.lock.acquire()
             admission_held=True
