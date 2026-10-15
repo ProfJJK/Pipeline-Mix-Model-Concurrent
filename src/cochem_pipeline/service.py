@@ -326,15 +326,17 @@ class Handler(BaseHTTPRequestHandler):
                             validate_production_coding_project(projects[project_id])
                         from .owner_ui_428 import build_public_task_view
                         if project_id is not None:
-                            submitted=planner.submit(data['objective'],task_id,project_id=project_id)
+                            submitted=planner.submit(data['objective'],task_id,project_id=project_id,
+                                                     requested_requirements=data.get('requirements'))
                         else:
-                            submitted=runtime.submit_task(data['objective'],task_id)
+                            submitted=runtime.submit_task(data['objective'],task_id,
+                                                          requested_requirements=data.get('requirements'))
                         self.reply(202,redact(build_public_task_view(submitted,owner_broker=getattr(runtime,'owner_approval_broker',None))))
                     else:
                         count=data.get('chapter_count',6)
                         if type(count) is not int or not 1<=count<=len(runtime.config.workers):
                             raise ValueError('chapter_count must fit the provisioned distinct worker identity pool')
-                        workflow=runtime.store.submit(data['objective'],data.get('requirements',['REQ-001']),
+                        workflow=runtime.store.submit(data['objective'],data.get('requirements') or ['REQ-001'],
                                                       count,data.get('workflow_id'),max_attempts=data.get('max_attempts'),
                                                       max_dispatches=data.get('max_dispatches'))
                         self.reply(202,public_workflow(workflow))

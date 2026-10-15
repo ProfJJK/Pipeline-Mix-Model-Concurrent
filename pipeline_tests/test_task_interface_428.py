@@ -96,6 +96,7 @@ def test_mcp_submit_routes_to_428_planner_and_retains_legacy_workflow_status(tas
                     "objective": "Design and verify tier-9 distributed state machine",
                     "task_id": "task-mcp-01",
                     "project_id": "registered-proj",
+                    "requirements": ["Preserve existing records", "Produce an auditable migration receipt"],
                 },
             )
             assert not sub_res.isError
@@ -104,6 +105,8 @@ def test_mcp_submit_routes_to_428_planner_and_retains_legacy_workflow_status(tas
             assert view["workflow_id"] == "task-mcp-01"
             assert view["task"]["stage"] == "SRS"
             assert view["task"]["project_id"] == "registered-proj"
+            assert view["task"]["requested_requirements"] == [
+                "Preserve existing records", "Produce an auditable migration receipt"]
             assert view["status"] == "IN_PROGRESS"
 
             # 3. Idempotent duplicate submit returns the same task; conflicting objective fails
@@ -113,6 +116,7 @@ def test_mcp_submit_routes_to_428_planner_and_retains_legacy_workflow_status(tas
                     "objective": "Design and verify tier-9 distributed state machine",
                     "task_id": "task-mcp-01",
                     "project_id": "registered-proj",
+                    "requirements": ["Preserve existing records", "Produce an auditable migration receipt"],
                 },
             )
             assert not dup_res.isError

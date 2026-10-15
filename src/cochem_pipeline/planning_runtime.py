@@ -272,12 +272,12 @@ class PlanningController:
     def has_task(self, task_id) -> bool:
         return self.journal.has_task(task_id)
 
-    def submit(self, objective, task_id=None, *, project_id=None):
+    def submit(self, objective, task_id=None, *, project_id=None, requested_requirements=None):
         # No catalog, tier, approval, profile or dispatch arguments are accepted.
         task_id = _id(task_id if task_id is not None else 'task428-' + uuid.uuid4().hex)
         if self.artifact_runtime is not None:
             self.artifact_runtime.prepare_task(task_id, project_id)
-        self.journal.create(task_id, objective, project_id=project_id)
+        self.journal.create(task_id, objective, project_id=project_id, requested_requirements=requested_requirements)
         return self.task_status(task_id)
 
     def cancel(self, task_id):

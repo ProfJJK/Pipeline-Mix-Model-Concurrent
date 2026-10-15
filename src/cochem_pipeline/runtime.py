@@ -591,11 +591,11 @@ class Runtime:
                 'state':'held', 'error_type':type(error).__name__}
             LOG.error('Task planning held: %s', type(error).__name__)
 
-    def submit_task(self, objective, task_id=None):
+    def submit_task(self, objective, task_id=None, *, requested_requirements=None):
         planner = getattr(self, 'task_planning', None)
         if planner is None:
             raise ValueError('4.2.8 task planning is not enabled in the reviewed installation')
-        return planner.submit(objective, task_id)
+        return planner.submit(objective, task_id, requested_requirements=requested_requirements)
 
     def task_status(self, task_id):
         planner = getattr(self, 'task_planning', None)

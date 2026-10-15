@@ -85,7 +85,7 @@ def create_server(client:ControlClient):
                               task_id:str|None=None,project_id:str|None=None)->dict[str,Any]:
         """Create one complete planning workflow; no manual repeated delegation is needed."""
         payload:dict[str,Any] = {
-            'objective':objective,'requirements':requirements or ['REQ-001'],'chapter_count':chapter_count,
+            'objective':objective,'requirements':requirements if requirements is not None else [],'chapter_count':chapter_count,
             'max_attempts':max_attempts,'max_dispatches':max_dispatches}
         if task_id is not None:
             payload['task_id'] = task_id
