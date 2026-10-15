@@ -101,6 +101,54 @@ def _map(conn, job_id, root):
         conn.execute('INSERT INTO planning428_budget_members VALUES(?,?)', (job_id, root))
 
 
+def _compiled_fracture_member(conn, payload, member, root):
+    """Lower fragment tiers come from the controller's compiled graph only."""
+    node = payload.get('microtask_node') or {}
+    declared = node.get('lineage_kind') == 'FAILURE_FRACTURE'
+    present = conn.execute("SELECT 1 FROM planning_budget_ledger.sqlite_master "
+                          "WHERE type='table' AND name='task428_fracture_nodes'").fetchone()
+    row = (conn.execute('SELECT * FROM planning_budget_ledger.task428_fracture_nodes '
+                        'WHERE child_id=? AND lineage_root=?', (member, root)).fetchone() if present else None)
+    if row is None:
+        if declared:
+            raise LineageBudgetHold('compiled_fracture_member_missing')
+        return False
+    intent = payload['planning_intent']
+    context = node.get('fracture_context') or {}
+    expected_context = dict(fracture_id=row['fracture_id'], graph_sha256=row['graph_sha256'],
+        dossier_sha256=row['dossier_sha256'], lineage_root=root, failed_microtask_id=row['failed_scope_id'])
+    if (not declared or intent['stage'] != 'MICROTASK_EXECUTION' or intent.get('microtask_id') != member
+            or node.get('attempt_lineage_id') != member or context != expected_context
+            or intent['complexity'] != row['complexity'] or node.get('complexity') != row['complexity']
+            or intent['task_types'] != json.loads(row['task_types_json'])
+            or intent['candidate_profiles'] != [row['selected_profile_id']]
+            or node.get('role') != row['role'] or row['status'] != 'READY' or row['needs_owner_approval']):
+        raise LineageBudgetHold('compiled_fracture_member_mismatch_or_hold')
+    for key in ('task_types','requirement_ids','deliverables','depends_on'):
+        if node.get(key) != json.loads(row[key+'_json']):
+            raise LineageBudgetHold('compiled_fracture_scope_mismatch')
+    model = payload['task_catalog']['models'].get(row['selected_profile_id'], {})
+    if (model.get('family'), model.get('effort')) != (row['selected_model_family'], row['selected_effort']):
+        raise LineageBudgetHold('compiled_fracture_profile_mismatch')
+    graph = conn.execute('SELECT graph_json,graph_sha256,dossier_sha256 FROM '
+        'planning_budget_ledger.task428_fractures WHERE fracture_id=? AND lineage_root=?',
+        (row['fracture_id'], root)).fetchone()
+    outbox = conn.execute('SELECT sync_status FROM planning_budget_ledger.task428_fracture_outbox '
+                         'WHERE fracture_id=?', (row['fracture_id'],)).fetchone()
+    if (graph is None or tuple(graph)[1:] != (row['graph_sha256'], row['dossier_sha256'])
+            or outbox is None or outbox[0] != 'COMMITTED'):
+        raise LineageBudgetHold('compiled_fracture_graph_uncommitted')
+    matches = [child for child in json.loads(graph[0])['children'] if child['id'] == member]
+    if len(matches) != 1 or matches[0] != json.loads(row['node_json']):
+        raise LineageBudgetHold('compiled_fracture_graph_mismatch')
+    for dependency in json.loads(row['depends_on_json']):
+        prior = conn.execute('SELECT status,artifact_sha256 FROM planning_budget_ledger.task428_fracture_nodes '
+            'WHERE child_id=? AND lineage_root=?', (dependency, root)).fetchone()
+        if prior is None or prior[0] != 'COMPLETED' or not prior[1]:
+            raise LineageBudgetHold('compiled_fracture_dependencies_pending')
+    return row['role'] == 'implementation' and not row['escalated_scope']
+
+
 def capture_lineage_budget(conn, job_id, payload, policy, *, attempt_ledger, now=None):
     """Capture remaining finite limits once; never use zero to mean exhausted.
 
@@ -140,7 +188,8 @@ def capture_lineage_budget(conn, job_id, payload, policy, *, attempt_ledger, now
     if (state.get('root') != root or state.get('stage') != 'READY' or state.get('research_due')
             or type(failures) is not int or not 0 <= failures < 30):
         raise LineageBudgetHold('quality_research_or_lock_required')
-    if payload['planning_intent']['complexity'] < state['floor']:
+    lower_fragment = _compiled_fracture_member(conn, payload, member, root)
+    if payload['planning_intent']['complexity'] < state['floor'] and not lower_fragment:
         raise LineageBudgetHold('retained_reasoning_floor')
     expected = (state.get('fracture_child_models') or {}).get(member, state.get('next_model'))
     if expected is not None:

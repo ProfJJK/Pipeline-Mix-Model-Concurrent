@@ -263,3 +263,72 @@ def test_actual_claims_charge_aggregate_budget_without_native_processes(env):
     with env['store']._connection() as conn:
         assert conn.execute('SELECT count(*) FROM pipeline_route_reservations').fetchone()[0] == 2
         assert lineage_unavailability(conn, 'job-third-claim', 1000) == 'lineage_dispatch_budget_exhausted'
+
+
+@pytest.fixture
+def compiled_fracture(env):
+    from cochem_pipeline.fracture_runtime_428 import FractureRuntime
+    with env['ledger']._write() as conn:
+        state = env['ledger']._read(conn, env['root'])
+        state['floor'] = 5
+        env['ledger']._save(conn, state)
+    quality_failures(env, 10)
+    runtime = FractureRuntime(env['ledger'], env['original']['payload']['task_catalog'])
+    runtime.dossier_store.record_dossier(env['root'], 10, research_channels=research(),
+        root_cause_synthesis='Split the failed component', hypotheses=['Smaller implementation units'])
+    children = [dict(id=name, role='implementation', complexity=2, task_types=['COD-TERM'],
+        rationale='Narrow implementation fragment', requirement_ids=[req], deliverables=[name+'.py'],
+        release_criteria=['Focused checks pass'], depends_on=[])
+        for name, req in [('fragment-a','R1'),('fragment-b','R2')]]
+    children.append(dict(id='assembly', role='assembly', complexity=6, task_types=['COD-TERM'],
+        rationale='Assemble and verify both fragments', requirement_ids=['R1','R2'],
+        deliverables=['fragment-a.py','fragment-b.py'], release_criteria=['Combined checks pass'],
+        depends_on=['fragment-a','fragment-b']))
+    result = runtime.execute_fracture(env['root'],
+        failed_scope=dict(scope_id='failed-component',requirement_ids=['R1','R2'],
+                          deliverables=['fragment-a.py','fragment-b.py']), children=children,
+        review=dict(reviewer_model='claude-opus-5-5',reviewer_tier=6,effort='high',accepted=True,
+                    review_sha256=digest('independent-review')))
+    child = next(row for row in result['children'] if row['child_id']=='fragment-a')
+    payload = deepcopy(env['original']['payload'])
+    payload['planning_intent'].update(stage='MICROTASK_EXECUTION',microtask_id=child['child_id'],
+        complexity=child['complexity'],task_types=child['task_types'],
+        candidate_profiles=[child['selected_profile_id']])
+    payload['microtask_node'] = dict(lineage_kind='FAILURE_FRACTURE',attempt_lineage_id=child['child_id'],
+        **{key:child[key] for key in ('role','complexity','task_types','requirement_ids','deliverables','depends_on')},
+        fracture_context=dict(fracture_id=child['fracture_id'], graph_sha256=child['graph_sha256'],
+            dossier_sha256=child['dossier_sha256'],lineage_root=env['root'],failed_microtask_id=child['failed_scope_id']))
+    return env, payload
+
+
+def test_compiled_fragment_keeps_its_lower_tier_and_inherits_shared_remainder(compiled_fracture):
+    env, payload = compiled_fracture
+    policy = scoped_policy(env['original']['routing']['policy'],payload['planning_intent'],payload['task_catalog'])
+    with env['store']._write() as conn:
+        budget = capture_lineage_budget(conn, 'compiled-fragment',payload,policy,attempt_ledger=env['ledger'])
+    assert budget.lineage_root == env['root'] and budget.max_attempts == 10
+    assert env['ledger'].status(env['root'])['floor'] == 6
+    assert env['ledger'].status(env['root'])['failures'] == 10
+
+
+@pytest.mark.parametrize('mutation',['unregistered','classification','tags','profile','scope','context','graph','approval','status'])
+def test_forged_or_held_fragment_cannot_lower_root_floor(compiled_fracture, mutation):
+    env, payload = compiled_fracture
+    node, intent = payload['microtask_node'], payload['planning_intent']
+    if mutation=='unregistered':
+        env['ledger'].create('fake-child',1)
+        node['attempt_lineage_id']='fake-child'
+    if mutation=='classification': intent['complexity']=1
+    if mutation=='tags': intent['task_types']=['SCI-FORMAL']
+    if mutation=='profile': intent['candidate_profiles']=env['original']['payload']['planning_intent']['candidate_profiles']
+    if mutation=='scope': node['deliverables']=['unreviewed.py']
+    if mutation=='context': node['fracture_context']['graph_sha256']='f'*64
+    if mutation in ('graph','approval','status'):
+        with env['ledger']._write() as conn:
+            column,value = {'graph':('node_json','{}'),'approval':('needs_owner_approval',1),
+                            'status':('status','FRACTURED_OBSOLETE')}[mutation]
+            conn.execute(f'UPDATE task428_fracture_nodes SET {column}=? WHERE child_id=?',(value,'fragment-a'))
+    policy = scoped_policy(env['original']['routing']['policy'],intent,payload['task_catalog'])
+    with pytest.raises(LineageBudgetHold, match='compiled_fracture'):
+        with env['store']._write() as conn:
+            capture_lineage_budget(conn, 'forged-fragment',payload,policy,attempt_ledger=env['ledger'])
