@@ -644,7 +644,7 @@ def _failure_envelope(provider, stdout, stderr):
                 if (
                     api_status is None
                     and record.get('is_error') is True
-                    and any(k in record for k in _CLAUDE_ENVELOPE_IDENTITY_KEYS)
+                    and (any(k in record for k in _CLAUDE_ENVELOPE_IDENTITY_KEYS) or len(record) > 4)
                 ):
                     combined = (
                         (text[:4096] if isinstance(text, str) else '')

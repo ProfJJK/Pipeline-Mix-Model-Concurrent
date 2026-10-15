@@ -259,7 +259,7 @@ def _claude_result_category(record: dict) -> str | None:
         for category, pattern in (*_NATIVE_DIAGNOSTICS, ('auth', _CLAUDE_RESULT_AUTH)):
             if re.match(pattern, text):
                 return category
-    if record.get('is_error') is True and any(k in record for k in _CLAUDE_ENVELOPE_IDENTITY_KEYS):
+    if record.get('is_error') is True and (any(k in record for k in _CLAUDE_ENVELOPE_IDENTITY_KEYS) or len(record) > 4):
         combined = _ANSI.sub(
             '',
             ((raw_result[:4096] if isinstance(raw_result, str) else '') + '\n' + json.dumps(record, ensure_ascii=False)),

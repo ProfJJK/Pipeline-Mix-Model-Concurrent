@@ -314,7 +314,7 @@ function Wait-428Health {
 }
 
 function Restore-428BeforeStart {
-    param($Scheduler,$Folder,[string]$OriginalXml,[string]$Sddl,[string]$OldRoot,[bool]$MigrationRequested,[bool]$Migrated)
+    param($Scheduler,$Folder,[string]$OriginalXml,[string]$Sddl,[string]$OldRoot,[bool]$MigrationRequested,[bool]$Migrated,[bool]$AlreadyStopped=$false)
     Assert-428PortFree
     if($MigrationRequested -and -not $Migrated){throw 'Migration completion is uncertain; preserve the stopped state.'}
     if($Migrated){$null=Invoke-428Migration $Scheduler $Folder $true}
@@ -329,6 +329,10 @@ function Restore-428BeforeStart {
         Assert-428WardenTask $task $OriginalXml $Sddl $OldRoot $arguments $true $false 0
     }else{
         Assert-428WardenTask $task $OriginalXml $Sddl $OldRoot $arguments $true $false
+    }
+    if($AlreadyStopped){
+        Assert-428PortFree
+        return 'PREVIOUS_STOPPED_RUNTIME_RESTORED_VERIFIED'
     }
     $allowPaused=($OldRoot -ceq 'C:\Program Files\CoChem\Pipeline4.2.7-windows-20261009-r4')
     $instance=$task.Run($null)
@@ -370,7 +374,7 @@ function Invoke-428SequenceStep {
 function Invoke-428Launch {
     param([string]$ManifestPath,[string]$ManifestHash,[bool]$ApplyRequested,[string]$Directory)
     $pins=[Collections.Generic.List[IO.Stream]]::new();$processes=$null;$mutex=$null;$locked=$false;$ownerMutex=$null;$ownerLocked=$false;$awake=$null
-    $stopped=$false;$stopRequested=$false;$migrationRequested=$false;$migrated=$false;$startRequested=$false;$phase='package'
+    $stopped=$false;$stopRequested=$false;$migrationRequested=$false;$migrated=$false;$startRequested=$false;$alreadyStoppedR4=$false;$phase='package'
     $script:Root428='C:\Program Files\CoChem\Pipeline4.2.8-windows-20261014-r3'
     $oldR7='C:\Program Files\CoChem\Pipeline4.2.7-windows-20261012-r7-v1'
     $oldR6='C:\Program Files\CoChem\Pipeline4.2.7-windows-20261012-r6-v1'
@@ -438,6 +442,7 @@ function Invoke-428Launch {
         $script:targetRoot=$old;$null=Assert-428Tree;Assert-428Interpreter;$script:targetRoot=$script:Root428
         $token=[IO.File]::ReadAllText([string]$oldCfg.token_file).Trim();$script:Headers428=@{Authorization='Bearer '+$token}
         $oldTriggerCount=[int]$task.Definition.Triggers.Count
+        $alreadyStoppedR4=($old -ceq $oldR4 -and $oldTriggerCount -eq 0 -and $task.GetInstances(0).Count -eq 0)
         $triggerValid=if($old -ceq $oldR4){
             $oldTriggerCount -eq 0 -or ($oldTriggerCount -eq 1 -and [int]$task.Definition.Triggers.Item(1).Type -eq 9 -and [bool]$task.Definition.Triggers.Item(1).Enabled)
         }else{
@@ -448,16 +453,18 @@ function Invoke-428Launch {
             $task.Definition.Principal.UserId -notin @('SYSTEM','S-1-5-18') -or $task.Definition.Principal.LogonType -ne 5 -or
             $task.Definition.Principal.RunLevel -ne 1 -or $task.Definition.Settings.RestartCount -ne 0 -or
             $task.Definition.Settings.MultipleInstances -ne 2 -or -not $triggerValid -or
-            -not $task.Enabled){throw 'Live Warden definition differs from verified baseline.'}
-        if($old -ceq $oldR4 -and $oldTriggerCount -eq 0 -and $task.GetInstances(0).Count -eq 0){
-            Assert-428PortFree;$null=$task.Run($null);$null=Wait-428Health $old $true;$task=$folder.GetTask('CoChem-4.2.7-Warden')
-        }
-        if($task.GetInstances(0).Count -ne 1){throw 'Live Warden definition differs from verified baseline.'}
+            (-not $task.Enabled -and -not $alreadyStoppedR4)){throw 'Live Warden definition differs from verified baseline.'}
         $expectedOldArgs=$action.Arguments
         $allowOldPaused=($old -ceq $oldR4)
-        $health=Get-428Health;Assert-428Health $health $old $allowOldPaused
         $original=$task.Xml;$originalSddl=$task.GetSecurityDescriptor(7)
-        Assert-428WardenTask $task $original $originalSddl $old $expectedOldArgs $true ($oldTriggerCount -ge 1) $oldTriggerCount
+        if($alreadyStoppedR4){
+            Assert-428PortFree
+            Assert-428WardenTask $task $original $originalSddl $old $expectedOldArgs ([bool]$task.Enabled) $false 0
+        }else{
+            if($task.GetInstances(0).Count -ne 1){throw 'Live Warden definition differs from verified baseline.'}
+            $health=Get-428Health;Assert-428Health $health $old $allowOldPaused
+            Assert-428WardenTask $task $original $originalSddl $old $expectedOldArgs $true ($oldTriggerCount -ge 1) $oldTriggerCount
+        }
         $script:Sitting428='C:\Program Files\CoChem\R428Sitting-windows-20261014-'+[Guid]::NewGuid().ToString('N')
         New-ProtectedDirectory $script:Sitting428
         Write-Host ('Sanitized status reports: '+$script:Sitting428+'\status-*.json')
@@ -482,48 +489,59 @@ function Invoke-428Launch {
             ) 'native-acceptance' 600
         }finally{$script:targetRoot=$saved}
         $phase='idle';Write-428Status $phase
-        $deadline=[DateTime]::UtcNow.AddMinutes(30);$idle=$false
-        do{
-            try{$first=Get-428Health;Assert-428Health $first $old $allowOldPaused;Start-Sleep -Seconds 5;$second=Get-428Health;Assert-428Health $second $old $allowOldPaused
-                $operator=if($old -ceq $oldR4){
-                    $inFlight=0
-                    if($null -ne $second.routing -and $null -ne $second.routing.counts){
-                        foreach($state in @('IN_PROGRESS','PENDING','PENDING_RETRY','CLAIMED','RUNNING','QUEUED','ACTIVE')){
-                            $prop=$second.routing.counts.PSObject.Properties[$state]
-                            if($null -ne $prop){$inFlight+=[int]$prop.Value}
-                        }
-                    }
-                    [pscustomobject]@{window=[pscustomobject]@{jobs_truncated=$false};queue=if($inFlight -gt 0){@([pscustomobject]@{status='IN_PROGRESS'})}else{@()}}
-                }else{
-                    Invoke-RestMethod -Uri 'http://127.0.0.1:47824/operator' -Headers $script:Headers428 -TimeoutSec 10
-                }
-                Assert-428Idle $first $second $operator;$idle=$true;break}catch{Start-Sleep -Seconds 10}
-        }while([DateTime]::UtcNow -lt $deadline)
-        if(-not $idle){throw 'Previous controller did not become idle within the unattended bound.'}
-        $processes=Open-428ProcessProof $second $old
-        $task=$folder.GetTask('CoChem-4.2.7-Warden')
-        if($task.Xml -cne $original -or $task.GetSecurityDescriptor(7) -cne $originalSddl){throw 'Warden changed during installation.'}
-        Write-428InstallRecord 'warden-task-before.xml.json' @{xml=$original;sddl=$originalSddl;pid=$second.pid;instance_id=$second.instance_id}
-        $phase='stop';Write-428Status $phase;$stopRequested=$true
-        if($oldTriggerCount -ge 1){
-            $definition=$task.Definition;$definition.Triggers.Item(1).Enabled=$false
-            $null=$folder.RegisterTaskDefinition('CoChem-4.2.7-Warden',$definition,20,'SYSTEM',$null,5,$originalSddl)
+        if($alreadyStoppedR4){
             $task=$folder.GetTask('CoChem-4.2.7-Warden')
-            Assert-428WardenTask $task $original $originalSddl $old $expectedOldArgs $true $false $oldTriggerCount
+            if($task.Xml -cne $original -or $task.GetSecurityDescriptor(7) -cne $originalSddl -or $task.GetInstances(0).Count -ne 0){throw 'Warden changed during installation.'}
+            Assert-428PortFree
+            Write-428InstallRecord 'warden-task-before.xml.json' @{xml=$original;sddl=$originalSddl;pid=$null;instance_id='r4-stopped-since-reboot'}
+            $phase='stop';Write-428Status $phase;$stopRequested=$true
+            if($task.Enabled){$task.Enabled=$false}
+            Assert-428WardenTask $task $original $originalSddl $old $expectedOldArgs $false $false 0
+            Assert-428PortFree;$stopped=$true
+        }else{
+            $deadline=[DateTime]::UtcNow.AddMinutes(30);$idle=$false
+            do{
+                try{$first=Get-428Health;Assert-428Health $first $old $allowOldPaused;Start-Sleep -Seconds 5;$second=Get-428Health;Assert-428Health $second $old $allowOldPaused
+                    $operator=if($old -ceq $oldR4){
+                        $inFlight=0
+                        if($null -ne $second.routing -and $null -ne $second.routing.counts){
+                            foreach($state in @('IN_PROGRESS','PENDING','PENDING_RETRY','CLAIMED','RUNNING','QUEUED','ACTIVE')){
+                                $prop=$second.routing.counts.PSObject.Properties[$state]
+                                if($null -ne $prop){$inFlight+=[int]$prop.Value}
+                            }
+                        }
+                        [pscustomobject]@{window=[pscustomobject]@{jobs_truncated=$false};queue=if($inFlight -gt 0){@([pscustomobject]@{status='IN_PROGRESS'})}else{@()}}
+                    }else{
+                        Invoke-RestMethod -Uri 'http://127.0.0.1:47824/operator' -Headers $script:Headers428 -TimeoutSec 10
+                    }
+                    Assert-428Idle $first $second $operator;$idle=$true;break}catch{Start-Sleep -Seconds 10}
+            }while([DateTime]::UtcNow -lt $deadline)
+            if(-not $idle){throw 'Previous controller did not become idle within the unattended bound.'}
+            $processes=Open-428ProcessProof $second $old
+            $task=$folder.GetTask('CoChem-4.2.7-Warden')
+            if($task.Xml -cne $original -or $task.GetSecurityDescriptor(7) -cne $originalSddl){throw 'Warden changed during installation.'}
+            Write-428InstallRecord 'warden-task-before.xml.json' @{xml=$original;sddl=$originalSddl;pid=$second.pid;instance_id=$second.instance_id}
+            $phase='stop';Write-428Status $phase;$stopRequested=$true
+            if($oldTriggerCount -ge 1){
+                $definition=$task.Definition;$definition.Triggers.Item(1).Enabled=$false
+                $null=$folder.RegisterTaskDefinition('CoChem-4.2.7-Warden',$definition,20,'SYSTEM',$null,5,$originalSddl)
+                $task=$folder.GetTask('CoChem-4.2.7-Warden')
+                Assert-428WardenTask $task $original $originalSddl $old $expectedOldArgs $true $false $oldTriggerCount
+            }
+            try{$task.Stop(0)}catch{
+                $cause=$_.Exception;while($cause.InnerException){$cause=$cause.InnerException}
+                if($cause.HResult -ne -2147216629){throw}
+            }
+            $deadline=[DateTime]::UtcNow.AddMinutes(2)
+            do{Start-Sleep -Seconds 2;$task=$folder.GetTask('CoChem-4.2.7-Warden')
+                $gone=@($processes|Where-Object{-not $_.HasExited}).Count -eq 0
+                if($gone -and $task.GetInstances(0).Count -eq 0){break}
+            }while([DateTime]::UtcNow -lt $deadline)
+            if(-not $gone -or $task.GetInstances(0).Count){throw 'Owned native processes did not exit; preserve running state.'}
+            $task.Enabled=$false
+            Assert-428WardenTask $task $original $originalSddl $old $expectedOldArgs $false $false $oldTriggerCount
+            Assert-428PortFree;$stopped=$true
         }
-        try{$task.Stop(0)}catch{
-            $cause=$_.Exception;while($cause.InnerException){$cause=$cause.InnerException}
-            if($cause.HResult -ne -2147216629){throw}
-        }
-        $deadline=[DateTime]::UtcNow.AddMinutes(2)
-        do{Start-Sleep -Seconds 2;$task=$folder.GetTask('CoChem-4.2.7-Warden')
-            $gone=@($processes|Where-Object{-not $_.HasExited}).Count -eq 0
-            if($gone -and $task.GetInstances(0).Count -eq 0){break}
-        }while([DateTime]::UtcNow -lt $deadline)
-        if(-not $gone -or $task.GetInstances(0).Count){throw 'Owned native processes did not exit; preserve running state.'}
-        $task.Enabled=$false
-        Assert-428WardenTask $task $original $originalSddl $old $expectedOldArgs $false $false $oldTriggerCount
-        Assert-428PortFree;$stopped=$true
         $phase='migration';Write-428Status $phase
         Assert-ProtectedPath (Split-Path -Parent $script:Migration428)
         $null=[IO.Directory]::CreateDirectory($script:Migration428,(New-428PayloadAcl 'source/knowledge/control' $true))
@@ -576,7 +594,7 @@ function Invoke-428Launch {
         $failure=$_;$rollback='NOT_REQUIRED'
         if($stopped -and -not $startRequested){
             try{
-                $rollback=Restore-428BeforeStart $scheduler $folder $original $originalSddl $old $migrationRequested $migrated
+                $rollback=Restore-428BeforeStart $scheduler $folder $original $originalSddl $old $migrationRequested $migrated $alreadyStoppedR4
             }catch{$rollback='HELD_PRESERVE_STOPPED_OR_RUNNING_STATE'}
         }elseif($stopRequested -or $startRequested){$rollback='HELD_PRESERVE_POSSIBLY_RUNNING_STATE'}
         $record=@{schema='cochem-428-owner-sitting/1';status='R428_HELD_PRESERVE_EVIDENCE';version='4.2.8';phase=$phase;

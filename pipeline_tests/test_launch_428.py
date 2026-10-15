@@ -564,7 +564,8 @@ $fakeScheduler|Add-Member -MemberType ScriptMethod -Name NewTask -Value {{param(
 $fakeFolder=[pscustomobject]@{{}}
 $fakeFolder|Add-Member -MemberType ScriptMethod -Name RegisterTaskDefinition -Value {{param($n,$d,$f,$u,$p,$l,$s) $script:events.Add('register-r4');$fakeTask}}
 $fakeFolder|Add-Member -MemberType ScriptMethod -Name GetTask -Value {{param($n) $fakeTask}}
-$restoreStatus=Restore-428BeforeStart $fakeScheduler $fakeFolder $r4Xml 'SDDL' $r4Root $true $true
+$restoreStatus=Restore-428BeforeStart $fakeScheduler $fakeFolder $r4Xml 'SDDL' $r4Root $true $true $false
+$restoreStoppedStatus=Restore-428BeforeStart $fakeScheduler $fakeFolder $r4Xml 'SDDL' $r4Root $true $true $true
 @{{
     ok_count=$ok.Count;
     ok_status=$ok[0].status;
@@ -574,6 +575,7 @@ $restoreStatus=Restore-428BeforeStart $fakeScheduler $fakeFolder $r4Xml 'SDDL' $
     paused_allowed=$pausedAllowed;
     paused_rejected=$pausedRejected;
     restore_status=$restoreStatus;
+    restore_stopped_status=$restoreStoppedStatus;
     events=@($script:events)
 }}|ConvertTo-Json -Compress
 """
@@ -587,6 +589,7 @@ $restoreStatus=Restore-428BeforeStart $fakeScheduler $fakeFolder $r4Xml 'SDDL' $
         "paused_allowed": True,
         "paused_rejected": True,
         "restore_status": "PREVIOUS_RUNTIME_RESTORED_HEALTH_VERIFIED",
+        "restore_stopped_status": "PREVIOUS_STOPPED_RUNTIME_RESTORED_VERIFIED",
         "events": [
             "port",
             "rollback:True",
@@ -594,6 +597,10 @@ $restoreStatus=Restore-428BeforeStart $fakeScheduler $fakeFolder $r4Xml 'SDDL' $
             "run-r4",
             "wait:True",
             "proof",
+            "port",
+            "rollback:True",
+            "register-r4",
+            "port",
         ],
     }
 
@@ -643,7 +650,8 @@ $untrustedHeld=$false;try{{Assert-428PrivateReceipt '{esc_receipt}'}}catch{{$unt
     script_text = LAUNCH_SCRIPT.read_text(encoding="utf-8")
     assert "$script:Migration428='C:\\Program Files\\CoChem\\Migration4.2.8-windows-20261014-v3'" in script_text
     assert '--state-root "C:\\ProgramData\\CoChemPipeline427\\private"' in script_text
-    assert "if($old -ceq $oldR4 -and $oldTriggerCount -eq 0 -and $task.GetInstances(0).Count -eq 0){" in script_text
+    assert "$alreadyStoppedR4=($old -ceq $oldR4 -and $oldTriggerCount -eq 0 -and $task.GetInstances(0).Count -eq 0)" in script_text
+    assert "if($alreadyStoppedR4){" in script_text
     assert "if($old -ceq $oldR4){" in script_text
     assert (
         "Assert-ProtectedPath (Split-Path -Parent $script:Migration428)\n"
