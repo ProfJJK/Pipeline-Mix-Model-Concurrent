@@ -11,12 +11,14 @@ from pipeline_tests.test_planning_pivots_428 import env, fail_window, complete_r
 from pipeline_tests.test_microtask_board_428 import _complete_claimed_job_for_node
 
 
-def finish_control(env, stage, *, accepted=True):
+def finish_control(env, stage, *, accepted=True, transform=None):
     store, journal, ledger, board, outcomes, bridge = env
     job = store.claim('inert-fracture', worker_slot='slot2', allowed_kinds=['TASK_PLAN'], requires_cleanup=True)
     assert job is not None
     assert job['payload']['planning_intent']['stage'] == stage
     output = fracture_contract(job['payload'])
+    if transform:
+        transform(output)
     if stage == 'FRACTURE_REVIEW' and not accepted:
         output.update(accepted=False, findings=['Fragment interface omits the required null case'])
     store.clear_execution_quarantine(job['job_id'], job['attempt_id'], job['fencing_token'])
@@ -53,17 +55,26 @@ def test_fracture_requires_review_then_preserves_failure_budget_on_restart(env):
     assert store.get(old['job_id'])['status'] == 'BLOCKED'
 
 
-def test_rejected_review_never_registers_fracture(env):
+def test_rejected_review_revises_captured_plan_without_resetting_budget(env):
     old, boundary = fail_window(env)
     complete_review(env, strategy='fracture')
     env[-1].step('task')
-    finish_control(env, 'FRACTURE_PLAN')
+    first_plan = finish_control(env, 'FRACTURE_PLAN')
     env[-1].step('task')
     finish_control(env, 'FRACTURE_REVIEW', accepted=False)
     env[-1].step('task')
-    assert env[4].status('task')[-1]['status'] == 'FRACTURE_REVIEW_REJECTED'
+    assert env[4].status('task')[-1]['status'] == 'WAITING_FOR_FRACTURE_PLAN'
     assert env[2].status(boundary['lineage_root'])['stage'] == 'PIVOT_RESEARCH'
     assert env[-1].fractures.fracture_runtime.accepted_record(boundary['lineage_root'], 10) is None
+    second = finish_control(env, 'FRACTURE_PLAN')
+    assert second['job_id'] != first_plan['job_id']
+    assert second['payload']['planning_intent']['attempt_lineage_id'] == first_plan['payload']['planning_intent']['attempt_lineage_id']
+    assert second['payload']['planning_intent']['task']['fracture_review_feedback']['findings']
+    env[-1].step('task')
+    finish_control(env, 'FRACTURE_REVIEW')
+    env[-1].step('task')
+    assert env[4].status('task')[-1]['status'] == 'FRACTURE_READY_NEW_CAPTURE'
+    assert env[2].status(boundary['lineage_root'])['failures'] == 10
 
 
 def test_plan_rejects_scope_loss_and_duplicate_fragments(env):
@@ -150,3 +161,63 @@ def test_fragment_failure_is_recorded_on_shared_root(env):
     outcomes.reconcile_task('task')
     assert ledger.status(boundary['lineage_root'])['failures'] == 11
     assert env[-1]._source_job(boundary['lineage_root'])['job_id'] == job['job_id']
+
+
+def test_new_high_tier_fracture_children_use_existing_owner_broker(env):
+    from pipeline_tests.test_microtask_board_428 import OWNER_SECRET
+    old, boundary = fail_window(env)
+    complete_review(env, strategy='fracture')
+    env[-1].step('task')
+    def high_plan(output):
+        for child in output['children']:
+            if child['role'] in ('assembly', 'final_test'):
+                child['complexity'] = 8
+    finish_control(env, 'FRACTURE_PLAN', transform=high_plan)
+    env[-1].step('task')
+    finish_control(env, 'FRACTURE_REVIEW')
+    env[-1].step('task')
+    attach_board(env)
+    board = env[3]
+    status = board.materialize('task')
+    high = [row for row in status['nodes'] if row['lineage_kind'] == 'FAILURE_FRACTURE' and row['complexity'] == 8]
+    assert len(high) == 2 and all(row['status'] == 'HOLD_OWNER_APPROVAL' for row in high)
+    with pytest.raises(PermissionError):
+        board.approve_child_microtask('task', high[0]['microtask_id'], owner_token='wrong')
+    for node in high:
+        board.approve_child_microtask('task', node['microtask_id'], owner_token=OWNER_SECRET)
+        projection = board.fracture_runtime.get_fracture_child(node['microtask_id'])
+        assert projection['owner_approval']['graph_sha256'] == projection['graph_sha256']
+    assert env[2].status(boundary['lineage_root'])['failures'] == 10
+
+
+def test_final_test_fracture_keeps_test_paths_with_terminal_role(env):
+    fail_window(env)
+    complete_review(env, strategy='fracture')
+    env[-1].step('task')
+    job = env[0].claim('inert-plan', worker_slot='slot2', allowed_kinds=['TASK_PLAN'])
+    payload = deepcopy(job['payload'])
+    payload['planning_intent']['task']['fracture_scope'].update(failed_role='final_test', deliverables=['tests/test_original.py'])
+    output = fracture_contract(payload)
+    validate_fracture_plan(payload, output)
+    assembly = next(child for child in output['children'] if child['role'] == 'assembly')
+    final = next(child for child in output['children'] if child['role'] == 'final_test')
+    assert 'tests/test_original.py' not in assembly['deliverables']
+    assert final['deliverables'] == ['tests/test_original.py']
+    final['deliverables'] = ['unrelated.txt']
+    with pytest.raises(ValueError, match='preserve full scope'):
+        validate_fracture_plan(payload, output)
+
+
+def test_external_dependency_helper_rejects_uncaptured_input(env):
+    from types import SimpleNamespace
+    from cochem_pipeline.planning_fractures_428 import validated_external_predecessors
+    prepare_fracture(env)
+    attach_board(env)
+    env[3].materialize('task')
+    job = env[0].claim('inert-child', worker_slot='slot1', allowed_kinds=['TASK_PLAN'])
+    planner = SimpleNamespace(store=env[0], journal=env[1], fracture_runtime=env[-1].fractures.fracture_runtime)
+    assert validated_external_predecessors(planner, job['payload']) == {}
+    altered = deepcopy(job['payload'])
+    altered['microtask_node']['fracture_external_predecessors'] = {'unrelated': {'artifact_sha256': '0'*64}}
+    with pytest.raises(ValueError, match='capture changed'):
+        validated_external_predecessors(planner, altered)

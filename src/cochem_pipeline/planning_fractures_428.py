@@ -10,6 +10,64 @@ from .task_routing import digest
 from .workflow_428 import _dag, _id, _text, _texts, assessment
 
 
+def validated_fracture_source(planner, task_id, fracture_record):
+    """Rebind an accepted graph to the original immutable failed job contract."""
+    with planner.journal._write() as conn:
+        rows = conn.execute('SELECT source_job_id,boundary,lineage_root FROM planning428_fracture_plans '
+            "WHERE task_id=? AND fracture_id=? AND status='FRACTURE_READY_NEW_CAPTURE'",
+            (task_id, fracture_record['fracture_id'])).fetchall()
+    if len(rows) != 1:
+        raise ValueError('Fracture has no unique accepted source capture')
+    row = rows[0]
+    record = planner.fracture_runtime.accepted_record(row['lineage_root'], row['boundary'])
+    if record is None or any(record[key] != fracture_record.get(key)
+            for key in ('fracture_id', 'lineage_root', 'failed_scope_id', 'graph_sha256')):
+        raise ValueError('Fracture source has no matching committed graph')
+    source = planner.store.get(row['source_job_id'])
+    payload = source['payload']
+    if (payload['planning_intent']['task_id'] != task_id
+            or payload['microtask_node']['microtask_id'] != record['failed_scope_id']
+            or planner.fracture_runtime.ledger.status(payload['microtask_node']['attempt_lineage_id'])['root'] != record['lineage_root']):
+        raise ValueError('Fracture source belongs to another failed scope or shared lineage')
+    return source
+
+
+def validated_external_predecessors(planner, payload):
+    """Return only original dependency captures bound to this registered fracture."""
+    node = payload.get('microtask_node') or {}
+    context = node.get('fracture_context')
+    supplied = node.get('fracture_external_predecessors') or {}
+    if context is None:
+        if supplied:
+            raise ValueError('External fracture dependencies require a compiled graph')
+        return {}
+    intent = payload['planning_intent']
+    with planner.journal._write() as conn:
+        rows = conn.execute('SELECT source_job_id,boundary,lineage_root FROM planning428_fracture_plans '
+            "WHERE task_id=? AND fracture_id=? AND status='FRACTURE_READY_NEW_CAPTURE'",
+            (intent['task_id'], context['fracture_id'])).fetchall()
+    if len(rows) != 1:
+        raise ValueError('Fracture has no unique accepted source capture')
+    row = rows[0]
+    record = planner.fracture_runtime.accepted_record(row['lineage_root'], row['boundary'])
+    if record is None:
+        raise ValueError('Fracture source has no committed graph')
+    expected_context = dict(fracture_id=record['fracture_id'], graph_sha256=record['graph_sha256'],
+        dossier_sha256=record['dossier_sha256'], lineage_root=record['lineage_root'],
+        failed_microtask_id=record['failed_scope_id'])
+    if context != expected_context or node['microtask_id'] not in {child['id'] for child in record['graph']['children']}:
+        raise ValueError('External dependencies belong to another compiled child')
+    source = planner.store.get(row['source_job_id'])['payload']
+    if (source['planning_intent']['task_id'] != intent['task_id']
+            or source['planning_intent']['plan_generation_sha256'] != intent['plan_generation_sha256']
+            or source['microtask_node']['microtask_id'] != record['failed_scope_id']):
+        raise ValueError('External dependencies belong to another failed scope or generation')
+    expected = source.get('predecessor_outputs') or {}
+    if supplied != expected:
+        raise ValueError('Fracture external dependency capture changed')
+    return deepcopy(expected)
+
+
 def validate_fracture_plan(payload, output):
     if not isinstance(output, dict) or set(output) != {'summary', 'children'}:
         raise ValueError('Fracture plan requires summary and children')
@@ -58,7 +116,8 @@ def validate_fracture_plan(payload, output):
             or any(set(child['requirement_ids']) != reqs for child in (assembly, final))
             or any(child['complexity'] < floor for child in (assembly, final))
             or any(not set(scope['release_criteria']) <= set(child['release_criteria']) for child in (assembly, final))
-            or not set(scope['deliverables']) <= set(assembly['deliverables'])):
+            or not set(scope['deliverables']) <= set((final if scope.get('failed_role') == 'final_test' else assembly)['deliverables'])
+            or not set().union(*(set(child['deliverables']) for child in implementations)) <= set(assembly['deliverables'])):
         raise ValueError('Fracture assembly and final test must preserve full scope, dependency order and raised floor')
     return deepcopy(output)
 
@@ -83,6 +142,8 @@ def fracture_contract(payload):
     scope = intent['task']['fracture_scope']
     reqs = scope['requirement_ids']
     floor = min(10, scope['parent_floor'] + 1)
+    assembly_paths = ([] if scope.get('failed_role') == 'final_test' else scope['deliverables']) + ['fragment-a.txt', 'fragment-b.txt']
+    final_paths = scope['deliverables'] if scope.get('failed_role') == 'final_test' else ['verification.txt']
     def child(cid, role, tier, paths, deps):
         return dict(id=cid, role=role, complexity=tier, task_types=intent['task_types'],
             rationale='Independent scoped assessment', requirement_ids=reqs,
@@ -91,8 +152,8 @@ def fracture_contract(payload):
     return dict(summary='Decompose the observed failure while preserving every requirement', children=[
         child('fragment-a', 'implementation', 3, ['fragment-a.txt'], []),
         child('fragment-b', 'implementation', 3, ['fragment-b.txt'], []),
-        child('assembly', 'assembly', floor, scope['deliverables'], ['fragment-a', 'fragment-b']),
-        child('final-test', 'final_test', floor, ['verification.txt'], ['assembly'])])
+        child('assembly', 'assembly', floor, list(dict.fromkeys(assembly_paths)), ['fragment-a', 'fragment-b']),
+        child('final-test', 'final_test', floor, final_paths, ['assembly'])])
 
 
 class PlanningFractureRuntime:
@@ -105,6 +166,9 @@ class PlanningFractureRuntime:
                 source_job_id TEXT NOT NULL,pivot_job_id TEXT NOT NULL,plan_job_id TEXT NOT NULL,
                 review_job_id TEXT,status TEXT NOT NULL,fracture_id TEXT,
                 PRIMARY KEY(lineage_root,boundary))''')
+            conn.execute('''CREATE TABLE IF NOT EXISTS planning428_fracture_controls(
+                job_id TEXT PRIMARY KEY,task_id TEXT NOT NULL,lineage_root TEXT NOT NULL,
+                boundary INTEGER NOT NULL,stage TEXT NOT NULL)''')
 
     def _submit(self, source, *, stage, task_state, tier, tags, candidates, extra=None):
         from .planning_gateway import prompt_contract, scoped_policy
@@ -130,14 +194,19 @@ class PlanningFractureRuntime:
                 result = self.store._get(conn, job_id)
                 if result['payload'] != payload:
                     raise ValueError('Fracture control capture cannot be rebound')
-                return result
-            budget = capture_lineage_budget(conn, job_id, payload, policy, attempt_ledger=accounting)
-            self.store._insert(conn, root_id, root_id, None, 'MACRO_PLANNING_REQUEST', 'IN_PROGRESS',
-                               dict(workflow_type='planning428', intent_sha256=key))
-            routes.capture_workflow(conn, root_id, policy, max_dispatches=budget.max_dispatches)
-            self.store._insert(conn, job_id, root_id, root_id, 'TASK_PLAN', 'PENDING', payload,
-                               max_attempts=budget.max_attempts)
-            return self.store._get(conn, job_id)
+            else:
+                budget = capture_lineage_budget(conn, job_id, payload, policy, attempt_ledger=accounting)
+                self.store._insert(conn, root_id, root_id, None, 'MACRO_PLANNING_REQUEST', 'IN_PROGRESS',
+                                   dict(workflow_type='planning428', intent_sha256=key))
+                routes.capture_workflow(conn, root_id, policy, max_dispatches=budget.max_dispatches)
+                self.store._insert(conn, job_id, root_id, root_id, 'TASK_PLAN', 'PENDING', payload,
+                                   max_attempts=budget.max_attempts)
+                result = self.store._get(conn, job_id)
+        with self.journal._write() as conn:
+            conn.execute('INSERT OR IGNORE INTO planning428_fracture_controls VALUES(?,?,?,?,?)',
+                (job_id, original['task_id'], task_state['fracture_scope']['lineage_root'],
+                 task_state['failure_dossier']['boundary'], stage))
+        return result
 
     def step(self, task_id, boundary, source, pivot_job, pivot_result):
         from .planning_gateway import PlanningGateway
@@ -161,7 +230,7 @@ class PlanningFractureRuntime:
             return dict(status='FRACTURE_READY_NEW_CAPTURE', fracture_id=row['fracture_id'])
         ledger = captured.ledger.status(root)
         task_state = deepcopy(pivot_job['payload']['planning_intent']['task'])
-        scope = dict(scope_id=failed['microtask_id'], lineage_root=root, parent_floor=ledger['floor'],
+        scope = dict(scope_id=failed['microtask_id'], failed_role=failed['role'], lineage_root=root, parent_floor=ledger['floor'],
             last_failed_model=ledger['last_model'], requirement_ids=failed['requirement_ids'],
             deliverables=failed['deliverables'], release_criteria=failed['release_criteria'])
         task_state.update(fracture_scope=scope, fracture_recommendation=pivot_result['output'])
@@ -210,7 +279,27 @@ class PlanningFractureRuntime:
             return dict(status='FRACTURE_REVIEW_HELD' if review_job['status'] in ('FAILED', 'BLOCKED') else 'WAITING_FOR_FRACTURE_REVIEW')
         verdict = validate_fracture_review(review_job['payload'], reviewed['output'])
         if not verdict['accepted']:
-            return dict(status='FRACTURE_REVIEW_REJECTED')
+            revision = task_state.get('fracture_revision', 0)
+            if revision >= 9:
+                return dict(status='FRACTURE_REVIEW_REVISION_LIMIT')
+            revised = dict(task_state, fracture_revision=revision + 1,
+                fracture_review_feedback=dict(plan_job_id=plan_job['job_id'], plan_sha256=plan_sha,
+                    previous_plan=plan, review_job_id=review_job['job_id'], review_sha256=digest(reviewed),
+                    findings=verdict['findings']))
+            planning_tier = plan_job['payload']['planning_intent']['complexity']
+            planning_tags = plan_job['payload']['planning_intent']['task_types']
+            candidates = select_pivot_candidates(captured.catalog, planning_tags, planning_tier,
+                                                last_failed_model=scope['last_failed_model'])
+            try:
+                replacement = self._submit(source, stage='FRACTURE_PLAN', task_state=revised,
+                    tier=planning_tier, tags=planning_tags, candidates=candidates)
+            except LineageBudgetHold as hold:
+                return dict(status='FRACTURE_PLAN_BUDGET_HOLD', reason=hold.reason)
+            with self.journal._write() as conn:
+                conn.execute('UPDATE planning428_fracture_plans SET plan_job_id=?,review_job_id=NULL,status=? '
+                    'WHERE lineage_root=? AND boundary=?',
+                    (replacement['job_id'], 'WAITING_FOR_FRACTURE_PLAN', root, number))
+            return dict(status='WAITING_FOR_FRACTURE_PLAN')
         reviewer = captured.catalog['models'][reviewed['profile_id']]
         prefix = 'fr428-' + digest(dict(root=root, boundary=number))[:16] + '-'
         names = {child['id']: prefix + str(index) for index, child in enumerate(plan['children'])}
@@ -239,7 +328,9 @@ class PlanningFractureRuntime:
     def cancellation_targets(self, task_id):
         with self.journal._write() as conn:
             rows = conn.execute('SELECT plan_job_id,review_job_id FROM planning428_fracture_plans WHERE task_id=?', (task_id,))
-            return [value for row in rows for value in row if value]
+            ids = [value for row in rows for value in row if value]
+            ids += [row[0] for row in conn.execute('SELECT job_id FROM planning428_fracture_controls WHERE task_id=?', (task_id,))]
+            return list(dict.fromkeys(ids))
 
     def records_for_task(self, task_id, generation):
         """Committed fractures only, scoped to their immutable original WBS generation."""
