@@ -16,28 +16,29 @@ from cochem_pipeline.hardware_guard import HardwarePolicy
 from cochem_pipeline.resource_limits import ResourceLimits, ResourcePolicyError, controller_limits
 
 # Explicit sample fixtures for the fake sampler; they are not live measurements.
-OVER = {'rss_mb':WARDEN_MEMORY_LIMIT_MB+1,'cpu_percent':1}
-HEALTHY = {'rss_mb':40,'cpu_percent':1}
-CPU_SPIKE = {'rss_mb':40,'cpu_percent':WARDEN_CPU_LIMIT_PERCENT+1}
+AFFINITY = {'allowed_logical_processors': list(range(8))}
+OVER = {**AFFINITY, 'rss_mb':WARDEN_MEMORY_LIMIT_MB+1,'cpu_percent':1}
+HEALTHY = {**AFFINITY, 'rss_mb':40,'cpu_percent':1}
+CPU_SPIKE = {**AFFINITY, 'rss_mb':40,'cpu_percent':WARDEN_CPU_LIMIT_PERCENT+1}
 
 
 @pytest.mark.parametrize('rss,cpu,ready',[(WARDEN_MEMORY_LIMIT_MB,WARDEN_CPU_LIMIT_PERCENT,True),
                                         (WARDEN_MEMORY_LIMIT_MB+.001,0,False),(1,WARDEN_CPU_LIMIT_PERCENT+.001,False),
                                         (None,1,False),(1,None,False),(float('nan'),0,False)])
 def test_strict_warden_budgets_never_report_ready_for_missing_or_excess_measurements(rss,cpu,ready):
-    result=assess_controller({'rss_mb':rss,'cpu_percent':cpu})
+    result=assess_controller({**AFFINITY, 'rss_mb':rss,'cpu_percent':cpu})
     assert result['ready'] is ready
     assert result['strict_srs_ready'] is ready
     assert result['action']==('none' if ready else 'pause_admission')
 
 
-def test_owner_amended_warden_budgets_are_200_mib_and_7_percent():
-    assert (WARDEN_MEMORY_LIMIT_MB,WARDEN_CPU_LIMIT_PERCENT)==(200,7)
-    result=assess_controller({'rss_mb':WARDEN_MEMORY_LIMIT_MB+1,'cpu_percent':0})
+def test_owner_amended_warden_budgets_are_200_mib_and_one_core():
+    assert (WARDEN_MEMORY_LIMIT_MB,WARDEN_CPU_LIMIT_PERCENT)==(200,12.5)
+    result=assess_controller({**AFFINITY, 'rss_mb':WARDEN_MEMORY_LIMIT_MB+1,'cpu_percent':0})
     assert result['reasons']==['Warden resident memory exceeds its strict 200 MiB budget']
     assert (result['memory_limit_mb'],result['cpu_limit_percent'])==(WARDEN_MEMORY_LIMIT_MB,WARDEN_CPU_LIMIT_PERCENT)
     # Allocator high-water just above the former literal no longer closes admission.
-    assert assess_controller({'rss_mb':54,'cpu_percent':1})['ready'] is True
+    assert assess_controller({**AFFINITY, 'rss_mb':54,'cpu_percent':1})['ready'] is True
 
 
 def test_monitor_reports_actual_current_process_and_bounded_scope():
@@ -49,7 +50,7 @@ def test_monitor_reports_actual_current_process_and_bounded_scope():
     assert measured['measurements']['cpu_percent']>=0
     assert monitor.sample() is measured
     assert measured['ready']==(measured['measurements']['rss_mb']<=WARDEN_MEMORY_LIMIT_MB
-                               and measured['measurements']['cpu_percent']<=WARDEN_CPU_LIMIT_PERCENT)
+                               and measured['cpu_core_equivalents']<=1)
     # A first sample is never held by an earlier violation.
     assert measured['admission_ready'] is measured['ready']
 
@@ -62,14 +63,14 @@ def test_full_runtime_import_has_a_measured_idle_budget_in_fresh_process():
     observed=json.loads(result.stdout)
     assert observed['measurements']['rss_mb']>0
     assert observed['ready']==(observed['measurements']['rss_mb']<=WARDEN_MEMORY_LIMIT_MB
-                              and observed['measurements']['cpu_percent']<=WARDEN_CPU_LIMIT_PERCENT)
+                              and observed['cpu_core_equivalents']<=1)
 
 
 def fake_monitor(**policy):
     """A monitor driven by an explicit fake clock and sampler, not by psutil."""
     clock=SimpleNamespace(now=1000.)
     reading={'value':HEALTHY}
-    monitor=ControllerMonitor(**policy,clock=lambda: clock.now,measure=lambda: dict(reading['value']))
+    monitor=ControllerMonitor(**policy,clock=lambda: clock.now,measure=lambda: {**AFFINITY, **reading['value']})
 
     def at(seconds,value):
         clock.now=1000.+seconds
@@ -139,7 +140,7 @@ def test_cpu_only_spike_pauses_on_the_same_sample_and_reopens_on_the_next_ready_
     paused=at(1,CPU_SPIKE)
     assert (paused['ready'],paused['admission_ready'],paused['recovery_hold'])==(False,False,False)
     assert paused['action']=='pause_admission'
-    assert paused['admission_reasons']==paused['reasons']==['Warden CPU utilization exceeds its strict 7% budget']
+    assert paused['admission_reasons']==paused['reasons']==['Warden CPU utilization exceeds its strict 1 core-equivalent budget']
     # A cached read inside the one-second window is the same paused sample.
     assert at(1.5,HEALTHY) is paused
     reopened=at(2,HEALTHY)
@@ -318,7 +319,7 @@ def test_runtime_tick_closes_on_a_cpu_only_spike_and_reopens_on_the_next_fresh_s
     for step in range(10,20):
         capacity,component=tick(step)
         assert capacity==0 and component['state']=='resource_pressure'
-        assert telemetry[-1]['reasons']==['Warden CPU utilization exceeds its strict 7% budget']
+        assert telemetry[-1]['reasons']==['Warden CPU utilization exceeds its strict 1 core-equivalent budget']
     capacity,component=tick(20)
     assert capacity==4 and component['state']=='healthy' and component['recovery_hold'] is False
     assert 'controller' not in telemetry[-1]

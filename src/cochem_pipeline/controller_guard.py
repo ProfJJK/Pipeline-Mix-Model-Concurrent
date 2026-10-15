@@ -1,18 +1,16 @@
-"""Measure the Warden itself against its WARDEN_MEMORY_LIMIT_MB (200 MiB) / 7% polling budget.
+"""Measure the Warden against 200 MiB and one CPU-core equivalent.
 
 The 200 MiB memory budget is the owner amendment of 2026-10-11 to S427-HOST-006
 and S427-PERF-005 (repo-root 4.2.7_SRS.md): the earlier literal left under 10 MiB
 of headroom over the ~40 MiB idle Python footprint, so harmless allocator
 high-water paused admission.
 
-The 7% CPU budget, measured over a rolling CPU_WINDOW_SECONDS (10 s) window, is
-the owner amendment of 2026-10-14 (docs/4.2.8/OWNER_AMENDMENT_20261014_CPU.md).
-The live 4.2.8 controller measured 3.9-6% while idle when each sample covered
-only the ~1 s since the previous tick, so one bounded operation (hashing a
-provider binary, serializing an operator view) zeroed admission capacity and
-revoked the catalog control probe. The window measures sustained controller
-load; it does not hide it. The hashed SRS text still states 5% until the
-specification and knowledge manifest are re-ratified.
+The owner amendment of 2026-10-15 uses CPU seconds per elapsed second over
+the rolling CPU_WINDOW_SECONDS (10 s) window. The verified controller affinity
+is the efficiency-core pool; one core equals 12.5% of an eight-processor pool.
+Admission does not assume an eight-processor denominator. Half a core is an
+optimization target, not another gate. The legacy percentage remains visible
+with its actual affinity denominator; it is never subtracted from host CPU.
 
 These are readiness/admission limits, not a promise that a Python allocation
 cannot cross the boundary. Crossing it holds new work without killing the
@@ -37,36 +35,66 @@ import psutil
 from .hardware_guard import HardwarePolicy
 
 WARDEN_MEMORY_LIMIT_MB = 200
-WARDEN_CPU_LIMIT_PERCENT = 7
+WARDEN_CPU_LIMIT_CORES = 1.0
+WARDEN_CPU_TARGET_CORES = 0.5
+# Compatibility/display reference for historical eight-processor receipts only.
+# Admission uses WARDEN_CPU_LIMIT_CORES and the measured denominator below.
+WARDEN_CPU_LIMIT_PERCENT = 12.5
 CPU_WINDOW_SECONDS = 10.0
+
+
+def _cpu_budget_measurement(measurements):
+    """Return core equivalents and the percentage limit for a measured affinity.
+
+    Percentage-only records without their denominator cannot establish load.
+    Explicit core readings also need a valid affinity for consistent evidence.
+    """
+    affinity = measurements.get('allowed_logical_processors')
+    if (not isinstance(affinity, (list, tuple)) or not affinity
+            or any(type(cpu) is not int or cpu < 0 for cpu in affinity)
+            or len(set(affinity)) != len(affinity)):
+        return None, None
+    percent = measurements.get('cpu_percent')
+    if type(percent) not in (int, float) or not math.isfinite(percent) or percent < 0:
+        return None, 100.0 / len(affinity)
+    cores = percent * len(affinity) / 100.0
+    explicit = measurements.get('cpu_core_equivalents', cores)
+    if (type(explicit) not in (int, float) or not math.isfinite(explicit) or explicit < 0
+            or not math.isclose(explicit, cores, rel_tol=1e-9, abs_tol=1e-9)):
+        return None, 100.0 / len(affinity)
+    return cores, 100.0 / len(affinity)
 
 
 def assess_controller(measurements):
     """Pure budget verdict: ready only for rss_mb <= WARDEN_MEMORY_LIMIT_MB (200 MiB)
-    and cpu_percent <= WARDEN_CPU_LIMIT_PERCENT (7%); missing telemetry is never ready."""
+    and CPU core equivalents <= 1; missing telemetry is never ready."""
     reasons = []
     rss = measurements.get('rss_mb')
-    cpu = measurements.get('cpu_percent')
+    cpu, percent_limit = _cpu_budget_measurement(measurements)
     for name, value, maximum in (('resident memory',rss,WARDEN_MEMORY_LIMIT_MB),
-                                 ('CPU utilization',cpu,WARDEN_CPU_LIMIT_PERCENT)):
+                                 ('CPU utilization',cpu,WARDEN_CPU_LIMIT_CORES)):
         if type(value) not in (int,float) or not math.isfinite(value) or value < 0:
             reasons.append('Warden '+name+' telemetry is unavailable')
         elif value > maximum:
-            reasons.append('Warden '+name+' exceeds its strict '+str(maximum)+(' MiB' if name=='resident memory' else '%')+' budget')
+            reasons.append('Warden '+name+' exceeds its strict '+format(maximum,'g')
+                           +(' MiB' if name=='resident memory' else ' core-equivalent')+' budget')
     return {'ready':not reasons, 'strict_srs_ready':not reasons,
             'action':'pause_admission' if reasons else 'none', 'reasons':reasons,
-            'memory_limit_mb':WARDEN_MEMORY_LIMIT_MB,'cpu_limit_percent':WARDEN_CPU_LIMIT_PERCENT,
+            'memory_limit_mb':WARDEN_MEMORY_LIMIT_MB,'cpu_limit_percent':percent_limit,
+            'cpu_limit_core_equivalents':WARDEN_CPU_LIMIT_CORES,
+            'cpu_target_core_equivalents':WARDEN_CPU_TARGET_CORES,
+            'cpu_core_equivalents':cpu,
             'measurements':measurements}
 
 
 def _cpu_only_violation(measurements):
     """True only when resident memory is measured within WARDEN_MEMORY_LIMIT_MB and
-    CPU utilization is measured above WARDEN_CPU_LIMIT_PERCENT; unavailable
+    CPU utilization is measured above WARDEN_CPU_LIMIT_CORES; unavailable
     telemetry is never a CPU-only violation."""
     rss = measurements.get('rss_mb')
-    cpu = measurements.get('cpu_percent')
+    cpu, _ = _cpu_budget_measurement(measurements)
     measured = all(type(value) in (int,float) and math.isfinite(value) and value >= 0 for value in (rss,cpu))
-    return measured and rss <= WARDEN_MEMORY_LIMIT_MB and cpu > WARDEN_CPU_LIMIT_PERCENT
+    return measured and rss <= WARDEN_MEMORY_LIMIT_MB and cpu > WARDEN_CPU_LIMIT_CORES
 
 
 class CpuWindow:
@@ -145,6 +173,7 @@ class ControllerMonitor:
 
     def _measure_process(self):
         measured = {'pid':self.process.pid,'rss_mb':None,'private_mb':None,'cpu_percent':None,
+                    'cpu_core_equivalents':None,
                     'source':'psutil.Process.memory_info/cpu_times/cpu_affinity',
                     'cpu_scope':('process CPU over a rolling '+format(CPU_WINDOW_SECONDS,'g')
                                  +' s window divided by its actual allowed logical CPU count')}
@@ -167,6 +196,7 @@ class ControllerMonitor:
                 time.sleep(.05)
             cpu, elapsed = self._cpu_window.add(*used(), len(affinity))
             measured['cpu_percent'] = cpu
+            measured['cpu_core_equivalents'] = None if cpu is None else cpu*len(affinity)/100.0
             measured['cpu_window_seconds'] = elapsed
             if cpu is None:
                 raise ValueError('Controller CPU window could not be measured')

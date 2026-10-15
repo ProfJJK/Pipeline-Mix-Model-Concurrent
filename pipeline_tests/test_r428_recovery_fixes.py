@@ -41,16 +41,16 @@ def test_window_amortizes_one_binary_hash_that_a_one_second_sample_would_flag():
     assert one_second_sample > WARDEN_CPU_LIMIT_PERCENT          # the old per-tick verdict paused admission
     assert spiked <= WARDEN_CPU_LIMIT_PERCENT                    # the window does not
     assert elapsed >= CPU_WINDOW_SECONDS
-    assert assess_controller({'rss_mb': 50, 'cpu_percent': spiked})['ready'] is True
+    assert assess_controller({'allowed_logical_processors': list(range(8)), 'rss_mb': 50, 'cpu_percent': spiked})['ready'] is True
 
 
 def test_window_still_flags_sustained_controller_load():
     window = CpuWindow(CPU_WINDOW_SECONDS)
-    (busy, _), *_ = _feed(window, [0.] + [.8]*12)                # 10% of 8 CPUs, sustained
-    assert busy == pytest.approx(10.0)
-    verdict = assess_controller({'rss_mb': 50, 'cpu_percent': busy})
+    (busy, _), *_ = _feed(window, [0.] + [1.2]*12)               # 1.2 cores (15% of 8 CPUs), sustained
+    assert busy == pytest.approx(15.0)
+    verdict = assess_controller({'allowed_logical_processors': list(range(8)), 'rss_mb': 50, 'cpu_percent': busy})
     assert verdict['ready'] is False
-    assert verdict['reasons'] == ['Warden CPU utilization exceeds its strict 7% budget']
+    assert verdict['reasons'] == ['Warden CPU utilization exceeds its strict 1 core-equivalent budget']
 
 
 def test_window_reports_unavailable_never_idle_on_clock_or_counter_regression():

@@ -143,11 +143,24 @@ def assess_resources(measurements: dict, policy: HardwarePolicy, max_agents: int
     ceiling = max_agents
     capacity = ceiling
     reasons, alerts, emergencies, sustained = [], [], [], []
+    recovery_required = False
+    transient_pressure = False
 
-    def pause(message: str):
-        nonlocal capacity
-        capacity = 0
-        reasons.append(message)
+    def limit(value: int, message: str, *, transient: bool = False):
+        nonlocal capacity, recovery_required, transient_pressure
+        if value < ceiling:
+            capacity = min(capacity, value)
+            reasons.append(message)
+            if transient:
+                transient_pressure = True
+            else:
+                recovery_required = True
+
+    def pause(message: str, *, transient: bool = False):
+        limit(0, message, transient=transient)
+        # Explicitly disabled capacity still has an explanatory reason.
+        if ceiling == 0 and message not in reasons:
+            reasons.append(message)
 
     def critical(message: str):
         pause(message)
@@ -176,20 +189,16 @@ def assess_resources(measurements: dict, policy: HardwarePolicy, max_agents: int
         alerts.append('Physical CPU count unavailable; explicitly configured logical-CPU fallback')
     if cpu_ok and memory_ok:
         percent, available = cpu['percent'], memory['available_mb']
-        if percent < 30 and available > 16384:
-            band = ceiling
-        elif percent < 50 and available > 8192:
-            band = max(1, ceiling*3//4) if ceiling else 0
-        elif percent < 70 and available > 4096:
-            band = max(1, ceiling//2) if ceiling else 0
-        elif percent < 85 and available > 2048:
-            band = max(1, ceiling//4) if ceiling else 0
-        else:
-            band = 0
-            pause('CPU/RAM pressure is outside the safe historical admission bands')
+        bands = (ceiling, max(1, ceiling*3//4) if ceiling else 0,
+                 max(1, ceiling//2) if ceiling else 0, max(1, ceiling//4) if ceiling else 0, 0)
+        cpu_band = bands[sum(percent >= threshold for threshold in (30, 50, 70, 85))]
+        memory_band = bands[sum(available <= threshold for threshold in (16384, 8192, 4096, 2048))]
+        limit(cpu_band, 'Host CPU pressure reduces the historical admission band to '+str(cpu_band), transient=True)
+        limit(memory_band, 'Physical memory pressure reduces the historical admission band to '+str(memory_band))
         memory_slots = max(0, math.floor((available-policy.min_free_memory_mb)/policy.per_agent_memory_mb))
         processor_slots = min(cpu['count'],cpu['physical_count']) if physical_ok else cpu['count']
-        capacity = min(capacity, processor_slots, band, memory_slots)
+        limit(processor_slots, 'Measured processor capacity limits worker admission to '+str(processor_slots))
+        limit(memory_slots, 'Available memory and configured reserve limit worker admission to '+str(memory_slots))
         if memory_slots == 0:
             pause('Available memory cannot accommodate a worker and the configured reserve')
     # Missing unrelated telemetry must not mask an independently measured
@@ -198,7 +207,7 @@ def assess_resources(measurements: dict, policy: HardwarePolicy, max_agents: int
         critical('Physical memory is below the critical free-memory threshold')
     if cpu_ok:
         if cpu['percent'] >= policy.max_cpu_percent:
-            pause('CPU utilization exceeds the configured admission threshold')
+            pause('Host CPU utilization exceeds the configured admission threshold', transient=True)
         if cpu['percent'] >= policy.critical_cpu_percent:
             sustained.append('Sustained critical CPU utilization')
     temperature = cpu.get('temperature_celsius') if isinstance(cpu, dict) else None
@@ -223,7 +232,8 @@ def assess_resources(measurements: dict, policy: HardwarePolicy, max_agents: int
         elif commit['free_mb'] < policy.min_free_commit_mb:
             pause('Windows commit headroom is below its admission reserve')
         else:
-            capacity = min(capacity, max(0, math.floor((commit['free_mb']-policy.min_free_commit_mb)/policy.per_agent_memory_mb)))
+            commit_slots = max(0, math.floor((commit['free_mb']-policy.min_free_commit_mb)/policy.per_agent_memory_mb))
+            limit(commit_slots, 'Windows commit headroom and reserve limit worker admission to '+str(commit_slots))
 
     devices = gpu.get('devices') if isinstance(gpu, dict) else None
     gpu_ok = isinstance(gpu, dict) and gpu.get('available') is True and isinstance(devices, list) and bool(devices)
@@ -242,7 +252,7 @@ def assess_resources(measurements: dict, policy: HardwarePolicy, max_agents: int
                 alerts.append('GPU VRAM pressure reached the configured alert threshold')
                 pause('GPU VRAM pressure pauses new admission')
             elif usage > policy.gpu_vram_throttle_percent:
-                capacity = min(capacity, max(1, ceiling//4) if ceiling else 0)
+                limit(max(1, ceiling//4) if ceiling else 0, 'GPU VRAM pressure reduces worker admission to one quarter')
                 alerts.append('GPU VRAM pressure reduced the worker ceiling to one quarter')
             if usage >= policy.gpu_vram_critical_percent:
                 sustained.append('Sustained critical GPU VRAM pressure')
@@ -270,24 +280,32 @@ def assess_resources(measurements: dict, policy: HardwarePolicy, max_agents: int
     if not io_ok and policy.disk_io_required:
         pause('Required disk throughput/IOPS telemetry is unavailable')
     elif io_ok and (io['total_mb_s'] > policy.max_disk_mb_s or io['total_iops'] > policy.max_disk_iops):
-        pause('Disk throughput or IOPS exceeds the admission pressure threshold')
+        pause('Disk throughput or IOPS exceeds the admission pressure threshold', transient=True)
     if ceiling == 0:
         pause('Worker admission is explicitly disabled')
     state = 'critical' if emergencies else 'paused' if capacity == 0 else 'throttled' if capacity < ceiling else 'normal'
     return {'capacity':capacity, 'state':state,
             'action':'terminate_active' if emergencies else 'pause_admission' if capacity == 0 else 'none',
             'reasons':list(dict.fromkeys(reasons)), 'alerts':list(dict.fromkeys(alerts)),
+            'transient_pressure':transient_pressure, 'recovery_required':recovery_required,
             'critical_reasons':list(dict.fromkeys(emergencies)), 'sustained_critical':list(dict.fromkeys(sustained))}
 
 
 class GovernorState:
-    """Pure state transition: drop immediately, recover slowly without gate swaps."""
+    """Pause new starts on congestion; preserve protective recovery hysteresis.
+
+    A transient CPU/disk event remembers the previously established capacity,
+    which can reopen on the next healthy sample. It never invents new capacity:
+    startup and any increase beyond that plateau still ramp, and a protective
+    or sustained-critical condition invalidates the remembered plateau.
+    """
     def __init__(self):
         self.capacity = 0
         self.healthy_since = None
         self.healthy_samples = 0
         self.critical_since: dict[str, float] = {}
         self.last_sample = None
+        self._transient_ceiling = None
 
     def apply(self, decision: dict, policy: HardwarePolicy, now: float) -> dict:
         if not _number(now) or (self.last_sample is not None and now < self.last_sample):
@@ -302,6 +320,14 @@ class GovernorState:
         if result['critical_reasons']:
             result.update(capacity=0, state='critical', action='terminate_active')
         desired = result['capacity']
+        if result['critical_reasons'] or decision.get('recovery_required', True):
+            self._transient_ceiling = None
+        elif decision.get('transient_pressure') and desired < self.capacity:
+            self._transient_ceiling = max(self.capacity, self._transient_ceiling or 0)
+        if self._transient_ceiling is not None and desired > self.capacity:
+            self.capacity = min(desired, self._transient_ceiling)
+            if self.capacity == self._transient_ceiling:
+                self._transient_ceiling = None
         if desired <= self.capacity:
             if desired < self.capacity or desired == 0:
                 self.healthy_since = None
@@ -321,6 +347,7 @@ class GovernorState:
                     result['state'] = 'paused' if self.capacity == 0 else 'throttled'
                     result['action'] = 'pause_admission' if self.capacity == 0 else 'none'
         result.update(capacity=self.capacity, raw_capacity=desired,
+                      transient_recovery_capacity=self._transient_ceiling,
                       healthy_samples=self.healthy_samples, recovery_started_at=self.healthy_since)
         return result
 

@@ -45,6 +45,9 @@ def _finite(value: Any, name: str, minimum: float = 0, maximum: float | None = N
 def _cpu(sample_seconds: float) -> dict[str, Any]:
     result: dict[str, Any] = {
         "available": False, "count": None, "percent": None,
+        "host_logical_count": None, "allowed_logical_processors": None,
+        "utilization_scope": "host_all_logical_processors",
+        "capacity_scope": "host_all_logical_processors",
         "physical_count": None, "physical_count_available": False,
         "physical_count_source": "psutil.cpu_count(logical=False)", "physical_count_error": None,
         "source": "psutil.cpu_count/cpu_affinity/cpu_percent",
@@ -55,11 +58,14 @@ def _cpu(sample_seconds: float) -> dict[str, Any]:
         count = psutil.cpu_count(logical=True)
         if not isinstance(count, int) or count < 1:
             raise ValueError("OS did not report a usable CPU count")
+        result['host_logical_count'] = count
         process = psutil.Process()
         if hasattr(process, "cpu_affinity"):
             affinity = process.cpu_affinity()
             if not affinity:
                 raise ValueError("OS reported no CPUs in process affinity")
+            result['allowed_logical_processors'] = affinity
+            result['capacity_scope'] = 'process_affinity'
             count = min(count, len(affinity))
         result["count"] = count
         try:
@@ -70,6 +76,9 @@ def _cpu(sample_seconds: float) -> dict[str, Any]:
             result['physical_count_available'] = True
         except _PROBE_ERRORS as exc:
             result['physical_count_error'] = _error(exc)
+        # cpu_percent is a host-wide measurement. Affinity limits the seat count,
+        # not this percentage's denominator. Never subtract controller/pool CPU
+        # percentages from it; those measurements describe different scopes.
         result["percent"] = _finite(psutil.cpu_percent(interval=sample_seconds), "CPU utilization", maximum=100)
         result["available"] = True
     except _PROBE_ERRORS as exc:

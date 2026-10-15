@@ -259,7 +259,7 @@ def test_hysteresis_never_releases_new_capacity_from_a_replaced_gate():
     assert state.apply(safe,policy,5)['capacity']==1
     assert state.apply(safe,policy,10)['capacity']==1  # only one fresh recovery sample
     assert state.apply(safe,policy,11)['capacity']==2
-    pressure=policy_case(); pressure['cpu']['percent']=96
+    pressure=policy_case(); pressure['memory']['available_mb']=2000
     assert state.apply(assess_resources(pressure,policy),policy,12)['capacity']==0
     assert state.apply(safe,policy,13)['capacity']==0
     assert state.apply(safe,policy,18)['capacity']==1
