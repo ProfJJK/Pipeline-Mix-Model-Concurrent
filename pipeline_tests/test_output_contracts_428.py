@@ -42,7 +42,8 @@ def test_initial_prompt_and_validator_use_identical_contract_and_known_bindings(
 def test_feedback_is_bounded_safe_and_never_exposes_answer_content():
     node = chapter()
     with pytest.raises(OutputFormatError) as caught:
-        validate_output_format(node, {'chapter_id': 'secret model content', 'artifact_text': 42})
+        validate_output_format(node, {'chapter_id': 'storage', 'artifact_text': 42,
+                                     'private_reason': 'secret model content'})
     feedback = caught.value.as_feedback()
     assert 'secret model content' not in json.dumps(feedback)
     assert {'path': '$.artifact_text', 'code': 'wrong_type'} in feedback['issues']
@@ -71,9 +72,24 @@ def test_semantic_identity_failure_is_not_a_format_correction():
     node = chapter()
     output = {**prepare_output_contract(node)['handoff']['response'],
               'artifact_text': 'Actual content', 'chapter_id': 'wrong-owner'}
-    validate_output_format(node, output)
+    with pytest.raises(ValueError, match='commitment') as caught:
+        validate_output_format(node, output)
+    assert not isinstance(caught.value, OutputFormatError)
     with pytest.raises(ValueError, match='ownership') as caught:
         JobStore._chapter(node, output)
+    assert not isinstance(caught.value, OutputFormatError)
+
+
+def test_wrong_supplied_hash_beats_missing_format_fields():
+    node = dict(kind='SYNTHESIS', payload=dict(chapter_hashes={'first': 'a'*64},
+        chapter_output_hashes={'first': 'b'*64}, coverage_report_sha256='c'*64,
+        wbs_tasks_by_chapter={'first': []}))
+    with pytest.raises(ValueError, match='commitment') as caught:
+        validate_output_format(node, {'chapter_hashes': {'first': 'f'*64}})
+    assert not isinstance(caught.value, OutputFormatError)
+    micro = execution_node()
+    with pytest.raises(ValueError, match='digest') as caught:
+        validate_output_format(micro, {'deliverables': [{'name': 'wrong', 'content': 'data', 'sha256': 'f'*64}]})
     assert not isinstance(caught.value, OutputFormatError)
 
 

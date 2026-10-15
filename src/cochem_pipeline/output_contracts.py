@@ -387,6 +387,32 @@ def prepare_output_contract(node):
 def validate_output_format(node, output):
     """Classify only syntactic/structural mistakes; all semantics stay separate."""
     prepared = prepare_output_contract(node)
+    if isinstance(output, dict):
+        # A broken commitment is semantic even if other fields are missing.
+        # Do not turn supplied false evidence into a free formatting correction.
+        commitments = {'chapter_id', 'artifact_uri', 'chapter_hashes', 'chapter_output_hashes',
+            'coverage_report_sha256', 'wbs_tasks_by_chapter', 'plan_sha256', 'artifact_hashes',
+            'failure_evidence_sha256', 'reconciliation_manifest_sha256', 'path',
+            'file_sha256', 'diff_sha256', 'test_receipt_sha256'}
+        for key, expected in prepared['handoff']['fixed_bindings'].items():
+            if key in commitments and key in output and output[key] != expected:
+                raise ValueError('Supplied output commitment differs from the captured assignment: '+key)
+        stage = (node['payload'].get('planning_intent') or {}).get('stage')
+        if node['kind'] == 'TASK_PLAN' and stage in {'SIMPLE_EXECUTION', 'MICROTASK_EXECUTION', 'MICROTASK_SWARM_BATCH'}:
+            def check_new_hashes(value):
+                if not isinstance(value, dict):
+                    return
+                for item in value.get('deliverables', []) if isinstance(value.get('deliverables'), list) else ():
+                    if (isinstance(item, dict) and item.get('sha256') is not None
+                            and isinstance(item.get('content'), str)
+                            and item['sha256'] != hashlib.sha256(item['content'].encode('utf-8')).hexdigest()):
+                        raise ValueError('Supplied deliverable digest does not match its exact content')
+            if stage != 'MICROTASK_SWARM_BATCH':
+                check_new_hashes(output)
+            else:
+                members = output.get('subagent_outputs', output)
+                for item in members.values() if isinstance(members, dict) else members if isinstance(members, list) else ():
+                    check_new_hashes(item.get('output', item) if isinstance(item, dict) else item)
     issues = []
 
     def visit(value, spec, path):
