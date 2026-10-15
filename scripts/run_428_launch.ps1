@@ -236,7 +236,7 @@ function Assert-428PortFree {
 }
 
 function Assert-428PrivateReceipt {
-    param([string]$Path,[string]$PrivateRoot=$(if(Get-Variable -Name Migration428 -Scope Script -ErrorAction SilentlyContinue){$script:Migration428}else{'C:\Program Files\CoChem\Migration4.2.8-windows-20261014-v3'}))
+    param([string]$Path,[string]$PrivateRoot=$(if(Get-Variable -Name Migration428 -Scope Script -ErrorAction SilentlyContinue){$script:Migration428}else{'C:\Program Files\CoChem\Migration4.2.8-windows-20261014-v4'}))
     $full=Get-LocalPath $Path
     $root=Get-LocalPath $PrivateRoot
     if(-not $full.StartsWith($root+'\',[StringComparison]::OrdinalIgnoreCase)){throw '4.2.8 private receipt must reside under the protected migration root.'}
@@ -313,6 +313,52 @@ function Wait-428Health {
     throw 'Controller health did not verify within its unattended bound.'
 }
 
+function Get-428FileSha256 {
+    param([string]$Path)
+    $stream=[IO.File]::Open($Path,'Open','Read','Read')
+    try{$sha=[Security.Cryptography.SHA256]::Create()
+        try{[BitConverter]::ToString($sha.ComputeHash($stream)).Replace('-','').ToLowerInvariant()}finally{$sha.Dispose()}
+    }finally{$stream.Dispose()}
+}
+
+function Set-428CatalogPointer {
+    # Recovery sitting only, while every controller is stopped. The previous
+    # pointer is preserved byte-for-byte in the sitting directory; the proposal
+    # it names is content-addressed and is never modified.
+    param([string]$Authority,[string]$SourcePointer,$PointerPin,$ProposalPin,[string]$ProposalSource,[string]$ProposalLeaf,[string]$Backup)
+    Assert-ProtectedPath $Authority
+    $current=Join-Path $Authority 'current-request.json'
+    if(-not (Test-Path -LiteralPath $current)){throw 'Recovery requires the existing protected catalog pointer.'}
+    Assert-ProtectedPath $current
+    $proposal=Join-Path $Authority $ProposalLeaf
+    if(Test-Path -LiteralPath $proposal){
+        Assert-ProtectedPath $proposal
+        if((Get-428FileSha256 $proposal) -cne $ProposalPin.sha256){throw 'Existing catalog proposal differs from the reviewed proposal.'}
+    }else{
+        Copy-VerifiedPayload ([pscustomobject]@{source=$ProposalSource;destination=$proposal;sha256=$ProposalPin.sha256;length=$ProposalPin.length})
+    }
+    $previousSha=Get-428FileSha256 $current
+    if($previousSha -ceq $PointerPin.sha256){throw 'The reviewed catalog pointer is already current; no automatic repeat.'}
+    $pending=Join-Path $Authority ('current-request.'+[Guid]::NewGuid().ToString('N')+'.pending')
+    Copy-VerifiedPayload ([pscustomobject]@{source=$SourcePointer;destination=$pending;sha256=$PointerPin.sha256;length=$PointerPin.length})
+    if(Test-Path -LiteralPath $Backup){throw 'Preserve the existing catalog pointer backup.'}
+    [IO.File]::Replace($pending,$current,$Backup)
+    Assert-ProtectedPath $current
+    if((Get-428FileSha256 $current) -cne $PointerPin.sha256){throw 'Replaced catalog pointer did not verify.'}
+    if((Get-428FileSha256 $Backup) -cne $previousSha){throw 'Previous catalog pointer backup did not verify.'}
+    $previousSha
+}
+
+function Restore-428CatalogPointer {
+    param([string]$Authority,[string]$Backup,[string]$PreviousSha)
+    $current=Join-Path $Authority 'current-request.json'
+    if((Get-428FileSha256 $Backup) -cne $PreviousSha){throw 'Catalog pointer backup changed; preserve it.'}
+    $pending=Join-Path $Authority ('current-request.'+[Guid]::NewGuid().ToString('N')+'.pending')
+    Copy-VerifiedPayload ([pscustomobject]@{source=$Backup;destination=$pending;sha256=$PreviousSha;length=(Get-Item -LiteralPath $Backup).Length})
+    [IO.File]::Replace($pending,$current,[NullString]::Value)
+    if((Get-428FileSha256 $current) -cne $PreviousSha){throw 'Restored catalog pointer did not verify.'}
+}
+
 function Restore-428BeforeStart {
     param($Scheduler,$Folder,[string]$OriginalXml,[string]$Sddl,[string]$OldRoot,[bool]$MigrationRequested,[bool]$Migrated,[bool]$AlreadyStopped=$false)
     Assert-428PortFree
@@ -334,7 +380,7 @@ function Restore-428BeforeStart {
         Assert-428PortFree
         return 'PREVIOUS_STOPPED_RUNTIME_RESTORED_VERIFIED'
     }
-    $allowPaused=($OldRoot -ceq 'C:\Program Files\CoChem\Pipeline4.2.7-windows-20261009-r4')
+    $allowPaused=($OldRoot -cin @('C:\Program Files\CoChem\Pipeline4.2.7-windows-20261009-r4','C:\Program Files\CoChem\Pipeline4.2.8-windows-20261014-r3'))
     $instance=$task.Run($null)
     $health=if($allowPaused){Wait-428Health $OldRoot $true}else{Wait-428Health $OldRoot}
     $proof=Open-428ProcessProof $health $OldRoot
@@ -375,11 +421,13 @@ function Invoke-428Launch {
     param([string]$ManifestPath,[string]$ManifestHash,[bool]$ApplyRequested,[string]$Directory)
     $pins=[Collections.Generic.List[IO.Stream]]::new();$processes=$null;$mutex=$null;$locked=$false;$ownerMutex=$null;$ownerLocked=$false;$awake=$null
     $stopped=$false;$stopRequested=$false;$migrationRequested=$false;$migrated=$false;$startRequested=$false;$alreadyStoppedR4=$false;$phase='package'
-    $script:Root428='C:\Program Files\CoChem\Pipeline4.2.8-windows-20261014-r3'
+    $recovery428=$false;$pointerPreviousSha=$null;$pointerBackup=$null
+    $script:Root428='C:\Program Files\CoChem\Pipeline4.2.8-windows-20261014-r4'
+    $oldR3='C:\Program Files\CoChem\Pipeline4.2.8-windows-20261014-r3'
     $oldR7='C:\Program Files\CoChem\Pipeline4.2.7-windows-20261012-r7-v1'
     $oldR6='C:\Program Files\CoChem\Pipeline4.2.7-windows-20261012-r6-v1'
     $oldR4='C:\Program Files\CoChem\Pipeline4.2.7-windows-20261009-r4'
-    $script:Migration428='C:\Program Files\CoChem\Migration4.2.8-windows-20261014-v3'
+    $script:Migration428='C:\Program Files\CoChem\Migration4.2.8-windows-20261014-v4'
     $script:Sitting428=$null
     $startedUtc=[DateTime]::UtcNow
     $authority='C:\Program Files\CoChem\RoutingCatalog4.2.8';$folder=$null;$original=$null;$originalSddl=$null;$old=$null
@@ -422,7 +470,7 @@ function Invoke-428Launch {
         $ownerMutex=[Threading.Mutex]::new($false,'Global\CoChem428-OwnerSitting')
         try{$ownerLocked=$ownerMutex.WaitOne(0)}catch [Threading.AbandonedMutexException]{$ownerLocked=$true;throw 'An earlier 4.2.8 sitting was interrupted; preserve evidence.'}
         if(-not $ownerLocked){throw 'Another 4.2.8 sitting is already active.'}
-        foreach($path in @($script:Root428,$script:Migration428,$authority)){if(Test-Path -LiteralPath $path){throw 'A prior 4.2.8 target exists. Preserve it; no automatic repeat.'}}
+        foreach($path in @($script:Root428,$script:Migration428)){if(Test-Path -LiteralPath $path){throw 'A prior 4.2.8 target exists. Preserve it; no automatic repeat.'}}
         $awake=Start-428AwakeLease
         $phase='front_loaded_input'
         $frontLoaded=Invoke-428FrontLoadedInput $manifest $Directory $startedUtc
@@ -436,7 +484,15 @@ function Invoke-428Launch {
         $task=$folder.GetTask('CoChem-4.2.7-Warden');Assert-428TaskAcl $task
         $action=$task.Definition.Actions.Item(1)
         $old=[string]$action.WorkingDirectory
-        if($old -cnotin @($oldR7,$oldR6,$oldR4)){throw 'Live Warden working directory is not a recognized baseline root.'}
+        if($old -cnotin @($oldR7,$oldR6,$oldR4,$oldR3)){throw 'Live Warden working directory is not a recognized baseline root.'}
+        # Recovery: the live 4.2.8 -r3 runtime already migrated the database and
+        # holds its first catalog request. No migration or rollback runs; a new
+        # reviewed catalog request is published by the fresh -r4 runtime.
+        $recovery428=($old -ceq $oldR3)
+        if($recovery428){
+            if(-not (Test-Path -LiteralPath (Join-Path $authority 'current-request.json'))){throw 'Recovery requires the existing protected catalog authority.'}
+            Assert-ProtectedPath $authority
+        }elseif(Test-Path -LiteralPath $authority){throw 'A prior 4.2.8 target exists. Preserve it; no automatic repeat.'}
         Assert-ProtectedPath (Join-Path $old 'pipeline.json')
         $oldCfg=Get-Content -LiteralPath (Join-Path $old 'pipeline.json') -Raw|ConvertFrom-Json
         $script:targetRoot=$old;$null=Assert-428Tree;Assert-428Interpreter;$script:targetRoot=$script:Root428
@@ -455,7 +511,7 @@ function Invoke-428Launch {
             $task.Definition.Settings.MultipleInstances -ne 2 -or -not $triggerValid -or
             (-not $task.Enabled -and -not $alreadyStoppedR4)){throw 'Live Warden definition differs from verified baseline.'}
         $expectedOldArgs=$action.Arguments
-        $allowOldPaused=($old -ceq $oldR4)
+        $allowOldPaused=($old -ceq $oldR4 -or $recovery428)
         $original=$task.Xml;$originalSddl=$task.GetSecurityDescriptor(7)
         if($alreadyStoppedR4){
             Assert-428PortFree
@@ -463,6 +519,7 @@ function Invoke-428Launch {
         }else{
             if($task.GetInstances(0).Count -ne 1){throw 'Live Warden definition differs from verified baseline.'}
             $health=Get-428Health;Assert-428Health $health $old $allowOldPaused
+            if($recovery428 -and [string]$health.version -cne '4.2.8'){throw 'Recovery baseline is not the 4.2.8 controller.'}
             Assert-428WardenTask $task $original $originalSddl $old $expectedOldArgs $true ($oldTriggerCount -ge 1) $oldTriggerCount
         }
         $script:Sitting428='C:\Program Files\CoChem\R428Sitting-windows-20261014-'+[Guid]::NewGuid().ToString('N')
@@ -542,17 +599,29 @@ function Invoke-428Launch {
             Assert-428WardenTask $task $original $originalSddl $old $expectedOldArgs $false $false $oldTriggerCount
             Assert-428PortFree;$stopped=$true
         }
-        $phase='migration';Write-428Status $phase
-        Assert-ProtectedPath (Split-Path -Parent $script:Migration428)
-        $null=[IO.Directory]::CreateDirectory($script:Migration428,(New-428PayloadAcl 'source/knowledge/control' $true))
-        Assert-NoReparseAncestors $script:Migration428;Assert-ProtectedPath $script:Migration428
-        $migrationRequested=$true;$migration=Invoke-428Migration $scheduler $folder $false;$migrated=$true
-        New-ProtectedDirectory $authority
-        foreach($copy in @([pscustomobject]@{name='proposal.json';leaf=($manifest.proposal_sha256+'.json')},
-            [pscustomobject]@{name='pointer.json';leaf='current-request.json'})){
-            $source=Join-Path $Directory $copy.name;$destination=Join-Path $authority $copy.leaf
-            $pin=(@($manifest.files)|Where-Object{$_.name -ceq $copy.name})[0]
-            Copy-VerifiedPayload ([pscustomobject]@{source=$source;destination=$destination;sha256=$pin.sha256;length=$pin.length})}
+        if($recovery428){
+            # No migration: the -r3 controller already migrated and marked
+            # cutover (database overwrite rollback is closed). Only the catalog
+            # pointer changes, to a fresh reviewed request ID.
+            $phase='catalog_authority';Write-428Status $phase
+            $pointerPin=(@($manifest.files)|Where-Object{$_.name -ceq 'pointer.json'})[0]
+            $proposalPin=(@($manifest.files)|Where-Object{$_.name -ceq 'proposal.json'})[0]
+            $pointerBackup=Join-Path $script:Sitting428 'catalog-pointer-before.json'
+            $pointerPreviousSha=Set-428CatalogPointer $authority (Join-Path $Directory 'pointer.json') $pointerPin $proposalPin `
+                (Join-Path $Directory 'proposal.json') ($manifest.proposal_sha256+'.json') $pointerBackup
+        }else{
+            $phase='migration';Write-428Status $phase
+            Assert-ProtectedPath (Split-Path -Parent $script:Migration428)
+            $null=[IO.Directory]::CreateDirectory($script:Migration428,(New-428PayloadAcl 'source/knowledge/control' $true))
+            Assert-NoReparseAncestors $script:Migration428;Assert-ProtectedPath $script:Migration428
+            $migrationRequested=$true;$migration=Invoke-428Migration $scheduler $folder $false;$migrated=$true
+            New-ProtectedDirectory $authority
+            foreach($copy in @([pscustomobject]@{name='proposal.json';leaf=($manifest.proposal_sha256+'.json')},
+                [pscustomobject]@{name='pointer.json';leaf='current-request.json'})){
+                $source=Join-Path $Directory $copy.name;$destination=Join-Path $authority $copy.leaf
+                $pin=(@($manifest.files)|Where-Object{$_.name -ceq $copy.name})[0]
+                Copy-VerifiedPayload ([pscustomobject]@{source=$source;destination=$destination;sha256=$pin.sha256;length=$pin.length})}
+        }
         $phase='cutover';Write-428Status $phase
         $task=$folder.GetTask('CoChem-4.2.7-Warden');$definition=$task.Definition
         $action=$definition.Actions.Item(1);$action.Path=Join-Path $script:Root428 '.venv\Scripts\python.exe';$action.WorkingDirectory=$script:Root428
@@ -568,7 +637,11 @@ function Invoke-428Launch {
         $newArguments=$action.Arguments
         Assert-428WardenTask $task $original $originalSddl $script:Root428 $newArguments $true $false 1
         $startRequested=$true;$instance=$task.Run($null)
-        $health=Wait-428Health $script:Root428;$proof=Open-428ProcessProof $health $script:Root428
+        # Cutover proves identity (SYSTEM, root, stable PID/instance, process
+        # ownership). Admission is proved end to end by catalog publication,
+        # whose native control probe can only run with admitted capacity.
+        $health=Wait-428Health $script:Root428 $true;$proof=Open-428ProcessProof $health $script:Root428
+        $startedPid=$health.pid;$startedInstance=[string]$health.instance_id
         try{
             $task=$folder.GetTask('CoChem-4.2.7-Warden')
             if($task.GetInstances(0).Count -ne 1 -or $task.GetInstances(0).Item(1).InstanceGuid -cne $instance.InstanceGuid){throw '4.2.8 task instance differs.'}
@@ -576,15 +649,20 @@ function Invoke-428Launch {
             $null=$folder.RegisterTaskDefinition('CoChem-4.2.7-Warden',$definition,20,'SYSTEM',$null,5,$originalSddl)
             Assert-428WardenTask ($folder.GetTask('CoChem-4.2.7-Warden')) $original $originalSddl $script:Root428 $newArguments $true $true 1
         }finally{foreach($p in $proof){$p.Dispose()}}
-        $phase='catalog_publication';Write-428Status $phase;$deadline=[DateTime]::UtcNow.AddMinutes(30)
+        $phase='catalog_publication';Write-428Status $phase;$deadline=[DateTime]::UtcNow.AddMinutes(30);$catalog=$null
         do{
-            Start-Sleep -Seconds 5;$health=Get-428Health;Assert-428Health $health $script:Root428
+            Start-Sleep -Seconds 5
+            # A transient HTTP failure is retried until the deadline; a changed
+            # controller identity or a held catalog is never tolerated.
+            try{$health=Get-428Health}catch{continue}
+            Assert-428Health $health $script:Root428 $true
+            if($health.pid -ne $startedPid -or [string]$health.instance_id -cne $startedInstance){throw '4.2.8 controller restarted during catalog publication.'}
             $catalog=$health.catalog_activation
             if($catalog.status -cin @('PUBLISHED_IN_CALLER_TRANSACTION','ALREADY_PUBLISHED') -and $catalog.request_id -ceq $manifest.request_id -and
                 $catalog.policy_digest -ceq $manifest.catalog_policy_digest){break}
             if($catalog.status -ceq 'HELD'){throw '4.2.8 catalog control probe held. Preserve the running controller and evidence.'}
         }while([DateTime]::UtcNow -lt $deadline)
-        if($catalog.status -cnotin @('PUBLISHED_IN_CALLER_TRANSACTION','ALREADY_PUBLISHED') -or
+        if($null -eq $catalog -or $catalog.status -cnotin @('PUBLISHED_IN_CALLER_TRANSACTION','ALREADY_PUBLISHED') -or
             $catalog.request_id -cne $manifest.request_id -or $catalog.policy_digest -cne $manifest.catalog_policy_digest){throw 'Catalog publication exceeded its unattended bound.'}
         $record=@{schema='cochem-428-owner-sitting/1';status='R428_RUNNING_CATALOG_PUBLICATION_VERIFIED';version='4.2.8';
             source_commit=$manifest.source_commit;launch_manifest_sha256=$ManifestHash;request_id=$manifest.request_id;
@@ -594,6 +672,7 @@ function Invoke-428Launch {
         $failure=$_;$rollback='NOT_REQUIRED'
         if($stopped -and -not $startRequested){
             try{
+                if($null -ne $pointerPreviousSha){Restore-428CatalogPointer $authority $pointerBackup $pointerPreviousSha}
                 $rollback=Restore-428BeforeStart $scheduler $folder $original $originalSddl $old $migrationRequested $migrated $alreadyStoppedR4
             }catch{$rollback='HELD_PRESERVE_STOPPED_OR_RUNNING_STATE'}
         }elseif($stopRequested -or $startRequested){$rollback='HELD_PRESERVE_POSSIBLY_RUNNING_STATE'}

@@ -528,18 +528,12 @@ def gemini_binary_digest(spec):
         metadata = current.lstat()
         if stat.S_ISLNK(metadata.st_mode) or getattr(metadata, 'st_file_attributes', 0) & 0x400:
             raise ValueError('Agy executable cannot traverse a symbolic link or reparse point')
-    before = path.stat()
-    if not stat.S_ISREG(before.st_mode) or not 0 < before.st_size <= 1073741824:
-        raise ValueError('Agy native executable is missing or exceeds its bounded binary size')
-    digest = hashlib.sha256()
-    with path.open('rb') as stream:
-        while chunk := stream.read(1048576):
-            digest.update(chunk)
-    after = path.stat()
-    if (before.st_size, before.st_mtime_ns, before.st_ino, before.st_dev) != (
-            after.st_size, after.st_mtime_ns, after.st_ino, after.st_dev):
-        raise ValueError('Agy executable changed while validating its native contract')
-    actual = digest.hexdigest()
+    from .native_effort import verified_executable_sha256
+    try:
+        # Hashed once per physical file identity, not on every dispatch.
+        actual = verified_executable_sha256(path)
+    except ValueError as exc:
+        raise ValueError('Agy native executable is missing, oversized or changed while validating its native contract') from exc
     if actual != spec['inference_only']['executable_sha256']:
         raise ValueError('Agy executable does not match its reviewed inference-only contract')
     return actual

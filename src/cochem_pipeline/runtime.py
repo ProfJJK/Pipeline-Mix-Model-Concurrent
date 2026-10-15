@@ -140,6 +140,10 @@ class Runtime:
         oracle_dir.mkdir(exist_ok=True)
         self.oracle = Oracle(self.engine,oracle_dir/'tracking.db',self.trip)
         self.runner = NativeRunner(config)
+        # Verify provider binaries once, before admission opens and before the
+        # controller monitor's first CPU sample, instead of on every dispatch.
+        from .native_effort import prewarm_executable_digests
+        self.executable_digests = prewarm_executable_digests(getattr(config,'providers',{}))
         self.ramdisk = None
         self.coding = None
         self.docker = None
@@ -189,6 +193,7 @@ class Runtime:
         self.owner = 'warden-'+uuid.uuid4().hex
         self.event_cursor = 0
         self.last_capacity = 0
+        self.last_admission_action = None
         self.heartbeat = Heartbeat(config.private_root,__version__)
         self.pool = ThreadPoolExecutor(max_workers=min(getattr(config,'max_execution_slots',4),len(config.workers)),thread_name_prefix='pipeline')
         self.owner_approval_broker = None; self.task_planning = None
@@ -492,6 +497,7 @@ class Runtime:
                     'reasons':[*decision.get('reasons',[]),*controller.get('admission_reasons',controller['reasons'])],
                     'controller':controller}
         ceiling = decision['capacity']
+        self.last_admission_action = decision.get('action')
         self.store.set_transition_telemetry(decision)
         if decision.get('action') == 'terminate_active':
             with self.lock:

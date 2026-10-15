@@ -117,6 +117,22 @@ class CatalogController:
             self.status={'status':'PROBING','request_id':self.authority.request_id}
         except Exception as exc:self._hold(exc)
 
+    def _probe_lease_valid(self, reservation_id):
+        """Heartbeat for an admitted catalog probe.
+
+        A pause (capacity 0, action pause_admission) only blocks new work.
+        Revoking an admitted probe on a pause turned one controller CPU sample
+        into a permanent catalog hold; only shutdown, critical pressure
+        (terminate_active), or a cleaned or expired reservation revokes it,
+        exactly as ordinary jobs are revoked only on resource trips.
+        """
+        rt=self.runtime
+        if rt.stop_event.is_set() or getattr(rt,'last_admission_action',None)=='terminate_active':return False
+        with rt.store._connection() as conn:
+            row=conn.execute('SELECT lease_expires_at,cleanup_at FROM pipeline_catalog_probes WHERE reservation_id=?',
+                (reservation_id,)).fetchone()
+        return row is not None and row[1] is None and row[0]>time.time()
+
     def _execute(self, target, slot, token):
         from .worker import NativeRunner, WorkerCleanupError
         from .runtime import clear_ram_workspace
@@ -131,11 +147,7 @@ class CatalogController:
         node['fencing_token']=node['route']['fencing_token']=token['fencing_token']
         node['route']['reservation_id']=token['reservation_id']
         def heartbeat():
-            if rt.stop_event.is_set() or rt.last_capacity<=0:return False
-            with rt.store._connection() as conn:
-                row=conn.execute('SELECT lease_expires_at,cleanup_at FROM pipeline_catalog_probes WHERE reservation_id=?',
-                    (token['reservation_id'],)).fetchone()
-            return row is not None and row[1] is None and row[0]>time.time()
+            return self._probe_lease_valid(token['reservation_id'])
         descriptor=rt.ramdisk.workspace(slot)
         runner=NativeRunner(replace(rt.config,routing=policy,timeout_seconds=60))
         cleaned=True;accepted=False

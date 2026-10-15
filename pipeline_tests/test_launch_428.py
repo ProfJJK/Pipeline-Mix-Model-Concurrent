@@ -606,7 +606,7 @@ $restoreStoppedStatus=Restore-428BeforeStart $fakeScheduler $fakeFolder $r4Xml '
 
 
 def test_assert_428_private_receipt_and_migration_directory_creation_order(tmp_path: Path) -> None:
-    mig_dir = tmp_path / "CoChem" / "Migration4.2.8-windows-20261014-v3"
+    mig_dir = tmp_path / "CoChem" / "Migration4.2.8-windows-20261014-v4"
     mig_dir.mkdir(parents=True)
     receipt = mig_dir / "migration-428.json"
     receipt.write_text('{"status":"MIGRATION_428_VERIFIED"}', encoding="utf-8")
@@ -648,15 +648,96 @@ $untrustedHeld=$false;try{{Assert-428PrivateReceipt '{esc_receipt}'}}catch{{$unt
     assert row == {"ok": True, "outside_held": True, "untrusted_held": True}
 
     script_text = LAUNCH_SCRIPT.read_text(encoding="utf-8")
-    assert "$script:Migration428='C:\\Program Files\\CoChem\\Migration4.2.8-windows-20261014-v3'" in script_text
+    assert "$script:Root428='C:\\Program Files\\CoChem\\Pipeline4.2.8-windows-20261014-r4'" in script_text
+    assert "$script:Migration428='C:\\Program Files\\CoChem\\Migration4.2.8-windows-20261014-v4'" in script_text
     assert '--state-root "C:\\ProgramData\\CoChemPipeline427\\private"' in script_text
     assert "$alreadyStoppedR4=($old -ceq $oldR4 -and $oldTriggerCount -eq 0 -and $task.GetInstances(0).Count -eq 0)" in script_text
     assert "if($alreadyStoppedR4){" in script_text
     assert "if($old -ceq $oldR4){" in script_text
     assert (
         "Assert-ProtectedPath (Split-Path -Parent $script:Migration428)\n"
-        "        $null=[IO.Directory]::CreateDirectory($script:Migration428,(New-428PayloadAcl 'source/knowledge/control' $true))\n"
-        "        Assert-NoReparseAncestors $script:Migration428;Assert-ProtectedPath $script:Migration428"
+        "            $null=[IO.Directory]::CreateDirectory($script:Migration428,(New-428PayloadAcl 'source/knowledge/control' $true))\n"
+        "            Assert-NoReparseAncestors $script:Migration428;Assert-ProtectedPath $script:Migration428"
     ) in script_text
     assert prior_428.AGENT_HOLD_ROOT_NAME == Path(prior_428.AGENT_HOLD_REL).parts[0]
+
+
+def test_recovery_sitting_flow_is_bounded_and_never_migrates_428_state() -> None:
+    script = LAUNCH_SCRIPT.read_text(encoding="utf-8")
+    sequence = script.split("function Invoke-428Launch")[1]
+    # The live 4.2.8 -r3 runtime is the only recovery baseline.
+    assert "if($old -cnotin @($oldR7,$oldR6,$oldR4,$oldR3))" in sequence
+    assert "$recovery428=($old -ceq $oldR3)" in sequence
+    # Recovery requires the existing authority; a fresh launch requires its absence.
+    assert "Recovery requires the existing protected catalog authority." in sequence
+    assert "}elseif(Test-Path -LiteralPath $authority){throw 'A prior 4.2.8 target exists." in sequence
+    # Recovery never runs or rolls back the SYSTEM migration.
+    recovery_branch = sequence.split("if($recovery428){\n            # No migration")[1].split("}else{")[0]
+    assert "Invoke-428Migration" not in recovery_branch and "Set-428CatalogPointer" in recovery_branch
+    # Cutover proves identity; publication tolerates pauses but never a restart or a hold.
+    assert "$health=Wait-428Health $script:Root428 $true" in sequence
+    publication = sequence.split("$phase='catalog_publication'")[1].split("$record=@{")[0]
+    assert "Assert-428Health $health $script:Root428 $true" in publication
+    assert "4.2.8 controller restarted during catalog publication." in publication
+    assert "if($catalog.status -ceq 'HELD'){throw" in publication
+    assert publication.index("$catalog=$health.catalog_activation") < publication.index("if($catalog.status -ceq 'HELD')")
+    # A pre-start failure restores the exact previous pointer before restarting -r3.
+    rollback = sequence.split("}catch{\n        $failure=$_")[1]
+    assert rollback.index("Restore-428CatalogPointer") < rollback.index("Restore-428BeforeStart")
+
+
+def test_catalog_pointer_replacement_preserves_and_restores_previous_bytes(tmp_path: Path) -> None:
+    authority = tmp_path / "RoutingCatalog4.2.8"
+    authority.mkdir()
+    sitting = tmp_path / "sitting"
+    sitting.mkdir()
+    bundle = tmp_path / "bundle"
+    bundle.mkdir()
+    proposal = b'{"schema":"cochem-catalog-change-request/1"}\n'
+    proposal_sha = hashlib.sha256(proposal).hexdigest()
+    (authority / (proposal_sha + ".json")).write_bytes(proposal)
+    (bundle / "proposal.json").write_bytes(proposal)
+    old_pointer = ('{"schema":"cochem-catalog-authority-pointer/1","request_id":"' + "d" * 32
+                   + '","proposal_sha256":"' + proposal_sha + '"}\n').encode()
+    new_pointer = old_pointer.replace(b"d" * 32, b"e" * 32)
+    (authority / "current-request.json").write_bytes(old_pointer)
+    (bundle / "pointer.json").write_bytes(new_pointer)
+    esc = {k: str(v).replace("'", "''") for k, v in
+           dict(authority=authority, sitting=sitting, bundle=bundle).items()}
+    body = f"""
+function Assert-ProtectedPath {{param([string]$Path)}}
+function Copy-VerifiedPayload {{
+    param($File)
+    $target=[IO.FileStream]::new($File.destination,[IO.FileMode]::CreateNew)
+    try{{$bytes=[IO.File]::ReadAllBytes($File.source);$target.Write($bytes,0,$bytes.Length)}}finally{{$target.Dispose()}}
+    if((Get-428FileSha256 $File.destination) -cne $File.sha256){{throw 'copy hash differs'}}
+}}
+$pointerPin=[pscustomobject]@{{sha256='{hashlib.sha256(new_pointer).hexdigest()}';length={len(new_pointer)}}}
+$proposalPin=[pscustomobject]@{{sha256='{proposal_sha}';length={len(proposal)}}}
+$backup=Join-Path '{esc['sitting']}' 'catalog-pointer-before.json'
+$previous=Set-428CatalogPointer '{esc['authority']}' (Join-Path '{esc['bundle']}' 'pointer.json') $pointerPin $proposalPin `
+    (Join-Path '{esc['bundle']}' 'proposal.json') '{proposal_sha}.json' $backup
+$afterSet=Get-428FileSha256 (Join-Path '{esc['authority']}' 'current-request.json')
+$repeatHeld=$false;try{{$null=Set-428CatalogPointer '{esc['authority']}' (Join-Path '{esc['bundle']}' 'pointer.json') $pointerPin $proposalPin `
+    (Join-Path '{esc['bundle']}' 'proposal.json') '{proposal_sha}.json' (Join-Path '{esc['sitting']}' 'second.json')}}catch{{$repeatHeld=$true}}
+$badProposal=[pscustomobject]@{{sha256=('0'*64);length=1}}
+$proposalHeld=$false;try{{$null=Set-428CatalogPointer '{esc['authority']}' (Join-Path '{esc['bundle']}' 'pointer.json') $pointerPin $badProposal `
+    (Join-Path '{esc['bundle']}' 'proposal.json') '{proposal_sha}.json' (Join-Path '{esc['sitting']}' 'third.json')}}catch{{$proposalHeld=$true}}
+Restore-428CatalogPointer '{esc['authority']}' $backup $previous
+$afterRestore=Get-428FileSha256 (Join-Path '{esc['authority']}' 'current-request.json')
+$pending=@(Get-ChildItem -LiteralPath '{esc['authority']}' -Filter '*.pending').Count
+@{{previous=$previous;after_set=$afterSet;after_restore=$afterRestore;repeat_held=$repeatHeld;proposal_held=$proposalHeld;pending=$pending}}|ConvertTo-Json -Compress
+"""
+    row = run_ps_428(body)
+    assert row == {
+        "previous": hashlib.sha256(old_pointer).hexdigest(),
+        "after_set": hashlib.sha256(new_pointer).hexdigest(),
+        "after_restore": hashlib.sha256(old_pointer).hexdigest(),
+        "repeat_held": True,
+        "proposal_held": True,
+        "pending": 0,
+    }
+    assert (sitting / "catalog-pointer-before.json").read_bytes() == old_pointer
+    assert (authority / (proposal_sha + ".json")).read_bytes() == proposal
+
 

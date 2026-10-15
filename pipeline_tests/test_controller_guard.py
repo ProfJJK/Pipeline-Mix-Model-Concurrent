@@ -31,8 +31,8 @@ def test_strict_warden_budgets_never_report_ready_for_missing_or_excess_measurem
     assert result['action']==('none' if ready else 'pause_admission')
 
 
-def test_owner_amended_warden_memory_budget_is_200_mib_and_cpu_stays_5_percent():
-    assert (WARDEN_MEMORY_LIMIT_MB,WARDEN_CPU_LIMIT_PERCENT)==(200,5)
+def test_owner_amended_warden_budgets_are_200_mib_and_7_percent():
+    assert (WARDEN_MEMORY_LIMIT_MB,WARDEN_CPU_LIMIT_PERCENT)==(200,7)
     result=assess_controller({'rss_mb':WARDEN_MEMORY_LIMIT_MB+1,'cpu_percent':0})
     assert result['reasons']==['Warden resident memory exceeds its strict 200 MiB budget']
     assert (result['memory_limit_mb'],result['cpu_limit_percent'])==(WARDEN_MEMORY_LIMIT_MB,WARDEN_CPU_LIMIT_PERCENT)
@@ -139,7 +139,7 @@ def test_cpu_only_spike_pauses_on_the_same_sample_and_reopens_on_the_next_ready_
     paused=at(1,CPU_SPIKE)
     assert (paused['ready'],paused['admission_ready'],paused['recovery_hold'])==(False,False,False)
     assert paused['action']=='pause_admission'
-    assert paused['admission_reasons']==paused['reasons']==['Warden CPU utilization exceeds its strict 5% budget']
+    assert paused['admission_reasons']==paused['reasons']==['Warden CPU utilization exceeds its strict 7% budget']
     # A cached read inside the one-second window is the same paused sample.
     assert at(1.5,HEALTHY) is paused
     reopened=at(2,HEALTHY)
@@ -318,7 +318,7 @@ def test_runtime_tick_closes_on_a_cpu_only_spike_and_reopens_on_the_next_fresh_s
     for step in range(10,20):
         capacity,component=tick(step)
         assert capacity==0 and component['state']=='resource_pressure'
-        assert telemetry[-1]['reasons']==['Warden CPU utilization exceeds its strict 5% budget']
+        assert telemetry[-1]['reasons']==['Warden CPU utilization exceeds its strict 7% budget']
     capacity,component=tick(20)
     assert capacity==4 and component['state']=='healthy' and component['recovery_hold'] is False
     assert 'controller' not in telemetry[-1]

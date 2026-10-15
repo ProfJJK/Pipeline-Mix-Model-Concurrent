@@ -270,10 +270,10 @@ def test_real_offline_application_build_and_read_only_installer_plan_428(tmp_pat
     assert plan["schema"] == "cochem-428-offline-install/1"
     assert plan["status"] == "READ_ONLY_PLAN"
     assert plan["version"] == "4.2.8"
-    assert plan["revision"] == "windows-20261014-428-v3"
+    assert plan["revision"] == "windows-20261014-428-v4"
     assert plan["source_commit"] == commit
     assert plan["files"] == bundle_res["payload_files"]
     assert plan["activation_ready"] is False
-    assert plan["target_root"] == r"C:\Program Files\CoChem\Pipeline4.2.8-windows-20261014-r3"
+    assert plan["target_root"] == r"C:\Program Files\CoChem\Pipeline4.2.8-windows-20261014-r4"
     assert release_428.KNOWLEDGE_STATE_428 == release_428.OLD_R6_KNOWLEDGE_STATE
     assert not Path(plan["target_root"]).exists()

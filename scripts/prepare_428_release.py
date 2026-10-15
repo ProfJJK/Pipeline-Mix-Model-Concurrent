@@ -3,7 +3,7 @@
 Reuses reviewed R6 build helpers (`prepare_r6_install_bundle.read_pinned`,
 `prepare_r6_install_bundle.relative`, `prepare_r6_launch_package.read_regular`)
 while pinning 4.2.8 version metadata (`cochem-4.2.8-py3-none-any.whl`,
-`windows-20261014-428-v3`), binding `docs/4.2.8/VALIDATION.md` and
+`windows-20261014-428-v4`), binding `docs/4.2.8/VALIDATION.md` and
 `docs/4.2.8/routing-candidate.json`, and refusing any stale hardcoded R6
 recovery bundle or unreviewed source file. Never installs, elevates, or
 executes host acceptance.
@@ -55,9 +55,9 @@ PREVIOUS = Path(r"C:\Users\ansac\CoChem427\r6-bundle-359ca92\pipeline.json")
 PREVIOUS_PIN = "a8b9b2052402f30860188721f986686c5a2f6785e563045edf295adae250f288"
 OLD_R6_ROOT = r"C:\Program Files\CoChem\Pipeline4.2.7-windows-20261012-r6-v1"
 OLD_R6_KNOWLEDGE_STATE = r"C:\ProgramData\CoChemPipeline427\private\knowledge-windows-20261012-r6-v1"
-TARGET_ROOT_428 = r"C:\Program Files\CoChem\Pipeline4.2.8-windows-20261014-r3"
+TARGET_ROOT_428 = r"C:\Program Files\CoChem\Pipeline4.2.8-windows-20261014-r4"
 KNOWLEDGE_STATE_428 = OLD_R6_KNOWLEDGE_STATE
-REVISION_428 = "windows-20261014-428-v3"
+REVISION_428 = "windows-20261014-428-v4"
 WHEEL_NAME_428 = "cochem-4.2.8-py3-none-any.whl"
 DIST_INFO_428 = "cochem-4.2.8.dist-info"
 

@@ -15,6 +15,7 @@ import json
 from pathlib import Path
 import re
 import stat
+import threading
 
 
 _FIELDS = {'arguments', 'version_arguments', 'executable_sha256', 'version',
@@ -134,6 +135,68 @@ def effort_contract(provider, model, effort, spec):
     return contract
 
 
+_DIGEST_LOCK = threading.Lock()
+_DIGEST_CACHE: dict[tuple, str] = {}
+
+
+def _file_identity(path, metadata):
+    return (str(path), metadata.st_size, metadata.st_mtime_ns, metadata.st_ctime_ns,
+            metadata.st_ino, metadata.st_dev)
+
+
+def verified_executable_sha256(path, maximum=1073741824):
+    """SHA-256 of a regular executable, computed once per physical file identity.
+
+    The digest is reused only while the path's size, modification time, creation
+    time, file index and volume are unchanged; any replacement or rewrite is
+    hashed again. Reviewed executables live under ACL-protected Program Files
+    roots that only SYSTEM/Administrators can write, and every dispatch still
+    runs the native version probe. Hashing a provider binary (claude.exe is
+    235 MB) inside the controller on every dispatch exceeded the Warden's own
+    CPU budget and revoked the 4.2.8 catalog control probe.
+    """
+    path = Path(path)
+    before = path.stat()
+    if not stat.S_ISREG(before.st_mode) or not 0 < before.st_size <= maximum:
+        raise ValueError('Native executable is missing or exceeds its size bound')
+    key = _file_identity(path, before)
+    with _DIGEST_LOCK:
+        cached = _DIGEST_CACHE.get(key)
+    if cached is not None:
+        return cached
+    digest = hashlib.sha256()
+    with path.open('rb') as stream:
+        while chunk := stream.read(1048576):
+            digest.update(chunk)
+    if key != _file_identity(path, path.stat()):
+        raise ValueError('Native executable changed while it was being verified')
+    actual = digest.hexdigest()
+    with _DIGEST_LOCK:
+        # Bounded: a handful of reviewed provider executables per controller.
+        if len(_DIGEST_CACHE) >= 64:
+            _DIGEST_CACHE.clear()
+        _DIGEST_CACHE[key] = actual
+    return actual
+
+
+def prewarm_executable_digests(providers):
+    """Verify each configured provider executable once, before admission opens.
+
+    Returns {provider: sha256 or None}. A failure is not fatal here: the
+    dispatch-time contract check still refuses a missing or mismatched binary.
+    """
+    result = {}
+    for name, spec in sorted((providers or {}).items()):
+        executable = spec.get('executable') if isinstance(spec, dict) else None
+        if not isinstance(executable, str) or not Path(executable).is_absolute():
+            continue
+        try:
+            result[name] = verified_executable_sha256(executable)
+        except (OSError, ValueError):
+            result[name] = None
+    return result
+
+
 def effort_binary_digest(spec, contract):
     """Pin reviewed effort semantics to a regular, nonredirected executable."""
     path = Path(spec['executable'])
@@ -143,18 +206,10 @@ def effort_binary_digest(spec, contract):
         metadata = current.lstat()
         if stat.S_ISLNK(metadata.st_mode) or getattr(metadata, 'st_file_attributes', 0) & 0x400:
             raise ValueError('Native reasoning effort executable cannot traverse redirected paths')
-    before = path.stat()
-    if not stat.S_ISREG(before.st_mode) or not 0 < before.st_size <= 1073741824:
-        raise ValueError('Native reasoning effort executable is missing or exceeds its size bound')
-    digest = hashlib.sha256()
-    with path.open('rb') as stream:
-        while chunk := stream.read(1048576):
-            digest.update(chunk)
-    after = path.stat()
-    if (before.st_size, before.st_mtime_ns, before.st_ino, before.st_dev) != (
-            after.st_size, after.st_mtime_ns, after.st_ino, after.st_dev):
-        raise ValueError('Native executable changed during reasoning effort validation')
-    actual = digest.hexdigest()
+    try:
+        actual = verified_executable_sha256(path)
+    except ValueError as exc:
+        raise ValueError('Native reasoning effort executable is missing, oversized or changed during validation') from exc
     if actual != contract['executable_sha256']:
         raise ValueError('Native executable does not match the reviewed reasoning effort contract')
     return actual
