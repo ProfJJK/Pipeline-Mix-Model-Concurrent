@@ -145,10 +145,11 @@ def validate_simple_execution_output(
 class SimpleTaskExecutionRuntime:
     """Materializes and imports single-node executions for `READY` simple 4.2.8 tasks."""
 
-    def __init__(self, journal, store, *, clock=time.time):
+    def __init__(self, journal, store, *, clock=time.time, artifact_runtime=None):
         self.journal = journal
         self.store = store
         self.clock = clock
+        self.artifact_runtime = artifact_runtime
         with self.journal._write() as conn:
             conn.executescript(
                 """
@@ -371,6 +372,11 @@ class SimpleTaskExecutionRuntime:
         job = self.materialize(task_id)
         job_id = job["job_id"]
         if job["status"] == "COMPLETED":
+            if self.artifact_runtime is not None:
+                check = self.artifact_runtime.ensure_verification(job,
+                    [r['id'] for r in job['payload']['planning_intent']['task']['document']['requirements']])
+                if check['status'] != 'VERIFIED':
+                    return {**check, 'delay': 1}
             artifact = self._import_completed_execution(task_id, job)
             if artifact is None:
                 return {"status": "WAITING_FOR_NATIVE_CLEANUP", "job_id": job_id, "delay": 1}

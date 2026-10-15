@@ -197,7 +197,12 @@ class Runtime:
         self.heartbeat = Heartbeat(config.private_root,__version__)
         self.pool = ThreadPoolExecutor(max_workers=min(getattr(config,'max_execution_slots',4),len(config.workers)),thread_name_prefix='pipeline')
         self.owner_approval_broker = None; self.task_planning = None
+        self.task_artifacts = None
         if getattr(config, 'task_planning', None) is not None:
+            if self.ramdisk is None:
+                raise ValueError('Task execution requires verified RAM staging')
+            from .task_artifact_runtime_428 import TaskArtifactRuntime
+            self.task_artifacts = TaskArtifactRuntime(self)
             from .planning_runtime import PlanningController
             self.task_planning = PlanningController.from_runtime(self)
         self.catalog=None
@@ -286,6 +291,9 @@ class Runtime:
             # Each attempt owns its watcher. Stop it before supervisor cleanup,
             # so cleanup events cannot trip a completed job or a later occupant.
             coding = node['kind'].startswith('CODE_')
+            artifacts = getattr(self, 'task_artifacts', None)
+            task_fragment = artifacts is not None and artifacts.handles(node)
+            task_verifier = node['kind'] in ('TASK_VERIFY', 'TASK_TEST')
             def native_watch_start(workspace):
                 observer.schedule(SlotMonitor(self.oracle,job_id),str(workspace),recursive=True)
                 observer.start()
@@ -295,7 +303,7 @@ class Runtime:
                     observer.join(timeout=10)
                     if observer.is_alive():
                         raise WorkerCleanupError('Native filesystem monitor did not stop before controller staging')
-            if not coding:
+            if not coding and not task_fragment and not task_verifier:
                 if self.ramdisk is not None:
                     descriptor=self.ramdisk.workspace(slot)
                     descriptor.validate(identity=descriptor.identity)
@@ -320,6 +328,14 @@ class Runtime:
                 output,receipt,evidence,files = self.coding.run(node,slot,context,heartbeat,launched,
                     self.active[job_id]['cancel_event'],on_native_start=native_watch_start,on_native_end=native_watch_end,
                     container_reservation=self.active[job_id].get('container_reservation'))
+            elif task_fragment:
+                output,receipt = artifacts.run(node,slot,context,heartbeat,launched,
+                    self.active[job_id]['cancel_event'],on_native_start=native_watch_start,on_native_end=native_watch_end)
+            elif task_verifier:
+                if artifacts is None:
+                    raise ProviderFailure('configuration')
+                output,receipt,evidence = artifacts.run_verification(node,slot,heartbeat,
+                    self.active[job_id]['cancel_event'],container_reservation=self.active[job_id].get('container_reservation'))
             elif self.ramdisk is not None:
                 descriptor = self.ramdisk.workspace(slot)
                 output,receipt = self.runner.run(node,slot,context,heartbeat,launched,
@@ -335,11 +351,14 @@ class Runtime:
                 if coding:
                     self.store.complete_coding(job_id,node['attempt_id'],node['fencing_token'],output,receipt,
                                                evidence=evidence,files=files)
+                elif task_verifier:
+                    self.store.complete_task_verification(job_id,node['attempt_id'],node['fencing_token'],
+                                                          output,receipt,evidence=evidence)
                 else:
                     self.store.complete(job_id,node['attempt_id'],node['fencing_token'],output,receipt)
                 observed_success = self.store.get(job_id)['status'] == 'COMPLETED'
         except Exception as exc:
-            if node['kind']=='CODE_TEST' and self.docker is not None and not isinstance(exc,WorkerCleanupError):
+            if node['kind'] in ('CODE_TEST','TASK_TEST') and self.docker is not None and not isinstance(exc,WorkerCleanupError):
                 try:
                     proof=self.docker.confirm_attempt_cleanup(node['attempt_id'],controller_stopped=True)
                     if proof.get('cleanup_verified') is not True:

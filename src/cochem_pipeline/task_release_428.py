@@ -37,10 +37,12 @@ class TaskReleaseRuntime:
         board: MicrotaskBoardRuntime | None = None,
         owner_broker=None,
         clock=time.time,
+        artifact_runtime=None,
     ):
         self.journal = journal
         self.store = store
         self.clock = clock
+        self.artifact_runtime = artifact_runtime
         self.board = board or MicrotaskBoardRuntime(
             journal,
             store,
@@ -276,6 +278,23 @@ class TaskReleaseRuntime:
                     "status": "STALE_ASSEMBLY_OR_TEST_EVIDENCE",
                     "blocking_microtask_id": n["microtask_id"],
                 }
+
+        # Materialize physical checks on the existing admission pool. A native
+        # final-test response cannot manufacture a controller test receipt.
+        if self.artifact_runtime is not None:
+            for ft in ft_nodes:
+                check = self.artifact_runtime.ensure_verification(self.store.get(ft['job_id']), ft['requirement_ids'])
+                if check['status'] != 'VERIFIED':
+                    return {'ready': False, **check, 'blocking_microtask_id': ft['microtask_id']}
+                if check['output']['verification_kind'] != 'coding_green':
+                    return {'ready': False, 'status': 'WAITING_FOR_INDEPENDENT_CONTENT_VERIFICATION',
+                            'blocking_microtask_id': ft['microtask_id']}
+                self.record_controller_test_receipt(task_id, ft['microtask_id'], passed=True,
+                    exit_code=0, cleanup_verified=True, verified_requirements=check['output']['verified_requirements'],
+                    summary='Sealed requirement tests executed RED then GREEN by the protected offline runner',
+                    plan_generation_sha256=gen_sha,
+                    assembly_hashes={n['microtask_id']: n['artifact_sha256'] for n in asm_nodes},
+                    final_test_artifact_sha256=ft['artifact_sha256'])
 
         # 4. Verify controller-owned final-test receipts for every final_test node
         assembly_hashes = {n["microtask_id"]: n["artifact_sha256"] for n in asm_nodes}
