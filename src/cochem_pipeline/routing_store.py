@@ -504,7 +504,7 @@ def select(conn, job, current_policy=None):
     lineage_hold = lineage_unavailability(conn, job['job_id'], now)
     if lineage_hold == 'lineage_dispatch_budget_exhausted':
         return {'exhausted': 'Lineage dispatch budget exhausted'}, True
-    if lineage_hold == 'quality_window_in_flight':
+    if lineage_hold in {'quality_window_in_flight', 'quality_research_pending'}:
         conn.execute("UPDATE pipeline_routing_jobs SET state='WAITING',wait_reason=?,next_eligible_at=? WHERE job_id=?",
                      (lineage_hold, max(state['next_eligible_at'], now+1), job['job_id']))
         if state.get('wait_reason') != lineage_hold:

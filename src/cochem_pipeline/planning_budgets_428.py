@@ -373,6 +373,10 @@ def _live_quality_hold(conn, job_id, root):
                            'WHERE root=?', (root,)).fetchone()
         state = json.loads(row[0]) if row else {}
         failures = state.get('failures')
+        if (state.get('root') == root and state.get('stage') == 'PIVOT_RESEARCH'
+                and state.get('research_due') is True and type(failures) is int
+                and failures in (10, 20)):
+            return 'quality_research_pending'
         if (state.get('root') != root or state.get('stage') != 'READY' or state.get('research_due')
                 or type(failures) is not int or not 0 <= failures < 30):
             return 'quality_research_or_lock_required'

@@ -222,7 +222,7 @@ def test_promotion_controls_share_dispatch_and_time_without_resuming_quality(env
     control, budget = generation(env, 'control-a', cap=40, seconds=1000, member='control', aggregate=env['root'])
     assert budget.max_dispatches == 30-boundary and budget.expires_at == initial.expires_at
     with env['store']._write() as conn:
-        assert lineage_unavailability(conn, first['job_id'], env['clock'][0]) == 'quality_research_or_lock_required'
+        assert lineage_unavailability(conn, first['job_id'], env['clock'][0]) == 'quality_research_pending'
         assert lineage_unavailability(conn, control['job_id'], env['clock'][0]) is None
     spend(env, control['job_id'], 2)
     env['ledger'] = AttemptLedger(env['ledger'].path)
@@ -257,12 +257,42 @@ def test_queued_sibling_rechecks_live_quality_boundary_without_spending(env,stag
         state.update(stage=stage, failures=failures, research_due=True)
         env['ledger']._save(conn, state)
     with env['store']._write() as conn:
-        assert routes.preview_next_route(conn, second)['state'] == 'quality_research_or_lock_required'
-        with pytest.raises(LineageBudgetHold, match='quality_research_or_lock_required'):
+        reason = 'quality_research_pending' if stage == 'PIVOT_RESEARCH' else 'quality_research_or_lock_required'
+        assert routes.preview_next_route(conn, second)['state'] == reason
+        with pytest.raises(LineageBudgetHold, match=reason):
             routes.reserve(conn, second, {}, 'slot2')
         assert routes.select(conn, second) == (None, True)
     assert env['store'].get(first['job_id'])['routing']['dispatches'] == 0
     assert env['store'].get(second['job_id'])['routing']['dispatches'] == 0
+    saved = env['store'].get(second['job_id'])
+    assert saved['status'] == ('PENDING' if stage == 'PIVOT_RESEARCH' else 'BLOCKED')
+    assert saved['routing']['state'] == ('WAITING' if stage == 'PIVOT_RESEARCH' else 'BLOCKED')
+
+
+@pytest.mark.parametrize('boundary', [10, 20])
+def test_research_parking_survives_restart_then_rechecks_retained_floor(env, boundary):
+    sibling, _ = generation(env, 'parked', cap=50)
+    with env['ledger']._write() as conn:
+        state = env['ledger']._read(conn, env['root'])
+        state.update(stage='PIVOT_RESEARCH', failures=boundary, research_due=True)
+        env['ledger']._save(conn, state)
+    with env['store']._write() as conn:
+        assert routes.select(conn, sibling) == (None, True)
+    env['ledger'] = AttemptLedger(env['ledger'].path)
+    env['clock'][0] += 2
+    with env['ledger']._write() as conn:
+        state = env['ledger']._read(conn, env['root'])
+        state.update(stage='READY', research_due=False,
+                     floor=sibling['payload']['planning_intent']['complexity'] + 1)
+        env['ledger']._save(conn, state)
+    with env['store']._write() as conn:
+        assert routes.preview_next_route(conn, sibling)['state'] == 'retained_reasoning_floor'
+        assert routes.select(conn, sibling) == (None, True)
+    saved = env['store'].get(sibling['job_id'])
+    assert saved['status'] == 'BLOCKED'
+    assert saved['routing']['wait_reason'] == 'retained_reasoning_floor'
+    assert saved['routing']['dispatches'] == saved['routing']['failure_count'] == 0
+    assert env['ledger'].status(env['root'])['failures'] == boundary
 
 
 def test_live_quality_snapshot_prevents_boundary_commit_during_reservation(env):
