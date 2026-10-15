@@ -28,6 +28,7 @@ from cochem_pipeline.workflow_428 import (
 
 
 from pipeline_tests.test_planning_gateway_428 import accepted_receipt
+from pipeline_tests.task_catalog_fixtures import accepted_planning_store
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -39,9 +40,8 @@ def _sha256_text(text: str) -> str:
 
 
 def _make_store_and_journal(tmp_path: Path):
-    catalog = json.loads((ROOT / "docs" / "4.2.8" / "routing-candidate.json").read_text(encoding="utf-8"))
+    store, catalog = accepted_planning_store(tmp_path / "board.db")
     journal = PlanningJournal(tmp_path / "planning428.db", catalog, flash_context_limit=100000)
-    store = JobStore(tmp_path / "board.db", routing_policy=load_routing_policy({"policy_version": 3}))
     broker = OwnerApprovalBroker(tmp_path / "owner428.db", owner_secret=OWNER_SECRET)
     return store, journal, broker
 

@@ -18,6 +18,7 @@ from cochem_pipeline.task_execution_428 import (
 )
 from pipeline_tests.test_planning_gateway_428 import accepted_receipt
 from pipeline_tests.test_workflow_428 import document
+from pipeline_tests.task_catalog_fixtures import accepted_planning_store
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -56,9 +57,8 @@ def _valid_execution_output(srs_doc: dict) -> dict:
 
 @pytest.fixture
 def simple_env(tmp_path: Path):
-    catalog = json.loads((ROOT / "docs" / "4.2.8" / "routing-candidate.json").read_text(encoding="utf-8"))
+    store, catalog = accepted_planning_store(tmp_path / "jobs428.db")
     journal = PlanningJournal(tmp_path / "planning428.db", catalog, flash_context_limit=100000)
-    store = JobStore(tmp_path / "jobs428.db", routing_policy=load_routing_policy({"policy_version": 3}))
     clock = [100.0]
     exec_runtime = SimpleTaskExecutionRuntime(journal, store, clock=lambda: clock[0])
     controller = PlanningController(
@@ -187,7 +187,7 @@ def test_invalid_output_and_stale_claim_are_rejected(simple_env):
 
     # 1. Model prose alone is rejected
     prose_only = {"artifact_text": "I completed everything successfully."}
-    with pytest.raises(ValueError, match="Simple execution output requires"):
+    with pytest.raises(ValueError, match="supplied JSON format"):
         store.complete(
             claimed["job_id"],
             claimed["attempt_id"],

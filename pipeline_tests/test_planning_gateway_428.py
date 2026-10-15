@@ -10,15 +10,14 @@ from cochem_pipeline.routing import load_routing_policy
 from cochem_pipeline.store import JobStore, output_digest
 from cochem_pipeline.worker import node_prompt
 from pipeline_tests.test_workflow_428 import document
+from pipeline_tests.task_catalog_fixtures import accepted_planning_store
 
 
 @pytest.fixture
 def gateway(tmp_path):
-    catalog = json.loads((Path(__file__).parents[1]/'docs/4.2.8/routing-candidate.json').read_text())
+    store, catalog = accepted_planning_store(tmp_path/'jobs.db')
     journal = PlanningJournal(tmp_path/'planning.db', catalog, flash_context_limit=100000)
     journal.create('task', 'Write a small useful note')
-    policy = scoped_policy(load_routing_policy({'policy_version':3}), journal.intent('task'), catalog)
-    store = JobStore(tmp_path/'jobs.db', routing_policy=policy)
     bridge = PlanningGateway(journal, store)
     journal.model_result = bridge.model_result
     yield bridge
@@ -73,7 +72,8 @@ def test_stale_or_rewritten_intent_cannot_change_existing_job(gateway):
 
 
 def test_scoped_catalog_rejects_cross_tier_candidate_substitution(gateway):
-    policy=deepcopy(gateway.store.routing_policy)
+    policy=scoped_policy(load_routing_policy(gateway.store.routing_policy),
+                         gateway.journal.intent('task'), gateway.journal.catalog)
     policy['catalog']['tiers']['10']=list(reversed(policy['catalog']['tiers']['10']))
     with pytest.raises(ValueError):
         load_routing_policy(policy)

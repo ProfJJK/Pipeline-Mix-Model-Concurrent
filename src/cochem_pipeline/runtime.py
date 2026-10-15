@@ -116,6 +116,10 @@ class Runtime:
         self.store = JobStore(config.job_db,max_attempts=config.max_attempts,routing_policy=config.routing,
                               cleanup_boot_id=self.boot_id,governing_requirements=self.canonical_authority,
                               catalog_enabled=getattr(config,'catalog_activation',False))
+        self.accepted_task_catalog = None
+        if getattr(config, 'task_planning', None) is not None:
+            from .task_catalog_428 import initialize_task_catalog_authority
+            self.accepted_task_catalog = initialize_task_catalog_authority(self.store, config.task_planning)
         with self.store._connection() as conn:
             if conn.execute(
                 "SELECT 1 FROM sqlite_master WHERE type='table' AND name='pipeline_428_migration_state'"

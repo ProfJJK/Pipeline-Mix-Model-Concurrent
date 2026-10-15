@@ -392,40 +392,22 @@ def _candidate_unavailability(conn, job, state, target, current_policy, now):
     # The immutable old candidate list is never upgraded in place. Skip a
     # retired identity before allocating a reservation or consuming an attempt;
     # an unchanged later candidate may still execute with its original digest.
-    task_catalog = None
     if isinstance(job, dict) and job.get('kind') == 'TASK_PLAN':
-        if conn is not None:
-            from .catalog_journal import active_task_catalog
-            try:
-                task_catalog = active_task_catalog(conn)
-            except ValueError:
-                task_catalog = None
-        if task_catalog is None:
-            raw_tc = job.get('payload', {}).get('task_catalog')
-            if isinstance(raw_tc, dict) and raw_tc.get('schema') == 'cochem-task-routing/1' and raw_tc.get('host_accepted') is True:
-                task_catalog = raw_tc
-    if task_catalog is not None and current_policy is not None:
-        from .task_catalog_428 import classify_target_status, build_admission_policy_view
-        status = classify_target_status(target, current_policy, task_catalog)
-        if status is not None:
-            return status
-        current_policy = build_admission_policy_view(current_policy, task_catalog)
-    elif current_policy is not None and isinstance(job, dict) and job.get('kind') == 'TASK_PLAN':
-        raw_tc = job.get('payload', {}).get('task_catalog')
-        if isinstance(raw_tc, dict) and raw_tc.get('schema') == 'cochem-task-routing/1':
-            allowed_428 = {
-                (m.get('provider'), m.get('model'), m.get('effort'))
-                for m in raw_tc.get('models', {}).values()
-                if m.get('score_evidence') == 'PUBLISHER_OBSERVED' and m.get('native_acceptance') != 'RETIRED'
-            }
-            if (provider, target['model'], target.get('reasoning_effort')) not in allowed_428:
-                return 'retired_target'
-            extra_limits = (raw_tc.get('model_limits') or state['policy'].get('model_limits') or {})
-            merged_limits = dict(current_policy.get('model_limits') or {})
-            for k, lim in extra_limits.items():
-                if k not in merged_limits or merged_limits[k] is None:
-                    merged_limits[k] = lim
-            current_policy = {**current_policy, 'model_limits': merged_limits}
+        from .task_catalog_428 import (task_catalog_authority, classify_target_status,
+                                       build_admission_policy_view)
+        try:
+            task_catalog = task_catalog_authority(conn, job)
+            if current_policy is None:
+                from .catalog_journal import active_policy
+                current_policy = active_policy(conn).as_dict()
+            status = classify_target_status(target, current_policy, task_catalog)
+            if status is not None:
+                return status
+            current_policy = build_admission_policy_view(current_policy, task_catalog)
+        except (ValueError, TypeError, KeyError, sqlite3.Error):
+            # Hold only this planning route. Never fall back to caller-captured
+            # flags or benchmark evidence if durable authority is unavailable.
+            return 'task_catalog_unverified'
     elif current_policy is not None and not any(
             (provider, target['model'], target.get('reasoning_effort')) ==
             (entry['provider'], entry['model'], entry.get('reasoning_effort'))

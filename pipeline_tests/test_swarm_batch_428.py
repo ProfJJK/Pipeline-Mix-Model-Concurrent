@@ -19,6 +19,7 @@ from cochem_pipeline.planning_journal import PlanningJournal
 from cochem_pipeline.resource_limits import ResourceLimits
 from cochem_pipeline.routing import load_routing_policy
 from cochem_pipeline.store import JobStore
+from pipeline_tests.task_catalog_fixtures import accepted_planning_store
 from cochem_pipeline.swarm_batch_428 import (
     PROVIDER_SWARM_PROFILES,
     SwarmBatchRuntime,
@@ -54,9 +55,8 @@ def _load_catalog() -> dict[str, Any]:
 
 
 def _make_env(tmp_path: Path):
-    catalog = _load_catalog()
+    store, catalog = accepted_planning_store(tmp_path / "board.db")
     journal = PlanningJournal(tmp_path / "planning428.db", catalog, flash_context_limit=100000)
-    store = JobStore(tmp_path / "board.db", routing_policy=load_routing_policy({"policy_version": 3}))
     broker = OwnerApprovalBroker(tmp_path / "owner428.db", owner_secret=OWNER_SECRET)
     ledger = AttemptLedger(tmp_path / "attempts428.db")
     return catalog, store, journal, broker, ledger

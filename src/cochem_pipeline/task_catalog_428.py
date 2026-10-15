@@ -454,6 +454,54 @@ def classify_target_status(
     return None if tup in accepted_only_policy else "retired_target"
 
 
+def task_catalog_authority(conn, job: dict[str, Any]) -> dict[str, Any]:
+    """Bind a planning capture to protected history and return live authority.
+
+    A publisher score or a job's ``host_accepted`` flag is not authorization.
+    Old accepted captures remain valid records, while the current generation
+    controls which exact targets may start now. The caller owns the read/write
+    transaction so publication cannot split the history and active reads.
+    """
+    from .catalog_journal import active_task_catalog
+
+    if conn is None or not conn.in_transaction:
+        raise ValueError('Task catalog authority requires the caller transaction')
+    captured = job.get('payload', {}).get('task_catalog')
+    if (not isinstance(captured, dict) or captured.get('schema') != 'cochem-task-routing/1'
+            or captured.get('host_accepted') is not True):
+        raise ValueError('Planning capture is not an accepted task catalog')
+    active = active_task_catalog(conn)
+    if active is None:
+        raise ValueError('No protected active task catalog is installed')
+    captured_digest = digest(captured)
+    row = conn.execute('''SELECT catalog_json, policy_digest FROM pipeline_task_catalog_generations
+        WHERE catalog_sha256=?''', (captured_digest,)).fetchone()
+    if row is None:
+        raise ValueError('Planning catalog capture is absent from protected history')
+    historical = json.loads(row[0])
+    if (digest(historical) != captured_digest or historical != captured
+            or historical.get('host_accepted') is not True
+            or historical.get('policy_digest', row[1]) != row[1]):
+        raise ValueError('Planning catalog capture differs from protected history')
+    return active
+
+
+def initialize_task_catalog_authority(store, planning_config) -> dict[str, Any]:
+    """Adopt the exact protected installation baseline without replacing history."""
+    from .catalog_journal import initialize_task_catalog, active_policy, active_task_catalog
+
+    if not getattr(store, '_catalog_enabled', False):
+        raise ValueError('Task planning requires protected catalog journal activation')
+    installed = planning_config.read_catalog()
+    with store._write() as conn:
+        initialize_task_catalog(conn, installed)
+        current = active_task_catalog(conn)
+        if current is None:
+            raise ValueError('Task catalog initialization produced no active authority')
+        active_accepted_target_set(active_policy(conn), current)
+        return current
+
+
 def check_task_target_admission(
     conn,
     job: dict[str, Any],
@@ -468,6 +516,11 @@ def check_task_target_admission(
     from . import routing_store as routes
 
     observed = time.time() if now is None else now
+    if job.get('kind') == 'TASK_PLAN':
+        # The board journal, never this optional convenience argument, is the
+        # planning admission authority. Pass the unmodified policy for its pin.
+        policy = current_policy.as_dict() if isinstance(current_policy, RoutingPolicy) else current_policy
+        return routes._candidate_unavailability(conn, job, state, target, policy, observed)
     status = classify_target_status(target, current_policy, task_catalog)
     if status is not None:
         return status

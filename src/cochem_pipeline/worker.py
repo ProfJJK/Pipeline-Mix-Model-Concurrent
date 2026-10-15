@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import hashlib
-from contextlib import contextmanager
+from contextlib import contextmanager, closing
 import json
 import os
 from pathlib import Path
@@ -601,19 +601,27 @@ class NativeRunner:
         return dict(selected)
 
     def _is_route_target_enabled(self, node: dict, target) -> bool:
-        if self.config.routing.is_enabled(target):
-            return True
-        if node.get('kind') == 'TASK_PLAN' and self.config.routing.as_dict().get('catalog', {}).get('schema') != 'cochem-routing-catalog/3':
-            raw_tc = node.get('payload', {}).get('task_catalog')
-            if isinstance(raw_tc, dict) and raw_tc.get('schema') == 'cochem-task-routing/1' and raw_tc.get('host_accepted') is True:
-                plan_cfg = getattr(self.config, 'task_planning', None)
-                if plan_cfg is not None:
-                    from .task_routing import digest as task_digest
-                    if task_digest(raw_tc) != plan_cfg.catalog_sha256:
-                        return False
-                from .task_catalog_428 import classify_target_status
-                return classify_target_status(target.as_dict() if hasattr(target, 'as_dict') else target, self.config.routing, raw_tc) is None
-        return False
+        if node.get('kind') != 'TASK_PLAN':
+            return self.config.routing.is_enabled(target)
+        # Planning requires v3 and may use newly accepted targets absent from
+        # its installed baseline. Re-read live journal authority instead of
+        # trusting payload flags, a stale config, or a schema-version shortcut.
+        import sqlite3
+        from .catalog_journal import active_policy
+        from .task_catalog_428 import task_catalog_authority, classify_target_status
+        if not getattr(self.config, 'catalog_activation', False):
+            return False
+        try:
+            database = Path(self.config.job_db).resolve().as_uri() + '?mode=ro'
+            with closing(sqlite3.connect(database, uri=True, timeout=1)) as conn:
+                conn.execute('PRAGMA query_only=ON')
+                conn.execute('BEGIN')
+                catalog = task_catalog_authority(conn, node)
+                policy = active_policy(conn)
+                return classify_target_status(target.as_dict() if hasattr(target, 'as_dict') else target,
+                                              policy, catalog) is None
+        except (ValueError, TypeError, KeyError, AttributeError, OSError, sqlite3.Error):
+            return False
 
     @contextmanager
     def _managed(self,job_id,process):

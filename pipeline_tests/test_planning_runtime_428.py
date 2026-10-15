@@ -17,13 +17,13 @@ from pipeline_tests.test_config import config_document, write_config
 from pipeline_tests.test_planning_gateway_428 import accepted_receipt
 from pipeline_tests.test_service import endpoint, request
 from pipeline_tests.test_workflow_428 import document, research, wbs, microtasks
+from pipeline_tests.task_catalog_fixtures import accepted_planning_store
 
 
 @pytest.fixture
 def pump(tmp_path):
-    catalog = json.loads((Path(__file__).parents[1]/'docs/4.2.8/routing-candidate.json').read_text())
+    store, catalog = accepted_planning_store(tmp_path/'jobs.db')
     journal = PlanningJournal(tmp_path/'planning.db', catalog, flash_context_limit=100000)
-    store = JobStore(tmp_path/'jobs.db', routing_policy=load_routing_policy({'policy_version':3}))
     clock = [100.]
     controller = PlanningController(journal, store, clock=lambda: clock[0])
     controller.test_clock = clock
@@ -209,6 +209,7 @@ def test_candidate_cannot_activate_and_exact_file_pin_is_required(tmp_path, monk
     monkeypatch.setattr(windows, 'validate_code_path', checked.append)
     path = tmp_path/'catalog.json'
     candidate = deepcopy(pump.journal.catalog)
+    candidate['host_accepted'] = False
     path.write_bytes(json.dumps(candidate).encode())
     config = PlanningConfig(path, hashlib.sha256(path.read_bytes()).hexdigest())
     with pytest.raises(ValueError, match='host-accepted'):

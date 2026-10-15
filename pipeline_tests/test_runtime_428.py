@@ -42,6 +42,7 @@ from cochem_pipeline.workflow_428 import AttemptLedger
 from cochem_supervisor.repair_admission_428 import SupervisorRepairAdmission428
 from pipeline_tests.test_planning_gateway_428 import accepted_receipt
 from pipeline_tests.test_workflow_428 import document, microtasks, research, wbs
+from pipeline_tests.task_catalog_fixtures import accepted_planning_store
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -111,7 +112,7 @@ def _make_microtask_node_output(node: dict) -> dict:
 
 
 def _build_controller_env(tmp_path: Path):
-    catalog = _load_catalog()
+    store, catalog = accepted_planning_store(tmp_path / "jobs.db")
     clock = [1000.0]
     approval_store = OwnerApprovalBroker(
         tmp_path / "approvals428.db",
@@ -123,10 +124,6 @@ def _build_controller_env(tmp_path: Path):
         catalog,
         flash_context_limit=100000,
         owner_receipt=approval_store.load_for_journal,
-    )
-    store = JobStore(
-        tmp_path / "jobs.db",
-        routing_policy=load_routing_policy({"policy_version": 3}),
     )
     def _transport(url: str, headers: dict, timeout: float, max_bytes: int):
         from cochem_pipeline.research_search_428 import HttpResponseFixture
@@ -384,6 +381,7 @@ def test_routing_store_and_native_runner_accept_428_task_catalog_profiles_and_bl
             pointer_sha256="2" * 64,
             proposal_sha256="3" * 64,
         )
+        catalog = active_task_catalog(conn)
         conn.commit()
     finally:
         conn.close()
@@ -404,6 +402,7 @@ def test_routing_store_and_native_runner_accept_428_task_catalog_profiles_and_bl
         # NativeRunner.route accepts the 4.2.8 task catalog target when pinned
         runner_cfg = SimpleNamespace(
             routing=baseline,
+            catalog_activation=True, job_db=db_path,
             task_planning=PlanningConfig(cat_file, cat_sha, 100000),
         )
         runner = NativeRunner(runner_cfg)

@@ -20,6 +20,7 @@ from cochem_pipeline.store import JobStore
 from pipeline_tests.test_planning_gateway_428 import accepted_receipt
 from pipeline_tests.test_service import endpoint, request
 from pipeline_tests.test_workflow_428 import document
+from pipeline_tests.task_catalog_fixtures import accepted_planning_store
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -29,8 +30,7 @@ OWNER_SECRET = "owner-dedicated-secret-428-9f8e7d6c5b4a3210-high-entropy"
 @pytest.fixture
 def task_endpoint(endpoint, tmp_path: Path):
     """Connect 4.2.8 PlanningController and OwnerApprovalBroker to the loopback HTTP endpoint."""
-    catalog = json.loads((ROOT / "docs" / "4.2.8" / "routing-candidate.json").read_text(encoding="utf-8"))
-    store = JobStore(tmp_path / "jobs428.db", routing_policy=load_routing_policy({"policy_version": 3}))
+    store, catalog = accepted_planning_store(tmp_path / "jobs428.db")
     broker = OwnerApprovalBroker(
         tmp_path / "owner_broker.db",
         owner_secret=OWNER_SECRET,
