@@ -340,6 +340,7 @@ class MicrotaskBoardRuntime:
                 "candidates": candidates,
                 "pred_hashes": pred_hashes,
                 "pivot_context": node.get("pivot_context"),
+                "physical_retry": node.get("physical_retry"),
             }
         )
         root_id = "mt428-" + identity[:40]
@@ -531,6 +532,12 @@ class MicrotaskBoardRuntime:
             profile_id = validate_stage_output(job["payload"], job["output"], job["route"])
             validated = validate_microtask_execution_output(node, job["output"])
             validated["profile_id"] = profile_id
+            # These references belong to the committed controller receipt, never
+            # to model output. Dependency snapshots remain unambiguous after a
+            # repaired producer completes in the same plan generation.
+            validated["producer_job_id"] = job["job_id"]
+            validated["producer_attempt_id"] = job["attempt_id"]
+            validated["producer_fencing_token"] = job["fencing_token"]
             validated["predecessor_artifact_hashes"] = dict(
                 job["payload"].get("predecessor_artifact_hashes") or {}
             )
@@ -622,6 +629,46 @@ class MicrotaskBoardRuntime:
             ),
         )
 
+    def _physical_recovery_contexts(self, task_id, nodes):
+        """Derive recovery generations from accounted, committed verifier failures."""
+        if self.artifact_runtime is None or self.attempt_accounting is None:
+            return {}
+        contexts = {}
+        for final in (n for n in nodes if n['role'] == 'final_test'):
+            feedback = self.artifact_runtime.retry_feedback(task_id, final['microtask_id'])
+            if feedback is None:
+                continue
+            producer = self.store.get(feedback['producer_job_id'])
+            with self.attempt_accounting.ledger._write() as conn:
+                accounted = conn.execute("SELECT lineage_root FROM attempt428_outbox WHERE job_id=? "
+                    "AND attempt_id=? AND fencing_token=? AND status='RECONCILED' AND staged_outcome='quality_failure'",
+                    (producer['job_id'], producer['attempt_id'], producer['fencing_token'])).fetchone()
+            if accounted is None or accounted['lineage_root'] != feedback['lineage_root']:
+                continue
+            if self.attempt_accounting.ledger.status(accounted['lineage_root'])['stage'] != 'READY':
+                continue
+            code_repair = feedback['failure'].get('test_phase') != 'red'
+            affected = {final['microtask_id']}
+            if code_repair:
+                assembly = {n['microtask_id'] for n in nodes if n['role'] == 'assembly'
+                            and n['microtask_id'] in final['ancestors']}
+                if not assembly:
+                    raise ValueError('Failed final verification has no assigned assembly ancestor')
+                affected |= assembly
+                affected |= {n['microtask_id'] for n in nodes if set(n['ancestors']) & assembly}
+            for node in nodes:
+                if node['microtask_id'] not in affected:
+                    continue
+                context = contexts.setdefault(node['microtask_id'], dict(
+                    schema='cochem-microtask-physical-recovery/4.2.8', failed_checks=[], sealed_test_producer_ids=[]))
+                context['failed_checks'].append(deepcopy(feedback))
+                if code_repair:
+                    context['sealed_test_producer_ids'].append(producer['job_id'])
+        for context in contexts.values():
+            context['failed_checks'].sort(key=lambda f: (f['lineage_root'], f['retry_generation'], f['verification_job_id']))
+            context['sealed_test_producer_ids'] = sorted(set(context['sealed_test_producer_ids']))
+        return contexts
+
     def _materialize_internal(
         self,
         task_id: str,
@@ -631,6 +678,17 @@ class MicrotaskBoardRuntime:
     ) -> dict[str, Any]:
         gen_sha, compiled_nodes, state, catalog, limit = self._compile(task_id)
         ordered_nodes = self._topological_nodes(compiled_nodes)
+        recovery = self._physical_recovery_contexts(task_id, ordered_nodes)
+        for node in ordered_nodes:
+            context = recovery.get(node['microtask_id'])
+            if context is not None:
+                node['physical_retry'] = context
+                if node['role'] == 'assembly':
+                    # Assembly can repair its assigned implementation fragments;
+                    # test ownership stays with final_test and sealed tests persist.
+                    node['deliverables'] = sorted(set(node['deliverables']).union(*(
+                        set(prior['deliverables']) for prior in ordered_nodes
+                        if prior['role'] == 'implementation' and prior['microtask_id'] in node['ancestors'])))
         now = float(self.clock())
         preserved_ids = set(preserve_pending_retry_ids or ())
 
@@ -714,6 +772,14 @@ class MicrotaskBoardRuntime:
                     "SELECT * FROM microtask428_nodes WHERE node_key=?",
                     (node_key,),
                 ).fetchone()
+            if existing is not None:
+                prior_context = json.loads(existing['node_json']).get('physical_retry')
+                if node.get('physical_retry') is not None and prior_context != node['physical_retry']:
+                    prior_job = self.store.get(existing['job_id']) if existing['job_id'] else None
+                    if prior_job is None or prior_job['status'] in ('COMPLETED', 'FAILED', 'BLOCKED'):
+                        # Replace the projection only; immutable jobs, outputs,
+                        # verifier receipts and lineage counters are preserved.
+                        existing = None
             if existing is not None:
                 existing_by_id[mt_id] = dict(existing)
 
@@ -1126,7 +1192,7 @@ class MicrotaskBoardRuntime:
                     )
             else:
                 execution_node = dict(compiled_by_id[mt_id])
-                for key in ('effective_complexity', 'task_types', 'pivot_model', 'pivot_context'):
+                for key in ('effective_complexity', 'task_types', 'pivot_model', 'pivot_context', 'physical_retry'):
                     if key in admitted_node:
                         execution_node[key] = deepcopy(admitted_node[key])
                 board_job = self._submit_board_job_for_node(

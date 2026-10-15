@@ -82,3 +82,27 @@ Complexity 1–3 single-type pivots expose `execution_pivot` for the simple adap
 No terminal job or failure counter is reset. Planning stages after promotion
 continue the preserved planning lineage, while existing WBS child policy stays
 unchanged. Original approved SRS receipts stay valid only for their exact revision.
+
+## Physical verification recovery
+
+The microtask board now consumes committed verifier feedback only after the
+original producer fence has been reconciled as one quality failure and its
+lineage is ready. A green-test or content-review rejection regenerates the
+assigned assembly ancestors and their downstream final checks. Assembly may
+repair only its assigned implementation ancestor paths. A red-baseline failure
+regenerates the final check alone. At a ten-failure boundary, recovery remains
+held for the existing researched pivot; no counter or terminal job is reset.
+
+Each new capture carries the exact verifier feedback and sealed-test producer
+identities. Repeated polling retains that capture; committed new failures create
+new identities. Completed board fragments carry controller-owned producer job,
+attempt and fencing references so downstream physical snapshots can select the
+exact repaired producer within the same plan generation. Old jobs and evidence
+remain immutable. The artifact runtime separately enforces these references and
+test-file custody; model text does not establish either proof.
+
+Validation: 32 serialized source tests passed across physical-recovery board,
+microtask dependency, pivot, planning lifecycle and release suites. The recovery
+fixtures use the real temporary SQLite board and attempt ledger with inert
+verifier ports. These tests do not attest native provider or host deployment
+acceptance, and do not activate aggregate swarm execution.
