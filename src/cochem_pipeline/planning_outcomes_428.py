@@ -15,10 +15,11 @@ from .workflow_428 import _id
 
 class PlanningOutcomeRuntime:
     def __init__(self, journal, store, accounting, *, research_runtime=None,
-                 dossier_store=None, decision_store=None):
+                 dossier_store=None, decision_store=None, artifact_runtime=None):
         self.journal, self.store, self.accounting = journal, store, accounting
         self.research_runtime, self.dossier_store = research_runtime, dossier_store
         self.decision_store = decision_store
+        self.artifact_runtime = artifact_runtime
         with journal._write() as conn:
             conn.executescript('''
                 CREATE TABLE IF NOT EXISTS planning428_observed_outcomes(
@@ -64,6 +65,7 @@ class PlanningOutcomeRuntime:
             pending = [dict(row) for row in rows]
         count = 0
         for reservation in pending:
+            physical = None
             with self.store._connection() as conn:
                 job = self.store._get(conn, reservation['job_id'])
                 cleanup = conn.execute('SELECT cleared_at FROM pipeline_execution_cleanup '
@@ -91,6 +93,19 @@ class PlanningOutcomeRuntime:
                             or receipt.get('route_reservation_id') != reservation['reservation_id']):
                         raise ValueError('Completed reservation has no matching committed receipt')
                     disposition = 'success'
+                    from .task_artifact_runtime_428 import TaskArtifactRuntime
+                    if TaskArtifactRuntime.requires_terminal_verification(payload):
+                        if self.artifact_runtime is None:
+                            continue
+                        physical = self.artifact_runtime.verification_outcome(job)
+                        if physical['status'] == 'TASK_VERIFICATION_CANCELLED':
+                            disposition = 'CANCELLED_NOT_QUALITY'
+                        elif physical['status'] not in ('VERIFIED', 'REJECTED'):
+                            # A model proposal is not yet a completed external
+                            # result. Infrastructure holds do not spend quality.
+                            continue
+                        else:
+                            disposition = 'success' if physical['status'] == 'VERIFIED' else 'quality_failure'
                 else:
                     try:
                         disposition = classify_attempt_outcome(reason)
@@ -101,7 +116,9 @@ class PlanningOutcomeRuntime:
             evidence = dict(reservation_id=reservation['reservation_id'], job_id=job['job_id'],
                 attempt_id=reservation['attempt_id'], fencing_token=reservation['fencing_token'],
                 release_reason=reservation['release_reason'], cleanup_verified=True,
-                receipt=job.get('receipt') if disposition == 'success' else None)
+                receipt=job.get('receipt') if reservation['release_reason'] == 'completed' else None)
+            if physical is not None:
+                evidence['physical_verification'] = physical
             sha = digest(evidence)
             if disposition in ('success', 'quality_failure', 'availability'):
                 catalog = payload['task_catalog']

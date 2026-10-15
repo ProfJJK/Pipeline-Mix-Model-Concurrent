@@ -275,6 +275,7 @@ class TaskArtifactRuntime:
         files = self.store.coding_files(accepted['snapshot_sha256'])
         base = dict(schema='cochem-task-verification/4.2.8', task_id=intent['task_id'],
                     microtask_id=intent.get('microtask_id'), producer_job_id=job['job_id'],
+                    producer_attempt_id=job['attempt_id'], producer_fencing_token=job['fencing_token'],
                     source_modes=capture['modes'], source_snapshot_sha256=accepted['snapshot_sha256'],
                     producer_output_sha256=digest(job['output']), requirements=sorted(set(requirements)))
         phases = [('integrity', files)]
@@ -318,6 +319,130 @@ class TaskArtifactRuntime:
         return dict(status='VERIFIED', job_id=job_id, output=verified['output'],
                     source_snapshot_sha256=accepted['snapshot_sha256'],
                     integration_status='REVIEW_REQUIRED' if capture['project'] is not None else 'NOT_APPLICABLE')
+
+    @staticmethod
+    def requires_terminal_verification(payload):
+        stage = (payload.get('planning_intent') or {}).get('stage')
+        return (stage == 'SIMPLE_EXECUTION' or (stage == 'MICROTASK_EXECUTION'
+                and (payload.get('microtask_node') or {}).get('role') == 'final_test'))
+
+    def _committed_verification(self, job_id):
+        """Read only a fully committed controller observation and its custody.
+
+        The result is a compact binding, never raw provider text, raw command
+        output, or a caller's assertion that tests passed.
+        """
+        with self.store._connection() as conn:
+            check = self.store._get(conn, job_id)
+            if check['kind'] not in ('TASK_TEST', 'TASK_VERIFY') or check['status'] != 'COMPLETED':
+                raise ValueError('Physical outcome requires a committed verifier')
+            payload, output, receipt = check['payload'], check['output'], check['receipt']
+            stored = conn.execute('SELECT evidence_json,sha256 FROM coding_evidence WHERE job_id=?', (job_id,)).fetchone()
+            attempt = conn.execute('SELECT evidence_json,sha256 FROM coding_attempt_evidence '
+                'WHERE job_id=? AND attempt_id=? AND fencing_token=?',
+                (job_id, check['attempt_id'], check['fencing_token'])).fetchone()
+            cleanup = conn.execute('SELECT cleared_at FROM pipeline_execution_cleanup '
+                'WHERE job_id=? AND attempt_id=? AND fencing_token=?',
+                (job_id, check['attempt_id'], check['fencing_token'])).fetchone()
+            if (stored is None or attempt is None or tuple(stored) != tuple(attempt)
+                    or cleanup is None or cleanup[0] is None):
+                raise ValueError('Physical outcome is missing durable cleaned-up evidence')
+            evidence = json.loads(stored['evidence_json'])
+            if (payload['verification_key'] != digest({k: v for k, v in payload.items() if k != 'verification_key'})
+                    or stored['sha256'] != digest(evidence) or receipt.get('executor') != 'task_verifier'
+                    or receipt.get('output_sha256') != digest(output) or receipt.get('cleanup_verified') is not True
+                    or any(record.get(key) != check[key] for record in (receipt, evidence)
+                           for key in ('job_id', 'attempt_id', 'fencing_token'))
+                    or any(evidence.get(key) != payload[key]
+                           for key in ('verification_key', 'source_snapshot_sha256'))):
+                raise ValueError('Committed verification identities changed')
+            producer = self.store._get(conn, payload['producer_job_id'])
+            if (any(payload.get('producer_' + key) != producer[key] for key in ('attempt_id', 'fencing_token'))
+                    or payload['producer_output_sha256'] != digest(producer['output'])
+                    or payload['task_id'] != producer['payload']['planning_intent']['task_id']
+                    or payload.get('microtask_id') != producer['payload']['planning_intent'].get('microtask_id')):
+                raise ValueError('Physical outcome producer identity changed')
+            files = self.store._coding_files(conn, payload['source_snapshot_sha256'])
+            validate = verify_task_test_evidence if check['kind'] == 'TASK_TEST' else verify_artifact_evidence
+            if output != validate(payload, evidence, files):
+                raise ValueError('Committed physical result differs from its exact evidence')
+        accepted = self.accepted_snapshot(producer)
+        intent = producer['payload']['planning_intent']
+        lineage = (producer['payload'].get('microtask_node') or {}).get('attempt_lineage_id', intent['task_id'])
+        result = dict(status=output['status'], passed=output['passed'],
+            producer_job_id=producer['job_id'], producer_attempt_id=producer['attempt_id'],
+            producer_fencing_token=producer['fencing_token'], producer_output_sha256=digest(producer['output']),
+            producer_snapshot_sha256=accepted['snapshot_sha256'], verification_job_id=job_id,
+            verification_attempt_id=check['attempt_id'], verification_fencing_token=check['fencing_token'],
+            verification_output_sha256=digest(output), verification_key=payload['verification_key'],
+            source_snapshot_sha256=payload['source_snapshot_sha256'], evidence_sha256=stored['sha256'],
+            test_phase=payload['test_phase'], verification_kind=output['verification_kind'], lineage_root=_id(lineage))
+        if output['status'] == 'REJECTED':
+            expected = set((payload.get('requirement_test_names') or {}).values())
+            tests = sorted({(case.get('name', '').split('[', 1)[0], case.get('status'))
+                for command in evidence.get('commands', []) for case in command.get('junit_cases', [])
+                if case.get('name', '').split('[', 1)[0] in expected
+                and case.get('status') in ('passed', 'failed', 'skipped', 'error')})
+            category = evidence.get('failure_category')
+            result['failure'] = dict(schema='cochem-task-verification-feedback/4.2.8',
+                category='physical_verification', test_phase=payload['test_phase'],
+                reason=('BASELINE_ASSERTION_NOT_PROVEN' if payload['test_phase'] == 'red'
+                        else 'REQUIREMENT_TESTS_NOT_PASSED'),
+                execution_category=category if category in ('tests_failed', 'timeout', 'oom', 'output_limit') else None,
+                tests=[dict(name=name, status=status) for name, status in tests[:40]],
+                tests_truncated=len(tests) > 40, evidence_sha256=stored['sha256'],
+                source_snapshot_sha256=payload['source_snapshot_sha256'])
+        return result
+
+    def verification_outcome(self, job):
+        job = self.store.get(job['job_id'])
+        intent = job['payload']['planning_intent']
+        requirements = ((job['payload'].get('microtask_node') or {}).get('requirement_ids')
+                        or [item['id'] for item in intent['task']['document']['requirements']])
+        result = self.ensure_verification(job, requirements)
+        if result['status'] in ('VERIFIED', 'TASK_VERIFICATION_REJECTED'):
+            proof = self._committed_verification(result['job_id'])
+            if proof['verification_kind'] == 'artifact_integrity':
+                # Byte integrity does not yet establish content correctness.
+                # The independent-review adapter must bind its committed verdict.
+                return dict(status='WAITING_FOR_INDEPENDENT_CONTENT_VERIFICATION', physical_verification=proof)
+            return proof
+        return result
+
+    def retry_feedback(self, task_id, microtask_id=None):
+        """Return deterministic retry input from rejected producer attempts only.
+
+        Polling never changes generation, and a verifier re-run cannot create a
+        second generation for the same original producer fence. The caller must
+        still reconcile its attempt ledger and honor research/pivot boundaries.
+        """
+        _id(task_id)
+        if microtask_id is not None:
+            _id(microtask_id)
+        with self.store._connection() as conn:
+            if conn.execute('SELECT 1 FROM task428_cancelled_tasks WHERE task_id=?', (task_id,)).fetchone():
+                return None
+            rows = list(conn.execute("SELECT j.job_id FROM pipeline_jobs j JOIN pipeline_outputs o USING(job_id) "
+                "WHERE j.kind IN ('TASK_TEST','TASK_VERIFY') AND j.status='COMPLETED' "
+                "AND json_extract(j.payload_json,'$.task_id')=? "
+                "AND json_extract(j.payload_json,'$.microtask_id') IS ? "
+                "AND json_extract(o.output_json,'$.status')='REJECTED' "
+                'ORDER BY o.created_at,j.job_id LIMIT 129', (task_id, microtask_id)))
+        if len(rows) > 128:
+            raise ValueError('Verification history exceeds bounded lineage reconciliation')
+        rejected = {}
+        for row in rows:
+            result = self._committed_verification(row['job_id'])
+            key = (result['producer_job_id'], result['producer_attempt_id'], result['producer_fencing_token'])
+            rejected.setdefault(key, result)
+        if not rejected:
+            return None
+        # The first rejection of an original producer fence is authoritative;
+        # a duplicate verifier observation cannot rewrite existing retry input.
+        latest = list(rejected.values())[-1]
+        return dict(retry_generation=len(rejected), producer_job_id=latest['producer_job_id'],
+                    verification_job_id=latest['verification_job_id'], failure=latest['failure'],
+                    lineage_root=latest['lineage_root'])
 
     def run_verification(self, node, slot, heartbeat, cancel_event, *, container_reservation=None):
         from .container_policy import DockerPolicy

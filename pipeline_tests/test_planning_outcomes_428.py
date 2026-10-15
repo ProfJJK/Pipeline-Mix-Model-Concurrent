@@ -6,6 +6,7 @@ import pytest
 from cochem_pipeline.attempt_runtime_428 import AttemptAccountingRuntime
 from cochem_pipeline.failure_dossier_428 import FailureDossierStore
 from cochem_pipeline.planning_outcomes_428 import PlanningOutcomeRuntime
+from cochem_pipeline.output_contracts import prepare_output_contract
 from cochem_pipeline.research_evidence_428 import ResearchEvidenceStore
 from cochem_pipeline.research_runtime_428 import ResearchRuntime
 from cochem_pipeline.task_routing import digest
@@ -69,8 +70,8 @@ def test_format_correction_preserves_zero_quality_without_faking_availability(ou
     job = claim(pump)
     pump.store.clear_execution_quarantine(job['job_id'], job['attempt_id'], job['fencing_token'])
     assert pump.store.correct_output_format(job['job_id'], job['attempt_id'], job['fencing_token'], {
-        'schema': 'cochem-output-format-feedback/1', 'contract_sha256': 'a'*64,
-        'issues': ['Missing required result object']})
+        'schema': 'cochem-output-format-feedback/1', 'contract_sha256': prepare_output_contract(job)['contract_sha256'],
+        'issues': [{'path': '$.result', 'code': 'missing_field'}]})
     assert runtime.reconcile_task('task') == 1
     with runtime.accounting.ledger._write() as conn:
         assert conn.execute('SELECT count(*) FROM task428_attempts').fetchone()[0] == 0

@@ -97,7 +97,8 @@ class PlanningController:
         if outcome_runtime is None and attempt_runtime is not None:
             from .planning_outcomes_428 import PlanningOutcomeRuntime
             outcome_runtime = PlanningOutcomeRuntime(journal, store, attempt_runtime,
-                research_runtime=research_runtime, dossier_store=dossier_store, decision_store=decision_store)
+                research_runtime=research_runtime, dossier_store=dossier_store, decision_store=decision_store,
+                artifact_runtime=artifact_runtime)
         self.outcome_runtime = outcome_runtime
         self.pivot_bridge = None
         if outcome_runtime is not None and pivot_runtime is not None:

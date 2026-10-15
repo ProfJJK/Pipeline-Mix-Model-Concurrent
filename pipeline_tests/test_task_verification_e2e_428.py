@@ -21,7 +21,7 @@ from pipeline_tests.test_task_execution_428 import simple_env, _advance_to_ready
 
 
 @pytest.fixture
-def staged(simple_env, tmp_path, monkeypatch):
+def staged(simple_env, tmp_path, monkeypatch, request):
     controller, execution, journal, store = simple_env
     project = CodingProject.from_dict('fixture-project', dict(repository=str(tmp_path / 'repo'),
         branch='main', allowed_paths=['src'], test_paths=['tests']))
@@ -48,7 +48,10 @@ def staged(simple_env, tmp_path, monkeypatch):
     source = 'from pathlib import Path\n' + ''.join(
         f'def {name}():\n    assert (Path(__file__).parents[1] / "src/value.py").read_text() == "value = 1\\n"\n'
         for name in names.values())
-    files = {'src/value.py': 'value = 1\n', 'tests/test_bound.py': source}
+    proposed_value = getattr(request, 'param', 1)
+    if proposed_value == 0:
+        source = source.replace('value = 1', 'value = 0')
+    files = {'src/value.py': f'value = {proposed_value}\n', 'tests/test_bound.py': source}
     output = dict(artifact_text='Concrete proposal',
         deliverables=[dict(name=p, content=text, sha256=hashlib.sha256(text.encode()).hexdigest())
                       for p, text in files.items()],
@@ -181,6 +184,98 @@ def test_cancel_before_first_verification_never_materializes_a_child(staged):
     assert artifacts.ensure_verification(producer, requirements)['status'] == 'TASK_VERIFICATION_CANCELLED'
     with runtime.store._connection() as conn:
         assert not conn.execute("SELECT 1 FROM pipeline_jobs WHERE kind IN ('TASK_VERIFY','TASK_TEST')").fetchone()
+
+
+def outcome_runtime(simple_env, artifacts, tmp_path):
+    from cochem_pipeline.attempt_runtime_428 import AttemptAccountingRuntime
+    from cochem_pipeline.planning_outcomes_428 import PlanningOutcomeRuntime
+    from cochem_pipeline.workflow_428 import AttemptLedger
+    _, _, journal, store = simple_env
+    accounting = AttemptAccountingRuntime(AttemptLedger(tmp_path / 'outcomes.db'), store=store)
+    return PlanningOutcomeRuntime(journal, store, accounting, artifact_runtime=artifacts)
+
+
+@pytest.mark.parametrize('staged', [0, 2], indirect=True)
+def test_rejected_physical_check_charges_original_producer_once_with_restart_feedback(
+        staged, simple_env, monkeypatch, tmp_path):
+    artifacts, runtime, producer, requirements, _ = staged
+    outcomes = outcome_runtime(simple_env, artifacts, tmp_path)
+    # Planning completion is observable now; producer success must wait for its
+    # controller-owned evidence even though the model supplied valid JSON.
+    assert outcomes.reconcile_task('task') == 1
+    assert artifacts.retry_feedback('task') is None
+    with outcomes.accounting.ledger._write() as conn:
+        assert not conn.execute('SELECT 1 FROM attempt428_outbox WHERE job_id=?', (producer['job_id'],)).fetchone()
+    while True:
+        node, (output, receipt, evidence), engine = verify_next(artifacts, runtime.store, monkeypatch)
+        runtime.store.clear_execution_quarantine(node['job_id'], node['attempt_id'], node['fencing_token'])
+        runtime.store.complete_task_verification(node['job_id'], node['attempt_id'], node['fencing_token'],
+                                                 output, receipt, evidence=evidence)
+        if output['status'] == 'REJECTED':
+            break
+        assert outcomes.reconcile_task('task') == 0
+    proof = artifacts.verification_outcome(producer)
+    assert proof['status'] == 'REJECTED'
+    assert proof['producer_job_id'] == producer['job_id']
+    assert proof['producer_attempt_id'] == producer['attempt_id']
+    assert proof['verification_job_id'] == node['job_id']
+    assert outcomes.reconcile_task('task') == 1
+    assert outcomes.reconcile_task('task') == 0
+    assert outcomes.accounting.ledger.status('task')['failures'] == 1
+    with outcomes.accounting.ledger._write() as conn:
+        rows = conn.execute('SELECT * FROM attempt428_outbox WHERE job_id=?', (producer['job_id'],)).fetchall()
+        assert len(rows) == 1 and rows[0]['staged_outcome'] == 'quality_failure'
+        assert rows[0]['attempt_id'] == producer['attempt_id']
+    feedback = artifacts.retry_feedback('task')
+    assert feedback['retry_generation'] == 1
+    assert feedback['lineage_root'] == 'task'
+    assert feedback['producer_job_id'] == producer['job_id']
+    assert feedback['verification_job_id'] == node['job_id']
+    assert feedback['failure']['reason'] in ('BASELINE_ASSERTION_NOT_PROVEN', 'REQUIREMENT_TESTS_NOT_PASSED')
+    assert feedback['failure']['evidence_sha256'] == digest(evidence)
+    assert TaskArtifactRuntime(runtime).retry_feedback('task') == feedback
+    assert outcome_runtime(simple_env, artifacts, tmp_path).reconcile_task('task') == 0
+    assert artifacts.retry_feedback('task', 'unrelated-microtask') is None
+    # An identical duplicate controller observation cannot invent a second
+    # model attempt or a new generation.
+    with runtime.store._write() as conn:
+        runtime.store._insert(conn, 'duplicate-root', 'duplicate-root', None, 'MACRO_PLANNING_REQUEST',
+            'IN_PROGRESS', {'workflow_type': 'task_verification428', 'task_id': 'task'})
+        runtime.store._insert(conn, 'duplicate-check', 'duplicate-root', 'duplicate-root', 'TASK_TEST',
+                              'PENDING', node['payload'])
+    duplicate, (dup_output, dup_receipt, dup_evidence), _ = verify_next(artifacts, runtime.store, monkeypatch)
+    runtime.store.clear_execution_quarantine(duplicate['job_id'], duplicate['attempt_id'], duplicate['fencing_token'])
+    runtime.store.complete_task_verification(duplicate['job_id'], duplicate['attempt_id'], duplicate['fencing_token'],
+                                             dup_output, dup_receipt, evidence=dup_evidence)
+    assert artifacts.retry_feedback('task') == feedback
+
+
+def test_verified_physical_checks_commit_only_one_original_success(staged, simple_env, monkeypatch, tmp_path):
+    artifacts, runtime, producer, requirements, _ = staged
+    outcomes = outcome_runtime(simple_env, artifacts, tmp_path)
+    assert outcomes.reconcile_task('task') == 1
+    for phase in ('red', 'green'):
+        node, (output, receipt, evidence), _ = verify_next(artifacts, runtime.store, monkeypatch)
+        runtime.store.clear_execution_quarantine(node['job_id'], node['attempt_id'], node['fencing_token'])
+        runtime.store.complete_task_verification(node['job_id'], node['attempt_id'], node['fencing_token'],
+                                                 output, receipt, evidence=evidence)
+        assert outcomes.reconcile_task('task') == (0 if phase == 'red' else 1)
+    assert outcomes.reconcile_task('task') == 0
+    with outcomes.accounting.ledger._write() as conn:
+        rows = conn.execute('SELECT * FROM attempt428_outbox WHERE job_id=?', (producer['job_id'],)).fetchall()
+        assert len(rows) == 1 and rows[0]['staged_outcome'] == 'success'
+    assert artifacts.retry_feedback('task') is None
+
+
+def test_cancelled_verification_never_becomes_a_quality_failure(staged, simple_env, tmp_path):
+    artifacts, runtime, producer, requirements, _ = staged
+    outcomes = outcome_runtime(simple_env, artifacts, tmp_path)
+    assert outcomes.reconcile_task('task') == 1
+    artifacts.cancel_task('task')
+    assert outcomes.reconcile_task('task') == 1
+    with outcomes.accounting.ledger._write() as conn:
+        assert not conn.execute('SELECT 1 FROM attempt428_outbox WHERE job_id=?', (producer['job_id'],)).fetchone()
+    assert artifacts.retry_feedback('task') is None
 
 
 @pytest.mark.parametrize('cancel,cleanup', [(True, True), (False, False)])
