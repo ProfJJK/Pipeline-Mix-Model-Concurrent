@@ -236,3 +236,30 @@ def test_inner_fracture_final_proof_cannot_replace_original_release_scope(tmp_pa
         assert [r['microtask_id'] for r in result['release_manifest']['controller_test_receipts']] == [original['microtask_id']]
     else:
         assert result['status'] == 'MISSING_ORIGINAL_FINAL_SCOPE'
+
+
+from pipeline_tests.test_task_content_verification_e2e_428 import content_task
+
+
+def test_release_deliverables_use_final_verified_bytes_not_board_order(content_task, monkeypatch):
+    from copy import deepcopy
+    from cochem_pipeline.content_review_428 import ContentReviewRuntime
+    from pipeline_tests.test_fracture_artifacts_428 import accept_review
+    store, journal, artifacts, producer, args, _ = content_task
+    reviewer = ContentReviewRuntime(journal, store)
+    reviewer.ensure('content-task', **args)
+    accept_review(store)
+    assert reviewer.ensure('content-task', **args)['status'] == 'VERIFIED'
+    release = TaskReleaseRuntime(journal, store, artifact_runtime=artifacts)
+    board = release.board.materialize('content-task')
+    # Earlier output claims can coexist with corrected assembly/final bytes.
+    # A board projection never chooses the release version by iteration order.
+    item = board['nodes'][0]['output']['deliverables'][0]
+    item.update(content='obsolete earlier proposal', sha256=hashlib.sha256(b'obsolete earlier proposal').hexdigest())
+    monkeypatch.setattr(release.board, 'materialize', lambda _: deepcopy(board))
+    ready = release.verify_release_readiness('content-task')
+    assert ready['ready'] is True
+    final_files = store.coding_files(artifacts.accepted_snapshot(producer)['snapshot_sha256'])
+    for item in ready['release_manifest']['deliverables']:
+        assert item['content'].encode() == final_files[item['name']]
+        assert item['sha256'] == hashlib.sha256(final_files[item['name']]).hexdigest()

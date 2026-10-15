@@ -17,6 +17,7 @@ Guarantees:
 from __future__ import annotations
 
 from copy import deepcopy
+import hashlib
 import json
 import time
 from typing import Any
@@ -281,6 +282,16 @@ class TaskReleaseRuntime:
                 dep: nodes_by_id[dep]["artifact_sha256"]
                 for dep in sorted(n["depends_on"])
             }
+            if (self.artifact_runtime is not None and n['lineage_kind'] == 'FAILURE_FRACTURE'
+                    and not out.get('fracture_join_id')):
+                from .planning_fractures_428 import validated_external_predecessors
+                payload = self.store.get(n['job_id'])['payload']
+                external = validated_external_predecessors(self.artifact_runtime.runtime.task_planning, payload)
+                if any(dep not in nodes_by_id or nodes_by_id[dep]['artifact_sha256'] != value['artifact_sha256']
+                       for dep, value in external.items()):
+                    return {'ready': False, 'status': 'STALE_ASSEMBLY_OR_TEST_EVIDENCE',
+                            'blocking_microtask_id': n['microtask_id']}
+                actual_preds.update({dep: value['artifact_sha256'] for dep, value in external.items()})
             if recorded_preds != actual_preds:
                 return {
                     "ready": False,
@@ -394,6 +405,22 @@ class TaskReleaseRuntime:
                             "evidence": c["evidence"],
                         }
                     )
+
+        if self.artifact_runtime is not None:
+            # The board may contain earlier versions of the same path. Publish
+            # the bytes actually covered by final proof, never lexical node order.
+            verified_files = {}
+            for result in physical_results:
+                for path, data in self.store.coding_files(result['source_snapshot_sha256']).items():
+                    if path in verified_files and verified_files[path] != data:
+                        return {'ready': False, 'status': 'CONFLICTING_FINAL_SNAPSHOTS', 'path': path}
+                    verified_files[path] = data
+            missing = sorted(set(produced_deliverables) - set(verified_files))
+            if missing:
+                return {'ready': False, 'status': 'DELIVERABLE_NOT_IN_FINAL_SNAPSHOT',
+                        'missing_deliverables': missing}
+            produced_deliverables = {path: dict(name=path, content=verified_files[path].decode('utf-8'),
+                sha256=hashlib.sha256(verified_files[path]).hexdigest()) for path in produced_deliverables}
 
         reviewed_content_reqs = {r for review in content_reviews for r in review['reviewed_requirements']}
         release_covered_reqs = controller_verified_reqs | reviewed_content_reqs
