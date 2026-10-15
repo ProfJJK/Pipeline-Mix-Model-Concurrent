@@ -8,6 +8,7 @@ from cochem_pipeline.planning_pivots_428 import PlanningPivotRuntime
 from cochem_pipeline.planning_gateway import PlanningGateway
 from pipeline_tests.test_planning_gateway_428 import accepted_receipt
 from pipeline_tests.test_planning_pivots_428 import env, fail_window, complete_review
+from pipeline_tests.test_microtask_board_428 import _complete_claimed_job_for_node
 
 
 def finish_control(env, stage, *, accepted=True):
@@ -101,3 +102,51 @@ def test_fracture_recovers_graph_commit_before_projection(env, monkeypatch):
     bridge.step('task')
     assert env[2].status(boundary['lineage_root'])['failures'] == 10
     assert env[4].status('task')[-1]['status'] == 'FRACTURE_READY_NEW_CAPTURE'
+
+
+def attach_board(env):
+    board, bridge = env[3], env[-1]
+    board.fracture_runtime = bridge.fractures.fracture_runtime
+    board.fracture_planning = bridge.fractures
+
+
+def test_registered_fragments_dispatch_exact_profiles_then_hold_for_physical_join(env):
+    old, boundary, plan, review = prepare_fracture(env)
+    store, journal, ledger, board, outcomes, bridge = env
+    attach_board(env)
+    status = board.materialize('task')
+    fragments = [node for node in status['nodes'] if node['lineage_kind'] == 'FAILURE_FRACTURE']
+    assert len(fragments) == 4
+    assert sum(node['status'] == 'DISPATCHED' for node in fragments) == 2
+    root = boundary['lineage_root']
+    for role in ('implementation', 'implementation', 'assembly', 'final_test'):
+        job = store.claim('inert-fragment', worker_slot='slot1', allowed_kinds=['TASK_PLAN'], requires_cleanup=True)
+        assert job is not None
+        node = job['payload']['microtask_node']
+        assert node['role'] == role
+        registration = board.fracture_runtime.get_fracture_child(node['microtask_id'])
+        assert job['payload']['planning_intent']['candidate_profiles'] == [registration['selected_profile_id']]
+        assert node['complexity'] == registration['complexity']
+        assert ledger.status(node['attempt_lineage_id'])['root'] == root
+        _complete_claimed_job_for_node(store, job, node)
+        outcomes.reconcile_task('task')
+        board.materialize('task')
+    status = board.materialize('task')
+    original = next(node for node in status['nodes'] if node['microtask_id'] == old['payload']['microtask_node']['microtask_id'])
+    assert original['status'] == 'WAITING_FOR_FRACTURE_PHYSICAL_JOIN'
+    assert store.get(old['job_id'])['status'] == 'BLOCKED'
+    assert ledger.status(root)['failures'] == 10
+    assert store.claim('inert', worker_slot='slot1', allowed_kinds=['TASK_PLAN']) is None
+
+
+def test_fragment_failure_is_recorded_on_shared_root(env):
+    _, boundary, _, _ = prepare_fracture(env)
+    store, _, ledger, board, outcomes, _ = env
+    attach_board(env)
+    board.materialize('task')
+    job = store.claim('inert-fragment', worker_slot='slot1', allowed_kinds=['TASK_PLAN'], requires_cleanup=True)
+    store.clear_execution_quarantine(job['job_id'], job['attempt_id'], job['fencing_token'])
+    store.fail(job['job_id'], job['attempt_id'], job['fencing_token'], 'inert fragment failed', retry=True, category='code')
+    outcomes.reconcile_task('task')
+    assert ledger.status(boundary['lineage_root'])['failures'] == 11
+    assert env[-1]._source_job(boundary['lineage_root'])['job_id'] == job['job_id']

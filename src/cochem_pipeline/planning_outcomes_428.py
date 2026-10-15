@@ -37,12 +37,12 @@ class PlanningOutcomeRuntime:
         intent = payload['planning_intent']
         if intent['task_id'] != task_id:
             raise ValueError('Outcome belongs to another planning task')
+        if intent.get('attempt_lineage_id'):
+            return _id(intent['attempt_lineage_id'])
         if intent['stage'] in ('MICROTASK_SWARM_BATCH', 'PIVOT_REVIEW', 'FRACTURE_PLAN', 'FRACTURE_REVIEW'):
             # Individual outcomes are fenced by complete_swarm_batch; charging
             # this aggregate reservation would double-charge its children.
             return None
-        if intent.get('attempt_lineage_id'):
-            return _id(intent['attempt_lineage_id'])
         node = payload.get('microtask_node')
         if node is not None:
             return _id(node['attempt_lineage_id'])
@@ -138,6 +138,9 @@ class PlanningOutcomeRuntime:
                     model_family=profiles[0]['family'], complexity=payload['planning_intent']['complexity'])
                 state = self.accounting.record_board_outcome(job['job_id'], reservation['attempt_id'],
                     reservation['fencing_token'], category=disposition, evidence_sha256=sha)
+                # Fracture members share the original root. Boundary source
+                # discovery must find their exact failures under that root.
+                lineage = root
                 if state['research_due']:
                     self._boundary(task_id, state, payload)
             with self.journal._write() as conn:

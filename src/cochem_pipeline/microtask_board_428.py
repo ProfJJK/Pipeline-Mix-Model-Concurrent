@@ -169,6 +169,8 @@ class MicrotaskBoardRuntime:
         self.clock = clock
         self.swarm_batch_mode = bool(swarm_batch_mode)
         self.artifact_runtime = artifact_runtime
+        self.fracture_runtime = None
+        self.fracture_planning = None
         if isinstance(attempt_ledger, AttemptAccountingRuntime):
             self.attempt_accounting: AttemptAccountingRuntime | None = attempt_ledger
             self.attempt_ledger: AttemptLedger | None = attempt_ledger.ledger
@@ -267,7 +269,100 @@ class MicrotaskBoardRuntime:
             limit = row["flash_context_limit"]
         nodes = compile_reassessed_microtask_plan(state)
         gen_sha = self._plan_generation_sha256(state, catalog)
+        if self.fracture_planning is not None:
+            nodes = self._overlay_fractures(nodes, self.fracture_planning.records_for_task(task_id, gen_sha))
         return gen_sha, nodes, state, catalog, limit
+
+    def _overlay_fractures(self, nodes, records):
+        """Project registered children without changing the original SRS/WBS generation."""
+        by_id = {node['microtask_id']: deepcopy(node) for node in nodes}
+        for record in records:
+            failed_id = record['failed_scope_id']
+            if failed_id not in by_id:
+                raise ValueError('Registered fracture scope is absent from this task generation')
+            failed = by_id[failed_id]
+            source = record['source_job']['payload']
+            if source['microtask_node']['microtask_id'] != failed_id:
+                raise ValueError('Fracture source microtask differs from its scope')
+            current = {row['child_id']: row for row in record['children']}
+            finals = [child for child in record['graph']['children'] if child['role'] == 'final_test']
+            if len(finals) != 1:
+                raise ValueError('Accepted fracture requires exactly one terminal verification child')
+            context = dict(fracture_id=record['fracture_id'], graph_sha256=record['graph_sha256'],
+                dossier_sha256=record['dossier_sha256'], lineage_root=record['lineage_root'],
+                failed_microtask_id=failed_id)
+            for child in record['graph']['children']:
+                cid = child['id']
+                if cid in by_id:
+                    raise ValueError('Fracture child collides with a task scope')
+                projection = current[cid]
+                by_id[cid] = dict(failed, **{key: deepcopy(value) for key, value in child.items()
+                    if key not in ('id', 'lineage_root', 'failed_scope_id')})
+                by_id[cid].update(microtask_id=cid, lineage_kind='FAILURE_FRACTURE', attempt_lineage_id=cid,
+                    fracture_context=context, needs_owner_approval=projection['needs_owner_approval'],
+                    owner_approval=projection['owner_approval'],
+                    fracture_external_predecessors=deepcopy(source.get('predecessor_outputs') or {}),
+                    # The physical snapshot still inherits the original, exact
+                    # external dependency capture, without rewriting graph deps.
+                    ancestors=sorted(set(child['ancestors']) | set(failed['ancestors'])))
+                for key in ('physical_retry', 'pivot_context', 'effective_complexity', 'pivot_model', 'fracture_join'):
+                    by_id[cid].pop(key, None)
+            failed['fracture_join'] = dict(record, failed_node=dict(deepcopy(source['microtask_node']),
+                plan_generation_sha256=source['planning_intent']['plan_generation_sha256']))
+            failed['depends_on'] = [finals[0]['id']]
+        return list(by_id.values())
+
+    @staticmethod
+    def _predecessors(node, completed):
+        return {**deepcopy(node.get('fracture_external_predecessors') or {}),
+                **{dep: completed[dep] for dep in node['depends_on']}}
+
+    def _sync_fracture_completion(self, node, output):
+        if not node.get('fracture_context') or node.get('fracture_join'):
+            return
+        if self.fracture_runtime is None:
+            raise ValueError('Compiled fracture cannot complete without its controller journal')
+        current = self.fracture_runtime.get_fracture_child(node['microtask_id'])
+        if current['status'] == 'COMPLETED':
+            if current['artifact_sha256'] != output['artifact_sha256']:
+                raise ValueError('Fracture completion cannot be rebound to different bytes')
+            return
+        # Inputs here come only from _check_board_completion, never a model's
+        # self-attested graph state. Physical final proof remains a join gate.
+        self.fracture_runtime.complete_fracture_child(current['lineage_root'],
+            node['microtask_id'], output['artifact_sha256'])
+
+    def _materialize_fracture_join(self, task_id, gen_sha, node, completed, now):
+        record = node['fracture_join']
+        children = [dict(microtask_id=child['id'], role=child['role'],
+                    status='COMPLETED', output=completed[child['id']],
+                    artifact_sha256=completed[child['id']]['artifact_sha256'],
+                    job_id=completed[child['id']]['producer_job_id'])
+                    for child in record['graph']['children'] if child['id'] in completed]
+        result = dict(status='WAITING_FOR_FRACTURE_CHILDREN')
+        if len(children) == len(record['graph']['children']):
+            if self.artifact_runtime is None or not hasattr(self.artifact_runtime, 'fracture_join'):
+                result = dict(status='WAITING_FOR_FRACTURE_PHYSICAL_JOIN')
+            else:
+                result = self.artifact_runtime.fracture_join(task_id, record['failed_node'], record, children)
+        output = result.get('output') if result['status'] == 'COMPLETED' else None
+        if output is not None:
+            # Native final-test output and physical alias verification remain
+            # authoritative; the board does not manufacture a native completion.
+            if not output.get('fracture_join_id') or not result.get('job_id'):
+                raise ValueError('Completed fracture join requires concrete verified producer identity')
+            expected = self._predecessors(node, completed)
+            if output.get('predecessor_artifact_hashes') != {dep: value['artifact_sha256']
+                    for dep, value in sorted(expected.items())}:
+                raise ValueError('Fracture join must bind its exact terminal predecessor')
+        with self.journal._write() as conn:
+            key = f'{gen_sha[:32]}::{node["microtask_id"]}'
+            self._release_node_file_locks(conn, key)
+            self._upsert_node_row(conn, node_key=key, task_id=task_id, mt_id=node['microtask_id'],
+                gen_sha=gen_sha, node=node, candidates=[], status=result['status'],
+                job_id=result.get('job_id'), output_obj=output,
+                artifact_sha256=output['artifact_sha256'] if output else None, now=now)
+        return output
 
     def _cancel_stale_board_job(self, job_id: str | None) -> None:
         if not job_id:
@@ -681,6 +776,10 @@ class MicrotaskBoardRuntime:
         preserve_pending_retry_ids: set[str] | None = None,
     ) -> dict[str, Any]:
         gen_sha, compiled_nodes, state, catalog, limit = self._compile(task_id)
+        # Registered fracture members require individual native fences and exact
+        # captured profiles; they do not enter aggregate swarm accounting.
+        if any(node.get('fracture_context') or node.get('fracture_join') for node in compiled_nodes):
+            use_swarm_batches = False
         ordered_nodes = self._topological_nodes(compiled_nodes)
         recovery = self._physical_recovery_contexts(task_id, ordered_nodes)
         for node in ordered_nodes:
@@ -761,6 +860,11 @@ class MicrotaskBoardRuntime:
         for node in ordered_nodes:
             mt_id = node["microtask_id"]
             node_key = f"{gen_sha[:32]}::{mt_id}"
+            if node.get('fracture_join'):
+                joined = self._materialize_fracture_join(task_id, gen_sha, node, completed_by_id, now)
+                if joined is not None:
+                    completed_by_id[mt_id] = joined
+                continue
             options = five_model_options(catalog, node["task_types"], node["complexity"])
             candidates = [opt["model_id"] for opt in options if opt["meets_floor"]]
             if not candidates:
@@ -788,7 +892,7 @@ class MicrotaskBoardRuntime:
                 existing_by_id[mt_id] = dict(existing)
 
             expected_pred_hashes = (
-                {dep: completed_by_id[dep]["artifact_sha256"] for dep in sorted(node["depends_on"])}
+                {dep: output['artifact_sha256'] for dep, output in sorted(self._predecessors(node, completed_by_id).items())}
                 if all(dep in completed_by_id for dep in node["depends_on"])
                 else None
             )
@@ -802,6 +906,7 @@ class MicrotaskBoardRuntime:
                     with self.journal._write() as conn:
                         self._release_node_file_locks(conn, node_key)
                     completed_by_id[mt_id] = existing_out
+                    self._sync_fracture_completion(node, existing_out)
                     continue
 
             if existing is not None and existing["job_id"]:
@@ -825,6 +930,7 @@ class MicrotaskBoardRuntime:
                         )
                         self._release_node_file_locks(conn, node_key)
                     completed_by_id[mt_id] = val
+                    self._sync_fracture_completion(node, val)
                     continue
 
         # 3. Partition remaining nodes into held/waiting vs already-dispatched vs dependency-ready
@@ -832,7 +938,7 @@ class MicrotaskBoardRuntime:
         candidates_by_mt: dict[str, list[str]] = {}
         for node in ordered_nodes:
             mt_id = node["microtask_id"]
-            if mt_id in completed_by_id:
+            if mt_id in completed_by_id or node.get('fracture_join'):
                 continue
             node_key = f"{gen_sha[:32]}::{mt_id}"
             lstate = None
@@ -846,13 +952,14 @@ class MicrotaskBoardRuntime:
                     node["attempt_lineage_id"],
                     complexity=int(node["complexity"]),
                 )
-                eff_complexity = max(int(node["complexity"]), int(lstate.get("floor") or node["complexity"]))
+                eff_complexity = (int(node['complexity']) if node.get('fracture_context') else
+                                  max(int(node["complexity"]), int(lstate.get("floor") or node["complexity"])))
                 child_models = lstate.get("fracture_child_models") or {}
                 pivot_model = child_models.get(node["attempt_lineage_id"], lstate.get("next_model"))
                 if not pivot_model and lstate.get("pivots"):
                     last_prop = lstate["pivots"][-1].get("proposal") or {}
                     pivot_model = last_prop.get("next_model")
-                if lstate.get("pivots"):
+                if lstate.get("pivots") and not node.get('fracture_context'):
                     node_for_route["task_types"] = lstate["pivots"][-1]["proposal"]["task_types"]
                     proposal = lstate["pivots"][-1]["proposal"]
                     if proposal.get("selected_profile_id"):
@@ -863,6 +970,10 @@ class MicrotaskBoardRuntime:
                         if context is not None:
                             node_for_route["pivot_context"] = context
                 node_for_route["effective_complexity"] = eff_complexity
+                if node.get('fracture_context'):
+                    # Exact profile was selected and accepted with this graph.
+                    # capture_lineage_budget rechecks all compiled-row bindings.
+                    pivot_model = node['selected_profile_id']
                 if pivot_model:
                     node_for_route["pivot_model"] = pivot_model
 
@@ -1162,7 +1273,7 @@ class MicrotaskBoardRuntime:
             mt_id = admitted_node["microtask_id"]
             node_key = f"{gen_sha[:32]}::{mt_id}"
             candidates = admitted_node["candidate_profiles"]
-            pred_outputs = {dep: completed_by_id[dep] for dep in admitted_node["depends_on"]}
+            pred_outputs = self._predecessors(admitted_node, completed_by_id)
 
             if use_swarm_batches:
                 bjob = batch_job_by_batch_id[admitted_node["batch_id"]]
@@ -1238,6 +1349,7 @@ class MicrotaskBoardRuntime:
                                 now=now,
                             )
                         completed_by_id[mt_id] = val
+                        self._sync_fracture_completion(compiled_by_id[mt_id], val)
                         continue
                     desired_status = "WAITING_FOR_NATIVE_CLEANUP"
                 else:
@@ -1533,6 +1645,17 @@ class MicrotaskBoardRuntime:
             raise ValueError("OwnerApprovalBroker is required to approve high-tier microtasks")
         self.owner_broker._authenticate_owner_token(owner_token)
         state = self.journal.status(task_id)
+        if self.fracture_planning is not None:
+            generation, nodes, _, _, _ = self._compile(task_id)
+            matches = [node for node in nodes if node['microtask_id'] == microtask_id and node.get('fracture_context')]
+            if matches:
+                node = matches[0]
+                _text(notes, 'Owner notes', 8000) if notes else None
+                context = node['fracture_context']
+                receipt_id = 'fractureowner428-' + digest(dict(task_id=task_id, microtask_id=microtask_id,
+                    generation=generation, graph_sha256=context['graph_sha256'], notes=notes))[:40]
+                self.fracture_runtime.approve_fracture_child(context['lineage_root'], microtask_id, receipt_id)
+                return self.materialize(task_id)
         expected_version = state["journal_version"]
         lineage = f'{task_id}.mt.{microtask_id}'
         pending = (state.get('microtask_pivot_approvals') or {}).get(lineage)

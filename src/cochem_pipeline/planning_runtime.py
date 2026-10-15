@@ -109,6 +109,7 @@ class PlanningController:
             if self.release_runtime is not None:
                 self.release_runtime.board.pivot_context_provider = self.pivot_bridge.dispatch_context
                 self.release_runtime.board.fracture_runtime = self.pivot_bridge.fractures.fracture_runtime
+                self.release_runtime.board.fracture_planning = self.pivot_bridge.fractures
         self._research_thread = None
         self.gateway = PlanningGateway(journal, store, artifact_runtime=artifact_runtime,
                                        attempt_accounting=attempt_runtime)

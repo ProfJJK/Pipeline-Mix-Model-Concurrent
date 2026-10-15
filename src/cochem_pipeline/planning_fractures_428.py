@@ -5,6 +5,7 @@ import json
 from . import routing_store as routes
 from .fracture_runtime_428 import FractureRuntime
 from .pivot_runtime_428 import select_pivot_candidates, PivotHoldError
+from .planning_budgets_428 import capture_lineage_budget, LineageBudgetHold
 from .task_routing import digest
 from .workflow_428 import _dag, _id, _text, _texts, assessment
 
@@ -113,12 +114,16 @@ class PlanningFractureRuntime:
             catalog_sha256=original['catalog_sha256'], srs_sha256=original['srs_sha256'], task=task_state,
             complexity=tier, task_types=tags, candidate_profiles=[item['profile_id'] for item in candidates[:5]],
             execution_authorized=False, **(extra or {}))
+        intent['attempt_lineage_id'] = 'fracture-control428-' + digest(dict(task=original['task_id'],
+            root=task_state['fracture_scope']['lineage_root'], stage=stage))[:36]
         key = digest(intent)
         root_id, job_id = 'fracture-plan428-' + key[:36], 'fracture-node428-' + key[:36]
         payload = dict(workflow_type='planning428', planning_intent=intent,
                        task_catalog=source['payload']['task_catalog'], flash_context_limit=source['payload']['flash_context_limit'])
         prompt_contract(payload)
         policy = scoped_policy(self.store.routing_policy, intent, payload['task_catalog'])
+        accounting = self.outcomes.accounting
+        accounting.ensure_lineage(intent['attempt_lineage_id'], complexity=tier)
         with self.store._write() as conn:
             old = conn.execute('SELECT 1 FROM pipeline_jobs WHERE job_id=?', (job_id,)).fetchone()
             if old:
@@ -126,10 +131,12 @@ class PlanningFractureRuntime:
                 if result['payload'] != payload:
                     raise ValueError('Fracture control capture cannot be rebound')
                 return result
+            budget = capture_lineage_budget(conn, job_id, payload, policy, attempt_ledger=accounting)
             self.store._insert(conn, root_id, root_id, None, 'MACRO_PLANNING_REQUEST', 'IN_PROGRESS',
                                dict(workflow_type='planning428', intent_sha256=key))
-            routes.capture_workflow(conn, root_id, policy)
-            self.store._insert(conn, job_id, root_id, root_id, 'TASK_PLAN', 'PENDING', payload, max_attempts=10)
+            routes.capture_workflow(conn, root_id, policy, max_dispatches=budget.max_dispatches)
+            self.store._insert(conn, job_id, root_id, root_id, 'TASK_PLAN', 'PENDING', payload,
+                               max_attempts=budget.max_attempts)
             return self.store._get(conn, job_id)
 
     def step(self, task_id, boundary, source, pivot_job, pivot_result):
@@ -166,8 +173,11 @@ class PlanningFractureRuntime:
                                                 last_failed_model=ledger['last_model'])
             if not candidates:
                 return dict(status='CAPABILITY_HOLD')
-            plan_job = self._submit(source, stage='FRACTURE_PLAN', task_state=task_state,
-                tier=tier, tags=source_intent['task_types'], candidates=candidates)
+            try:
+                plan_job = self._submit(source, stage='FRACTURE_PLAN', task_state=task_state,
+                    tier=tier, tags=source_intent['task_types'], candidates=candidates)
+            except LineageBudgetHold as hold:
+                return dict(status='FRACTURE_PLAN_BUDGET_HOLD', reason=hold.reason)
         if row is None:
             with self.journal._write() as conn:
                 conn.execute('INSERT INTO planning428_fracture_plans VALUES(?,?,?,?,?,?,NULL,?,NULL)',
@@ -187,8 +197,11 @@ class PlanningFractureRuntime:
         if not candidates:
             return dict(status='FRACTURE_REVIEW_CAPABILITY_HOLD')
         review_state = dict(task_state, fracture_plan=plan, fracture_plan_profile=result['profile_id'])
-        review_job = self._submit(source, stage='FRACTURE_REVIEW', task_state=review_state,
-            tier=review_tier, tags=tags, candidates=candidates, extra=dict(fracture_plan_sha256=plan_sha))
+        try:
+            review_job = self._submit(source, stage='FRACTURE_REVIEW', task_state=review_state,
+                tier=review_tier, tags=tags, candidates=candidates, extra=dict(fracture_plan_sha256=plan_sha))
+        except LineageBudgetHold as hold:
+            return dict(status='FRACTURE_REVIEW_BUDGET_HOLD', reason=hold.reason)
         with self.journal._write() as conn:
             conn.execute('UPDATE planning428_fracture_plans SET review_job_id=?,status=? WHERE lineage_root=? AND boundary=?',
                          (review_job['job_id'], 'WAITING_FOR_FRACTURE_REVIEW', root, number))
@@ -227,3 +240,19 @@ class PlanningFractureRuntime:
         with self.journal._write() as conn:
             rows = conn.execute('SELECT plan_job_id,review_job_id FROM planning428_fracture_plans WHERE task_id=?', (task_id,))
             return [value for row in rows for value in row if value]
+
+    def records_for_task(self, task_id, generation):
+        """Committed fractures only, scoped to their immutable original WBS generation."""
+        with self.journal._write() as conn:
+            rows = conn.execute("SELECT * FROM planning428_fracture_plans WHERE task_id=? "
+                "AND status='FRACTURE_READY_NEW_CAPTURE' ORDER BY boundary,lineage_root", (task_id,)).fetchall()
+        records = []
+        for row in rows:
+            source = self.store.get(row['source_job_id'])
+            if source['payload']['planning_intent'].get('plan_generation_sha256') != generation:
+                continue
+            record = self.fracture_runtime.accepted_record(row['lineage_root'], row['boundary'])
+            if record is None or record['fracture_id'] != row['fracture_id']:
+                raise ValueError('Fracture task projection has no committed matching graph')
+            records.append(dict(record, source_job=source))
+        return records
