@@ -276,7 +276,7 @@ def test_explicit_final_config_path_not_install_bootstrap():
 
 def test_queued_task_is_not_mistaken_for_successful_exit():
     row=inert_ps(r"""
-$t=[pscustomobject]@{LastTaskResult=0;LastRunTime=[DateTime]'2001-01-01Z'}
+$t=[pscustomobject]@{State=3;LastTaskResult=0;LastRunTime=[DateTime]'2001-01-01Z'}
 $t|Add-Member ScriptMethod GetInstances {param($flags)[pscustomobject]@{Count=0}}
 $now=[DateTime]::UtcNow;$queued=Test-OpTaskTerminal $t $now
 $t.LastRunTime=$now;$t.LastTaskResult=267009;$running=Test-OpTaskTerminal $t $now
@@ -284,6 +284,27 @@ $t.LastTaskResult=2;$ended=Test-OpTaskTerminal $t $now
 @{queued=$queued;running=$running;ended=$ended}|ConvertTo-Json -Compress
 """)
     assert row==dict(queued=False,running=False,ended=True)
+
+
+@pytest.mark.parametrize('state,code,count,recent,terminal', [
+    (2, 0, 0, True, False),  # Queued can have no visible instance and a cached zero result.
+    (4, 0, 0, True, False), (0, 0, 0, True, False),
+    (3, 0x41303, 0, True, False), (3, 0x41325, 0, True, False),
+    (3, 0x41301, 0, True, False), (3, 0x41300, 0, True, False),
+    (3, 0x41302, 0, True, False),
+    (3, 0, 0, True, True), (3, 2, 0, True, True),
+    (1, 0, 0, True, True), (1, 2, 0, True, True),
+    (3, 2, 1, True, False), (3, 2, 0, False, False),
+])
+def test_terminal_detection_requires_idle_state_and_actual_completion(state, code, count, recent, terminal):
+    result = inert_ps(r"""
+$now=[DateTime]::UtcNow
+$t=[pscustomobject]@{State=STATE;LastTaskResult=CODE;LastRunTime=$(if(RECENT){$now}else{$now.AddMinutes(-1)});FixtureCount=COUNT}
+$t|Add-Member ScriptMethod GetInstances {param($flags)[pscustomobject]@{Count=$this.FixtureCount}}
+@{terminal=(Test-OpTaskTerminal $t $now)}|ConvertTo-Json -Compress
+""".replace('STATE', str(state)).replace('CODE', str(code)).replace('COUNT', str(count))
+        .replace('RECENT', '$true' if recent else '$false'))
+    assert result['terminal'] == terminal
 
 
 @pytest.mark.parametrize('fault', ['none', 'nonce', 'exited', 'identity'])

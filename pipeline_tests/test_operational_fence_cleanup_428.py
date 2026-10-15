@@ -15,8 +15,8 @@ if($script:mode -eq 'stale'){$when=$when.AddSeconds(-210)}
 if($script:mode -like 'terminal_*'){$when=$when.AddSeconds(-300);$script:count=0}
 $args='-I -B -m cochem_pipeline.owner_admission_fence_428 --config "'+$script:OpOldConfig+'" --config-sha256 '+$script:OpManifest.previous_config_sha256+
     ' --output-root "'+$root+'" --nonce '+$nonce+' --request-sha256 '+$script:OpManifest.request_sha256+' --wait-seconds 1800 --hold-seconds 240'
-$script:task=[pscustomobject]@{Xml='exact-xml';LastRunTime=$when;LastTaskResult=0}
-if($script:mode -like 'terminal_*'){$script:task.LastTaskResult=2}
+$script:task=[pscustomobject]@{State=4;Xml='exact-xml';LastRunTime=$when;LastTaskResult=0}
+if($script:mode -like 'terminal_*'){$script:task.LastTaskResult=2;$script:task.State=3}
 $script:task|Add-Member ScriptMethod GetSecurityDescriptor {param($f)'exact-sddl'}
 $script:task|Add-Member ScriptMethod GetInstances {
     param($f)$v=[pscustomobject]@{Count=$script:count}
@@ -61,7 +61,7 @@ function Write-OpRecord {
     param($p,$r)$script:writes++
     if(Test-Path -LiteralPath (Join-Path $root 'release.json')){throw 'Release was exposed before complete write.'}
     [IO.File]::WriteAllText($p,($r|ConvertTo-Json -Compress))
-    $script:count=0
+    $script:count=0;$script:task.State=3
 }
 function Read-OpPrivateRecord {
     param($p)

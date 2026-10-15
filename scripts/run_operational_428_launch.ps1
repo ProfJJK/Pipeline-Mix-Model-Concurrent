@@ -259,8 +259,14 @@ function Wait-OpOneShot {
 function Test-OpTaskTerminal {
     param($Task,[DateTime]$Requested)
     # Run() can return before the registered task transitions from queued to
-    # running. No old LastTaskResult or initial zero-instance observation is exit.
-    return ($Task.GetInstances(0).Count -eq 0 -and [int64]$Task.LastTaskResult -ne 267009 -and
+    # running. State and result are separate observations; an empty instance
+    # collection/recent LastRunTime cannot override queued/running/unknown state.
+    # TASK_STATE_DISABLED/READY are 1/3. The five SCHED_S values below mean
+    # ready/running/disabled/never-run/queued, not completion of our new action.
+    # https://learn.microsoft.com/en-us/windows/win32/taskschd/registeredtask-state
+    # https://learn.microsoft.com/en-us/windows/win32/taskschd/task-scheduler-error-and-success-constants
+    return ([int]$Task.State -in @(1,3) -and $Task.GetInstances(0).Count -eq 0 -and
+        [int64]$Task.LastTaskResult -notin @(0x41300,0x41301,0x41302,0x41303,0x41325) -and
         ([DateTime]$Task.LastRunTime).ToUniversalTime() -ge $Requested.AddSeconds(-2))
 }
 
