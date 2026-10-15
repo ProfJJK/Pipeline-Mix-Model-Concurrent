@@ -21,6 +21,7 @@ $tokens=$null;$errors=$null
 $ast=[Management.Automation.Language.Parser]::ParseFile('SOURCE',[ref]$tokens,[ref]$errors)
 if($errors.Count){throw ($errors|Out-String)}
 foreach($node in $ast.FindAll({param($n)$n -is [Management.Automation.Language.FunctionDefinitionAst]},$false)){. ([scriptblock]::Create($node.Extent.Text))}
+$script:OpRecovery=$null
 function Get-CimInstance {throw 'Forbidden real CIM'}
 function Get-NetTCPConnection {throw 'Forbidden real TCP inspection'}
 function Start-Process {throw 'Forbidden child launch'}
