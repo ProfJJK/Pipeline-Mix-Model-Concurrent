@@ -48,6 +48,7 @@ class TaskReleaseRuntime:
             store,
             owner_broker=owner_broker,
             clock=clock,
+            artifact_runtime=artifact_runtime,
         )
         with self.journal._write() as conn:
             conn.executescript(

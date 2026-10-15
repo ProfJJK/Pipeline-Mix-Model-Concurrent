@@ -136,15 +136,9 @@ class TaskArtifactRuntime:
                       workspace_manifest=manifest(before), assembly_input_sha256=digest(manifest(before)))
         return capture, project, baseline, before, conflicts, packet
 
-    def run(self, node, slot, context, heartbeat, launched, cancel_event, *, on_native_start, on_native_end):
-        from .worker import ExecutionRevokedError
-        capture, project, baseline, before, conflicts, packet = self._inputs(node)
-        descriptor = self.runtime.ramdisk.workspace(slot)
-        descriptor.validate(identity=descriptor.identity)
-        workspace = descriptor.root / 'task'
-        descriptor.validate(identity=descriptor.identity, cwd=descriptor.root)
-        staged = stage_fragment_workspace(workspace, packet)
-        intent, micro = node['payload']['planning_intent'], node['payload'].get('microtask_node')
+    def execution_context(self, payload):
+        _, project, _, before, conflicts, _ = self._inputs({'payload': payload})
+        intent, micro = payload['planning_intent'], payload.get('microtask_node')
         reqs = micro['requirement_ids'] if micro else [r['id'] for r in intent['task']['document']['requirements']]
         extra = self.planning_context(intent['task_id'])
         if project:
@@ -153,10 +147,22 @@ class TaskArtifactRuntime:
                          test_rule='Final-test nodes must provide new Python tests with these exact function names, '
                          'real assertions that fail on the original baseline and pass on assembled code. Never edit existing tests.')
         extra['conflicting_paths'] = conflicts
-        native_node = {**node, 'payload': {**node['payload'], 'execution_context': extra}}
+        return extra
+
+    def run(self, node, slot, context, heartbeat, launched, cancel_event, *, on_native_start, on_native_end):
+        from .worker import ExecutionRevokedError
+        capture, project, baseline, before, conflicts, packet = self._inputs(node)
+        if node['payload'].get('execution_context') != self.execution_context(node['payload']):
+            raise ValueError('Queued task execution context differs from its immutable source')
+        descriptor = self.runtime.ramdisk.workspace(slot)
+        descriptor.validate(identity=descriptor.identity)
+        workspace = descriptor.root / 'task'
+        descriptor.validate(identity=descriptor.identity, cwd=descriptor.root)
+        staged = stage_fragment_workspace(workspace, packet)
+        intent, micro = node['payload']['planning_intent'], node['payload'].get('microtask_node')
         on_native_start(workspace)
         try:
-            output, receipt = self.runtime.runner.run(native_node, slot, context, heartbeat, launched,
+            output, receipt = self.runtime.runner.run(node, slot, context, heartbeat, launched,
                                                       workspace=workspace, ramdisk_workspace=descriptor)
         finally:
             on_native_end()

@@ -160,12 +160,14 @@ class MicrotaskBoardRuntime:
         attempt_ledger: AttemptLedger | AttemptAccountingRuntime | None = None,
         clock=time.time,
         swarm_batch_mode: bool = False,
+        artifact_runtime=None,
     ):
         self.journal = journal
         self.store = store
         self.owner_broker = owner_broker
         self.clock = clock
         self.swarm_batch_mode = bool(swarm_batch_mode)
+        self.artifact_runtime = artifact_runtime
         if isinstance(attempt_ledger, AttemptAccountingRuntime):
             self.attempt_accounting: AttemptAccountingRuntime | None = attempt_ledger
             self.attempt_ledger: AttemptLedger | None = attempt_ledger.ledger
@@ -351,6 +353,8 @@ class MicrotaskBoardRuntime:
             "task_catalog": catalog,
             "flash_context_limit": limit,
         }
+        if self.artifact_runtime is not None:
+            payload['execution_context'] = self.artifact_runtime.execution_context(payload)
         prompt_contract(payload)
         with self.store._write() as conn:
             existing = conn.execute(

@@ -100,7 +100,7 @@ class PlanningController:
                 research_runtime=research_runtime, dossier_store=dossier_store, decision_store=decision_store)
         self.outcome_runtime = outcome_runtime
         self._research_thread = None
-        self.gateway = PlanningGateway(journal, store)
+        self.gateway = PlanningGateway(journal, store, artifact_runtime=artifact_runtime)
         self.journal.model_result = self.gateway.model_result
         if research_runtime is not None and self.journal.search_result is None:
             self.journal.search_result = research_runtime.evidence_store.load_for_journal
@@ -190,7 +190,7 @@ class PlanningController:
         artifact_args = {'artifact_runtime': artifact_runtime} if artifact_runtime is not None else {}
         exec_runtime = SimpleTaskExecutionRuntime(journal, runtime.store, **artifact_args)
         board = MicrotaskBoardRuntime(journal, runtime.store, owner_broker=owner_broker,
-                                      attempt_ledger=att_runtime)
+                                      attempt_ledger=att_runtime, **artifact_args)
         rel_runtime = TaskReleaseRuntime(journal, runtime.store, board=board,
                                         owner_broker=owner_broker, **artifact_args)
         dos_store = FailureDossierStore(ledger)

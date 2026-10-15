@@ -228,6 +228,8 @@ class SimpleTaskExecutionRuntime:
             "task_catalog": catalog,
             "flash_context_limit": limit,
         }
+        if self.artifact_runtime is not None:
+            payload['execution_context'] = self.artifact_runtime.execution_context(payload)
         prompt_contract(payload)
         with self.store._write() as conn:
             existing = conn.execute(

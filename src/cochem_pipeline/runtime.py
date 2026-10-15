@@ -163,7 +163,7 @@ class Runtime:
             # exact registered container attempt before clearing its guard.
             for pending in previous_cleanup:
                 old = self.store.get(pending['job_id'])
-                if (old['kind']=='CODE_TEST' and self.store.execution_owner_stopped(
+                if (old['kind'] in ('CODE_TEST','TASK_TEST') and self.store.execution_owner_stopped(
                         pending['job_id'],pending['attempt_id'],pending['fencing_token'])):
                     proof = self.docker.confirm_attempt_cleanup(pending['attempt_id'],controller_stopped=True)
                     if proof.get('cleanup_verified') is True:
@@ -644,10 +644,12 @@ class Runtime:
         native=min(86400,int(self.config.timeout_seconds)+300)
         docker=180
         for job in self.store.active_jobs():
-            if job['kind']=='CODE_TEST':
-                commands=self.store.coding_state(job['workflow_id'])['docker']['commands']
+            if job['kind'] in ('CODE_TEST','TASK_TEST'):
+                commands=(self.store.coding_state(job['workflow_id'])['docker']['commands'] if job['kind']=='CODE_TEST'
+                          else job['payload']['docker']['commands'])
                 docker=max(docker,sum(command['timeout_seconds'] for command in commands)+180)
-        return {'native':native,'CODE_TEST':min(86400,docker),'CODE_INTEGRATE':1200}
+        return {'native':native,'CODE_TEST':min(86400,docker),'TASK_TEST':min(86400,docker),
+                'TASK_VERIFY':180,'CODE_INTEGRATE':1200}
 
     def coding_projects(self):
         return self.coding.projects() if self.coding is not None else self.config.coding_projects

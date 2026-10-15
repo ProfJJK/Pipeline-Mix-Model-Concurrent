@@ -85,8 +85,9 @@ def validate_stage_output(payload, output, route):
 
 
 class PlanningGateway:
-    def __init__(self, journal, store):
+    def __init__(self, journal, store, *, artifact_runtime=None):
         self.journal, self.store = journal, store
+        self.artifact_runtime = artifact_runtime
 
     def submit(self, task_id):
         # Re-read from the durable journal. Never accept an agent-supplied
@@ -102,6 +103,8 @@ class PlanningGateway:
         job_id='plan428-node-'+identity[:40]
         payload=dict(workflow_type='planning428', planning_intent=intent,
                      task_catalog=catalog, flash_context_limit=limit)
+        if self.artifact_runtime is not None:
+            payload['execution_context'] = self.artifact_runtime.planning_context(task_id)
         prompt_contract(payload)
         with self.store._write() as conn:
             existing=conn.execute('SELECT job_id FROM pipeline_jobs WHERE job_id=?',(job_id,)).fetchone()

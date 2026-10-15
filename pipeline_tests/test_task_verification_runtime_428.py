@@ -109,9 +109,11 @@ def test_physical_fragment_staging_and_durable_capture(tmp_path):
         sha256=hashlib.sha256(b'Verified bytes').hexdigest())],requirement_evidence=[],release_criteria_results=[])
     runtime.runner=SimpleNamespace(run=lambda *a,**k:(deepcopy(output),{'test_fixture':True}))
     intent=dict(stage='SIMPLE_EXECUTION',task_id='task1',task=dict(document=dict(requirements=[{'id':'R1'}])))
+    payload=dict(planning_intent=intent)
+    payload['execution_context']=artifacts.execution_context(payload)
     with store._write() as conn:
         store._insert(conn,'root','root',None,'MACRO_PLANNING_REQUEST','IN_PROGRESS',{})
-        store._insert(conn,'node','root','root','TASK_PLAN','PENDING',dict(planning_intent=intent))
+        store._insert(conn,'node','root','root','TASK_PLAN','PENDING',payload)
     # Claim only changes lease state; this inert store has no routing catalog.
     node=store.claim('fixture',worker_slot='slot1',requires_cleanup=True)
     result,_=artifacts.run(node,'slot1','',lambda:True,lambda _:None,threading.Event(),
