@@ -88,18 +88,18 @@ authority publication, and Warden cutover in one sitting:
 
 ## 3. Read-Only Plan vs Owner Execution Commands
 
-- **Frozen source commit (`P428-SWARM` + Fable envelope replay + R4 post-reboot/idle/migration fixes):** `ffe41ba59063e3cf55de4a1c4e4e0210c5d7f004` (`ffe41ba`)
-- **Immutable release bundle:** `C:\Users\ansac\CoChem427\r428-bundle-ffe41ba` (prior bundles `r428-bundle-49d65d4`, `r428-bundle-4a87f33`, `r428-bundle-4cc3460`, `r428-bundle-b862701`, `r428-bundle-491e4a3`, and `r428-bundle-4ddf611` preserved intact)
-- **Launch manifest SHA-256:** `81e09db5c48be0a10e029fb0700a238ef159f3ee99612305c61efb96f4489738`
-- **Install manifest SHA-256:** `b37dd96bb7a1fc9f94a66c9cfaa660d22fbdee648adb84a8b158149afd95d377`
+- **Frozen source commit (`P428-SWARM` + Fable envelope replay + R4 post-reboot stopped-baseline/idle/migration fixes):** `0b046c6f907e17f538735151bb00d9168105bebf` (`0b046c6`)
+- **Immutable release bundle:** `C:\Users\ansac\CoChem427\r428-bundle-0b046c6` (prior bundles `r428-bundle-49d65d4`, `r428-bundle-4a87f33`, `r428-bundle-4cc3460`, `r428-bundle-b862701`, `r428-bundle-491e4a3`, `r428-bundle-4ddf611`, and `r428-bundle-ffe41ba` preserved intact)
+- **Launch manifest SHA-256:** `3205b61eafa30a5e09720b5d98e47e95a20c692ef9cdcd1ce6a036a94df1797c`
+- **Install manifest SHA-256:** `5a72414bd3ef2678fe5485a64bb36e2c020aff1c27709d7a3b8e9efd2f981f06`
 
 ### A. Read-Only Plan (Safe in Engineering / Non-Admin Sessions)
 
 ```powershell
 & "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive `
-  -File "C:\Users\ansac\CoChem427\r428-bundle-ffe41ba\run_428_launch.ps1" `
-  -LaunchManifest "C:\Users\ansac\CoChem427\r428-bundle-ffe41ba\launch-manifest.json" `
-  -LaunchManifestSha256 "81e09db5c48be0a10e029fb0700a238ef159f3ee99612305c61efb96f4489738"
+  -File "C:\Users\ansac\CoChem427\r428-bundle-0b046c6\run_428_launch.ps1" `
+  -LaunchManifest "C:\Users\ansac\CoChem427\r428-bundle-0b046c6\launch-manifest.json" `
+  -LaunchManifestSha256 "3205b61eafa30a5e09720b5d98e47e95a20c692ef9cdcd1ce6a036a94df1797c"
 ```
 
 ### B. Single Owner Sitting Command (`P428-28`, 64-bit Administrator Windows PowerShell 5.1 as `AETHERDESK\ansac`)
@@ -108,9 +108,9 @@ See `docs/4.2.8/RELEASE_REVIEW.md` for the complete independent release-package 
 
 ```powershell
 & "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile `
-  -File "C:\Users\ansac\CoChem427\r428-bundle-ffe41ba\run_428_launch.ps1" `
-  -LaunchManifest "C:\Users\ansac\CoChem427\r428-bundle-ffe41ba\launch-manifest.json" `
-  -LaunchManifestSha256 "81e09db5c48be0a10e029fb0700a238ef159f3ee99612305c61efb96f4489738" `
+  -File "C:\Users\ansac\CoChem427\r428-bundle-0b046c6\run_428_launch.ps1" `
+  -LaunchManifest "C:\Users\ansac\CoChem427\r428-bundle-0b046c6\launch-manifest.json" `
+  -LaunchManifestSha256 "3205b61eafa30a5e09720b5d98e47e95a20c692ef9cdcd1ce6a036a94df1797c" `
   -Apply
 ```
 
