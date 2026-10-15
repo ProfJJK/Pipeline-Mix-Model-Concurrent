@@ -70,9 +70,8 @@ class PlanningPivotRuntime:
         root, number = boundary['lineage_root'], boundary['boundary']
         source = self._source_job(root)
         payload = source['payload']
-        # This bounded slice supports native WBS microtasks; other stage
-        # promotion and approved fracture graphs remain explicit holds.
-        if payload['planning_intent']['stage'] != 'MICROTASK_EXECUTION':
+        if payload['planning_intent']['stage'] not in ('MICROTASK_EXECUTION', 'SIMPLE_EXECUTION',
+                'SRS', 'REVISING_SRS', 'PLAN_REVIEW', 'WBS', 'MICROTASKS', 'MICROTASK_ASSESSMENT'):
             self._set_status(root, number, 'PIVOT_SCOPE_ADAPTER_REQUIRED')
             return None
         state = self.pivot_runtime.ledger.status(root)
@@ -89,7 +88,7 @@ class PlanningPivotRuntime:
             raise ValueError('Pivot review requires complete controller-owned failure research')
         task_state = deepcopy(payload['planning_intent']['task'])
         task_state.update(failure_dossier=dossier, failure_research_excerpts=research['excerpts'],
-                          failing_microtask=payload['microtask_node'],
+                          failing_microtask=payload.get('microtask_node'),
                           failed_job=dict(job_id=source['job_id'], status=source['status'],
                               error=str(source.get('error') or '')[:8000]))
         intent = dict(schema='cochem-planning-intent/4.2.8', action='model_stage', stage='PIVOT_REVIEW',
@@ -155,18 +154,28 @@ class PlanningPivotRuntime:
             if output['strategy'] == 'fracture':
                 self._set_status(root, number, 'FRACTURE_PLAN_REQUIRED', output_sha=sha)
                 continue
-            state = self.pivot_runtime.ledger.status(root)
+            source = self.store.get(row['source_job_id']) if row else self._source_job(root)
+            source_intent = source['payload']['planning_intent']
+            captured_runtime = self.pivot_runtime
+            if digest(captured_runtime.catalog) != source_intent['catalog_sha256']:
+                from .pivot_runtime_428 import PivotRuntime
+                captured_runtime = PivotRuntime(self.pivot_runtime.ledger, source['payload']['task_catalog'],
+                    dossier_store=self.outcomes.dossier_store)
+            state = captured_runtime.ledger.status(root)
             effective_tier = max(output['assessment']['complexity'], min(10, state['floor'] + 1))
+            prior_pivot = next((p for p in state['pivots'] if p['after_failures'] == number), None)
+            if prior_pivot is not None:
+                effective_tier = prior_pivot['proposal']['complexity']
             source_node = job['payload']['planning_intent']['task']['failing_microtask']
-            if effective_tier >= 8 and not (source_node.get('owner_approval') or {}).get('receipt_id'):
+            if source_node and effective_tier >= 8 and not (source_node.get('owner_approval') or {}).get('receipt_id'):
                 self._set_status(root, number, 'PIVOT_OWNER_APPROVAL_REQUIRED', output_sha=sha)
                 continue
             # Recover the window after ledger.pivot committed but before our
             # dispatch marker: existing pivot evidence is authoritative.
-            existing = self.pivot_runtime.get_pivot_record(root, number)
+            existing = captured_runtime.get_pivot_record(root, number)
             if existing is None and any(p['after_failures'] == number
-                    for p in self.pivot_runtime.ledger.status(root)['pivots']):
-                existing = self.pivot_runtime.recover_pivot_record(root, number)
+                    for p in captured_runtime.ledger.status(root)['pivots']):
+                existing = captured_runtime.recover_pivot_record(root, number)
             if existing is None:
                 dossier = self.outcomes.dossier_store.get_dossier(root, number)
                 self.outcomes.dossier_store.record_dossier(root, number,
@@ -174,14 +183,33 @@ class PlanningPivotRuntime:
                     hypotheses=output['hypotheses'])
                 try:
                     review = output['assessment']
-                    chosen = self.pivot_runtime.evaluate_pivot(root, task_types=review['task_types'],
-                        proposed_complexity=review['complexity'], rationale=review['rationale'] + '\n' + output['approach'])
+                    eligible = select_pivot_candidates(captured_runtime.catalog, review['task_types'], effective_tier,
+                                                       last_failed_model=state['last_model'])
+                    if source_intent['stage'] == 'PLAN_REVIEW':
+                        eligible = [c for c in eligible if c['family'] != source_intent['task']['planner_model']]
+                    if not eligible:
+                        raise PivotHoldError('CAPABILITY_HOLD', 'No different eligible profile meets review constraints')
+                    chosen = captured_runtime.evaluate_pivot(root, task_types=review['task_types'],
+                        proposed_complexity=review['complexity'], rationale=review['rationale'] + '\n' + output['approach'],
+                        selected_profile_id=eligible[0]['profile_id'])
                     profile = chosen['selected_profile_id']
                 except PivotHoldError as error:
                     self._set_status(root, number, error.hold_status, output_sha=sha)
                     continue
             else:
                 profile = existing['selected_profile_id']
+            committed = captured_runtime.get_pivot_record(root, number)
+            context = dict(lineage_root=root, boundary=number, selected_profile_id=profile,
+                review_job_id=job['job_id'], review_sha256=sha, approach=output['approach'],
+                failure_dossier=self.outcomes.dossier_store.get_dossier(root, number))
+            classification = dict(complexity=committed['effective_tier'], task_types=committed['task_types'],
+                                  rationale=output['assessment']['rationale'])
+            if source_intent['stage'] == 'SIMPLE_EXECUTION':
+                self.journal.apply_simple_execution_pivot(task_id, source_intent['version'], source_intent,
+                                                         context, classification)
+            elif source_intent['stage'] != 'MICROTASK_EXECUTION':
+                self.journal.apply_planning_pivot(task_id, source_intent['version'], source_intent,
+                                                 context, classification)
             self._set_status(root, number, 'PIVOT_READY_NEW_CAPTURE', output_sha=sha, profile=profile)
         return len(boundaries)
 
@@ -196,7 +224,7 @@ class PlanningPivotRuntime:
         result = PlanningGateway(self.journal, self.store).model_result(row['review_job_id'])
         if result is None or digest(result) != row['output_sha256']:
             raise ValueError('Pivot dispatch review evidence differs')
-        return dict(boundary=row['boundary'], selected_profile_id=row['selected_profile'],
+        return dict(lineage_root=root, boundary=row['boundary'], selected_profile_id=row['selected_profile'],
             review_job_id=row['review_job_id'], review_sha256=row['output_sha256'],
             approach=result['output']['approach'],
             failure_dossier=self.outcomes.dossier_store.get_dossier(root, row['boundary']))

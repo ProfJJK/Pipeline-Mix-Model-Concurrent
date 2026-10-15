@@ -70,3 +70,15 @@ holds as `PIVOT_OWNER_APPROVAL_REQUIRED`. Planning-stage and simple-execution
 pivots hold as `PIVOT_SCOPE_ADAPTER_REQUIRED` pending their reclassification and
 approval-aware journal adapters. These states are not completed work or live
 acceptance. Review jobs and failure research are included in durable cancellation.
+
+The subsequent planning adapter replaces `PIVOT_SCOPE_ADAPTER_REQUIRED` for
+SRS, review, WBS, microtask planning/assessment and simple execution. It records
+a controller-owned journal route override with the exact selected profile,
+sticky floor and existing lineage. The journal validates subsequent completion
+against the new capture. SRS output cannot lower that floor. A simple task that
+now needs complexity 4+ or multiple types re-enters `REVISING_SRS`; its new SRS
+then follows research, independent review, WBS and the existing 8–10 owner gate.
+Complexity 1–3 single-type pivots expose `execution_pivot` for the simple adapter.
+No terminal job or failure counter is reset. Planning stages after promotion
+continue the preserved planning lineage, while existing WBS child policy stays
+unchanged. Original approved SRS receipts stay valid only for their exact revision.

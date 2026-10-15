@@ -41,6 +41,8 @@ class PlanningOutcomeRuntime:
             # Individual outcomes are fenced by complete_swarm_batch; charging
             # this aggregate reservation would double-charge its children.
             return None
+        if intent.get('attempt_lineage_id'):
+            return _id(intent['attempt_lineage_id'])
         node = payload.get('microtask_node')
         if node is not None:
             return _id(node['attempt_lineage_id'])

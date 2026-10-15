@@ -50,6 +50,8 @@ def validate_stage_output(payload, output, route):
     state, stage = intent['task'], intent['stage']
     model = catalog['models'][matches[0]]
     if stage in ('SRS','REVISING_SRS'):
+        if output.get('assessment', {}).get('complexity', 0) < state.get('pivot_reasoning_floor', 1):
+            raise ValueError('SRS reassessment cannot lower the retained pivot reasoning floor')
         accept_srs(state, output, planner_model=model['family'], flash_context_limit=payload['flash_context_limit'])
     elif stage == 'PLAN_REVIEW':
         if set(output) != {'accepted','findings','suggestions','clarifications'}:

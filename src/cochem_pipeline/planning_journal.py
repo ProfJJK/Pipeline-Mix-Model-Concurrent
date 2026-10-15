@@ -140,7 +140,7 @@ class PlanningJournal:
         # Bootstrap planning is a bounded tier-4 assessment, not a final claim
         # that the task itself is tier 4. Its output determines the actual gates.
         classification = state.get('assessment', dict(complexity=4, task_types=['GEN-DEFAULT']))
-        tier, tags = classification['complexity'], classification['task_types']
+        tier, tags = max(classification['complexity'], state.get('pivot_reasoning_floor', 1)), classification['task_types']
         if stage == 'PLAN_REVIEW':
             producer = state['planner_profile']
             candidates = select_reviewers(catalog, tags, tier, producer)
@@ -148,9 +148,74 @@ class PlanningJournal:
         else:
             options = five_model_options(catalog, tags, tier)
             candidates = [option['model_id'] for option in options if option['meets_floor']]
+        if state.get('planning_attempt_lineage_id'):
+            request['attempt_lineage_id'] = state['planning_attempt_lineage_id']
+        override = (state.get('planning_pivot_routes') or {}).get(stage)
+        if override is not None:
+            tier, tags = override['complexity'], override['task_types']
+            candidates = [override['selected_profile_id']]
+            model = catalog['models'][candidates[0]]
+            if not all(model['scores'].get(tag) is not None and model['scores'][tag]
+                       >= catalog['task_types'][tag]['tiers'][str(tier)]['floor'] for tag in tags):
+                raise ValueError('Planning pivot route no longer meets its captured floor')
+            if stage == 'PLAN_REVIEW' and model['family'] == state['planner_model']:
+                raise ValueError('Planning pivot cannot reuse the SRS planner for independent review')
+            request['attempt_lineage_id'] = override['lineage_root']
         return request | dict(action='model_stage' if candidates else 'capability_hold',
             complexity=tier, task_types=tags, candidate_profiles=candidates, task=state,
             prompt_rule='Return the required planning artifact only; do not execute, delegate or grant approval.')
+
+    def apply_planning_pivot(self, task_id, expected_version, source_intent, context, classification):
+        """Controller-only transition from a committed researched pivot to a new stage capture."""
+        classification = workflow.assessment(classification)
+        stage = source_intent['stage']
+        if stage not in ('SRS', 'REVISING_SRS', 'PLAN_REVIEW', 'WBS', 'MICROTASKS', 'MICROTASK_ASSESSMENT'):
+            raise ValueError('This pivot requires its execution-stage adapter')
+        evidence = dict(source_intent=source_intent, context=context, assessment=classification)
+        def transition(row):
+            state = json.loads(row['state_json'])
+            if source_intent != self._intent(row):
+                raise ValueError('Planning pivot belongs to a stale stage capture')
+            updated = deepcopy(state)
+            updated.setdefault('planning_pivot_routes', {})[stage] = dict(classification,
+                selected_profile_id=context['selected_profile_id'], lineage_root=context['lineage_root'])
+            updated['pivot_context'] = deepcopy(context)
+            updated['planning_attempt_lineage_id'] = context['lineage_root']
+            updated['pivot_reasoning_floor'] = max(classification['complexity'], state.get('pivot_reasoning_floor', 1))
+            if stage == 'PLAN_REVIEW':
+                updated['review_tier'] = classification['complexity']
+            return updated
+        event = 'pivot.' + digest({'root': context['lineage_root'], 'boundary': context['boundary']})[:40]
+        return self._transition(task_id, expected_version, event, evidence, transition)
+
+    def apply_simple_execution_pivot(self, task_id, expected_version, source_intent, context, classification):
+        """Preserve the failed execution lineage while promoting changed scope through SRS gates."""
+        classification = workflow.assessment(classification)
+        if source_intent['stage'] != 'SIMPLE_EXECUTION':
+            raise ValueError('Expected a simple-execution pivot capture')
+        evidence = dict(source_intent=source_intent, context=context, assessment=classification)
+        def transition(row):
+            state = json.loads(row['state_json'])
+            if (state['stage'] != 'READY' or source_intent['state_sha256'] != digest(state)
+                    or source_intent['srs_sha256'] != state['srs_sha256']):
+                raise ValueError('Simple pivot belongs to a stale execution capture')
+            updated = deepcopy(state)
+            updated.update(stage='REVISING_SRS', pivot_context=deepcopy(context),
+                           pivot_reasoning_floor=classification['complexity'],
+                           planning_attempt_lineage_id=context['lineage_root'])
+            route = dict(classification, selected_profile_id=context['selected_profile_id'],
+                         lineage_root=context['lineage_root'])
+            if classification['complexity'] <= 3 and len(classification['task_types']) == 1:
+                document = deepcopy(state['document'])
+                document['assessment'] = classification
+                updated = workflow.accept_srs(updated, document, planner_model=state['planner_model'],
+                                              flash_context_limit=row['flash_context_limit'])
+                updated['execution_pivot'] = route
+            else:
+                updated.setdefault('planning_pivot_routes', {})['REVISING_SRS'] = route
+            return updated
+        event = 'pivot.' + digest({'root': context['lineage_root'], 'boundary': context['boundary']})[:40]
+        return self._transition(task_id, expected_version, event, evidence, transition)
 
     @staticmethod
     def _load(port, key, label):
