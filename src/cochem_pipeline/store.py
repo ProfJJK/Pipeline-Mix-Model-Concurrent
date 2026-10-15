@@ -23,7 +23,7 @@ import uuid
 import weakref
 
 from . import routing_store as routes
-from .coding_store import CodingStoreMixin, CODING_KINDS, CONTROLLER_KINDS, SCHEMA as CODING_SCHEMA
+from .coding_store import CodingStoreMixin, CODING_KINDS, CONTROLLER_KINDS, TASK_VERIFICATION_KINDS, SCHEMA as CODING_SCHEMA
 
 
 def canonical_json(value: Any) -> str:
@@ -47,7 +47,7 @@ CREATE TABLE IF NOT EXISTS pipeline_jobs (
     job_id TEXT PRIMARY KEY,
     workflow_id TEXT NOT NULL REFERENCES pipeline_jobs(job_id),
     parent_job_id TEXT REFERENCES pipeline_jobs(job_id),
-    kind TEXT NOT NULL CHECK(kind IN ('MACRO_PLANNING_REQUEST','MANIFEST_GENERATOR','CHAPTER_DRAFT','SYNTHESIS','CODE_REQUEST','CODE_PLAN','CODE_PLAN_REVIEW','CODE_TEST_AUTHOR','CODE_EDIT','CODE_TEST','CODE_REVIEW','CODE_RESEARCH','CODE_INTEGRATE','PREFLIGHT_REQUEST','TASK_PLAN')),
+    kind TEXT NOT NULL CHECK(kind IN ('MACRO_PLANNING_REQUEST','MANIFEST_GENERATOR','CHAPTER_DRAFT','SYNTHESIS','CODE_REQUEST','CODE_PLAN','CODE_PLAN_REVIEW','CODE_TEST_AUTHOR','CODE_EDIT','CODE_TEST','CODE_REVIEW','CODE_RESEARCH','CODE_INTEGRATE','PREFLIGHT_REQUEST','TASK_VERIFY','TASK_TEST','TASK_PLAN')),
     status TEXT NOT NULL CHECK(status IN ('BLOCKED','PENDING','IN_PROGRESS','COMPLETED','FAILED','PENDING_RETRY')),
     chapter_id TEXT,
     payload_json TEXT NOT NULL CHECK(json_valid(payload_json)),
@@ -182,6 +182,13 @@ BEGIN
           AND EXISTS(SELECT 1 FROM pipeline_jobs j JOIN pipeline_outputs o USING(job_id)
             WHERE j.workflow_id=NEW.workflow_id AND j.kind='TASK_PLAN' AND j.status='COMPLETED'
             AND j.parent_job_id=NEW.job_id))
+        AND NOT (COALESCE(json_extract(NEW.payload_json,'$.workflow_type')='task_verification428',0)
+          AND EXISTS(SELECT 1 FROM pipeline_jobs j JOIN pipeline_outputs o USING(job_id)
+            JOIN coding_evidence e USING(job_id)
+            WHERE j.workflow_id=NEW.workflow_id AND j.kind IN ('TASK_VERIFY','TASK_TEST')
+            AND j.status='COMPLETED' AND j.parent_job_id=NEW.job_id
+            AND json_extract(o.receipt_json,'$.executor')='task_verifier'
+            AND json_extract(o.output_json,'$.status') IN ('VERIFIED','REJECTED')))
         THEN RAISE(ABORT,'root completion requires synthesis') END;
     SELECT CASE WHEN NEW.kind='CODE_REQUEST'
         AND NOT EXISTS(SELECT 1 FROM pipeline_jobs j JOIN pipeline_outputs o USING(job_id)
@@ -331,7 +338,7 @@ class JobStore(CodingStoreMixin):
                         routes.capture_workflow(conn, root['job_id'], self._current_routing_policy(conn))
                     for row in conn.execute('''SELECT j.job_id FROM pipeline_jobs j LEFT JOIN pipeline_route_reservations r
                         ON r.job_id=j.job_id AND r.attempt_id=j.attempt_id WHERE j.status='IN_PROGRESS'
-                        AND j.kind NOT IN ('MACRO_PLANNING_REQUEST','CODE_REQUEST','CODE_TEST','CODE_INTEGRATE') AND r.reservation_id IS NULL''').fetchall():
+                        AND j.kind NOT IN ('MACRO_PLANNING_REQUEST','CODE_REQUEST','CODE_TEST','CODE_INTEGRATE','TASK_VERIFY','TASK_TEST') AND r.reservation_id IS NULL''').fetchall():
                         legacy = self._get(conn,row['job_id'])
                         routes.guard_execution(conn,legacy,legacy['worker_slot'],observed_boot_id=self.cleanup_boot_id)
                 conn.commit()
@@ -343,7 +350,7 @@ class JobStore(CodingStoreMixin):
     def _migrate_coding_schema(conn):
         existing = conn.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='pipeline_jobs'").fetchone()
         required_kinds = ('MACRO_PLANNING_REQUEST', 'MANIFEST_GENERATOR', 'CHAPTER_DRAFT',
-                          'SYNTHESIS', 'PREFLIGHT_REQUEST', 'TASK_PLAN', *CODING_KINDS)
+                          'SYNTHESIS', 'PREFLIGHT_REQUEST', 'TASK_PLAN', *CODING_KINDS, *TASK_VERIFICATION_KINDS)
         if existing is None or all(repr(kind) in existing[0] for kind in required_kinds):
             return
         # Preserve every child table and FK target name. Renaming the old table
@@ -365,6 +372,7 @@ class JobStore(CodingStoreMixin):
             conn.execute('DROP TABLE coding_migration_jobs')
             # Other tables own these triggers; rebuild their expanded root rule.
             conn.execute('DROP TRIGGER IF EXISTS pipeline_output_owner')
+            conn.execute('DROP TRIGGER IF EXISTS pipeline_completed_output')
             conn.commit()
         except BaseException:
             conn.rollback()
@@ -601,7 +609,7 @@ class JobStore(CodingStoreMixin):
             WHERE j.kind NOT IN ('MACRO_PLANNING_REQUEST','CODE_REQUEST')
             AND ((j.status='IN_PROGRESS' AND j.lease_expires_at<=?)
               OR (j.status IN ('PENDING','PENDING_RETRY') AND
-                 ((r.job_id IS NULL AND j.kind NOT IN ('CODE_TEST','CODE_INTEGRATE') AND j.attempts>=j.max_attempts) OR
+                 ((r.job_id IS NULL AND j.kind NOT IN ('CODE_TEST','CODE_INTEGRATE','TASK_VERIFY','TASK_TEST') AND j.attempts>=j.max_attempts) OR
                   (r.job_id IS NOT NULL AND (r.failure_count>=j.max_attempts OR
                    (r.max_dispatches IS NOT NULL AND r.dispatches>=r.max_dispatches))))))""", (time.time(),)).fetchall()
         results = []
@@ -679,7 +687,7 @@ class JobStore(CodingStoreMixin):
             if isinstance(allowed_kinds,(str,bytes)):
                 raise ValueError('allowed_kinds must be an iterable of executable kinds')
             permitted=tuple(sorted(set(allowed_kinds)))
-            valid={'MANIFEST_GENERATOR','CHAPTER_DRAFT','SYNTHESIS','PREFLIGHT_REQUEST','TASK_PLAN',*CODING_KINDS}-{'CODE_REQUEST'}
+            valid={'MANIFEST_GENERATOR','CHAPTER_DRAFT','SYNTHESIS','PREFLIGHT_REQUEST','TASK_PLAN',*CODING_KINDS,*TASK_VERIFICATION_KINDS}-{'CODE_REQUEST'}
             if not permitted or any(kind not in valid for kind in permitted):
                 raise ValueError('allowed_kinds contains an unsupported execution kind')
             exclusion+=' AND j.kind IN ('+','.join('?' for _ in permitted)+')'
@@ -706,7 +714,7 @@ class JobStore(CodingStoreMixin):
                 return None
             if self.routing_policy is not None and conn.execute('''SELECT 1 FROM pipeline_jobs j
                 LEFT JOIN pipeline_route_reservations r ON r.job_id=j.job_id AND r.attempt_id=j.attempt_id
-                WHERE j.status='IN_PROGRESS' AND j.kind NOT IN ('MACRO_PLANNING_REQUEST','CODE_REQUEST','CODE_TEST','CODE_INTEGRATE') AND r.reservation_id IS NULL LIMIT 1''').fetchone():
+                WHERE j.status='IN_PROGRESS' AND j.kind NOT IN ('MACRO_PLANNING_REQUEST','CODE_REQUEST','CODE_TEST','CODE_INTEGRATE','TASK_VERIFY','TASK_TEST') AND r.reservation_id IS NULL LIMIT 1''').fetchone():
                 # Legacy active executions have no proven routing reservation.
                 # Wait for their fenced completion/reaping and OS cleanup rather
                 # than inventing a target or ignoring their resource occupancy.
@@ -750,7 +758,7 @@ class JobStore(CodingStoreMixin):
                 job = self._get(conn, row['job_id'])
             if requires_cleanup:
                 routes.guard_execution(conn,job,worker_slot,cleanup_boot_id if cleanup_boot_id is not None else self.cleanup_boot_id,
-                                       containment_id=None if job['kind']=='CODE_TEST' else containment_id,
+                                       containment_id=None if job['kind'] in ('CODE_TEST','TASK_TEST') else containment_id,
                                        owner_containment_id=containment_id)
                 job['worker_slot']=worker_slot
             self._event(conn, job, "CLAIMED", attempt_id=job["attempt_id"], fencing_token=job["fencing_token"],
@@ -1118,13 +1126,15 @@ class JobStore(CodingStoreMixin):
                 return False
             if job['kind'] in CONTROLLER_KINDS:
                 conn.execute('INSERT OR IGNORE INTO coding_controller_retries(job_id) VALUES(?)',(job_id,))
-                if category not in ('resource','configuration','compatibility'):
+                unavailable = (category in routes.AVAILABILITY if job['kind'] in TASK_VERIFICATION_KINDS
+                               else category == 'resource')
+                if not unavailable and category not in ('configuration','compatibility'):
                     conn.execute('UPDATE coding_controller_retries SET failures=failures+1 WHERE job_id=?',(job_id,))
                 failures = conn.execute('SELECT failures FROM coding_controller_retries WHERE job_id=?',(job_id,)).fetchone()[0]
                 held = category in ('configuration','compatibility') or (category=='resource' and hold_scope=='job')
                 status = ('BLOCKED' if failures>=job['max_attempts'] else
                           ('BLOCKED' if held else 'PENDING_RETRY') if retry else 'FAILED')
-                delay = max(1.,min(86400.,retry_after_seconds or 30.)) if category=='resource' else 0.
+                delay = max(1.,min(86400.,retry_after_seconds or 30.)) if unavailable else 0.
                 conn.execute('UPDATE coding_controller_retries SET next_eligible_at=? WHERE job_id=?',
                              (time.time()+delay if delay else 0,job_id))
                 conn.execute('UPDATE pipeline_jobs SET status=?,lease_owner=NULL,lease_expires_at=NULL,error=?,updated_at=? WHERE job_id=?',

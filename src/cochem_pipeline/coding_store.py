@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import re
 import time
 import uuid
 from contextlib import contextmanager
@@ -12,9 +13,11 @@ from .coding import CodingProject, digest, manifest, bind_test_identities, withi
 from . import routing_store as routes
 
 ROOT_KINDS = ('MACRO_PLANNING_REQUEST', 'CODE_REQUEST')
-CONTROLLER_KINDS = ('CODE_TEST', 'CODE_INTEGRATE')
+CODING_CONTROLLER_KINDS = ('CODE_TEST', 'CODE_INTEGRATE')
+TASK_VERIFICATION_KINDS = ('TASK_VERIFY', 'TASK_TEST')
+CONTROLLER_KINDS = (*CODING_CONTROLLER_KINDS, *TASK_VERIFICATION_KINDS)
 NATIVE_KINDS = ('CODE_PLAN', 'CODE_PLAN_REVIEW', 'CODE_TEST_AUTHOR', 'CODE_EDIT', 'CODE_REVIEW', 'CODE_RESEARCH')
-CODING_KINDS = ('CODE_REQUEST', *CONTROLLER_KINDS, *NATIVE_KINDS)
+CODING_KINDS = ('CODE_REQUEST', *CODING_CONTROLLER_KINDS, *NATIVE_KINDS)
 
 SCHEMA = '''
 CREATE TABLE IF NOT EXISTS coding_workflows (
@@ -126,6 +129,77 @@ class CodingStoreMixin:
                 self._event(conn,current,'CONTAINER_STARTUP_SLA_MISSED',evidence_sha256=digest(evidence),
                     **{key:evidence.get(key) for key in ('startup_seconds','startup_sla_seconds',
                         'execution_startup_seconds','queue_wait_seconds','handoff_wait_seconds','startup_violation_reason')})
+
+    def complete_task_verification(self, job_id, attempt_id, fencing_token, output, receipt, *, evidence):
+        """Commit a controller check against its durable attempt and exact source.
+
+        This is an internal controller API. Native model output cannot create the
+        physical attempt record, choose a different source, or supply a pass flag.
+        A REJECTED check is a completed observation, not a successful task.
+        """
+        from .task_verification_428 import verify_task_test_evidence, verify_artifact_evidence
+        if any(not isinstance(value, dict) for value in (output, receipt, evidence)):
+            raise ValueError('Task verification needs structured controller evidence')
+        with self._write() as conn:
+            job = self._get(conn, job_id)
+            if not self._owned(job, attempt_id, fencing_token):
+                raise ValueError('Stale task verification attempt cannot publish evidence')
+            if job['kind'] not in TASK_VERIFICATION_KINDS:
+                raise ValueError('Not a task verification execution node')
+            payload = job['payload']
+            expected_mode = 'coding_tests' if job['kind'] == 'TASK_TEST' else 'artifact_integrity'
+            if (payload.get('schema') != 'cochem-task-verification/4.2.8'
+                    or payload.get('mode') != expected_mode
+                    or not isinstance(payload.get('task_id'), str) or not payload['task_id'].strip()
+                    or any(not isinstance(payload.get(key), str)
+                           or not re.fullmatch(r'[0-9a-f]{64}', payload[key])
+                           for key in ('verification_key', 'source_snapshot_sha256'))
+                    or (payload.get('microtask_id') is not None
+                        and (not isinstance(payload['microtask_id'], str) or not payload['microtask_id'].strip()))):
+                raise ValueError('Task verification payload has invalid sealed identities')
+            if (receipt.get('executor') != 'task_verifier'
+                    or receipt.get('cleanup_verified') is not True
+                    or receipt.get('output_sha256') != digest(output)
+                    or any(type(record.get('fencing_token')) is not int
+                           or any(record.get(key) != job[key]
+                                  for key in ('job_id', 'attempt_id', 'fencing_token'))
+                           for record in (receipt, evidence))):
+                raise ValueError('Task verifier receipt and evidence must bind the exact controller attempt')
+            if any(record.get(key) != payload[key] for record in (output, evidence)
+                   for key in ('verification_key', 'source_snapshot_sha256')):
+                raise ValueError('Task verification evidence must bind the exact target and source snapshot')
+            if conn.execute('SELECT 1 FROM pipeline_execution_cleanup WHERE job_id=? AND cleared_at IS NULL',
+                            (job_id,)).fetchone():
+                raise ValueError('Task verification cannot complete before execution cleanup is verified')
+            recorded = conn.execute('SELECT evidence_json,sha256 FROM coding_attempt_evidence '
+                                    'WHERE job_id=? AND attempt_id=? AND fencing_token=?',
+                                    (job_id, attempt_id, fencing_token)).fetchone()
+            if (recorded is None or recorded['sha256'] != digest(evidence)
+                    or recorded['evidence_json'] != encoded(evidence)):
+                raise ValueError('Task verification requires the matching durable physical attempt evidence')
+            files = self._coding_files(conn, payload['source_snapshot_sha256'])
+            validator = verify_task_test_evidence if job['kind'] == 'TASK_TEST' else verify_artifact_evidence
+            expected_output = validator(payload, evidence, files)
+            if encoded(output) != encoded(expected_output):
+                raise ValueError('Task verification output must equal the independently validated physical result')
+            conn.execute('INSERT INTO coding_evidence VALUES(?,?,?)', (job_id, encoded(evidence), digest(evidence)))
+            conn.execute('INSERT INTO pipeline_outputs VALUES(?,?,?,?,?,?,?,?)',
+                         (job_id, attempt_id, fencing_token, None, encoded(output), encoded(receipt), digest(output), time.time()))
+            conn.execute("UPDATE pipeline_jobs SET status='COMPLETED',lease_owner=NULL,lease_expires_at=NULL,updated_at=? WHERE job_id=?",
+                         (time.time(), job_id))
+            routes.release(conn, job_id, 'completed', 'COMPLETED')
+            self._event(conn, job, 'COMPLETED', evidence_sha256=digest(evidence), output_sha256=digest(output),
+                        verification_status=output['status'], verification_key=payload['verification_key'])
+            root = self._get(conn, job['workflow_id'])
+            if (root['payload'].get('workflow_type') == 'task_verification428'
+                    and job['parent_job_id'] == root['job_id']
+                    and not conn.execute("SELECT 1 FROM pipeline_jobs WHERE workflow_id=? AND parent_job_id=? "
+                                         "AND status<>'COMPLETED'", (root['job_id'], root['job_id'])).fetchone()):
+                conn.execute("UPDATE pipeline_jobs SET status='COMPLETED',updated_at=? WHERE job_id=?",
+                             (time.time(), root['job_id']))
+                self._event(conn, root, 'WORKFLOW_COMPLETED', verification_job_id=job_id,
+                            verification_status=output['status'])
+            return self._get(conn, job_id)
 
     def prepare_coding_integration(self, node, staged):
         with self._write() as conn:
@@ -499,7 +573,7 @@ class CodingStoreMixin:
             job = self._get(conn, job_id)
             if not self._owned(job, attempt_id, fencing_token):
                 raise ValueError('Stale coding attempt cannot publish evidence')
-            if job['kind'] not in (*CONTROLLER_KINDS, *NATIVE_KINDS):
+            if job['kind'] not in (*CODING_CONTROLLER_KINDS, *NATIVE_KINDS):
                 raise ValueError('Not a coding execution node')
             if job['kind'] in NATIVE_KINDS:
                 self._native_coding_receipt(job, output, receipt)
