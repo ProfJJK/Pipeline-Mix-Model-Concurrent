@@ -436,11 +436,14 @@ class SubmissionLedger:
         task_id, request_sha256 = request['body']['task_id'], digest(request)
         with closing(self._connect()) as db:
             db.execute('BEGIN IMMEDIATE')
-            existing = db.execute('SELECT request_sha256,state,controller_id FROM legacy428_submissions WHERE task_id=?',
+            existing = db.execute('SELECT request_sha256,state,controller_id,plan_sha256,references_json '
+                                  'FROM legacy428_submissions WHERE task_id=?',
                                   (task_id,)).fetchone()
             if existing is not None:
                 if existing[0] != request_sha256:
                     raise ValueError('A previously reserved semantic request changed')
+                if existing[3] != plan_sha256 or existing[4] != _canonical(sorted(references)):
+                    raise ValueError('A previously reserved recovery plan or legacy references changed')
                 return {'task_id': task_id, 'may_submit': False,
                         'state': 'RECONCILIATION_REQUIRED' if existing[1] == 'RESERVED' else existing[1],
                         'controller_id': existing[2]}

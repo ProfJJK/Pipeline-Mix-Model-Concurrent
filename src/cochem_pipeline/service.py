@@ -218,6 +218,14 @@ class Handler(BaseHTTPRequestHandler):
             if self.command=='GET' and path=='/health':
                 self.reply(200,redact(runtime.status()))
             elif self.command=='GET' and heavy_projection(path):
+                if path.startswith('/tasks/status/'):
+                    planner = getattr(runtime, 'task_planning', None)
+                    # An explicit journal lookup is the only absence proof.
+                    # Exceptions while building an existing task's projection
+                    # remain errors, never a signal that intake may create it.
+                    if planner is not None and not planner.has_task(path[len('/tasks/status/'):]):
+                        self.reply(404, {'error':'Unknown planning task', 'error_code':'TASK_NOT_FOUND'})
+                        return
                 # Bounded wait, then build and encode under the path's lock. The lock
                 # is released before the socket write so a slow reader cannot stall
                 # other callers; only the encoded bytes outlive the projection.

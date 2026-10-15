@@ -65,6 +65,15 @@ def _json(text):
     return json.loads(text, object_pairs_hook=pairs, parse_constant=nonfinite)
 
 
+class ControllerHttpError(RuntimeError):
+    """Status-only transport error; never echo an untrusted response body."""
+
+    def __init__(self, status, *, error_code=None):
+        super().__init__(f'Controller HTTP operation failed with status {status}')
+        self.status = status
+        self.error_code = error_code if error_code == 'TASK_NOT_FOUND' else None
+
+
 class ControllerClient:
     """Authenticated loopback-only client independent of pipeline imports."""
 
@@ -76,11 +85,15 @@ class ControllerClient:
         self.port, self.token_file, self.timeout = port, Path(token_file), timeout
 
     def call(self, operation: str, data: dict | None = None) -> dict:
-        if not isinstance(operation, str) or not (operation in {"/health", "/submit", "/preflight", "/cancel"}
-                or re.fullmatch(r"/workflow/[A-Za-z0-9][A-Za-z0-9_.-]{0,127}", operation)):
+        if not isinstance(operation, str) or not (operation in {"/health", "/submit", "/preflight", "/cancel",
+                                                               '/coding/projects', '/tasks/submit'}
+                or re.fullmatch(r"/(?:workflow|tasks/status)/[A-Za-z0-9][A-Za-z0-9_.-]{0,127}", operation)):
             raise ValueError("Unsupported controller operation")
         if data is not None and not isinstance(data, dict):
             raise ValueError("Controller requests must be JSON objects")
+        if ((operation == '/tasks/submit' and data is None) or
+                ((operation == '/coding/projects' or operation.startswith('/tasks/status/')) and data is not None)):
+            raise ValueError('Unsupported method for task controller operation')
         if self.token_file.is_symlink() or not self.token_file.is_file() or self.token_file.stat().st_size > 4096:
             raise ValueError("Controller token must be a bounded regular private file")
         with self.token_file.open("r", encoding="ascii") as stream:
@@ -97,7 +110,15 @@ class ControllerClient:
             if response.status >= 400:
                 # A remote error body can contain arbitrary data, including
                 # echoed credentials. Never include it in an exception/log.
-                raise RuntimeError(f"Controller HTTP operation failed with status {response.status}")
+                error_code = None
+                if response.status == 404 and operation.startswith('/tasks/status/') and len(content) <= _MAX_RESPONSE:
+                    try:
+                        value = _json(content)
+                        if isinstance(value, dict) and value.get('error_code') == 'TASK_NOT_FOUND':
+                            error_code = 'TASK_NOT_FOUND'
+                    except (ValueError, UnicodeError):
+                        pass
+                raise ControllerHttpError(response.status, error_code=error_code)
             if len(content) > _MAX_RESPONSE:
                 raise ValueError("Controller response exceeds the acceptance size limit")
             value = _json(content)
