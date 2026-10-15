@@ -480,6 +480,10 @@ def test_high_tier_child_approval_and_atomic_partial_fracture_recovery(tmp_path:
 
     # Complete child-mod-a and child-mod-b -> child-asm-8 remains in HOLD_OWNER_APPROVAL until approved!
     recovered_rt.complete_fracture_child(root, "child-mod-a", digest("art-a"))
+    repeated = recovered_rt.approve_fracture_child(root, "child-mod-a", "owner-rcpt-mod-a")
+    assert repeated['status'] == 'COMPLETED' and repeated['artifact_sha256'] == digest('art-a')
+    with pytest.raises(ValueError, match='cannot be rebound'):
+        recovered_rt.approve_fracture_child(root, "child-mod-a", "different-owner-receipt")
     recovered_rt.complete_fracture_child(root, "child-mod-b", digest("art-b"))
     assert recovered_rt.get_fracture_child("child-asm-8")["status"] == "HOLD_OWNER_APPROVAL"
 

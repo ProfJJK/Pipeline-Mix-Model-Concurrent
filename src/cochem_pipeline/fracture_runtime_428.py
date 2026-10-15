@@ -463,6 +463,12 @@ class FractureRuntime:
                 raise ValueError(f"Unknown fracture child '{child_id}' in lineage '{lineage_root}'")
             if not 8 <= int(row["complexity"]) <= 10:
                 raise ValueError("Only complexity 8..10 fracture children require owner approval")
+            if row['status'] == 'FRACTURED_OBSOLETE':
+                raise ValueError('An owner receipt cannot resume an obsolete fracture scope')
+            if row['owner_approval_json'] and not row['needs_owner_approval']:
+                if json.loads(row['owner_approval_json'])['receipt_id'] != authenticated_owner_receipt_id:
+                    raise ValueError('An accepted fracture owner receipt cannot be rebound')
+                return self._row_to_dict(row, self.ledger._read(conn, child_id)['failures'])
             deps = json.loads(row["depends_on_json"])
             deps_done = True
             if deps:
@@ -517,7 +523,7 @@ class FractureRuntime:
                 s["child_id"] for s in siblings if s["status"] == "COMPLETED" or s["child_id"] == child_id
             }
             for sib in siblings:
-                if sib["child_id"] == child_id or sib["status"] == "COMPLETED":
+                if sib["status"] != "BLOCKED_DAG":
                     continue
                 deps = set(json.loads(sib["depends_on_json"]))
                 if deps <= completed_ids:

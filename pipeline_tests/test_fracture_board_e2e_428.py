@@ -3,6 +3,7 @@ import hashlib
 import json
 import threading
 from types import SimpleNamespace
+import pytest
 
 from cochem_pipeline.content_review_428 import review_contract
 from cochem_pipeline.task_artifact_runtime_428 import TaskArtifactRuntime
@@ -175,7 +176,12 @@ def test_failed_original_final_test_fractures_without_giving_assembly_its_test_p
     assert env[2].status(boundary['lineage_root'])['failures'] == 10
 
 
-def test_nested_physical_alias_advances_old_registered_child_without_rewriting_attempts(env, tmp_path):
+@pytest.mark.parametrize('complete_sibling_first', [True, False])
+def test_nested_physical_alias_advances_old_registered_child_without_rewriting_attempts(env, tmp_path, monkeypatch, complete_sibling_first):
+    import time
+    from cochem_pipeline import routing_store
+    route_offset = [0]
+    monkeypatch.setattr(routing_store, 'time', SimpleNamespace(time=lambda: time.time() + route_offset[0]))
     artifacts = install_artifact_port(env, tmp_path)
     _, first, _, _ = prepare_fracture(env)
     attach_board(env)
@@ -183,13 +189,16 @@ def test_nested_physical_alias_advances_old_registered_child_without_rewriting_a
     start = board.materialize('task')
     child = next(row for row in start['nodes'] if row['lineage_kind'] == 'FAILURE_FRACTURE'
                  and row['role'] == 'implementation')
-    first_attempt = store.claim('inert-nested-first', worker_slot='slot1', allowed_kinds=['TASK_PLAN'], requires_cleanup=True)
-    assert first_attempt['payload']['microtask_node']['microtask_id'] == child['microtask_id']
-    execute_one(store, artifacts)
-    store.clear_execution_quarantine(first_attempt['job_id'], first_attempt['attempt_id'], first_attempt['fencing_token'])
-    store.fail(first_attempt['job_id'], first_attempt['attempt_id'], first_attempt['fencing_token'],
-               'Inert nested scope failure', retry=True, category='code')
-    failed, second = fracture_after_physical_predecessors(env, artifacts, child['microtask_id'], failure_count=9)
+    remaining = 10
+    if complete_sibling_first:
+        first_attempt = store.claim('inert-nested-first', worker_slot='slot1', allowed_kinds=['TASK_PLAN'], requires_cleanup=True)
+        assert first_attempt['payload']['microtask_node']['microtask_id'] == child['microtask_id']
+        execute_one(store, artifacts)
+        store.clear_execution_quarantine(first_attempt['job_id'], first_attempt['attempt_id'], first_attempt['fencing_token'])
+        store.fail(first_attempt['job_id'], first_attempt['attempt_id'], first_attempt['fencing_token'],
+                   'Inert nested scope failure', retry=True, category='code')
+        remaining = 9
+    failed, second = fracture_after_physical_predecessors(env, artifacts, child['microtask_id'], failure_count=remaining)
     assert first['lineage_root'] == second['lineage_root']
     assert ledger.status(first['lineage_root'])['failures'] == 20
     for _ in range(20):
@@ -200,6 +209,10 @@ def test_nested_physical_alias_advances_old_registered_child_without_rewriting_a
             break
         job = store.claim('inert-nested-fracture', worker_slot='slot1',
                           allowed_kinds=['TASK_PLAN', 'TASK_VERIFY'], requires_cleanup=True)
+        if job is None:
+            route_offset[0] += 2  # Advance the bounded research availability wait, never a quality attempt.
+            job = store.claim('inert-nested-fracture', worker_slot='slot1',
+                              allowed_kinds=['TASK_PLAN', 'TASK_VERIFY'], requires_cleanup=True)
         assert job is not None, '\n'.join(str((n['microtask_id'], n['status'], n.get('reason'),
             store.get(n['job_id']).get('error') if n.get('job_id') else None)) for n in status['nodes'])
         execute_one(store, artifacts, job=job)
