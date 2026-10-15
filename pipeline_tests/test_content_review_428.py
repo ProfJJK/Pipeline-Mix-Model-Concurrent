@@ -14,7 +14,7 @@ from pipeline_tests.test_task_verification_store_428 import completion
 from pipeline_tests.test_planning_gateway_428 import accepted_receipt
 
 
-def prepared(tmp_path):
+def prepared(tmp_path, *, include_deliverables=True):
     store, journal, broker = _make_store_and_journal(tmp_path)
     task_id = 'content-task'
     _advance_task_to_reassessed_ready(journal, task_id=task_id)
@@ -26,7 +26,10 @@ def prepared(tmp_path):
         state = json.loads(journal._read(conn, task_id)['state_json'])
     # Physical verification fixture uses actual immutable bytes and fenced
     # controller evidence; separate runtime E2E tests exercise RAM staging.
-    files = {'report.md': b'Captured complete report\n'}
+    files = ({item['name']: item['content'].encode('utf-8')
+              for node in snap['nodes'] for item in node['output']['deliverables']}
+             if include_deliverables else {})
+    files['report.md'] = b'Captured complete report\n'
     with store._write() as conn:
         snapshot = store._snapshot(conn, files)
         store._insert(conn, 'integrity-root', 'integrity-root', None, 'MACRO_PLANNING_REQUEST', 'IN_PROGRESS',
@@ -130,9 +133,10 @@ def test_rejected_review_is_a_valid_result_not_a_success_or_format_retry(tmp_pat
     store.close()
 
 
-def test_content_release_retains_review_without_inventing_controller_tests(tmp_path):
+@pytest.mark.parametrize('include_deliverables', [True, False])
+def test_content_release_retains_review_without_inventing_controller_tests(tmp_path, include_deliverables):
     from types import SimpleNamespace
-    store, journal, release, args = prepared(tmp_path)
+    store, journal, release, args = prepared(tmp_path, include_deliverables=include_deliverables)
     release.artifact_runtime = SimpleNamespace(ensure_verification=lambda *_: args['physical'])
     waiting = release.step_microtask_task('content-task')
     assert waiting['status'] == 'WAITING_FOR_INDEPENDENT_CONTENT_REVIEW'
@@ -142,7 +146,13 @@ def test_content_release_retains_review_without_inventing_controller_tests(tmp_p
     store.clear_execution_quarantine(claimed['job_id'], claimed['attempt_id'], claimed['fencing_token'])
     store.complete(claimed['job_id'], claimed['attempt_id'], claimed['fencing_token'], output,
                    accepted_receipt(claimed, output))
-    assert release.step_microtask_task('content-task')['status'] == 'EXECUTION_COMPLETED'
+    result = release.step_microtask_task('content-task')
+    if not include_deliverables:
+        assert result['status'] == 'DELIVERABLE_NOT_IN_FINAL_SNAPSHOT'
+        assert release.get_release('content-task') is None
+        store.close()
+        return
+    assert result['status'] == 'EXECUTION_COMPLETED'
     saved = release.get_release('content-task')
     assert saved['verification_scope'] == 'content_integrity_and_independent_model_review'
     assert saved['controller_test_receipts'] == []

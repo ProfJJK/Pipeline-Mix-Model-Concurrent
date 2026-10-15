@@ -115,12 +115,23 @@ def activate_promotion(journal, task_id, record):
         'promotion-ready.' + digest(binding)[:36], binding, transition)
 
 
-def compile_promoted_graph(state, record):
+def compile_promoted_graph(state, record, *, routed_record=None):
     binding = state['promoted_fracture']
     if (state['stage'] != 'MICROTASKS_READY' or any(record[key] != binding[key] for key in binding)
             or digest(state['microtasks']) != state['microtasks_sha256']
             or state['microtasks'] != record['graph']['children']):
         raise ValueError('Promoted graph differs from its registered task capture')
+    if routed_record is not None:
+        route_fields = {'complexity', 'task_types', 'selected_profile_id', 'selected_model_family',
+                        'selected_effort', 'fracture_route_amendment', 'fracture_route_context'}
+        original = {child['id']: child for child in record['graph']['children']}
+        routed = {child['id']: child for child in routed_record['graph']['children']}
+        if (set(original) != set(routed) or len(routed) != len(routed_record['graph']['children'])
+                or any(record[key] != routed_record[key] for key in ('fracture_id', 'graph_sha256', 'lineage_root'))
+                or any({k: v for k, v in original[cid].items() if k not in route_fields}
+                       != {k: v for k, v in routed[cid].items() if k not in route_fields} for cid in original)):
+            raise ValueError('Promoted route amendment cannot change the registered scope')
+        record = routed_record
     rows = {row['child_id']: row for row in record['children']}
     context = dict(fracture_id=record['fracture_id'], graph_sha256=record['graph_sha256'],
         dossier_sha256=record['dossier_sha256'], lineage_root=record['lineage_root'],

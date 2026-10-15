@@ -201,3 +201,51 @@ def test_whole_promotion_recovers_graph_commit_before_journal_projection(env, mo
         conn.execute('UPDATE planning428_tasks SET state_json=? WHERE task_id=?', (json.dumps(state), 'task'))
     with pytest.raises(ValueError, match='registered task capture'):
         env.board.materialize('task')
+
+
+@pytest.mark.parametrize('recovery', ['pivot', 'fracture'])
+def test_promoted_task_second_boundary_reaches_physical_parent_release(env, tmp_path, recovery):
+    from cochem_pipeline.fracture_promotion_428 import compile_promoted_graph
+    from pipeline_tests.test_fracture_board_e2e_428 import (
+        install_artifact_port, execute_one, fracture_after_physical_predecessors, finish_physical_task)
+    _, first, _ = promote(env)
+    finish_srs_gates(env)
+    env.bridge.step('task'); finish(env, 'FRACTURE_PLAN')
+    env.bridge.step('task'); finish(env, 'FRACTURE_REVIEW')
+    env.bridge.step('task')
+    original_state = env.journal.status('task')
+    original = env.bridge.fractures.promoted_record('task', original_state)
+    inputs = (env.store, env.journal, env.ledger, env.board, env.outcomes, env.bridge)
+    artifacts = install_artifact_port(inputs, tmp_path)
+    status = env.board.materialize('task')
+    child = next(row for row in status['nodes'] if row['role'] == 'implementation')
+    attempt = env.store.claim('inert-promoted-first', worker_slot='slot1',
+                             allowed_kinds=['TASK_PLAN'], requires_cleanup=True)
+    assert attempt['payload']['microtask_node']['microtask_id'] == child['microtask_id']
+    execute_one(env.store, artifacts)  # Actual temp snapshot for the completed sibling.
+    env.store.clear_execution_quarantine(attempt['job_id'], attempt['attempt_id'], attempt['fencing_token'])
+    env.store.fail(attempt['job_id'], attempt['attempt_id'], attempt['fencing_token'],
+                   'Inert promoted child failure', retry=True, category='code')
+    _, second = fracture_after_physical_predecessors(inputs, artifacts, child['microtask_id'],
+                                                    failure_count=9, strategy=recovery)
+    assert second['lineage_root'] == first['lineage_root']
+    assert env.ledger.status(first['lineage_root'])['failures'] == 20
+    release, jobs = finish_physical_task(inputs, artifacts)
+    assert release.get_release('task')
+    reviews = [job for job in jobs if job['payload'].get('planning_intent', {}).get('stage') == 'CONTENT_REVIEW']
+    for review_job in reviews:
+        producer_tiers = [env.store.get(binding['job_id'])['payload']['planning_intent']['complexity']
+                          for binding in review_job['payload']['content_review']['producers']]
+        assert review_job['payload']['planning_intent']['complexity'] >= min(10, max(producer_tiers) + 1)
+    original_children = {row['id'] for row in original['graph']['children']}
+    amended = [job for job in jobs if job['payload'].get('microtask_node', {}).get('fracture_route_amendment')
+               and job['payload']['microtask_node']['microtask_id'] in original_children]
+    assert {'assembly', 'final_test'} <= {job['payload']['microtask_node']['role'] for job in amended}
+    assert env.ledger.status(first['lineage_root'])['failures'] == 20
+    after = env.bridge.fractures.fracture_runtime.accepted_record(first['lineage_root'], 10)
+    assert after['graph'] == original['graph']
+    assert env.journal.status('task')['microtasks'] == original_state['microtasks']
+    forged = deepcopy(original)
+    forged['graph']['children'][0]['deliverables'] = ['unreviewed.txt']
+    with pytest.raises(ValueError, match='registered scope'):
+        compile_promoted_graph(original_state, original, routed_record=forged)

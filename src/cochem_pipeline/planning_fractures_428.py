@@ -57,7 +57,26 @@ def validated_external_predecessors(planner, payload):
         failed_microtask_id=record['failed_scope_id'])
     if context != expected_context or node['microtask_id'] not in {child['id'] for child in record['graph']['children']}:
         raise ValueError('External dependencies belong to another compiled child')
-    source = planner.store.get(row['source_job_id'])['payload']
+    source_job = planner.store.get(row['source_job_id'])
+    source = source_job['payload']
+    if source.get('microtask_node') is None:
+        # Whole-task promotion has no original microtask generation or external
+        # predecessors. Bind the exceptional empty set to its exact registered
+        # source, reviewed promoted graph and the current task generation.
+        from .fracture_promotion_428 import compile_promoted_graph
+        from .microtask_board_428 import MicrotaskBoardRuntime
+        with planner.journal._write() as conn:
+            task = planner.journal._read(conn, intent['task_id'])
+            state, catalog = json.loads(task['state_json']), json.loads(task['catalog_json'])
+        promotion = state.get('fracture_promotion') or {}
+        if (source['planning_intent']['task_id'] != intent['task_id']
+                or promotion.get('source_job_id') != source_job['job_id']
+                or promotion.get('source_intent_sha256') != digest(source['planning_intent'])
+                or MicrotaskBoardRuntime._plan_generation_sha256(state, catalog) != intent['plan_generation_sha256']
+                or supplied or source.get('predecessor_outputs')):
+            raise ValueError('Whole fracture dependencies differ from its exact promoted source')
+        compile_promoted_graph(state, record)
+        return {}
     if (source['planning_intent']['task_id'] != intent['task_id']
             or source['planning_intent']['plan_generation_sha256'] != intent['plan_generation_sha256']
             or source['microtask_node']['microtask_id'] != record['failed_scope_id']):
@@ -386,7 +405,7 @@ class PlanningFractureRuntime:
             ids += [row[0] for row in conn.execute('SELECT job_id FROM planning428_fracture_controls WHERE task_id=?', (task_id,))]
             return list(dict.fromkeys(ids))
 
-    def records_for_task(self, task_id, generation):
+    def records_for_task(self, task_id, generation, *, apply_routes=True):
         """Committed fractures only, scoped to their immutable original WBS generation."""
         with self.journal._write() as conn:
             rows = conn.execute("SELECT * FROM planning428_fracture_plans WHERE task_id=? "
@@ -401,4 +420,4 @@ class PlanningFractureRuntime:
                 raise ValueError('Fracture task projection has no committed matching graph')
             records.append(dict(record, source_job=source))
         from .fracture_routes_428 import amend_records
-        return amend_records(self, task_id, records)
+        return amend_records(self, task_id, records) if apply_routes else records

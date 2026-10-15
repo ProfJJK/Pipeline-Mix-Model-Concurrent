@@ -171,7 +171,7 @@ class ContentReviewRuntime:
                 or verifier['payload']['task_id'] != task_id
                 or verifier['payload']['source_snapshot_sha256'] != physical['source_snapshot_sha256']):
             raise ValueError('Content review physical verification binding differs')
-        families, bindings = set(), []
+        families, bindings, producer_tiers = set(), [], []
         for job_id in sorted(set(producers)):
             job = self.store.get(job_id)
             result = PlanningGateway(self.journal, self.store).model_result(job_id)
@@ -179,13 +179,14 @@ class ContentReviewRuntime:
                 raise ValueError('Content producer has no cleaned committed completion')
             family = job['payload']['task_catalog']['models'][result['profile_id']]['family']
             families.add(family)
+            producer_tiers.append(job['payload']['planning_intent']['complexity'])
             bindings.append(dict(job_id=job_id, output_sha256=digest(job['output']),
                                  attempt_id=job['attempt_id'], fencing_token=job['fencing_token']))
         if not families:
             raise ValueError('Content review needs a producer to remain independent')
         requirements = deepcopy(state['document']['requirements'])
         criteria = deepcopy(state['document']['release_criteria'])
-        scope_tier = state['assessment']['complexity']
+        scope_tier = max(state['assessment']['complexity'], *producer_tiers)
         if scope_producer_id is not None:
             if scope_producer_id not in producers or verifier['payload']['producer_job_id'] != scope_producer_id:
                 raise ValueError('Scoped content review must bind its physically verified producer')
@@ -202,6 +203,12 @@ class ContentReviewRuntime:
         files = self.store.coding_files(physical['source_snapshot_sha256'])
         artifacts = {path: value.decode('utf-8') for path, value in sorted(files.items())}
         tier = min(10, scope_tier + 1)
+        if self.attempt_accounting is not None:
+            from .planning_outcomes_428 import PlanningOutcomeRuntime
+            review_lineage = PlanningOutcomeRuntime.lineage_for_job(task_id,
+                {'planning_intent': {'task_id': task_id, 'stage': 'CONTENT_REVIEW'}})
+            retained = self.attempt_accounting.ensure_lineage(review_lineage, complexity=tier)
+            tier = max(tier, retained['floor'])
         options = five_model_options(catalog, state['assessment']['task_types'], tier)
         candidates = [o['model_id'] for o in options if o['meets_floor']
                       and catalog['models'][o['model_id']]['family'] not in families
