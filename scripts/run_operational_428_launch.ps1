@@ -133,7 +133,8 @@ function Assert-OpRecoveryQuiescent {
     param($Recovery,$AllowedFence=$null)
     Assert-428PortFree
     foreach($id in @($Recovery.warden.pid,$Recovery.fence.pid)){
-        if($null -ne (Get-CimInstance Win32_Process -Filter ('ProcessId='+[int]$id))){throw 'A preserved recovery PID is occupied; hold.'}
+        $occupied=Get-CimInstance Win32_Process -Filter ('ProcessId='+[int]$id)
+        if($null -ne $occupied){throw (New-OpProcessRejection $occupied 'PRESERVED_PID_OCCUPIED')}
     }
     # Read-only bounded inventory. MCP clients are permitted only in their exact
     # module form; no daemon, provider, unknown launcher or competing owner phase
@@ -143,28 +144,63 @@ function Assert-OpRecoveryQuiescent {
     $byId=@{};foreach($row in $rows){$byId[[int]$row.ProcessId]=$row}
     foreach($row in $rows){
         $image=[string]$row.ExecutablePath;$command=[string]$row.CommandLine
-        $relevant=($image -ceq $script:python -or $image.StartsWith($script:OpOldRoot+'\',[StringComparison]::OrdinalIgnoreCase) -or
-            $image.StartsWith($script:OpRoot+'\',[StringComparison]::OrdinalIgnoreCase) -or
-            $command.IndexOf('cochem_pipeline',[StringComparison]::OrdinalIgnoreCase) -ge 0)
-        if(-not $relevant){continue}
+        $reason=Get-OpPipelineProcessReason $image $command ([string](Get-OpProperty $row 'Name'))
+        if($null -eq $reason){continue}
         if(Test-OpExactMcpProcess $image $command){continue}
         if($null -ne $AllowedFence -and $command.IndexOf($AllowedFence.arguments,[StringComparison]::Ordinal) -ge 0 -and
             (([int]$row.ProcessId -eq [int]$AllowedFence.ready.pid -and $image -ceq $script:python) -or
              ($image -ceq (Join-Path $script:OpRoot '.venv\Scripts\python.exe') -and
               $byId.ContainsKey([int]$AllowedFence.ready.pid) -and
               [int]$byId[[int]$AllowedFence.ready.pid].ParentProcessId -eq [int]$row.ProcessId))){continue}
-        throw 'A native pipeline process remains or its role is unknown; hold.'
+        throw (New-OpProcessRejection $row $reason)
     }
+}
+
+function Get-OpKnownPythonPattern {
+    $venv='C:\\Program Files\\CoChem\\Pipeline4\.2\.(?:7|8)-windows-[0-9]{8}-r[0-9]+\\\.venv\\Scripts\\python\.exe'
+    return '(?i:'+[regex]::Escape($script:python)+'|'+$venv+')'
+}
+
+function Get-OpPipelineProcessReason {
+    # Executable identity makes native processes relevant. A shell/search argv
+    # merely mentioning a source module is not evidence of Python execution.
+    param([string]$Image,[string]$Command,[string]$Name='')
+    if($Image -cmatch ('^(?:'+(Get-OpKnownPythonPattern)+')$')){return 'PROTECTED_PYTHON'}
+    if($Image.StartsWith($script:OpOldRoot+'\',[StringComparison]::OrdinalIgnoreCase) -or
+        $Image.StartsWith($script:OpRoot+'\',[StringComparison]::OrdinalIgnoreCase)){return 'RUNTIME_IMAGE'}
+    $base=if($Image){[IO.Path]::GetFileName($Image)}else{$Name}
+    if($base -match '^(?:python(?:w|[0-9]+(?:\.[0-9]+)?)?|py)\.exe$'){
+        if(-not $Image -or -not $Command){return 'UNINSPECTABLE_PYTHON'}
+        if($Command -match 'cochem_(?:pipeline|mcp|supervisor)'){return 'PIPELINE_PYTHON'}
+    }
+    if($base -match '^cochem-(?:pipeline|supervisor)\.exe$'){return 'PIPELINE_ENTRYPOINT'}
+    return $null
+}
+
+function New-OpProcessRejection {
+    param($Process,[string]$Reason)
+    $base=[IO.Path]::GetFileName([string](Get-OpProperty $Process 'ExecutablePath'))
+    if(-not $base){$base=[string](Get-OpProperty $Process 'Name')}
+    $base=$base.ToLowerInvariant()
+    if($base -cnotin @('python.exe','pythonw.exe','py.exe','node.exe','powershell.exe','pwsh.exe','cmd.exe',
+        'cochem-pipeline.exe','cochem-supervisor.exe','uv.exe')){$base='other'}
+    $e=[InvalidOperationException]::new('A native pipeline process remains or its role is unknown; preserve evidence.')
+    $e.Data['cochem_recovery_process']=@{pid=[int64]$Process.ProcessId;name=$base;
+        command_sha256=(Get-OpTextSha256 ([string](Get-OpProperty $Process 'CommandLine')));reason=$Reason}
+    return $e
 }
 
 function Test-OpExactMcpProcess {
     param([string]$Image,[string]$Command)
-    $venv='C:\\Program Files\\CoChem\\Pipeline4\.2\.(?:7|8)-windows-[0-9]{8}-r[0-9]+\\\.venv\\Scripts\\python\.exe'
-    $executable='(?i:'+[regex]::Escape($script:python)+'|'+$venv+')'
+    $executable=Get-OpKnownPythonPattern
     if($Image -cnotmatch ('^(?:'+$executable+')$')){return $false}
     $client='(?i:'+[regex]::Escape('C:\Users\ansac\CoChem427\pipeline-client-r3.json')+')'
     $pattern='^\s*(?:"'+$executable+'"|'+$executable+')\s+-I\s+-B\s+-m\s+cochem_pipeline\s+mcp\s+--client-config\s+(?:"'+$client+'"|'+$client+')\s*$'
-    if($Command -cnotmatch $pattern){return $false}
+    # Preserve the reviewed controller-only bridge used by existing Claude and
+    # Codex clients (r6_retarget_core.ps1 Get-ControllerPresence). It has no -I/-B.
+    $bridge='(?i:'+[regex]::Escape('C:\Users\ansac\CoChem427\bridge.local.json')+')'
+    $legacy='^\s*(?:"'+$executable+'"|'+$executable+')\s+-m\s+cochem_mcp\s+--provider\s+(?:codex|claude)\s+--config\s+(?:"'+$bridge+'"|'+$bridge+')\s*$'
+    if($Command -cnotmatch $pattern -and $Command -cnotmatch $legacy){return $false}
     Assert-ProtectedPath $Image
     return $true
 }
@@ -336,7 +372,21 @@ function Get-OpFailure {
         }
         if($frames.Count -eq 8){break}
     }
-    return @{error_type=$Record.Exception.GetType().Name;substage=$Substage;frames=$frames}
+    $process=$null;$exception=$Record.Exception
+    for($i=0;$i -lt 4 -and $null -ne $exception;$i++){
+        $v=$exception.Data['cochem_recovery_process']
+        if($v -is [Collections.IDictionary] -and $v.Count -eq 4 -and
+            $v.Contains('pid') -and $v.Contains('name') -and $v.Contains('reason') -and $v.Contains('command_sha256') -and
+            ($v.pid -is [int] -or $v.pid -is [long]) -and $v.pid -gt 0 -and $v.pid -le [uint32]::MaxValue -and
+            $v.name -is [string] -and $v.reason -is [string] -and
+            $v.name -cin @('python.exe','pythonw.exe','py.exe','node.exe','powershell.exe','pwsh.exe','cmd.exe','cochem-pipeline.exe','cochem-supervisor.exe','uv.exe','other') -and
+            $v.reason -cin @('PROTECTED_PYTHON','RUNTIME_IMAGE','PIPELINE_PYTHON','UNINSPECTABLE_PYTHON','PIPELINE_ENTRYPOINT','PRESERVED_PID_OCCUPIED') -and
+            $v.command_sha256 -is [string] -and $v.command_sha256 -cmatch '^[a-f0-9]{64}$'){
+            $process=@{pid=$v.pid;name=$v.name;reason=$v.reason;command_sha256=$v.command_sha256};break
+        }
+        $exception=$exception.InnerException
+    }
+    return @{error_type=$Record.Exception.GetType().Name;substage=$Substage;frames=$frames;process_rejection=$process}
 }
 
 function Set-OpSubstage {
