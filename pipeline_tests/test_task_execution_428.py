@@ -12,6 +12,7 @@ from cochem_pipeline.planning_journal import PlanningJournal
 from cochem_pipeline.planning_runtime import PlanningController
 from cochem_pipeline.routing import load_routing_policy
 from cochem_pipeline.store import JobStore
+from cochem_pipeline.output_contracts import OutputFormatError
 from cochem_pipeline.task_execution_428 import (
     SimpleTaskExecutionRuntime,
     validate_simple_execution_output,
@@ -187,7 +188,7 @@ def test_invalid_output_and_stale_claim_are_rejected(simple_env):
 
     # 1. Model prose alone is rejected
     prose_only = {"artifact_text": "I completed everything successfully."}
-    with pytest.raises(ValueError, match="supplied JSON format"):
+    with pytest.raises(OutputFormatError) as formatting:
         store.complete(
             claimed["job_id"],
             claimed["attempt_id"],
@@ -195,11 +196,12 @@ def test_invalid_output_and_stale_claim_are_rejected(simple_env):
             prose_only,
             accepted_receipt(claimed, prose_only),
         )
+    assert {issue['code'] for issue in formatting.value.issues} == {'missing_field'}
 
     # 2. Tampered deliverable sha256 is rejected
     bad_hash = deepcopy(valid_out)
     bad_hash["deliverables"][0]["sha256"] = "f" * 64
-    with pytest.raises(ValueError, match="sha256 does not match"):
+    with pytest.raises(ValueError) as semantic_hash:
         store.complete(
             claimed["job_id"],
             claimed["attempt_id"],
@@ -207,11 +209,12 @@ def test_invalid_output_and_stale_claim_are_rejected(simple_env):
             bad_hash,
             accepted_receipt(claimed, bad_hash),
         )
+    assert not isinstance(semantic_hash.value, OutputFormatError)
 
     # 3. Missing requirement coverage is rejected
     missing_req = deepcopy(valid_out)
     missing_req["requirement_evidence"] = []
-    with pytest.raises(ValueError, match="requirement_evidence"):
+    with pytest.raises(ValueError, match="requirement_evidence") as semantic_coverage:
         store.complete(
             claimed["job_id"],
             claimed["attempt_id"],
@@ -219,11 +222,12 @@ def test_invalid_output_and_stale_claim_are_rejected(simple_env):
             missing_req,
             accepted_receipt(claimed, missing_req),
         )
+    assert not isinstance(semantic_coverage.value, OutputFormatError)
 
     # 4. Unsatisfied release criterion is rejected
     failed_crit = deepcopy(valid_out)
     failed_crit["release_criteria_results"][0]["passed"] = False
-    with pytest.raises(ValueError, match="Release criterion not satisfied"):
+    with pytest.raises(ValueError, match="Release criterion not satisfied") as semantic_criterion:
         store.complete(
             claimed["job_id"],
             claimed["attempt_id"],
@@ -231,6 +235,7 @@ def test_invalid_output_and_stale_claim_are_rejected(simple_env):
             failed_crit,
             accepted_receipt(claimed, failed_crit),
         )
+    assert not isinstance(semantic_criterion.value, OutputFormatError)
 
     # 5. Stale fencing token cannot complete the job
     with pytest.raises(ValueError):
