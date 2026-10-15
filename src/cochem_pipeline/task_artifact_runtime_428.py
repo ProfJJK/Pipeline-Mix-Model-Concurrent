@@ -238,6 +238,13 @@ class TaskArtifactRuntime:
         job = self.store.get(job['job_id'])
         accepted = self.accepted_snapshot(job)
         intent = job['payload']['planning_intent']
+        declared = (job['payload']['microtask_node']['requirement_ids']
+                    if intent['stage'] == 'MICROTASK_EXECUTION'
+                    else [item['id'] for item in intent['task']['document']['requirements']])
+        if (not isinstance(requirements, (list, tuple)) or not declared
+                or len(requirements) != len(set(requirements)) or set(requirements) != set(declared)):
+            raise ValueError('Physical verification must cover the exact immutable producer requirement set')
+        requirements = sorted(set(declared))
         capture = self._capture(intent['task_id'])
         files = self.store.coding_files(accepted['snapshot_sha256'])
         base = dict(schema='cochem-task-verification/4.2.8', task_id=intent['task_id'],

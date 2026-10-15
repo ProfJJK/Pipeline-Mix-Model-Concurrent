@@ -204,7 +204,7 @@ def task_test(tmp_path, phase, *, successful=True):
     image = 'sha256:' + 'd' * 64
     policy = DockerPolicy.from_dict(dict(enabled=True, image=image, allowed_images=[image],
                                         commands=[dict(name='unit', argv=['python', '-m', 'pytest', '-q'])]))
-    identity = dict(path=path, file_sha256=manifest(files)[path], class_name='tests.test_requirements')
+    identity = dict(path=path, file_sha256=manifest(files)[path], class_name='tests.test_requirements', name=name)
     payload_extra = dict(test_phase=phase, docker=policy.as_dict(), requirement_test_names=names,
                          expected_test_identities={name: identity}, microtask_id=None)
     store, node, files = queued(tmp_path, 'TASK_TEST', files=files, payload_extra=payload_extra)

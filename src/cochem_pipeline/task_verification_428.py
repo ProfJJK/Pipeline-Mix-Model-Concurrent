@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import hashlib
 
-from .coding import digest, manifest
+from .coding import bind_test_identities, digest, manifest
 from .container_policy import DockerPolicy
 from .pytest_assertions import executed_assertion_failure
 
@@ -38,9 +38,12 @@ def verify_task_test_evidence(payload, evidence, files):
         raise ValueError('Task tests require exact runner, source and cleanup evidence')
     identities = payload['expected_test_identities']
     names = payload['requirement_test_names']
-    if not names or set(identities) != set(names.values()):
+    if (not names or names != requirement_test_names(payload.get('requirements', list(names)))
+            or set(identities) != set(names.values())):
         raise ValueError('Task tests need a sealed identity for every requirement')
-    if any(manifest(files).get(item['path']) != item['file_sha256'] for item in identities.values()):
+    rebound = bind_test_identities(files, sorted({item['path'] for item in identities.values()}),
+                                   [{'name': name} for name in names.values()])
+    if identities != rebound:
         raise ValueError('Task test identity is not bound to the tested bytes')
     commands = evidence.get('commands') or []
     cases = [case for command in commands for case in command.get('junit_cases', [])]

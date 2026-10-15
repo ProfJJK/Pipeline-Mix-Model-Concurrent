@@ -81,6 +81,25 @@ def test_source_bytes_and_sizes_are_bound_even_if_claimed_passed():
     payload,evidence,files=example()
     evidence['source']['files']['src/a.py']['size']+=1
     with pytest.raises(ValueError): verify_task_test_evidence(payload,evidence,files)
+
+
+@pytest.mark.parametrize('mutation', ['test_name', 'class_name', 'requirement_set'])
+def test_exact_source_definition_and_requirement_set_cannot_be_relabelled(mutation):
+    payload, evidence, files = example()
+    if mutation == 'requirement_set':
+        payload['requirements'] = ['R1', 'unverified']
+    elif mutation == 'test_name':
+        name = payload['requirement_test_names']['R1']
+        identity = payload['expected_test_identities'].pop(name)
+        payload['expected_test_identities']['test_unrelated'] = identity
+        payload['requirement_test_names']['R1'] = 'test_unrelated'
+        evidence['commands'][0]['junit_cases'][0]['name'] = 'test_unrelated'
+    else:
+        name = payload['requirement_test_names']['R1']
+        payload['expected_test_identities'][name]['class_name'] = 'forged.module'
+        evidence['commands'][0]['junit_cases'][0]['class_name'] = 'forged.module'
+    with pytest.raises(ValueError):
+        verify_task_test_evidence(payload, evidence, files)
     payload,evidence,files=example()
     files['src/a.py']=b'value = 0\n'
     with pytest.raises(ValueError): verify_task_test_evidence(payload,evidence,files)

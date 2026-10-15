@@ -166,6 +166,16 @@ def test_caller_cannot_rebind_a_verified_producer_snapshot_to_another_intent(sta
     assert artifacts.ensure_verification(rewritten, requirements) == expected
 
 
+@pytest.mark.parametrize('mode', ['missing', 'extra'])
+def test_verification_scope_must_match_the_immutable_producer_requirements(staged, mode):
+    artifacts, runtime, producer, requirements, _ = staged
+    changed = requirements[:-1] if mode == 'missing' else [*requirements, 'unassigned-requirement']
+    with pytest.raises(ValueError, match='requirement'):
+        artifacts.ensure_verification(producer, changed)
+    with runtime.store._connection() as conn:
+        assert not conn.execute("SELECT 1 FROM pipeline_jobs WHERE kind='TASK_TEST'").fetchone()
+
+
 @pytest.mark.parametrize('changed', ['extra_predecessor', 'missing_predecessor', 'wrong_hash'])
 def test_unassigned_or_rewritten_dependencies_never_enter_workspace(staged, changed):
     artifacts, runtime, producer, requirements, _ = staged
