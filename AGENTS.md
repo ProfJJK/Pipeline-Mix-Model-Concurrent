@@ -90,6 +90,15 @@ This is the preferred interface, not a claim that all three adapters have been
 implemented or accepted on this host. Reuse verified sessions before asking for input.
 
 ## Current handoff
+The owner has now run `r428-op-launch-865a29b`; it is spent. Its r5 installation
+and Codex preflight completed, but admission fencing held before catalog
+acceptance or cutover. The received diagnostic proves an expired, unreleased
+fence and an ended r4 Warden (unchanged definition, exit 1, no instances or
+listener). Do not claim the previous runtime is healthy or rerun the installer.
+Read `docs/4.2.8/OPERATIONAL_FENCE_HOLD_20261015.md`. Cleanup and task-transition
+repairs are committed; a separately bound installation-reuse continuation is
+being prepared. Only the owner will execute the reviewed continuation.
+
 2026-10-15: the owner-approved seven-part operational repair is integrated on
 `fix/428-operational-repair` in the separate local
 `C:\Users\ansac\source\repos\Pipeline-Mix-Model-Concurrent-428-repair` checkout.

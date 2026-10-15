@@ -1,5 +1,13 @@
 # 4.2.8 source progress
 
+The delivered operational r5 launch has run and is spent. Installation and Codex
+preflight passed, then admission fencing held before catalog acceptance/cutover.
+The received diagnostic proves fence expiry without a release request and an
+ended r4 Warden, with no listener. Source cleanup/task-transition repairs are
+committed; an exact-attempt continuation will reuse the completed installation.
+See [the current hold evidence](OPERATIONAL_FENCE_HOLD_20261015.md). Do not repeat
+the original owner command or treat source tests as deployment acceptance.
+
 ## Current operational repair â€” 15 October 2026
 
 The owner-approved seven-part repair is on `fix/428-operational-repair`, based

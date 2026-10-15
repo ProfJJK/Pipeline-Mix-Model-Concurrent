@@ -51,7 +51,7 @@ starting the old controller merely to stop it again.
 
 ## Independent source defect repaired
 
-`Start-OpFence` currently returns its context only after readiness validation.
+The spent launch's `Start-OpFence` returned its context only after readiness validation.
 If validation throws, the caller loses the task/nonce/receipt context needed to
 release its own temporary database writer fence. This can leave that fence held
 until its bounded expiry. The source defect is confirmed by inspection; its role
@@ -73,3 +73,14 @@ agent. The delivered immutable package remains unchanged.
 Any continuation must bind the saved installation receipt, verified exact task
 state and catalog publication state. Reusing an installed root requires explicit
 verification; the old fresh-install command is not a continuation mechanism.
+
+## Recovery packaging
+
+The offline recovery preparer validates the original twelve launch inputs and
+406 installation inputs before writing a fresh user-owned package. It preserves
+the application source at `865a29b` and replaces only the owner launcher, adding
+the pinned original manifest, exact-attempt recovery instructions and separate
+launcher test evidence. The recovery identifier names one new protected sitting;
+an existing sitting is spent and cannot be replayed. The preparer passed 32 inert
+fixture tests. Final integrated tests and the actual packaged read-only plan are
+recorded in the separate recovery delivery record when complete.
