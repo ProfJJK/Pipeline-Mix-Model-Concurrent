@@ -135,6 +135,7 @@ class PipelineConfig:
     ramdisk: RamdiskConfig = field(default_factory=RamdiskConfig)
     docker: DockerPolicy = field(default_factory=DockerPolicy)
     coding_projects: dict[str, Any] = field(default_factory=dict)
+    coding_registration: Any = None
     knowledge: KnowledgeConfig = field(default_factory=KnowledgeConfig)
     git_executable: str = field(default_factory=lambda: r'C:\Program Files\Git\cmd\git.exe' if os.name=='nt' else 'git')
 
@@ -241,6 +242,15 @@ def load_config(filename: str) -> PipelineConfig:
             or (os.name=='nt' and not Path(git_executable).is_absolute())):
         raise ValueError('git_executable must be one explicit absolute executable on Windows')
     projects = raw.get('coding_projects',{})
+    from .project_registration import RegistrationPolicy
+    registration = RegistrationPolicy.from_dict(raw.get('coding_registration'))
+    if registration is not None:
+        if not ramdisk.enabled or not docker.enabled:
+            raise ValueError('Dynamic coding registration requires RAM and independent Docker tests')
+        protected_roots=[private.resolve(),token.resolve(),*(root.resolve() for root in roots.values()),Path(ramdisk.mount_root).resolve()]
+        for root in registration.source_roots:
+            if any(root == item or root in item.parents or item in root.parents for item in protected_roots):
+                raise ValueError('Coding source roots must be disjoint from private state, credentials and RAM')
     if not isinstance(projects,dict):
         raise ValueError('coding_projects must be an operator-owned project registry')
     if projects:
@@ -269,4 +279,4 @@ def load_config(filename: str) -> PipelineConfig:
     return PipelineConfig(private.resolve(), {k:v.resolve() for k,v in roots.items()}, workers,
                           providers, rules, token, operator, reserved_fraction=fraction, routing=routing,
                           catalog_activation=catalog_activation,task_planning=task_planning,runtime_version=runtime_version,hardware=hardware,execution_limits=execution_limits,ramdisk=ramdisk,
-                          docker=docker,coding_projects=projects,knowledge=knowledge,git_executable=git_executable, **values)
+                          docker=docker,coding_projects=projects,coding_registration=registration,knowledge=knowledge,git_executable=git_executable, **values)

@@ -327,14 +327,28 @@ class CodingCoordinator:
         self.host_boot_id = host_boot_id
         from .coding_git import GitStager
         self.git = GitStager(config.private_root / 'coding-git', git_executable=getattr(config,'git_executable',None))
+        self.registry = None
+        if getattr(config,'coding_registration',None) is not None:
+            from .project_registration import ProjectRegistry
+            self.registry=ProjectRegistry(config.private_root/'coding-projects',config.coding_registration,
+                git_executable=config.git_executable,static_projects=config.coding_projects)
+
+    def projects(self):
+        return self.registry.projects() if getattr(self,'registry',None) else self.config.coding_projects
+
+    def prepare(self, project_id, registration):
+        if self.registry is None:
+            raise ValueError('Automatic project preparation is not enabled by the operator')
+        return self.registry.prepare(project_id, registration)
 
     def submit(self, project_id, objective, requirements, workflow_id=None):
         from .coding_git import capture_repository
-        if project_id not in self.config.coding_projects:
+        projects = self.projects()
+        if project_id not in projects:
             raise ValueError('Unknown registered coding project')
         if not self.config.ramdisk.enabled or not self.config.docker.enabled:
             raise ValueError('Coding requires verified RAM staging and independent Docker tests')
-        project = self.config.coding_projects[project_id]
+        project = validate_production_coding_project(projects[project_id])
         snapshot = capture_repository(project.repository, project.branch, git_executable=getattr(self.config,'git_executable',None))
         validate_project_files(snapshot.files)
         from .planning_governance import validate_registration,collect_external_sources

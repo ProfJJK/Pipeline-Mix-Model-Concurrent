@@ -235,9 +235,13 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply(200,runtime.knowledge_authority.status() if hasattr(runtime,'knowledge_authority')
                            else runtime.knowledge.status())
             elif self.command=='GET' and path=='/coding/projects':
-                self.reply(200,{'projects':sorted(runtime.config.coding_projects)})
+                projects = runtime.coding_projects() if hasattr(runtime,'coding_projects') else runtime.config.coding_projects
+                result={'projects':sorted(key for key in projects if key.casefold() != 'windows-acceptance')}
+                if 'windows-acceptance' in projects:
+                    result['acceptance_fixtures']=['windows-acceptance']
+                self.reply(200,result)
             elif self.command=='POST' and path in ('/submit','/preflight','/cancel','/routing/resume',
-                                                  '/coding/submit','/coding/cancel','/coding/resume',
+                                                  '/coding/submit','/coding/prepare','/coding/cancel','/coding/resume',
                                                   '/knowledge/search','/knowledge/read','/knowledge/refresh','/tasks/submit'):
                 size=int(self.headers.get('Content-Length','0'))
                 if not 1<=size<=4*1024*1024:
@@ -255,9 +259,11 @@ class Handler(BaseHTTPRequestHandler):
                         task_id=data['workflow_id']
                     project_id=data.get('project_id')
                     if project_id is not None:
-                        projects=getattr(getattr(runtime,'config',None),'coding_projects',{}) or {}
+                        projects=runtime.coding_projects() if hasattr(runtime,'coding_projects') else (getattr(getattr(runtime,'config',None),'coding_projects',{}) or {})
                         if not isinstance(project_id,str) or project_id not in projects:
                             raise ValueError('Task project_id must be a registered coding project')
+                        from .coding import validate_production_coding_project
+                        validate_production_coding_project(projects[project_id])
                     from .owner_ui_428 import build_public_task_view
                     planner=getattr(runtime,'task_planning',None)
                     if project_id is not None and planner is not None:
@@ -277,7 +283,20 @@ class Handler(BaseHTTPRequestHandler):
                     if set(data)-{'full'} or type(data.get('full',False)) is not bool:
                         raise ValueError('Knowledge refresh accepts only a boolean full flag')
                     self.reply(200,runtime.knowledge.refresh(full=data.get('full',False)))
+                elif path=='/coding/prepare':
+                    if set(data) != {'project_id','registration'}:
+                        raise ValueError('Project preparation requires project_id and registration')
+                    self.reply(200,runtime.prepare_coding_project(data['project_id'],data['registration']))
                 elif path=='/coding/submit':
+                    if set(data)-{'project_id','objective','requirements','workflow_id','registration'}:
+                        raise ValueError('Coding intake contains unsupported fields')
+                    if data.get('registration') is not None:
+                        runtime.prepare_coding_project(data['project_id'],data['registration'])
+                    projects=runtime.coding_projects() if hasattr(runtime,'coding_projects') else (getattr(runtime.config,'coding_projects',{}) or {})
+                    if data.get('project_id') not in projects:
+                        raise ValueError('Unknown registered coding project')
+                    from .coding import validate_production_coding_project
+                    validate_production_coding_project(projects[data['project_id']])
                     workflow=runtime.submit_coding(data['project_id'],data['objective'],
                         data.get('requirements',['REQ-001']),workflow_id=data.get('workflow_id'))
                     self.reply(202,public_workflow(workflow))
@@ -300,9 +319,11 @@ class Handler(BaseHTTPRequestHandler):
                             task_id=data['workflow_id']
                         project_id=data.get('project_id')
                         if project_id is not None:
-                            projects=getattr(getattr(runtime,'config',None),'coding_projects',{}) or {}
+                            projects=runtime.coding_projects() if hasattr(runtime,'coding_projects') else (getattr(getattr(runtime,'config',None),'coding_projects',{}) or {})
                             if not isinstance(project_id,str) or project_id not in projects:
                                 raise ValueError('Task project_id must be a registered coding project')
+                            from .coding import validate_production_coding_project
+                            validate_production_coding_project(projects[project_id])
                         from .owner_ui_428 import build_public_task_view
                         if project_id is not None:
                             submitted=planner.submit(data['objective'],task_id,project_id=project_id)

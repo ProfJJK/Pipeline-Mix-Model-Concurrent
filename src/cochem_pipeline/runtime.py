@@ -181,7 +181,7 @@ class Runtime:
                                                   *(self.ramdisk.workspace(slot).root for slot in config.workers)])
         from .admission import JointAdmission
         self.admission=JointAdmission(self.store,self.docker,capacity=0,max_capacity=min(getattr(config,'max_execution_slots',4),len(config.workers)))
-        if getattr(config, 'coding_projects', None) and self.ramdisk is not None and self.docker is not None:
+        if (getattr(config, 'coding_projects', None) or getattr(config,'coding_registration',None)) and self.ramdisk is not None and self.docker is not None:
             from .coding import CodingCoordinator
             self.coding = CodingCoordinator(config, self.store, self.runner, self.ramdisk,host_boot_id=self.boot_id)
         self.lock = threading.RLock()
@@ -619,6 +619,14 @@ class Runtime:
                 commands=self.store.coding_state(job['workflow_id'])['docker']['commands']
                 docker=max(docker,sum(command['timeout_seconds'] for command in commands)+180)
         return {'native':native,'CODE_TEST':min(86400,docker),'CODE_INTEGRATE':1200}
+
+    def coding_projects(self):
+        return self.coding.projects() if self.coding is not None else self.config.coding_projects
+
+    def prepare_coding_project(self, project_id, registration):
+        if self.coding is None:
+            raise ValueError('Coding requires verified RAM and Docker prerequisites')
+        return self.coding.prepare(project_id,registration)
 
     def submit_coding(self, project_id, objective, requirements, workflow_id=None):
         if self.coding is None:

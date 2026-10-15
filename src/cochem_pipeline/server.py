@@ -141,11 +141,14 @@ def create_server(client:ControlClient):
 
     @server.tool()
     async def pipeline_code(project_id:str,objective:str,requirements:list[str]|None=None,
-                            workflow_id:str|None=None)->dict[str,Any]:
+                            workflow_id:str|None=None,registration:dict[str,Any]|None=None)->dict[str,Any]:
         """Submit a staged coding workflow with independent tests and review; acceptance is not completion."""
-        return await asyncio.to_thread(client.call,'/coding/submit',{
+        payload={
             'project_id':project_id,'objective':objective,'requirements':requirements or ['REQ-001'],
-            'workflow_id':workflow_id})
+            'workflow_id':workflow_id}
+        if registration is not None:
+            payload['registration']=registration
+        return await asyncio.to_thread(client.call,'/coding/submit',payload)
 
     @server.tool()
     async def pipeline_code_status(workflow_id:str)->dict[str,Any]:
