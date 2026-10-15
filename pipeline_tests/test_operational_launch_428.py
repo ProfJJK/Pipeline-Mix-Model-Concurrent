@@ -44,6 +44,82 @@ try{Assert-OpIdleHealth $health 123 'same'}catch{$held=$true}
     assert result==dict(idle_verified=True,quarantine_held=True)
 
 
+def test_ps51_retained_native_process_list_preserves_exact_pair_shape():
+    """Only reference this inert PowerShell fixture process; never start/stop one."""
+    result = inert_ps(r"""
+function Get-FixtureHeldProcesses {
+    $held=[Collections.Generic.List[Diagnostics.Process]]::new()
+    $held.Add([Diagnostics.Process]::GetCurrentProcess())
+    $held.Add([Diagnostics.Process]::GetCurrentProcess())
+    return ,$held
+}
+$state=@{processes=(Get-FixtureHeldProcesses)}
+$when=[DateTime]'2026-10-15T12:00:00Z'
+$task=[pscustomobject]@{LastRunTime=$when}
+$task|Add-Member ScriptMethod GetInstances {
+    param($flags)$c=[pscustomobject]@{Count=1}
+    $c|Add-Member ScriptMethod Item {param($i)[pscustomobject]@{InstanceGuid='original'}};return $c
+}
+$failure=$null;$result=$null;$count=$null
+try{
+    $count=@($state.processes).Count
+    $result=Get-OpRetainedTaskState $task 'original' $when $state.processes
+}catch{
+    $failure=@{type=$_.Exception.GetType().Name;line=$_.InvocationInfo.ScriptLineNumber;
+        function=(Get-OpProperty $_.InvocationInfo.MyCommand 'Name');message=$_.Exception.Message}
+}finally{foreach($p in $state.processes){$p.Dispose()}}
+@{ps_edition=$PSVersionTable.PSEdition;ps_major=$PSVersionTable.PSVersion.Major;
+    list_type=$state.processes.GetType().FullName;count=$count;result=$result;failure=$failure}|ConvertTo-Json -Depth 5 -Compress
+""")
+    assert result['ps_edition'] == 'Desktop'
+    assert result['ps_major'] == 5
+    assert result['list_type'].startswith('System.Collections.Generic.List`1[[System.Diagnostics.Process,')
+    assert result['failure'] is None, result
+    assert result['count'] == 2, result
+    assert result['result'] == 'RUNNING', result
+
+
+def test_starting_fence_context_survives_ready_validation_failure(tmp_path):
+    """A failed admission proof must not discard the exact created-fence identity."""
+    result = inert_ps(r"""
+$script:OpPrivate='PRIVATE';$script:OpOldConfig='C:\fixture\old\pipeline.json'
+$script:OpManifest=@{previous_config_sha256=('a'*64);request_sha256=('b'*64)}
+$script:OpScheduler=$null;$script:OpFolder=$null
+$script:seen=[Collections.Generic.List[string]]::new()
+function Write-OpStatus {param($p,$s,$r,$step)}
+function New-OpPrivateDirectory {param($p)$script:seen.Add('fresh_directory');$script:freshRoot=$p;$null=[IO.Directory]::CreateDirectory($p)}
+function Write-OpRecord {param($p,$r)
+    if((Split-Path -Parent $p) -cne $script:OpPrivate){throw 'Intent must not pollute the fresh child directory'}
+    $script:seen.Add('intent_saved');[IO.File]::WriteAllText($p,($r|ConvertTo-Json -Compress))
+}
+function Assert-ProtectedPath {param($p)}
+function New-OpOneShot {param($s,$f,$n,$a,$seconds)
+    if(@([IO.Directory]::EnumerateFileSystemEntries($script:freshRoot)).Count){throw 'Child output root must be empty'}
+    $script:seen.Add('task_created')
+    return @{name=$n;arguments=$a;instance='fixture-instance';started=[DateTime]::UtcNow}
+}
+function Test-Path {param($LiteralPath)return $true}
+function Open-428Pin {param($p,$h)return [IO.MemoryStream]::new()}
+function Read-428Json {param($s)$script:seen.Add('read_ready');return @{status='WRITER_FENCE_HELD'}}
+function Get-428FileSha256 {param($p)return ('c'*64)}
+function Assert-OpFence {param($f)$script:seen.Add('validate_ready');throw [InvalidOperationException]::new('fixture admission rejection')}
+$state=@{fence=$null};$failure=$null
+try{$state.fence=Start-OpFence 'stop-fence' $state 'fence'}catch{
+    $failure=@{type=$_.Exception.GetType().Name;line=$_.InvocationInfo.ScriptLineNumber;
+        function=(Get-OpProperty $_.InvocationInfo.MyCommand 'Name');message=$_.Exception.Message}
+}
+$retained=$null
+if($null -ne $state.fence){$retained=@{root=$state.fence.root;nonce=$state.fence.nonce;
+    instance=$state.fence.handle.instance;ready_pin=$state.fence.ready_pin}}
+@{seen=@($script:seen);failure=$failure;retained=$retained}|ConvertTo-Json -Depth 5 -Compress
+""".replace('PRIVATE', str(tmp_path)))
+    assert result['seen'] == ['fresh_directory', 'intent_saved', 'task_created', 'read_ready', 'validate_ready']
+    assert result['failure']['type'] == 'InvalidOperationException'
+    assert result['retained'] is not None, result
+    assert result['retained']['instance'] == 'fixture-instance'
+    assert result['retained']['ready_pin'] == 'c' * 64
+
+
 @pytest.mark.parametrize('scenario,held,stops', [
     ('running', False, 1), ('ended', False, 0), ('exit_during_stop', False, 1),
     ('other_instance', True, 0), ('later_run', True, 0), ('orphan', True, 0),

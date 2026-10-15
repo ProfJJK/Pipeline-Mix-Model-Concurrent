@@ -43,6 +43,8 @@ function New-OpResultRecord {
         all_routes_usable=(Get-OpProperty $State.acceptance 'all_routes_usable' $false);
         coverage_holds=(Get-OpProperty $State.acceptance 'coverage_holds');
         error_type=(Get-OpProperty $State 'error_type');
+        launcher_failure=(Get-OpProperty $State 'launcher_failure');
+        fence_cleanup=(Get-OpProperty $State 'fence_cleanup');
         acceptance_failure=(Get-OpProperty $State.acceptance 'failure');
         late_prompt=$false;automatic_retry=$false;useful_job_acceptance=$false}
 }
@@ -65,6 +67,7 @@ function Invoke-OpTransaction {
     try{
         foreach($phase in @('preconditions','offline_install','codex_preflight','admission_fence','stop_previous','release_fence','catalog_acceptance','cutover','verify_running','enable_trigger','codex_integration')){
             $State.phase=$phase
+            $State.substage=$null
             if($phase -ceq 'stop_previous'){$State.stop_requested=$true}
             if($phase -ceq 'catalog_acceptance'){$State.acceptance_started=$true}
             if($phase -ceq 'cutover'){$State.cutover_requested=$true}
@@ -73,8 +76,16 @@ function Invoke-OpTransaction {
         $State.status='R428_OPERATIONAL_RUNNING_VERIFIED'
     }catch{
         $State.error_type=$_.Exception.GetType().Name
+        $State.launcher_failure=Get-OpFailure $_ (Get-OpProperty $State 'substage')
         $State.status='R428_OPERATIONAL_HELD_PRESERVE_EVIDENCE'
         $State.rollback='NOT_REQUIRED'
+        if(-not $State.stop_requested -and $null -ne (Get-OpProperty $State 'fence')){
+            # Starting a writer fence is meaningful even when READY validation
+            # fails before the stop action. Retain and settle only this sitting's
+            # exact verified one-shot; never infer old-runtime health/restoration.
+            try{Release-OpFence $State.fence;$State.fence_cleanup=$State.fence.completion}
+            catch{$State.fence_cleanup=@{status='HELD_PRESERVE_FENCE';failure=(Get-OpFailure $_ 'fence_cleanup')}}
+        }
         if($State.stopped -and (Test-OpRestoreAuthority $State.acceptance $State.acceptance_started $State.acceptance_exited $State.cutover_requested)){
             try{& $Actions.restore_previous $State;$State.rollback='PREVIOUS_RUNTIME_RESTORED_HEALTH_VERIFIED'}
             catch{$State.rollback='HELD_PRESERVE_STOPPED_OR_RUNNING_STATE';$State.recovery_error_type=$_.Exception.GetType().Name}
@@ -109,10 +120,30 @@ function Write-OpRecord {
 }
 
 function Write-OpStatus {
-    param([string]$Phase,[string]$Status='RUNNING',$Result=$null)
+    param([string]$Phase,[string]$Status='RUNNING',$Result=$null,$Substage=$null)
     if(-not $script:OpSitting){return}
     Write-OpRecord (Join-Path $script:OpSitting ('status-'+[DateTime]::UtcNow.ToString('yyyyMMddTHHmmssfffffff')+'-'+[Guid]::NewGuid().ToString('N')+'.json')) `
-        @{schema='cochem-428-operational-status/1';phase=$Phase;status=$Status;utc=[DateTime]::UtcNow.ToString('o');result=$Result;late_prompt=$false;automatic_retry=$false} $true
+        @{schema='cochem-428-operational-status/1';phase=$Phase;substage=$Substage;status=$Status;utc=[DateTime]::UtcNow.ToString('o');result=$Result;late_prompt=$false;automatic_retry=$false} $true
+}
+
+function Get-OpFailure {
+    param($Record,$Substage)
+    $frames=@()
+    foreach($line in ([string]$Record.ScriptStackTrace -split '\r?\n')){
+        if($line -match '^at ([A-Za-z0-9_-]+|<ScriptBlock>), .+: line ([0-9]+)$'){
+            $frames+=@{function=$Matches[1];line=[int]$Matches[2]}
+        }
+        if($frames.Count -eq 8){break}
+    }
+    return @{error_type=$Record.Exception.GetType().Name;substage=$Substage;frames=$frames}
+}
+
+function Set-OpSubstage {
+    param([hashtable]$State,[string]$Name)
+    if($null -eq $State){return}
+    if((Get-OpProperty $State 'substage') -ceq $Name){return}
+    $State.substage=$Name
+    Write-OpStatus (Get-OpProperty $State 'phase' 'admission_fence') 'RUNNING' $null $Name
 }
 
 function Read-OpPrivateRecord {
@@ -280,19 +311,34 @@ function Confirm-OpPhaseStart {
 }
 
 function Start-OpFence {
-    param([string]$Label)
-    $root=Join-Path $script:OpPrivate ($Label+'-'+[Guid]::NewGuid().ToString('N'));New-OpPrivateDirectory $root
+    param([string]$Label,[hashtable]$State,[string]$StateKey='fence')
+    if($Label -notin @('stop-fence','restore-fence') -or $StateKey -notin @('fence','restore_fence') -or
+        $null -eq $State -or $null -ne (Get-OpProperty $State $StateKey)){throw 'Fresh caller-owned fence state is required.'}
+    $root=Join-Path $script:OpPrivate ($Label+'-'+[Guid]::NewGuid().ToString('N'))
     $nonce=[Guid]::NewGuid().ToString('N')
     $args='-I -B -m cochem_pipeline.owner_admission_fence_428 --config "'+$script:OpOldConfig+'" --config-sha256 '+$script:OpManifest.previous_config_sha256+
         ' --output-root "'+$root+'" --nonce '+$nonce+' --request-sha256 '+$script:OpManifest.request_sha256+' --wait-seconds 1800 --hold-seconds 240'
-    $handle=New-OpOneShot $script:OpScheduler $script:OpFolder ('CoChem-4.2.8-Fence-'+$nonce) $args 2100
+    $fence=@{root=$root;nonce=$nonce;arguments=$args;name=('CoChem-4.2.8-Fence-'+$nonce);intent_at=[DateTime]::UtcNow;
+        owned=$false;handle=$null;ready=$null;ready_pin=$null;released=$false;process=$null;completion=$null}
+    # Assignment precedes every operation that could create a task or writer lock.
+    # A partial intent is evidence only and never authorizes release/stop.
+    $State[$StateKey]=$fence;Set-OpSubstage $State 'fence_create_directory'
+    New-OpPrivateDirectory $root
+    Write-OpRecord (Join-Path $script:OpPrivate ('fence-owner-intent-'+$nonce+'.json')) @{schema='cochem-owner-admission-intent/4.2.8';nonce=$nonce;
+        task_name=$fence.name;config_sha256=$script:OpManifest.previous_config_sha256;request_sha256=$script:OpManifest.request_sha256;
+        requested_at=$fence.intent_at.ToString('o')}
+    Set-OpSubstage $State 'fence_create_task'
+    $handle=New-OpOneShot $script:OpScheduler $script:OpFolder $fence.name $args 2100
+    $fence.handle=$handle;$fence.owned=$true
     $deadline=[DateTime]::UtcNow.AddSeconds(1830)
     do{
         if(Test-Path -LiteralPath (Join-Path $root 'ready.json')){
-            $ready=Read-OpPrivateRecord (Join-Path $root 'ready.json')
-            $fence=@{root=$root;handle=$handle;ready=$ready;nonce=$nonce;ready_pin=(Get-428FileSha256 (Join-Path $root 'ready.json'));released=$false;process=$null}
+            Set-OpSubstage $State 'fence_read_ready'
+            Read-OpFenceReady $fence
+            Set-OpSubstage $State 'fence_validate_ready'
             Assert-OpFence $fence;return $fence
         }
+        Set-OpSubstage $State 'fence_wait_ready'
         $t=Assert-OpOneShot $handle $false
         if(Test-OpTaskTerminal $t $handle.started){throw 'Admission fence ended without readiness.'}
         Start-Sleep -Seconds 1
@@ -300,14 +346,55 @@ function Start-OpFence {
     throw 'Admission did not drain within the bound; old runtime is preserved.'
 }
 
-function Assert-OpFence {
+function Assert-OpOwnedFence {
     param($Fence)
-    $r=$Fence.ready;$now=[DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
-    if($Fence.released -or $r.schema -cne 'cochem-owner-admission-fence/4.2.8' -or $r.status -cne 'WRITER_FENCE_HELD' -or
+    if($null -eq $Fence -or -not $Fence.owned -or $null -eq $Fence.handle -or $Fence.nonce -cnotmatch '^[a-f0-9]{32}$' -or
+        (Split-Path -Parent $Fence.root) -cne $script:OpPrivate -or (Split-Path -Leaf $Fence.root) -cnotmatch '^(stop|restore)-fence-[a-f0-9]{32}$' -or
+        $Fence.name -cne ('CoChem-4.2.8-Fence-'+$Fence.nonce) -or $Fence.handle.name -cne $Fence.name -or
+        $Fence.handle.arguments -cne $Fence.arguments -or $Fence.handle.started -lt $Fence.intent_at -or
+        [string]::IsNullOrEmpty($Fence.handle.instance)){throw 'Fence ownership is incomplete or changed; preserve evidence.'}
+    $expected='-I -B -m cochem_pipeline.owner_admission_fence_428 --config "'+$script:OpOldConfig+'" --config-sha256 '+$script:OpManifest.previous_config_sha256+
+        ' --output-root "'+$Fence.root+'" --nonce '+$Fence.nonce+' --request-sha256 '+$script:OpManifest.request_sha256+' --wait-seconds 1800 --hold-seconds 240'
+    if($Fence.arguments -cne $expected){throw 'Fence command binding differs.'}
+}
+
+function Read-OpFenceReady {
+    param($Fence)
+    Assert-OpOwnedFence $Fence
+    $path=Join-Path $Fence.root 'ready.json';Assert-ProtectedPath $path
+    $pin=Get-428FileSha256 $path;$stream=Open-428Pin $path $pin
+    try{$ready=Read-428Json $stream}finally{$stream.Dispose()}
+    if($null -ne $Fence.ready_pin -and $Fence.ready_pin -cne $pin){throw 'Fence readiness bytes changed.'}
+    $Fence.ready=$ready;$Fence.ready_pin=$pin
+}
+
+function Assert-OpFenceBinding {
+    # A release is not admission: stale readiness or nonzero accounting may
+    # reject a stop while still permitting release of our exact owned lock.
+    param($Fence)
+    Assert-OpOwnedFence $Fence
+    $r=$Fence.ready
+    if($null -eq $r -or $Fence.ready_pin -cnotmatch '^[a-f0-9]{64}$' -or
+        $r.schema -cne 'cochem-owner-admission-fence/4.2.8' -or $r.status -cne 'WRITER_FENCE_HELD' -or
         $r.nonce -cne $Fence.nonce -or $r.config_sha256 -cne $script:OpManifest.previous_config_sha256 -or
         $r.request_sha256 -cne $script:OpManifest.request_sha256 -or $r.database_path -cne (Join-Path $script:OpConfig.private_root 'job_board.db') -or
-        $r.ready_at -gt $now+2 -or $r.expires_at -lt $now+150 -or $r.expires_at-$r.ready_at -ne 240){throw 'Admission fence is absent, stale, or unbound.'}
+        [int64]$r.pid -le 0 -or $r.ready_at -lt ([DateTimeOffset]$Fence.handle.started).ToUnixTimeSeconds()-2 -or
+        $r.ready_at -gt [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()+2 -or $r.expires_at-$r.ready_at -ne 240){throw 'Fence readiness is unbound.'}
+}
+
+function Assert-OpFence {
+    param($Fence)
+    Assert-OpFenceBinding $Fence
+    $r=$Fence.ready;$now=[DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+    if($Fence.released -or $null -ne $Fence.completion -or $r.expires_at -lt $now+150){throw 'Admission fence is absent or stale.'}
     foreach($p in $r.counts.PSObject.Properties){if($p.Value -ne 0){throw 'Admission fence contains active execution.'}}
+    Confirm-OpFenceProcess $Fence
+}
+
+function Confirm-OpFenceProcess {
+    param($Fence)
+    Assert-OpFenceBinding $Fence
+    $r=$Fence.ready
     $null=Assert-OpOneShot $Fence.handle $true
     $native=Get-CimInstance Win32_Process -Filter ('ProcessId='+[int]$r.pid)
     if($null -eq $native -or $native.ExecutablePath -cne $script:python -or
@@ -323,15 +410,45 @@ function Assert-OpFence {
 
 function Release-OpFence {
     param($Fence)
-    if($Fence.released){return}
-    Write-OpRecord (Join-Path $Fence.root 'release.json') @{schema='cochem-owner-admission-release/4.2.8';nonce=$Fence.nonce;ready_sha256=$Fence.ready_pin;request_sha256=$script:OpManifest.request_sha256}
-    $code=Wait-OpOneShot $Fence.handle 30
+    if($Fence.released -or $null -ne $Fence.completion){return}
+    Assert-OpOwnedFence $Fence
+    Read-OpFenceReady $Fence;Assert-OpFenceBinding $Fence
+    $task=Assert-OpOneShot $Fence.handle $false
+    $terminal=Test-OpTaskTerminal $task $Fence.handle.started
+    $sent=$false
+    if(-not $terminal){
+        Confirm-OpFenceProcess $Fence
+        $path=Join-Path $Fence.root 'release.json'
+        $release=@{schema='cochem-owner-admission-release/4.2.8';nonce=$Fence.nonce;ready_sha256=$Fence.ready_pin;request_sha256=$script:OpManifest.request_sha256}
+        if(Test-Path -LiteralPath $path){
+            $old=Read-OpPrivateRecord $path
+            if(@($old.PSObject.Properties).Count -ne 4){throw 'Existing fence release differs.'}
+            foreach($key in $release.Keys){if((Get-OpProperty $old $key) -cne $release[$key]){throw 'Existing fence release differs.'}}
+        }else{
+            # Atomic name publication; the fence never sees a partially written release.
+            $pending=Join-Path $Fence.root 'release.pending';Write-OpRecord $pending $release
+            [IO.File]::Move($pending,$path)
+        }
+        $sent=$true;$deadline=[DateTime]::UtcNow.AddSeconds(30)
+        do{
+            $task=Assert-OpOneShot $Fence.handle $false
+            if(Test-OpTaskTerminal $task $Fence.handle.started){$terminal=$true;break}
+            Start-Sleep -Milliseconds 100
+        }while([DateTime]::UtcNow -lt $deadline)
+        if(-not $terminal){throw 'Owned fence release did not reach terminal state; preserve evidence.'}
+    }
     $r=Read-OpPrivateRecord (Join-Path $Fence.root 'result.json')
-    if($code -ne 0 -or $r.status -cne 'LOCK_RELEASED' -or $r.nonce -cne $Fence.nonce -or
+    $expectedStatus=if($r.released -eq $true){'LOCK_RELEASED'}else{'FENCE_EXPIRED'}
+    $expectedCode=if($r.released -eq $true){0}else{2}
+    if([int64]$task.LastTaskResult -ne $expectedCode -or $r.schema -cne 'cochem-owner-admission-fence/4.2.8' -or $r.status -cne $expectedStatus -or $r.nonce -cne $Fence.nonce -or
         $r.ready_sha256 -cne $Fence.ready_pin -or $r.request_sha256 -cne $script:OpManifest.request_sha256 -or
-        $r.released -ne $true -or $r.lock_released -ne $true){throw 'Admission fence release did not verify.'}
-    if($null -ne $Fence.process -and -not $Fence.process.WaitForExit(5000)){throw 'Fence native process did not exit.'}
-    $Fence.released=$true
+        $r.config_sha256 -cne $script:OpManifest.previous_config_sha256 -or $r.database_path -cne $Fence.ready.database_path -or
+        $r.pid -ne $Fence.ready.pid -or $r.lock_released -ne $true){throw 'Admission fence terminal receipt did not verify.'}
+    if($null -ne $Fence.process){
+        if(-not $Fence.process.WaitForExit(5000)){throw 'Fence native process did not exit.'}
+    }elseif($null -ne (Get-CimInstance Win32_Process -Filter ('ProcessId='+[int]$r.pid))){throw 'Terminal fence PID is still occupied; preserve evidence.'}
+    $Fence.released=$r.released -eq $true
+    $Fence.completion=@{status=$r.status;lock_released=$true;native_exit_verified=$true;release_requested=$sent}
 }
 
 function Wait-OpHealth {
@@ -358,7 +475,7 @@ function Restore-OpPrevious {
         if(-not (Test-OpRestoreAuthority $State.acceptance $true $State.acceptance_exited $State.cutover_requested)){throw 'Catalog state does not authorize previous-runtime restoration.'}
         # Exact pinned config and stopped task must still match. A fresh writer
         # fence independently proves the board has no unreconciled native work.
-        $State.restore_fence=Start-OpFence 'restore-fence'
+        $State.restore_fence=Start-OpFence 'restore-fence' $State 'restore_fence'
         $before=$State.fence.ready.catalog;$after=$State.restore_fence.ready.catalog;$phase=$State.acceptance.publication_proof
         foreach($key in @('active_policy_sha256','active_catalog_sha256')){
             if((Get-OpProperty $before $key) -cne (Get-OpProperty $after $key) -or
@@ -479,14 +596,17 @@ function Invoke-OperationalLaunch {
             # Finish HTTP/native health verification before excluding writers.
             # Active work may still drain during Start-OpFence; its locked
             # durable accounting supplies the later idle/cleanup proof.
+            Set-OpSubstage $state 'previous_health'
             $health=Get-428Health;Assert-428Health $health $script:OpOldRoot $true
             if($health.pid -ne $state.old_pid -or $health.instance_id -cne $state.old_instance){throw 'Previous controller changed before fencing.'}
+            Set-OpSubstage $state 'previous_native_identity'
             $state.processes=Open-OpProcessProof $health $script:OpOldRoot $script:OpOldConfig
+            Set-OpSubstage $state 'previous_task_identity'
             $task=$script:OpFolder.GetTask('CoChem-4.2.7-Warden')
             if($task.Xml -cne $script:OpOriginalXml -or $task.GetSecurityDescriptor(7) -cne $script:OpOriginalSddl -or
                 (Get-OpRetainedTaskState $task $state.old_task_instance $state.old_task_last_run $state.processes) -cne 'RUNNING'){
                 throw 'Previous task changed before fencing.'}
-            $state.fence=Start-OpFence 'stop-fence'
+            $state.fence=Start-OpFence 'stop-fence' $state 'fence'
         }
         $actions.stop_previous={param($state)
             Write-OpStatus $state.phase;Assert-OpFence $state.fence
