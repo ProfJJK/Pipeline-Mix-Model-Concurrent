@@ -1,0 +1,84 @@
+{
+  "schema": "cochem-operational-owner-hold-evidence/1",
+  "sitting": "C:\\Program Files\\CoChem\\R428Operational-20261015-a62bffb278044fffbaf21207a866ff81",
+  "public_status": [
+    {
+      "late_prompt": false,
+      "utc": "2026-10-15T18:34:01.3929095Z",
+      "schema": "cochem-428-operational-status/1",
+      "automatic_retry": false,
+      "result": null,
+      "phase": "preconditions",
+      "status": "RUNNING"
+    },
+    {
+      "late_prompt": false,
+      "utc": "2026-10-15T18:36:55.6388658Z",
+      "schema": "cochem-428-operational-status/1",
+      "automatic_retry": false,
+      "result": null,
+      "phase": "offline_install",
+      "status": "RUNNING"
+    },
+    {
+      "late_prompt": false,
+      "utc": "2026-10-15T18:41:17.0807120Z",
+      "schema": "cochem-428-operational-status/1",
+      "automatic_retry": false,
+      "result": null,
+      "phase": "codex_preflight",
+      "status": "RUNNING"
+    },
+    {
+      "late_prompt": false,
+      "utc": "2026-10-15T18:41:17.1985289Z",
+      "schema": "cochem-428-operational-status/1",
+      "automatic_retry": false,
+      "result": null,
+      "phase": "admission_fence",
+      "status": "RUNNING"
+    },
+    {
+      "late_prompt": false,
+      "utc": "2026-10-15T18:41:18.4972444Z",
+      "schema": "cochem-428-operational-status/1",
+      "automatic_retry": false,
+      "result": {
+        "phase": "admission_fence",
+        "cutover_requested": false,
+        "codex_integration_status": "NOT_APPLIED",
+        "acceptance_failure": null,
+        "automatic_retry": false,
+        "runtime_health_verified": false,
+        "rollback": "NOT_REQUIRED",
+        "codex_session_refresh_required": false,
+        "error_type": "RuntimeException",
+        "useful_job_acceptance": false,
+        "schema": "cochem-428-operational-owner-result/1",
+        "late_prompt": false,
+        "source_commit": "865a29b113a8b59c822f6aa4d921a45c18407fe5",
+        "coverage_holds": null,
+        "request_sha256": "8ca37638b5dbe15b877c7505dc2acbabac5f6e9b962b6b90101e5cc268aa814f",
+        "launch_manifest_sha256": "49481181faa25f4b8762b85013bece21afb3f58b3f9b8e7417237fa3dacfc75c",
+        "all_routes_usable": false,
+        "status": "R428_OPERATIONAL_HELD_PRESERVE_EVIDENCE",
+        "publication_state": "UNKNOWN"
+      },
+      "phase": "admission_fence",
+      "status": "R428_OPERATIONAL_HELD_PRESERVE_EVIDENCE"
+    }
+  ],
+  "install": {
+    "schema": "cochem-428-offline-install/1",
+    "status": "STOPPED_RUNTIME_INSTALLED",
+    "source_commit": "865a29b113a8b59c822f6aa4d921a45c18407fe5",
+    "manifest_sha256": "775de3a3c0edc9e8355d451728f370089ffce09a5f73c9b745c0d019912787d9"
+  },
+  "install_receipt_sha256": "0d4b036eda13a5381b700d766aa7eb097cbc893f6e0a6ff07b770e53bbe947ae",
+  "current_mcp_health": "CONNECTION_REFUSED_WINERROR_10061",
+  "current_mcp_projects": "CONNECTION_REFUSED_WINERROR_10061",
+  "private_evidence_access": "DENIED_TO_ORDINARY_PROCESS",
+  "root_cause_verified": false,
+  "agent_host_mutations": 0,
+  "recovery_attempted": false
+}

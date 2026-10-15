@@ -1,3 +1,8 @@
+SPENT OWNER RUN — 15 October 2026. Do not execute the command below again.
+The attempt installed r5, then held at admission_fence before cutover. The old
+controller now refuses connections; recovery needs the saved private fence evidence.
+The original launch sheet is preserved below for evidence only.
+
 Pipeline 4.2.8 operational repair r5 — owner launch, 15 October 2026
 
 Open a 64-bit Administrator Windows PowerShell window and paste the single command below once.

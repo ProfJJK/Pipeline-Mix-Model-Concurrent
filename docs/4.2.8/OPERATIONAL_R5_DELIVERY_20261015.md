@@ -1,3 +1,5 @@
+> **Spent owner attempt — do not rerun the command below.** The 15 October run installed r5 and passed Codex preflight, then held at `admission_fence` before cutover. The current controller refuses connections. Exact private fence/task evidence is pending; the cause and recovery are not yet verified. See [saved public evidence](evidence/operational-r5-hold-a62bffb.json). The original delivery record is retained below.
+
 # Operational r5 delivery — 15 October 2026
 
 The seven owner-approved source repairs are implemented and packaged. **Only the
