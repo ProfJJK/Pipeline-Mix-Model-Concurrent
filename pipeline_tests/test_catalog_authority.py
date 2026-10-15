@@ -103,7 +103,7 @@ def test_windows_adapter_requests_noninheritable_reparse_safe_replacement_denial
     assert adapter.acquire('fixture-directory',True)==17
     assert adapter.acquire('fixture-file',False)==17
     assert calls==[
-        ('fixture-directory',0x20000,3,None,3,0x02200000,None),
+        ('fixture-directory',0x20001,3,None,3,0x02200000,None),
         ('fixture-file',0x80000000,1,None,3,0x02200000,None)]
 
 
