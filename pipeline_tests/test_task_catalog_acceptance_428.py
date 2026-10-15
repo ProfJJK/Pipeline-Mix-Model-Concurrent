@@ -370,6 +370,24 @@ def test_windows_custody_directory_handles_participate_in_sharing_checks():
     assert calls[0][1]==0x20001 and calls[0][2]==3  # read/write share, no DELETE.
 
 
+def test_release_selection_preserves_unaccepted_rankings(tmp_path,raw_task_catalog,binary_bindings,monkeypatch):
+    import importlib
+    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[1]/'scripts'))
+    helper=importlib.import_module('prepare_task_catalog_428')
+    config=dict(routing=load_routing_policy({'policy_version':3}).as_dict(),max_execution_slots=4,
+                providers=valid_providers(binary_bindings),workers={f'slot{i}':dict(name=f'inert-{i}') for i in range(1,7)})
+    destination=tmp_path/'selected'
+    result=helper.prepare_task_catalog_release(destination,configuration=config,catalog=raw_task_catalog,
+        binary_bindings=binary_bindings,request_id='c'*32,source_commit='d'*40,
+        allow_partial_publication=True,candidate_profile_ids=['sonnet-max','luna-med'])
+    request=json.loads((destination/'task-catalog-request.json').read_bytes())
+    assert set(request['candidate_profile_ids'])=={'sonnet-max','luna-med'}
+    assert result['candidate_profile_ids']==request['candidate_profile_ids']
+    assert request['catalog']==raw_task_catalog
+    assert request['activation_authorized'] is False
+    assert result['native_probes_executed']==0
+
+
 def test_partial_publication_is_not_implicit_after_actual_quota_failure(environment):
     store,request,_=environment
     finish_all(store,request,defer=('claude','claude-sonnet-5-5','max'))
