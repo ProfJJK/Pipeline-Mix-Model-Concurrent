@@ -307,6 +307,8 @@ def _handoff(node, example):
     context = {key: deepcopy(payload[key]) for key in
         ('objective', 'requirements', 'allowed_paths', 'test_paths', 'active_leaf',
          'source_context_sha256', 'test_receipt_sha256', 'plan_sha256') if key in payload}
+    if 'execution_context' in payload:
+        context['execution_context_sha256'] = _digest(payload['execution_context'])
     for key in ('task_id', 'microtask_id', 'complexity', 'task_types', 'srs_sha256',
                 'plan_generation_sha256', 'predecessor_artifact_hashes'):
         if key in intent:
