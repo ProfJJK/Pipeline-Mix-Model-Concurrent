@@ -34,6 +34,14 @@ class TaskArtifactRuntime:
                     evidence_json TEXT NOT NULL, PRIMARY KEY(job_id,attempt_id,fencing_token));
                 CREATE INDEX IF NOT EXISTS task428_fragment_lookup ON
                     task428_fragment_attempts(task_id,microtask_id,generation);
+                CREATE TRIGGER IF NOT EXISTS task428_source_no_update BEFORE UPDATE ON task428_source_captures
+                BEGIN SELECT RAISE(ABORT,'task source capture is immutable'); END;
+                CREATE TRIGGER IF NOT EXISTS task428_source_no_delete BEFORE DELETE ON task428_source_captures
+                BEGIN SELECT RAISE(ABORT,'task source capture is immutable'); END;
+                CREATE TRIGGER IF NOT EXISTS task428_fragment_no_update BEFORE UPDATE ON task428_fragment_attempts
+                BEGIN SELECT RAISE(ABORT,'task fragment evidence is immutable'); END;
+                CREATE TRIGGER IF NOT EXISTS task428_fragment_no_delete BEFORE DELETE ON task428_fragment_attempts
+                BEGIN SELECT RAISE(ABORT,'task fragment evidence is immutable'); END;
             ''')
 
     def prepare_task(self, task_id, project_id):
@@ -107,7 +115,14 @@ class TaskArtifactRuntime:
                    if capture['project'] is not None else None)
         baseline = self.store.coding_files(capture['snapshot_sha256'])
         before, writers, conflicts = dict(baseline), {}, []
-        for dep, output in sorted(payload.get('predecessor_outputs', {}).items()):
+        predecessors = payload.get('predecessor_outputs', {})
+        if intent['stage'] == 'MICROTASK_EXECUTION':
+            declared = set(payload['microtask_node'].get('depends_on', []))
+            committed = {dep: output.get('artifact_sha256') for dep, output in predecessors.items()}
+            if (set(predecessors) != declared or committed != intent.get('predecessor_artifact_hashes', {})
+                    or committed != payload.get('predecessor_artifact_hashes', {})):
+                raise ValueError('Task workspace requires exactly its assigned predecessor commitments')
+        for dep, output in sorted(predecessors.items()):
             with self.store._connection() as conn:
                 rows = conn.execute('''SELECT j.job_id FROM task428_fragment_attempts a JOIN pipeline_jobs j
                     ON j.job_id=a.job_id AND j.attempt_id=a.attempt_id AND j.fencing_token=a.fencing_token
@@ -116,7 +131,13 @@ class TaskArtifactRuntime:
             if len(rows) != 1:
                 raise ValueError('Assigned predecessor lacks one accepted physical snapshot')
             prior = self.store.get(rows[0]['job_id'])
-            if prior['output']['artifact_text'] != output['artifact_text']:
+            from .microtask_board_428 import validate_microtask_execution_output
+            committed_output = validate_microtask_execution_output(prior['payload']['microtask_node'], prior['output'])
+            # Board outputs add controller metadata, but every model-produced
+            # field must still equal the exact accepted producer output.
+            if (any(committed_output.get(key) != output.get(key) for key in
+                    ('artifact_text', 'deliverables', 'requirement_evidence', 'release_criteria_results'))
+                    or output.get('artifact_sha256') != committed_output['artifact_sha256']):
                 raise ValueError('Predecessor commitment changed')
             inherited = self.store.coding_files(self.accepted_snapshot(prior)['snapshot_sha256'])
             for path, data in inherited.items():
@@ -212,6 +233,9 @@ class TaskArtifactRuntime:
         return output, receipt
 
     def ensure_verification(self, job, requirements):
+        # Never combine a fresh accepted snapshot with a caller's stale intent
+        # or proposal; all verification identities derive from the stored winner.
+        job = self.store.get(job['job_id'])
         accepted = self.accepted_snapshot(job)
         intent = job['payload']['planning_intent']
         capture = self._capture(intent['task_id'])
@@ -261,8 +285,8 @@ class TaskArtifactRuntime:
 
     def run_verification(self, node, slot, heartbeat, cancel_event, *, container_reservation=None):
         from .container_policy import DockerPolicy
-        from .containers import DockerRunner
-        from .worker import ExecutionRevokedError, WorkerCleanupError
+        from .containers import DockerRunner, ContainerCapacityError, ContainerCleanupError
+        from .worker import ExecutionRevokedError, WorkerCleanupError, ProviderFailure
         payload = node['payload']
         files = self.store.coding_files(payload['source_snapshot_sha256'])
         descriptor = self.runtime.ramdisk.workspace(slot)
@@ -293,23 +317,41 @@ class TaskArtifactRuntime:
                     raise ValueError('Captured test policy exceeds current protected bounds')
                 runner = DockerRunner(captured, self.runtime.config.private_root / 'containers',
                     trusted_operator=self.runtime.config.operator_name, host_boot_id=self.runtime.boot_id)
-                evidence = runner.run(workspace, job_id=node['job_id'], attempt_id=node['attempt_id'],
-                    cancel_event=cancel_event, ramdisk_workspace=descriptor, source_modes=payload.get('source_modes'),
-                    reservation=container_reservation)
-                if evidence.get('cleanup_verified') is not True:
-                    raise WorkerCleanupError('Task test container cleanup was not verified')
+                try:
+                    evidence = runner.run(workspace, job_id=node['job_id'], attempt_id=node['attempt_id'],
+                        cancel_event=cancel_event, ramdisk_workspace=descriptor, source_modes=payload.get('source_modes'),
+                        reservation=container_reservation)
+                except ContainerCleanupError as exc:
+                    raise WorkerCleanupError('Task test container cleanup was not verified') from exc
+                except ContainerCapacityError as exc:
+                    raise ProviderFailure('resource', retry_after_seconds=5) from exc
             else:
                 evidence = dict(kind='artifact-integrity', observed_manifest=manifest(observed), cleanup_verified=True,
                                 job_id=node['job_id'], attempt_id=node['attempt_id'])
             evidence.update(fencing_token=node['fencing_token'], verification_key=payload['verification_key'],
                             source_snapshot_sha256=payload['source_snapshot_sha256'])
+            # Preserve the observed physical attempt even when its lease was
+            # revoked or its proof is inadequate. Publication still fails below.
+            self.store.record_coding_attempt_evidence(node, evidence)
+            if evidence.get('cleanup_verified') is not True:
+                raise WorkerCleanupError('Task test container cleanup was not verified')
+            if cancel_event.is_set() or not heartbeat() or evidence.get('failure_category') == 'cancelled':
+                raise ExecutionRevokedError('Verification ownership revoked before publication')
+            candidate_failure = evidence.get('failure_category') in ('oom', 'timeout', 'output_limit')
+            source_proven = evidence.get('source_verified') is True or evidence.get('input_source_verified') is True
+            if evidence.get('failure_category') == 'container_contract' and source_proven:
+                raise ProviderFailure('configuration')
+            if evidence.get('quarantine_required') and not (candidate_failure and source_proven):
+                raise ProviderFailure('resource', retry_after_seconds=30)
+            if node['kind'] == 'TASK_TEST' and not evidence.get('passed') and evidence.get('failure_category') != 'tests_failed' and not (candidate_failure and source_proven):
+                raise ProviderFailure('resource', retry_after_seconds=30)
             output = (verify_task_test_evidence(payload, evidence, files) if node['kind'] == 'TASK_TEST'
                       else verify_artifact_evidence(payload, evidence, files))
             if cancel_event.is_set() or not heartbeat():
                 raise ExecutionRevokedError('Verification ownership revoked before publication')
-            self.store.record_coding_attempt_evidence(node, evidence)
             receipt = dict(executor='task_verifier', job_id=node['job_id'], attempt_id=node['attempt_id'],
-                           fencing_token=node['fencing_token'], output_sha256=digest(output), finished_at=time.time())
+                           fencing_token=node['fencing_token'], output_sha256=digest(output),
+                           cleanup_verified=True, finished_at=time.time())
             return output, receipt, evidence
         finally:
             stopped.set()
