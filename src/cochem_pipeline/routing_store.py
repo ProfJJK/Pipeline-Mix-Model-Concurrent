@@ -219,9 +219,13 @@ def ensure_job(conn, job_id, *, quality_routing=None):
         raise ValueError('Routing policy must provide at least one target')
     now = time.time()
     seconds = getattr(policy, 'max_routing_seconds', 0)
+    from .planning_budgets_428 import insertion_budget
+    lineage_budget = insertion_budget(conn, row, json.loads(row['payload_json']))
+    expires_at = (lineage_budget.expires_at if lineage_budget is not None
+                  else now + seconds if seconds else None)
     conn.execute('''INSERT INTO pipeline_routing_jobs(job_id,policy_json,score_json,candidates_json,
         expires_at,max_dispatches,created_at,failure_count,dispatches) VALUES(?,?,?,?,?,?,?,?,?)''',
-        (job_id, row['policy_json'], encoded(score), encoded(candidates), now + seconds if seconds else None,
+        (job_id, row['policy_json'], encoded(score), encoded(candidates), expires_at,
          row['max_dispatches'], now, row['attempts'], row['attempts']))
 
 
@@ -496,6 +500,17 @@ def select(conn, job, current_policy=None):
     if state is None:
         return None, False
     now = time.time()
+    from .planning_budgets_428 import lineage_unavailability
+    lineage_hold = lineage_unavailability(conn, job['job_id'], now)
+    if lineage_hold == 'lineage_dispatch_budget_exhausted':
+        return {'exhausted': 'Lineage dispatch budget exhausted'}, True
+    if lineage_hold:
+        conn.execute("UPDATE pipeline_routing_jobs SET state='BLOCKED',wait_reason=? WHERE job_id=?",
+                     (lineage_hold, job['job_id']))
+        conn.execute("UPDATE pipeline_jobs SET status='BLOCKED',error=?,updated_at=? WHERE job_id=?",
+                     (lineage_hold, now, job['job_id']))
+        event(conn, job, 'ROUTING_BLOCKED', reason=lineage_hold)
+        return None, True
     if state['state']=='BLOCKED' or state['next_eligible_at']>now:
         return None, True
     policy = state['policy']
@@ -555,6 +570,10 @@ def preview_next_route(conn, job, current_policy=None, now=None):
     state=get_state(conn,job['job_id'])
     if state is None:
         return {**result,'state':'awaiting_routing_capture'}
+    from .planning_budgets_428 import lineage_unavailability
+    lineage_hold = lineage_unavailability(conn, job['job_id'], observed)
+    if lineage_hold:
+        return {**result,'state':lineage_hold}
     # The next claim records this already-authorized amendment. A read-only
     # view can display its effect without rewriting the original snapshot.
     old=state['candidates']
@@ -589,6 +608,10 @@ def preview_next_route(conn, job, current_policy=None, now=None):
 
 
 def reserve(conn,job,selected,worker_slot):
+    from .planning_budgets_428 import LineageBudgetHold, lineage_unavailability
+    lineage_hold = lineage_unavailability(conn, job['job_id'], time.time())
+    if lineage_hold:
+        raise LineageBudgetHold(lineage_hold)
     reservation = uuid.uuid4().hex
     route = {**selected,'reservation_id':reservation,
              'reservation_sha256':hashlib.sha256(reservation.encode()).hexdigest(),
