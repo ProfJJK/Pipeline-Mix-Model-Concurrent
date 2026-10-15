@@ -128,4 +128,27 @@ window as `AETHERDESK\ansac`:
   -Apply
 ```
 
+---
+
+## 6. Verified Owner Sitting Completion (`P428-28`)
+
+- **Sitting Directory:** `C:\Program Files\CoChem\R428Sitting-windows-20261014-9bc847c534af4e56b0f9238ead81de8a`
+- **Final Sanitized Status Receipt:** `C:\Program Files\CoChem\R428Sitting-windows-20261014-9bc847c534af4e56b0f9238ead81de8a\status-20261015T0137470586569-aa402a6c5239432c81c560b03ff29691.json` (`2026-10-15T01:37:47.0586569Z`)
+- **Runtime Completion Receipt:** `C:\Program Files\CoChem\Pipeline4.2.8-windows-20261014-r4\r428-complete.json`
+  - `status`: `R428_RUNNING_CATALOG_PUBLICATION_VERIFIED`
+  - `version`: `4.2.8`
+  - `source_commit`: `3dab7f2375121e0bdb82c13dc3b0add9d45179bb`
+  - `launch_manifest_sha256`: `ac43248ab659e8597df38820c65c318cfeb724c7b43105ce89c39424cb277383`
+  - `request_id`: `b8ef27858d2242d0931071f0ed2eaacd`
+  - `native_control_probe_verified`: `true`
+  - `backup_preserved`: `true`
+  - `late_prompt`: `false`
+- **Live `pipeline_health` Verification (`127.0.0.1:47824`):**
+  - `service_identity`: `SYSTEM`
+  - `pid`: `24424`, `instance_id`: `65bb2e91a4df42e197a198508a7b5fee`
+  - `source_root`: `C:\Program Files\CoChem\Pipeline4.2.8-windows-20261014-r4\.venv\Lib`
+  - `admission_capacity`: `4` (`hardware.state = "normal"`, `warden_controller.state = "healthy"`, `cpu_limit_percent = 7`, `cpu_window_seconds = 10.141`)
+  - `catalog_activation`: `{"status": "ALREADY_PUBLISHED", "request_id": "b8ef27858d2242d0931071f0ed2eaacd", "policy_digest": "c8444fe2fd46b0f53edeaefc677ef7ff698c3e11cb83348a70255026a81da43d"}`
+
+
 
