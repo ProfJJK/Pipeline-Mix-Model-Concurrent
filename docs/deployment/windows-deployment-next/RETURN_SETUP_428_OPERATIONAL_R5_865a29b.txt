@@ -1,0 +1,24 @@
+Pipeline 4.2.8 operational repair r5 — owner launch, 15 October 2026
+
+Open a 64-bit Administrator Windows PowerShell window and paste the single command below once.
+The source, dependency wheels and application build are already prepared. The script reuses
+existing sign-ins and has no planned later prompt, reboot, or continuation command.
+Leave the computer and PowerShell running; unattended installation and native checks can take
+longer than 20 minutes. Your input is the initial Administrator launch.
+
+C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -File "C:\Users\ansac\CoChem427\r428-op-launch-865a29b\run_operational_428_launch.ps1" -LaunchManifest "C:\Users\ansac\CoChem427\r428-op-launch-865a29b\launch-manifest.json" -LaunchManifestSha256 49481181faa25f4b8762b85013bece21afb3f58b3f9b8e7417237fa3dacfc75c -Apply
+
+Expected successful status: R428_OPERATIONAL_RUNNING_VERIFIED.
+If it holds, preserve the window output and return the final sanitized status/report path.
+Do not repeat the spent command or rerun sign-in. The result identifies whether the old runtime
+was restored or the new runtime needs review. Missing quota/support is not recorded as acceptance.
+
+Source/inert verification: 973 passed, 1 skipped, 8 documented exclusions. The actual packaged
+launcher and installer read-only plans passed. Native acceptance and cutover have not run yet.
+The scoped Codex update takes effect in a refreshed Codex session after successful completion;
+refreshing the client is not an installation continuation command.
+
+Keep all r428-op-*-865a29b directories and r6-runtime-wheels-20261012-v1 in place: the launch
+manifest pins those local inputs. Older delivered packages are preserved and must not be replayed.
+The three prepared useful backlog jobs will be submitted once after the new runtime is verified.
+Exam, YouTube and Antigravity specialist settings are outside this update.

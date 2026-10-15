@@ -1,6 +1,6 @@
 # 4.2.8 source progress
 
-## Current operational repair — 15 October 2026
+## Current operational repair â€” 15 October 2026
 
 The owner-approved seven-part repair is on `fix/428-operational-repair`, based
 on `c714854506c736431e6a0d5aaea2471aba8ab5ff`, in the separate local
@@ -31,8 +31,8 @@ The final integrated source regression at `aa7706e` passed **973 tests**, with
 one skip and eight documented exclusions, in 281.64 seconds. Tests include real
 temporary files and SQLite with inert provider/process ports. Independent review
 found no remaining launcher or exact-source package-coherence blocker. Fresh
-immutable packaging and packaged read-only verification follow this source
-checkpoint; the delivered pins are recorded in `OPERATIONAL_R5_DELIVERY_20261015.md`.
+immutable packaging and both actual packaged read-only plans passed at source
+`865a29b`; the delivered pins are recorded in [OPERATIONAL_R5_DELIVERY_20261015.md](OPERATIONAL_R5_DELIVERY_20261015.md).
 See [VALIDATION.md](VALIDATION.md) for the verification boundary.
 
 Known limits remain explicit. The strict published reasoning floors leave some
@@ -108,7 +108,7 @@ or full SRS acceptance before that sitting completes.
   CLI ceiling while prioritizing repair reservations ahead of new normal reservations.
 - Prior R5/R6 repair custody and saved Fable `target-23` HTTP `429` replay
   verification (`P428-24`), stopped-runtime offline wheel installer (`P428-25`),
-  single owner entry point (`run_428_launch.ps1`, `accept_428_native.py` — `P428-26`)
+  single owner entry point (`run_428_launch.ps1`, `accept_428_native.py` â€” `P428-26`)
   supporting the live `AETHERDESK` `R4 v11` + `R6 target-23` hold baseline as well as
   `R6`/`R7` sitting receipts, and immutable release bundle preparation (`P428-27`).
 - Two-Staged Concurrency + Conflict-Colored Provider Batching + Intra-Slot Agent Swarm

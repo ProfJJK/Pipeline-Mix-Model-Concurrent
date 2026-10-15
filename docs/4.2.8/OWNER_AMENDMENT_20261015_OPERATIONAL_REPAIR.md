@@ -1,4 +1,4 @@
-# Owner-approved operational repair — 2026-10-15
+# Owner-approved operational repair â€” 2026-10-15
 
 The owner approved all seven recommendations in the Codex conversation on
 2026-10-15, including the following additions: provide the required format with
@@ -64,7 +64,7 @@ remain immutable. Source verification and actual host acceptance are distinct.
 - [x] Connected 4.2.8 planning configuration and execution source/fixture coverage.
 - [x] Legacy inventory, useful-work acceptance plan, snapshots and import ledger.
 - [x] Sanitized integration templates and owner-launch implementation.
-- [ ] Final immutable package and packaged read-only verification.
+- [x] Final immutable package and packaged read-only verification: source `865a29b`; see [delivery](OPERATIONAL_R5_DELIVERY_20261015.md).
 - [ ] Owner-run protected installation, native catalog acceptance and cutover.
 - [ ] Refreshed Codex MCP submission and verified useful-job deliverables.
 

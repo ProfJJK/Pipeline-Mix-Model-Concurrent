@@ -1,0 +1,38 @@
+{
+  "schema": "cochem-operational-package-review/1",
+  "source_commit": "865a29b113a8b59c822f6aa4d921a45c18407fe5",
+  "launch_manifest_sha256": "49481181faa25f4b8762b85013bece21afb3f58b3f9b8e7417237fa3dacfc75c",
+  "install_manifest_sha256": "775de3a3c0edc9e8355d451728f370089ffce09a5f73c9b745c0d019912787d9",
+  "launch_inputs": 12,
+  "install_inputs": 406,
+  "candidate_profiles": 27,
+  "allow_partial_publication": true,
+  "codex_integration_included": true,
+  "external_input_pins_verified": true,
+  "packaged_launch_plan_status": "READ_ONLY_PLAN_VERIFIED",
+  "packaged_installer_plan_status": "READ_ONLY_PLAN",
+  "packaged_plan_exit_codes": [
+    0,
+    0
+  ],
+  "source_tests": {
+    "commit": "aa7706e78abd7ab0d7eaec30e5c8f2858d51665c",
+    "passed": 973,
+    "skipped": 1,
+    "deselected": 8,
+    "elapsed_seconds": 281.64
+  },
+  "native_acceptance_executed": false,
+  "host_mutations": 0,
+  "live_jobs_submitted": 0,
+  "independent_review": {
+    "status": "VERIFIED",
+    "launch_pins": 12,
+    "install_inputs": 406,
+    "install_bytes": 130560536,
+    "source_files": 297,
+    "codex_target_hashes": 4,
+    "source_and_canonical_request_bindings_verified": true,
+    "host_actions_executed": false
+  }
+}
