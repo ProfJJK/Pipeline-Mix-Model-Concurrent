@@ -104,7 +104,7 @@ Path-remap evidence SHA256:
 
 ## Verification and remaining integration
 
-Serialized source checks: `38 passed` across
+Serialized source checks: `39 passed` across
 `test_backlog_recovery_428.py`, `test_legacy_snapshot.py` and
 `test_legacy_history.py`. Tests cover live committed WAL in temporary databases,
 changed pins, exact selectors, retained attempt history, fixture exclusions,

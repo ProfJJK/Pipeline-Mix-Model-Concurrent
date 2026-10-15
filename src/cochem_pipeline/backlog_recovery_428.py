@@ -271,6 +271,8 @@ def _prepare(resolution):
     project = resolution.get('project_id')
     if project is not None:
         _safe_text(project, 'PROJECT_ID', 128)
+        if not re.fullmatch(r'[A-Za-z0-9_.-]{1,128}', project):
+            raise ValueError('INVALID_PROJECT_ID')
         if project == 'windows-acceptance':
             raise ValueError('PRODUCTION_FIXTURE_FORBIDDEN')
     identity = {'target_key': target, 'stage': stage, 'project_id': project}
@@ -281,6 +283,10 @@ def _prepare(resolution):
             'Missing sources or failed checks must remain explicit holds; preserve historical attempts and budgets.'}
     if project is not None:
         body['project_id'] = project
+    # PlanningJournal.create uses workflow_428._text's 16,000 character intake
+    # bound. Count the complete injected contract, not only the short objective.
+    if len(body['objective']) > 16000:
+        raise ValueError('INTAKE_OBJECTIVE_BOUND_EXCEEDED')
     return {'schema': 'cochem-legacy-prepared-request/1', 'endpoint': '/tasks/submit',
             'identity': identity, 'contract': contract, 'body': body}
 
@@ -294,7 +300,7 @@ def validate_prepared_request(request):
     _validate_inputs(request['contract']['inputs'])
     if set(request['body']) - {'task_id', 'objective', 'project_id'}:
         raise ValueError('Prepared request cannot choose routing or budget authority')
-    _safe_text(request['body'].get('objective'), 'OBJECTIVE', 200000)
+    _safe_text(request['body'].get('objective'), 'OBJECTIVE', 16000)
     if request['body'].get('project_id') == 'windows-acceptance':
         raise ValueError('PRODUCTION_FIXTURE_FORBIDDEN')
     return True

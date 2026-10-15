@@ -269,3 +269,12 @@ def test_ledger_receipt_replay_is_idempotent_but_cannot_rebind(tmp_path):
     assert ledger.mark_submitted(task_id, task_id, receipt_sha256='b' * 64) == expected
     with pytest.raises(ValueError, match='changed'):
         ledger.mark_submitted(task_id, task_id, receipt_sha256='c' * 64)
+
+
+def test_full_injected_contract_obeys_actual_planning_intake_bound(tmp_path):
+    inv = archive(tmp_path)
+    ref = next(r['reference'] for r in inv['rows'] if r['primary_key'] == 'quick1')
+    fixed = resolution(tmp_path)
+    fixed['objective'] = 'A' * 15999
+    row = next(r for r in build_recovery_plan(inv, {ref: fixed})['queue_candidates'] if r['reference'] == ref)
+    assert row['holds'] == ['INTAKE_OBJECTIVE_BOUND_EXCEEDED']
