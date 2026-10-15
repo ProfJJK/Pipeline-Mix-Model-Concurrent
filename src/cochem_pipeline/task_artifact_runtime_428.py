@@ -504,7 +504,7 @@ class TaskArtifactRuntime:
                 source_snapshot_sha256=payload['source_snapshot_sha256'])
         return result
 
-    def verification_outcome(self, job):
+    def verification_outcome(self, job, *, content_binding_sha256=None):
         job = self.store.get(job['job_id'])
         intent = job['payload']['planning_intent']
         requirements = ((job['payload'].get('microtask_node') or {}).get('requirement_ids')
@@ -518,7 +518,9 @@ class TaskArtifactRuntime:
                     # content with explicit integrity-only scope.
                     return dict(proof, verification_scope='content_integrity')
                 from .content_review_428 import ContentReviewRuntime
-                review = ContentReviewRuntime.committed_result(self.store, job['job_id'])
+                review = (ContentReviewRuntime.committed_result(self.store, job['job_id'],
+                    binding_sha256=content_binding_sha256) if content_binding_sha256 is not None
+                    else ContentReviewRuntime.committed_result(self.store, job['job_id']))
                 if review is None:
                     return dict(status='WAITING_FOR_INDEPENDENT_CONTENT_VERIFICATION', physical_verification=proof)
                 if (review['producer_job_id'] != job['job_id']
@@ -563,15 +565,16 @@ class TaskArtifactRuntime:
                 "AND json_extract(j.payload_json,'$.microtask_id') IS ? "
                 "AND json_extract(o.output_json,'$.status')='REJECTED' ")
             params = [task_id, microtask_id]
-            if conn.execute("SELECT 1 FROM sqlite_master WHERE name='task428_content_review_results'").fetchone():
-                sql += ("UNION ALL SELECT j.job_id AS observed_job_id,1 AS content,o.created_at AS observed_at "
-                    "FROM task428_content_review_results r "
-                    'JOIN pipeline_jobs j ON j.job_id=r.producer_job_id '
-                    'JOIN pipeline_outputs o ON o.job_id=r.review_job_id '
-                    "WHERE json_extract(j.payload_json,'$.planning_intent.task_id')=? "
-                    "AND json_extract(j.payload_json,'$.planning_intent.microtask_id') IS ? "
-                    "AND json_extract(r.verdict_json,'$.accepted')=0 ")
-                params += [task_id, microtask_id]
+            for table in ('task428_content_review_results', 'task428_content_review_scopes'):
+                if conn.execute('SELECT 1 FROM sqlite_master WHERE name=?', (table,)).fetchone():
+                    sql += ("UNION ALL SELECT j.job_id AS observed_job_id,1 AS content,o.created_at AS observed_at "
+                        f"FROM {table} r "
+                        'JOIN pipeline_jobs j ON j.job_id=r.producer_job_id '
+                        'JOIN pipeline_outputs o ON o.job_id=r.review_job_id '
+                        "WHERE json_extract(j.payload_json,'$.planning_intent.task_id')=? "
+                        "AND json_extract(j.payload_json,'$.planning_intent.microtask_id') IS ? "
+                        "AND json_extract(r.verdict_json,'$.accepted')=0 ")
+                    params += [task_id, microtask_id]
             rows = list(conn.execute(sql + 'ORDER BY observed_at,observed_job_id LIMIT 129', params))
         if len(rows) > 128:
             raise ValueError('Verification history exceeds bounded lineage reconciliation')

@@ -24,8 +24,10 @@ def captured_fracture_inputs(monkeypatch):
     submit = MicrotaskBoardRuntime._submit_board_job_for_node
     def scoped(self, task_id, gen_sha, node, *args, **kwargs):
         node = deepcopy(node)
-        node.update(attempt_lineage_id=node['microtask_id'], lineage_kind='FAILURE_FRACTURE',
-            fracture_context=dict(fracture_id='fracture-fixture', graph_sha256='f'*64,
+        node.setdefault('attempt_lineage_id', node['microtask_id'])
+        node['attempt_lineage_id'] = node['microtask_id']
+        node['lineage_kind'] = 'FAILURE_FRACTURE'
+        node.setdefault('fracture_context', dict(fracture_id='fracture-fixture', graph_sha256='f'*64,
                 dossier_sha256='d'*64, lineage_root='failed-root', failed_microtask_id='failed-original'))
         return submit(self, task_id, gen_sha, node, *args, **kwargs)
     monkeypatch.setattr(MicrotaskBoardRuntime, '_submit_board_job_for_node', scoped)
@@ -140,3 +142,117 @@ def test_join_rebinds_compiled_child_authority_and_failed_scope(joined_scope, mo
         monkeypatch.setattr(artifacts.store, 'get', changed_get)
     with pytest.raises(ValueError, match='compiled|failed scope'):
         artifacts.fracture_join('content-task', failed, record, children)
+
+
+def test_scoped_success_does_not_replace_whole_srs_review_or_rewrite_alias(joined_scope):
+    from cochem_pipeline.content_review_428 import ContentReviewRuntime
+    artifacts, failed, record, children, producer = joined_scope
+    artifacts.fracture_join('content-task', failed, record, children)
+    accept_review(artifacts.store)
+    joined = artifacts.fracture_join('content-task', failed, record, children)
+    planner = artifacts.runtime.task_planning
+    with planner.journal._write() as conn:
+        state = json.loads(planner.journal._read(conn, 'content-task')['state_json'])
+    args = dict(state=state, generation=failed['plan_generation_sha256'],
+        producers=[n['job_id'] for n in children if n['role'] in ('assembly', 'final_test')],
+        physical=artifacts.ensure_verification(producer, producer['payload']['microtask_node']['requirement_ids']))
+    review = ContentReviewRuntime(planner.journal, artifacts.store)
+    waiting = review.ensure('content-task', **args)
+    assert waiting['status'] == 'WAITING_FOR_INDEPENDENT_CONTENT_REVIEW'
+    reviewer = artifacts.store.claim('inert-reviewer', worker_slot='slot3', allowed_kinds=['TASK_PLAN'], requires_cleanup=True)
+    output = review_contract(reviewer['payload'])
+    artifacts.store.clear_execution_quarantine(reviewer['job_id'], reviewer['attempt_id'], reviewer['fencing_token'])
+    artifacts.store.complete(reviewer['job_id'], reviewer['attempt_id'], reviewer['fencing_token'], output,
+                             accepted_receipt(reviewer, output))
+    assert review.ensure('content-task', **args)['status'] == 'CONTENT_REVIEW_REJECTED'
+    assert review.committed_result(artifacts.store, producer['job_id'])['accepted'] is False
+    # The inner scoped alias remains bound to its earlier positive judgment;
+    # parent release still requires the separate, now rejected whole-SRS scope.
+    intent = dict(task_id='content-task', plan_generation_sha256=failed['plan_generation_sha256'])
+    assert artifacts._accepted_dependency(intent, failed['microtask_id'], joined['output'])['job_id'] == producer['job_id']
+    with artifacts.store._connection() as conn:
+        assert conn.execute('SELECT count(*) FROM task428_content_review_scopes').fetchone()[0] == 2
+
+
+def test_failed_final_alias_projects_test_deliverables_not_assembly(joined_scope):
+    artifacts, failed, record, children, producer = joined_scope
+    node = producer['payload']['microtask_node']
+    failed.update(role='final_test', deliverables=node['deliverables'], requirement_ids=node['requirement_ids'])
+    artifacts.fracture_join('content-task', failed, record, children)
+    accept_review(artifacts.store)
+    joined = artifacts.fracture_join('content-task', failed, record, children)
+    assert joined['status'] == 'COMPLETED'
+    assert joined['output']['deliverables'] == producer['output']['deliverables']
+
+
+def test_nested_alias_consumes_inner_verified_bytes_without_claiming_outer_model_success(joined_scope):
+    import threading
+    from cochem_pipeline.fracture_artifacts_428 import _alias_binding
+    from cochem_pipeline.microtask_board_428 import validate_microtask_execution_output
+    artifacts, failed, record, children, producer = joined_scope
+    store, planner = artifacts.store, artifacts.runtime.task_planning
+    outer_id, outer_sha = 'outer-fracture', 'e'*64
+    outer_context = dict(fracture_id=outer_id, graph_sha256=outer_sha, dossier_sha256='b'*64,
+                         lineage_root='failed-root', failed_microtask_id='outer-original')
+    profile = next(n['output']['profile_id'] for n in children if n['role'] == 'assembly')
+    failed.update(attempt_lineage_id='failed-original', lineage_kind='FAILURE_FRACTURE',
+                  fracture_context=outer_context, routed_profile_id=profile)
+    with planner.fracture_runtime.ledger._write() as conn:
+        conn.execute('INSERT INTO task428_members VALUES(?,?)', ('failed-original', 'failed-root'))
+    artifacts.fracture_join('content-task', failed, record, children)
+    accept_review(store)
+    inner = artifacts.fracture_join('content-task', failed, record, children)
+    with planner.journal._write() as conn:
+        row = planner.journal._read(conn, 'content-task')
+        state, catalog = json.loads(row['state_json']), json.loads(row['catalog_json'])
+        limit = row['flash_context_limit']
+    spec = deepcopy(producer['payload']['microtask_node'])
+    spec.update(microtask_id='outer-final', attempt_lineage_id='outer-final', depends_on=['failed-original'],
+                deliverables=['outer-proof.md'], fracture_context=outer_context)
+    board = MicrotaskBoardRuntime(planner.journal, store, artifact_runtime=artifacts)
+    queued = board._submit_board_job_for_node('content-task', failed['plan_generation_sha256'], spec,
+        state, catalog, limit, producer['payload']['planning_intent']['candidate_profiles'], {'failed-original': inner['output']})
+    claimed = store.claim('inert-final', worker_slot='slot1', allowed_kinds=['TASK_PLAN'], requires_cleanup=True)
+    assert claimed['job_id'] == queued['job_id']
+    output, receipt = artifacts.run(claimed, 'slot1', '', lambda: True, lambda _: None, threading.Event(),
+                                    on_native_start=lambda _: None, on_native_end=lambda: None)
+    store.clear_execution_quarantine(claimed['job_id'], claimed['attempt_id'], claimed['fencing_token'])
+    store.complete(claimed['job_id'], claimed['attempt_id'], claimed['fencing_token'], output, receipt)
+    final = store.get(claimed['job_id'])
+    projected = validate_microtask_execution_output(spec, output)
+    projected.update(producer_job_id=final['job_id'], producer_attempt_id=final['attempt_id'],
+                     producer_fencing_token=final['fencing_token'])
+    outer_children = [dict(microtask_id='failed-original', role='assembly', status='COMPLETED', **{
+        key: inner[key] for key in ('job_id','output','artifact_sha256')}),
+        dict(microtask_id='outer-final', role='final_test', status='COMPLETED', job_id=final['job_id'],
+             output=projected, artifact_sha256=projected['artifact_sha256'])]
+    outer_failed = dict(failed, microtask_id='outer-original', attempt_lineage_id='failed-root')
+    outer_record = dict(fracture_id=outer_id, lineage_root='failed-root', failed_scope_id='outer-original', graph_sha256=outer_sha)
+    with planner.fracture_runtime.ledger._write() as conn:
+        conn.execute('INSERT INTO task428_fractures VALUES(?,?,?,?,?,?,?,?,?,?,?)',
+            (outer_id, 'failed-root', 'outer-original', 20, 'outer-dossier', 'b'*64,
+             outer_sha, 5, 'fixture-family', json.dumps({'children': outer_children}), 1))
+        template = dict(conn.execute('SELECT * FROM task428_fracture_nodes LIMIT 1').fetchone())
+        for row, child_spec, selected in [(outer_children[0], failed, profile),
+                (outer_children[1], final['payload']['microtask_node'], producer['payload']['planning_intent']['candidate_profiles'][0])]:
+            fields = dict(template, child_id=row['microtask_id'], fracture_id=outer_id, failed_scope_id='outer-original',
+                dossier_sha256='b'*64, graph_sha256=outer_sha, role=child_spec['role'], complexity=child_spec['complexity'],
+                selected_profile_id=selected, artifact_sha256=row['artifact_sha256'], node_json=json.dumps(child_spec))
+            fields.update({key+'_json': json.dumps(child_spec[key]) for key in
+                ('task_types','requirement_ids','deliverables','release_criteria','depends_on')})
+            conn.execute('INSERT INTO task428_fracture_nodes ('+','.join(fields)+') VALUES ('+
+                         ','.join('?' for _ in fields)+')', tuple(fields.values()))
+    pending = artifacts.fracture_join('content-task', outer_failed, outer_record, outer_children)
+    assert pending['status'] == 'WAITING_FOR_PHYSICAL_VERIFICATION'
+    verifier = store.claim('inert-integrity', worker_slot='slot2', allowed_kinds=['TASK_VERIFY'], requires_cleanup=True)
+    output, receipt, evidence = artifacts.run_verification(verifier, 'slot2', lambda: True, threading.Event())
+    store.clear_execution_quarantine(verifier['job_id'], verifier['attempt_id'], verifier['fencing_token'])
+    store.complete_task_verification(verifier['job_id'], verifier['attempt_id'], verifier['fencing_token'], output, receipt, evidence=evidence)
+    assert artifacts.fracture_join('content-task', outer_failed, outer_record, outer_children)['status'] == 'WAITING_FOR_INDEPENDENT_CONTENT_REVIEW'
+    accept_review(store)
+    outer = artifacts.fracture_join('content-task', outer_failed, outer_record, outer_children)
+    binding = _alias_binding(artifacts, outer['fracture_join_id'])
+    assert binding['child_aliases']['failed-original'] == inner['output']
+    assert binding['producer_job_id'] == final['job_id']
+    intent = dict(task_id='content-task', plan_generation_sha256=failed['plan_generation_sha256'])
+    assert artifacts._accepted_dependency(intent, 'outer-original', outer['output'])['job_id'] == final['job_id']

@@ -24,6 +24,19 @@ def initialize(conn):
 
 
 def _winner(artifacts, row, task_id, generation):
+    if (row.get('output') or {}).get('fracture_join_id'):
+        job = resolve(artifacts, dict(task_id=task_id, plan_generation_sha256=generation),
+                      row['microtask_id'], row['output'])
+        binding = _alias_binding(artifacts, row['output']['fracture_join_id'])
+        if row['status'] != 'COMPLETED' or row['job_id'] != job['job_id']:
+            raise ValueError('Nested fracture differs from its winning producer')
+        from .microtask_board_428 import validate_microtask_execution_output
+        output = validate_microtask_execution_output(binding['failed_node'],
+            {key: row['output'][key] for key in ('artifact_text', 'deliverables',
+                'requirement_evidence', 'release_criteria_results')})
+        if row['artifact_sha256'] != output['artifact_sha256']:
+            raise ValueError('Nested fracture projection differs from its winning producer')
+        return job, output, artifacts.accepted_snapshot(job)
     job = artifacts.store.get(row['job_id'])
     node, intent = job['payload']['microtask_node'], job['payload']['planning_intent']
     if (intent['task_id'] != task_id or intent['plan_generation_sha256'] != generation
@@ -78,13 +91,23 @@ def join(artifacts, task_id, failed_node, fracture_record, completed_children):
         if registration['needs_owner_approval'] and not registration['owner_approval_json']:
             return dict(status='HOLD_OWNER_APPROVAL', blocking_microtask_id=child_id)
         job, output, snapshot = _winner(artifacts, row, task_id, generation)
-        spec = job['payload']['microtask_node']
+        nested = row.get('output', {}).get('fracture_join_id')
+        spec = (_alias_binding(artifacts, nested)['failed_node'] if nested
+                else job['payload']['microtask_node'])
+        if row['role'] != registration['role']:
+            raise ValueError('Fracture child role differs from compiled scope')
         for key in ('role', 'complexity'):
             if spec[key] != registration[key]:
                 raise ValueError('Fracture child classification differs from compiled scope')
         from .planning_gateway import validate_stage_output
-        if validate_stage_output(job['payload'], job['output'], job['route']) != registration['selected_profile_id']:
-            raise ValueError('Fracture child executed a different compiled model profile')
+        if nested:
+            # The failed outer intended profile remains provenance, not a claim
+            # that it completed. Concrete execution belongs to the inner proof.
+            selected = spec.get('selected_profile_id', spec.get('routed_profile_id'))
+        else:
+            selected = validate_stage_output(job['payload'], job['output'], job['route'])
+        if selected != registration['selected_profile_id']:
+            raise ValueError('Fracture child differs from its compiled model authority')
         expected_context = dict(fracture_id=fracture_id, graph_sha256=record['graph_sha256'],
             dossier_sha256=record['dossier_sha256'], lineage_root=record['lineage_root'],
             failed_microtask_id=record['failed_scope_id'])
@@ -116,24 +139,31 @@ def join(artifacts, task_id, failed_node, fracture_record, completed_children):
         from .content_review_428 import ContentReviewRuntime
         reviewer = ContentReviewRuntime(planner.journal, artifacts.store,
                                         attempt_accounting=planner.attempt_runtime)
+        original_final = any(n['id'] == failed_node['microtask_id'] and n['role'] == 'final_test'
+                             for n in state['microtasks'])
         reviewed = reviewer.ensure(task_id, state=state, generation=generation,
             producers=[winners[assembly_id][0]['job_id'], terminal['job_id']], physical=physical,
-            scope_producer_id=terminal['job_id'])
+            scope_producer_id=None if original_final else terminal['job_id'])
         if reviewed['status'] != 'VERIFIED':
             return reviewed
-    proof = artifacts.verification_outcome(terminal)
+    review_binding = (reviewed['evidence']['binding_sha256']
+                      if physical['output']['verification_kind'] == 'artifact_integrity' else None)
+    proof = artifacts.verification_outcome(terminal, content_binding_sha256=review_binding)
     if proof['status'] != 'VERIFIED':
         return proof
     # Project only original requirements/criteria; the exact concrete producer
     # remains bound in metadata. No native output or failed job is rewritten.
     from .microtask_board_428 import validate_microtask_execution_output
     assembly, _, assembly_snapshot = winners[assembly_id]
-    projected = deepcopy(assembly['output'])
+    projected_source = terminal['output'] if failed_node['role'] == 'final_test' else winners[assembly_id][1]
+    projected = {key: deepcopy(projected_source[key]) for key in
+                 ('artifact_text', 'deliverables', 'requirement_evidence', 'release_criteria_results')}
     terminal_files = artifacts.store.coding_files(accepted['snapshot_sha256'])
     assembly_files = artifacts.store.coding_files(assembly_snapshot['snapshot_sha256'])
     for item in projected['deliverables']:
         data = item['content'].encode('utf-8')
-        if terminal_files.get(item['name']) != data or assembly_files.get(item['name']) != data:
+        if (terminal_files.get(item['name']) != data
+                or (failed_node['role'] != 'final_test' and assembly_files.get(item['name']) != data)):
             raise ValueError('Fracture assembly deliverable differs from the physically verified final bytes')
     projected['requirement_evidence'] = [x for x in projected['requirement_evidence']
                                        if x['requirement_id'] in failed_node['requirement_ids']]
@@ -147,7 +177,9 @@ def join(artifacts, task_id, failed_node, fracture_record, completed_children):
         producer_attempt_id=terminal['attempt_id'], producer_fencing_token=terminal['fencing_token'],
         producer_output_sha256=digest(terminal['output']), child_producers={cid: dict(job_id=job['job_id'],
             attempt_id=job['attempt_id'], fencing_token=job['fencing_token'], output_sha256=digest(job['output']))
-            for cid, (job, _, _) in winners.items()})
+            for cid, (job, _, _) in winners.items()},
+        child_aliases={cid: deepcopy(row['output']) for cid, row in children.items()
+                       if row.get('output', {}).get('fracture_join_id')})
     join_id = 'fracture-join428-' + digest(binding)[:40]
     output.update(fracture_join_id=join_id,
         predecessor_artifact_hashes={final_id: children[final_id]['artifact_sha256']},
@@ -167,7 +199,21 @@ def join(artifacts, task_id, failed_node, fracture_record, completed_children):
                 job_id=terminal['job_id'], fracture_join_id=join_id)
 
 
-def resolve(artifacts, intent, dependency_id, output):
+def _alias_binding(artifacts, join_id):
+    with artifacts.store._connection() as conn:
+        row = conn.execute('SELECT binding_json FROM task428_fracture_artifact_joins WHERE join_id=?',
+                           (_id(join_id),)).fetchone()
+    if row is None:
+        raise ValueError('Fracture alias has no immutable controller binding')
+    return json.loads(row[0])
+
+
+def resolve(artifacts, intent, dependency_id, output, *, _seen=None):
+    seen = set(_seen or ())
+    join_id = _id(output['fracture_join_id'])
+    if join_id in seen or len(seen) >= 3:
+        raise ValueError('Fracture alias ancestry exceeds the bounded failure windows')
+    seen.add(join_id)
     with artifacts.store._connection() as conn:
         row = conn.execute('SELECT * FROM task428_fracture_artifact_joins WHERE join_id=?',
                            (_id(output['fracture_join_id']),)).fetchone()
@@ -178,10 +224,17 @@ def resolve(artifacts, intent, dependency_id, output):
     binding = json.loads(row['binding_json'])
     if row['join_id'] != 'fracture-join428-' + digest(binding)[:40]:
         raise ValueError('Fracture alias commitment differs')
+    for child_id, alias in binding.get('child_aliases', {}).items():
+        prior = resolve(artifacts, intent, child_id, alias, _seen=seen)
+        captured = binding['child_producers'][child_id]
+        if (any(prior[key] != captured[key] for key in ('job_id', 'attempt_id', 'fencing_token'))
+                or digest(prior['output']) != captured['output_sha256']):
+            raise ValueError('Nested fracture alias producer changed')
     job = artifacts.store.get(binding['producer_job_id'])
+    review_binding = (binding['physical_proof'].get('content_review') or {}).get('binding_sha256')
     if (any(job[key] != binding['producer_' + key] for key in ('attempt_id', 'fencing_token'))
             or digest(job['output']) != binding['producer_output_sha256']
             or artifacts.accepted_snapshot(job)['snapshot_sha256'] != binding['source_snapshot_sha256']
-            or artifacts.verification_outcome(job) != binding['physical_proof']):
+            or artifacts.verification_outcome(job, content_binding_sha256=review_binding) != binding['physical_proof']):
         raise ValueError('Fracture alias producer or verification changed')
     return job

@@ -93,6 +93,14 @@ class ContentReviewRuntime:
                     producer_job_id TEXT NOT NULL, attempt_id TEXT NOT NULL, fencing_token INTEGER NOT NULL,
                     review_job_id TEXT NOT NULL, verdict_json TEXT NOT NULL,
                     PRIMARY KEY(producer_job_id,attempt_id,fencing_token));
+                CREATE TABLE IF NOT EXISTS task428_content_review_scopes(
+                    producer_job_id TEXT NOT NULL, attempt_id TEXT NOT NULL, fencing_token INTEGER NOT NULL,
+                    scope_sha256 TEXT NOT NULL, review_job_id TEXT NOT NULL, verdict_json TEXT NOT NULL,
+                    PRIMARY KEY(producer_job_id,attempt_id,fencing_token,scope_sha256));
+                CREATE TRIGGER IF NOT EXISTS content428_scope_no_update BEFORE UPDATE ON task428_content_review_scopes
+                BEGIN SELECT RAISE(ABORT,'content review scope is immutable'); END;
+                CREATE TRIGGER IF NOT EXISTS content428_scope_no_delete BEFORE DELETE ON task428_content_review_scopes
+                BEGIN SELECT RAISE(ABORT,'content review scope is immutable'); END;
                 CREATE TRIGGER IF NOT EXISTS content428_result_no_update BEFORE UPDATE ON task428_content_review_results
                 BEGIN SELECT RAISE(ABORT,'content review evidence is immutable'); END;
                 CREATE TRIGGER IF NOT EXISTS content428_result_no_delete BEFORE DELETE ON task428_content_review_results
@@ -100,32 +108,46 @@ class ContentReviewRuntime:
             ''')
 
     @staticmethod
-    def committed_result(store, producer_job_id):
-        """Read exact winning-producer/reviewer custody; never trust a pass flag."""
+    def committed_result(store, producer_job_id, *, binding_sha256=None):
+        """Read immutable reviewer custody, optionally for one exact scope.
+
+        Legacy whole-task verdicts remain readable. Separate scoped verdicts
+        cannot replace an earlier whole-SRS judgment or mutate an alias proof.
+        """
         with store._connection() as conn:
-            if not conn.execute("SELECT 1 FROM sqlite_master WHERE name='task428_content_review_results'").fetchone():
-                return None
             producer = store._get(conn, producer_job_id)
-            row = conn.execute('SELECT * FROM task428_content_review_results '
-                'WHERE producer_job_id=? AND attempt_id=? AND fencing_token=?',
-                (producer_job_id, producer['attempt_id'], producer['fencing_token'])).fetchone()
-            if row is None:
-                return None
-            verdict = json.loads(row['verdict_json'])
-            reviewer = store._get(conn, row['review_job_id'])
-            cleanup = conn.execute('SELECT cleared_at FROM pipeline_execution_cleanup '
-                'WHERE job_id=? AND attempt_id=? AND fencing_token=?',
-                (reviewer['job_id'], reviewer['attempt_id'], reviewer['fencing_token'])).fetchone()
-        from .planning_gateway import validate_stage_output
-        if (producer['status'] != 'COMPLETED' or reviewer['status'] != 'COMPLETED'
-                or cleanup is None or cleanup[0] is None
-                or digest(reviewer['output']) != verdict['review_output_sha256']
-                or digest(producer['output']) != verdict['producer_output_sha256']
-                or reviewer['output']['accepted'] is not verdict['accepted']
-                or digest(reviewer['payload']['content_review']) != verdict['binding_sha256']):
-            raise ValueError('Committed content review evidence changed')
-        validate_stage_output(reviewer['payload'], reviewer['output'], reviewer['route'])
-        return verdict
+            rows = []
+            for table in ('task428_content_review_results', 'task428_content_review_scopes'):
+                if conn.execute('SELECT 1 FROM sqlite_master WHERE name=?', (table,)).fetchone():
+                    rows.extend(conn.execute(f'SELECT review_job_id,verdict_json FROM {table} '
+                        'WHERE producer_job_id=? AND attempt_id=? AND fencing_token=?',
+                        (producer_job_id, producer['attempt_id'], producer['fencing_token'])).fetchall())
+            if len(rows) > 64:
+                raise ValueError('Content review scope history exceeds its bound')
+            choices = []
+            for row in rows:
+                verdict = json.loads(row['verdict_json'])
+                if binding_sha256 is not None and verdict['binding_sha256'] != binding_sha256:
+                    continue
+                reviewer = store._get(conn, row['review_job_id'])
+                binding = reviewer['payload']['content_review']
+                cleanup = conn.execute('SELECT cleared_at FROM pipeline_execution_cleanup '
+                    'WHERE job_id=? AND attempt_id=? AND fencing_token=?',
+                    (reviewer['job_id'], reviewer['attempt_id'], reviewer['fencing_token'])).fetchone()
+                from .planning_gateway import validate_stage_output
+                if (producer['status'] != 'COMPLETED' or reviewer['status'] != 'COMPLETED'
+                        or cleanup is None or cleanup[0] is None
+                        or digest(reviewer['output']) != verdict['review_output_sha256']
+                        or digest(producer['output']) != verdict['producer_output_sha256']
+                        or reviewer['output']['accepted'] is not verdict['accepted']
+                        or digest(binding) != verdict['binding_sha256']):
+                    raise ValueError('Committed content review evidence changed')
+                validate_stage_output(reviewer['payload'], reviewer['output'], reviewer['route'])
+                choices.append((bool(binding.get('scope_producer_id')), bool(verdict['accepted']),
+                                -len(binding['requirements']), verdict['binding_sha256'], verdict))
+        # Full-task evidence governs root repair accounting. Within one scope,
+        # an observed unresolved rejection cannot be hidden by another pass.
+        return min(choices, key=lambda row: row[:-1])[-1] if choices else None
 
     def ensure(self, task_id, *, state, generation, producers, physical, scope_producer_id=None):
         """Queue once; then return only committed, cleaned independent review.
@@ -241,12 +263,12 @@ class ContentReviewRuntime:
                            physical_job_id=physical['job_id'], findings=result['output']['findings'],
                            assessments=result['output']['requirements'], cleanup_verified=True)
             raw = json.dumps(verdict, sort_keys=True)
-            prior = conn.execute('SELECT verdict_json FROM task428_content_review_results '
-                                 'WHERE producer_job_id=? AND attempt_id=? AND fencing_token=?',
-                                 (target['job_id'], target['attempt_id'], target['fencing_token'])).fetchone()
+            prior = conn.execute('SELECT verdict_json FROM task428_content_review_scopes '
+                                 'WHERE producer_job_id=? AND attempt_id=? AND fencing_token=? AND scope_sha256=?',
+                                 (target['job_id'], target['attempt_id'], target['fencing_token'], digest(binding))).fetchone()
             if prior is None:
-                conn.execute('INSERT INTO task428_content_review_results VALUES(?,?,?,?,?)',
-                             (target['job_id'], target['attempt_id'], target['fencing_token'], job_id, raw))
+                conn.execute('INSERT INTO task428_content_review_scopes VALUES(?,?,?,?,?,?)',
+                             (target['job_id'], target['attempt_id'], target['fencing_token'], digest(binding), job_id, raw))
             elif prior[0] != raw:
                 raise ValueError('A producer already has a different immutable content review verdict')
         if not result['output']['accepted']:
