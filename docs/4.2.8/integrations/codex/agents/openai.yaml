@@ -1,0 +1,11 @@
+interface:
+  display_name: "CoChem Pipeline for Codex"
+  short_description: "Submit pipeline jobs and verify real completion"
+  default_prompt: "Use $codex-pipeline to submit my task and verify its routing, artifacts, and completion."
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "cochem-pipeline"
+      description: "CoChem pipeline submission, status, and evidence"
+policy:
+  allow_implicit_invocation: true

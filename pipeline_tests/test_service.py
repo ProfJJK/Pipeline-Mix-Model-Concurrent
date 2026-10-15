@@ -49,7 +49,7 @@ def test_actual_pipeline_mcp_session_creates_and_cancels_real_dag(endpoint):
             assert {tool.name for tool in tools.tools} == {
                 'pipeline_submit','pipeline_status','pipeline_health','pipeline_cancel','pipeline_resume_routing','pipeline_operator_view','pipeline_provider_preflight_submit',
                 'knowledge_search','knowledge_read','knowledge_status',
-                'pipeline_projects','pipeline_code','pipeline_code_status','pipeline_code_cancel','pipeline_code_resume'}
+                'pipeline_projects','pipeline_project_prepare','pipeline_code','pipeline_code_status','pipeline_code_cancel','pipeline_code_resume'}
             response = await client.call_tool('pipeline_submit',{
                 'objective':'Create a six-chapter SRS/WBS', 'requirements':['REQ-1'], 'chapter_count':6})
             assert not response.isError

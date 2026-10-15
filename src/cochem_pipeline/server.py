@@ -67,10 +67,13 @@ def create_server(client:ControlClient):
         'Direct local maintenance of the pipeline itself does not require these tools or project registration. '
         'This connector does not govern unrelated local coding or documentation work. '
         'Continue to follow the repository and host safety rules during direct maintenance. '
-        'For planning work explicitly submitted through this pipeline, submit one objective with pipeline_submit. '
-        'The Warden automatically generates a manifest, '
-        'runs isolated chapter workers within hardware limits, and routes synthesis only after '
-        'all chapter outputs are accepted. Complexity determines the configured model priority; '
+        'Check pipeline_health before choosing intake. When task_planning is enabled, pipeline_submit '
+        'runs the captured 4.2.8 SRS/research/review/approval/decomposition workflow and accepts a project_id '
+        'for repository work. pipeline_project_prepare captures a scoped isolated repository under '
+        'operator-configured trusted roots; it does not execute the requested task. '
+        'When task_planning is disabled, pipeline_submit only generates legacy chapter documents; '
+        'do not use that as proof of repository changes or other external actions. '
+        'pipeline_code remains the existing staged coding intake. Complexity determines configured model priority; '
         'busy or quota-limited targets can cause a recorded fallback or timed wait. '
         'A submission is not completion. Poll pipeline_status for routing decisions and wait times. '
         'Report failures and blocked prerequisites; never invent another agent output.'))
@@ -138,6 +141,16 @@ def create_server(client:ControlClient):
     async def pipeline_projects()->dict[str,Any]:
         """List operator-configured project IDs that accept code jobs."""
         return await asyncio.to_thread(client.call,'/coding/projects')
+
+    @server.tool()
+    async def pipeline_project_prepare(project_id:str,repository:str,branch:str,
+                                       allowed_paths:list[str],test_paths:list[str],
+                                       context_paths:list[str]|None=None)->dict[str,Any]:
+        """Capture/register one scoped isolated repository; preserves the original checkout and runs no model job."""
+        registration=dict(repository=repository,branch=branch,allowed_paths=allowed_paths,
+                          test_paths=test_paths,context_paths=context_paths or [])
+        return await asyncio.to_thread(client.call,'/coding/prepare',
+                                      {'project_id':project_id,'registration':registration})
 
     @server.tool()
     async def pipeline_code(project_id:str,objective:str,requirements:list[str]|None=None,

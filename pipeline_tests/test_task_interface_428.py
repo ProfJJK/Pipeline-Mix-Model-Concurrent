@@ -49,7 +49,10 @@ def task_endpoint(endpoint, tmp_path: Path):
     controller = endpoint.controller
     # Record one legacy workflow in controller.store before enabling 4.2.8 task_planning
     controller.store.submit("Legacy six-chapter workflow", ["REQ-LEG-1"], 2, "legacy-wf-01")
-    controller.config.coding_projects = {"registered-proj": {"repository": "private"}}
+    from cochem_pipeline.coding import CodingProject
+    controller.config.coding_projects = {"registered-proj": CodingProject.from_dict('registered-proj',
+        {'repository': str(tmp_path / 'repository'), 'branch': 'main',
+         'allowed_paths': ['src'], 'test_paths': ['tests']})}
     controller.task_planning = planner
     controller.owner_approval_broker = broker
     controller.submit_task = MethodType(Runtime.submit_task, controller)

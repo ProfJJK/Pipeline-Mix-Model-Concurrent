@@ -1,0 +1,7 @@
+# Render only this entry using the reviewed installed runtime and existing
+# unprivileged client configuration. Preserve all unrelated Codex settings.
+# Placeholders must be resolved before installation; no token belongs here.
+[mcp_servers.cochem-pipeline]
+enabled = true
+command = "{{RUNTIME_ROOT}}\\.venv\\Scripts\\python.exe"
+args = ["-I", "-B", "-m", "cochem_pipeline", "mcp", "--client-config", "{{CLIENT_CONFIG}}"]
