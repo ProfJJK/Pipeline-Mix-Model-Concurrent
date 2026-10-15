@@ -105,10 +105,11 @@ def test_fracture_is_explicit_hold_and_never_dispatches_unreviewed_children(env)
     old, boundary = fail_window(env)
     complete_review(env, strategy='fracture')
     bridge.step('task')
-    assert outcomes.status('task')[-1]['status'] == 'FRACTURE_PLAN_REQUIRED'
+    assert outcomes.status('task')[-1]['status'] == 'WAITING_FOR_FRACTURE_PLAN'
     assert ledger.status(boundary['lineage_root'])['stage'] == 'PIVOT_RESEARCH'
     board.materialize('task')
-    assert store.claim('inert', worker_slot='slot1', allowed_kinds=['TASK_PLAN']) is None
+    control = store.claim('inert', worker_slot='slot1', allowed_kinds=['TASK_PLAN'])
+    assert control['payload']['planning_intent']['stage'] == 'FRACTURE_PLAN'
 
 
 def test_newly_high_tier_pivot_does_not_bypass_child_owner_approval(env):

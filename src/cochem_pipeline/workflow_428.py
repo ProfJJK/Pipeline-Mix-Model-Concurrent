@@ -730,6 +730,12 @@ def compile_fracture_child_graph(failed_scope, children, review):
             'needs_owner_approval': needs_approval,
             'owner_approval': deepcopy(row.get('owner_approval')),
         })
+        # Authored prompts and audit checks belong to the immutable graph hash.
+        # Legacy callers without these fields retain their existing capture.
+        if 'prompt' in row:
+            compiled_children[-1]['prompt'] = _text(row['prompt'], 'Fracture prompt', 16000)
+        if 'audit_metrics' in row:
+            compiled_children[-1]['audit_metrics'] = _texts(row['audit_metrics'], 'Fracture audit metrics')
 
     if len(implementations) < 2 or not assemblies:
         raise ValueError('Fracture requires at least two narrower implementation fragments and an explicit assembly')

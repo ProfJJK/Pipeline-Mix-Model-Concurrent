@@ -36,8 +36,13 @@ def validate_pivot_review(output):
 
 
 class PlanningPivotRuntime:
-    def __init__(self, journal, store, outcomes, pivot_runtime):
+    def __init__(self, journal, store, outcomes, pivot_runtime, fracture_runtime=None):
         self.journal, self.store, self.outcomes, self.pivot_runtime = journal, store, outcomes, pivot_runtime
+        from .fracture_runtime_428 import FractureRuntime
+        from .planning_fractures_428 import PlanningFractureRuntime
+        self.fractures = PlanningFractureRuntime(journal, store, outcomes, fracture_runtime or
+            FractureRuntime(pivot_runtime.ledger, pivot_runtime.catalog,
+                            dossier_store=outcomes.dossier_store, job_store=store))
         with journal._write() as conn:
             conn.executescript('''CREATE TABLE IF NOT EXISTS planning428_pivot_reviews(
                 lineage_root TEXT NOT NULL,boundary INTEGER NOT NULL,task_id TEXT NOT NULL,
@@ -129,7 +134,8 @@ class PlanningPivotRuntime:
             raise ValueError('Pivot review polling must be bounded to 1..8')
         if self.journal.status(task_id)['stage'] == 'CANCELLED':
             return 0
-        eligible = {'WAITING_FOR_PIVOT_REVIEW', 'WAITING_FOR_PIVOT_BOARD', 'PIVOT_OWNER_APPROVAL_REQUIRED'}
+        eligible = {'WAITING_FOR_PIVOT_REVIEW', 'WAITING_FOR_PIVOT_BOARD', 'PIVOT_OWNER_APPROVAL_REQUIRED',
+                    'WAITING_FOR_FRACTURE_PLAN', 'WAITING_FOR_FRACTURE_REVIEW', 'FRACTURE_PLAN_REQUIRED'}
         boundaries = [b for b in self.outcomes.status(task_id) if b['status'] in eligible][:limit]
         for boundary in boundaries:
             root, number = boundary['lineage_root'], boundary['boundary']
@@ -151,10 +157,11 @@ class PlanningPivotRuntime:
                 continue
             output = validate_pivot_review(result['output'])
             sha = digest(result)
-            if output['strategy'] == 'fracture':
-                self._set_status(root, number, 'FRACTURE_PLAN_REQUIRED', output_sha=sha)
-                continue
             source = self.store.get(row['source_job_id']) if row else self._source_job(root)
+            if output['strategy'] == 'fracture':
+                progress = self.fractures.step(task_id, boundary, source, job, result)
+                self._set_status(root, number, progress['status'], output_sha=sha)
+                continue
             source_intent = source['payload']['planning_intent']
             captured_runtime = self.pivot_runtime
             if digest(captured_runtime.catalog) != source_intent['catalog_sha256']:
@@ -237,5 +244,6 @@ class PlanningPivotRuntime:
 
     def cancellation_targets(self, task_id):
         with self.journal._write() as conn:
-            return [row[0] for row in conn.execute('SELECT review_job_id FROM planning428_pivot_reviews WHERE task_id=?',
-                                                  (task_id,))]
+            reviews = [row[0] for row in conn.execute('SELECT review_job_id FROM planning428_pivot_reviews WHERE task_id=?',
+                                                     (task_id,))]
+        return reviews + self.fractures.cancellation_targets(task_id)

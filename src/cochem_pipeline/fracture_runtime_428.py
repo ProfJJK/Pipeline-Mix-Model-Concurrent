@@ -421,6 +421,19 @@ class FractureRuntime:
                 reconciled += 1
         return reconciled
 
+    def accepted_record(self, lineage_root, boundary):
+        """Return only a committed graph and its current controller child projections."""
+        self.reconcile_partial_fractures()
+        with self.ledger._write() as conn:
+            row = conn.execute('SELECT * FROM task428_fractures WHERE lineage_root=? AND after_failures=?',
+                               (lineage_root, boundary)).fetchone()
+            if row is None:
+                return None
+            result = dict(row)
+        result['graph'] = json.loads(result.pop('graph_json'))
+        result['children'] = self.list_fracture_children(lineage_root, fracture_id=result['fracture_id'])
+        return result
+
     def is_scope_obsolete(self, scope_id: str) -> bool:
         _id(scope_id)
         with self.ledger._write() as conn:

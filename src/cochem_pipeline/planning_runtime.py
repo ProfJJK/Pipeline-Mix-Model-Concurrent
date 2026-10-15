@@ -105,9 +105,10 @@ class PlanningController:
         self.pivot_bridge = None
         if outcome_runtime is not None and pivot_runtime is not None:
             from .planning_pivots_428 import PlanningPivotRuntime
-            self.pivot_bridge = PlanningPivotRuntime(journal, store, outcome_runtime, pivot_runtime)
+            self.pivot_bridge = PlanningPivotRuntime(journal, store, outcome_runtime, pivot_runtime, fracture_runtime)
             if self.release_runtime is not None:
                 self.release_runtime.board.pivot_context_provider = self.pivot_bridge.dispatch_context
+                self.release_runtime.board.fracture_runtime = self.pivot_bridge.fractures.fracture_runtime
         self._research_thread = None
         self.gateway = PlanningGateway(journal, store, artifact_runtime=artifact_runtime,
                                        attempt_accounting=attempt_runtime)
