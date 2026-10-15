@@ -57,8 +57,11 @@ def join(artifacts, task_id, failed_node, fracture_record, completed_children):
             raise ValueError('Fracture record differs from durable graph')
         node_records = {r['child_id']: dict(r) for r in conn.execute(
             'SELECT * FROM task428_fracture_nodes WHERE fracture_id=?', (fracture_id,))}
-    if failed_node['attempt_lineage_id'] != record['failed_scope_id']:
-        raise ValueError('Fracture does not replace this failed scope')
+        member = conn.execute('SELECT root FROM task428_members WHERE task_id=?',
+                              (failed_node['attempt_lineage_id'],)).fetchone()
+    if (failed_node['microtask_id'] != record['failed_scope_id']
+            or member is None or member[0] != record['lineage_root']):
+        raise ValueError('Fracture does not replace this failed scope and captured lineage')
     with planner.journal._write() as conn:
         task = planner.journal._read(conn, task_id)
         state = json.loads(task['state_json'])
@@ -82,7 +85,14 @@ def join(artifacts, task_id, failed_node, fracture_record, completed_children):
         from .planning_gateway import validate_stage_output
         if validate_stage_output(job['payload'], job['output'], job['route']) != registration['selected_profile_id']:
             raise ValueError('Fracture child executed a different compiled model profile')
-        for key in ('task_types', 'requirement_ids', 'deliverables', 'release_criteria'):
+        expected_context = dict(fracture_id=fracture_id, graph_sha256=record['graph_sha256'],
+            dossier_sha256=record['dossier_sha256'], lineage_root=record['lineage_root'],
+            failed_microtask_id=record['failed_scope_id'])
+        if (spec.get('attempt_lineage_id') != child_id
+                or spec.get('lineage_kind') != 'FAILURE_FRACTURE'
+                or spec.get('fracture_context') != expected_context):
+            raise ValueError('Fracture child identity differs from its compiled authority')
+        for key in ('task_types', 'requirement_ids', 'deliverables', 'release_criteria', 'depends_on'):
             if spec[key] != json.loads(registration[key + '_json']):
                 raise ValueError('Fracture child contract differs from compiled graph')
         winners[child_id] = (job, output, snapshot)
@@ -139,7 +149,9 @@ def join(artifacts, task_id, failed_node, fracture_record, completed_children):
             attempt_id=job['attempt_id'], fencing_token=job['fencing_token'], output_sha256=digest(job['output']))
             for cid, (job, _, _) in winners.items()})
     join_id = 'fracture-join428-' + digest(binding)[:40]
-    output.update(fracture_join_id=join_id, producer_job_id=terminal['job_id'],
+    output.update(fracture_join_id=join_id,
+        predecessor_artifact_hashes={final_id: children[final_id]['artifact_sha256']},
+        producer_job_id=terminal['job_id'],
         producer_attempt_id=terminal['attempt_id'], producer_fencing_token=terminal['fencing_token'])
     raw, result = json.dumps(binding, sort_keys=True), json.dumps(output, sort_keys=True)
     with artifacts.store._write() as conn:

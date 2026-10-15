@@ -389,3 +389,36 @@ def test_engine_exception_keeps_the_existing_resource_and_cleanup_classification
         artifacts.run_verification(node, 'slot2', lambda: True, threading.Event())
     if failure == 'capacity':
         assert raised.value.category == 'resource'
+
+
+def test_downstream_final_cannot_replace_inherited_requirement_tests(staged, monkeypatch):
+    artifacts, runtime, producer, requirements, _ = staged
+    artifacts.ensure_verification(producer, requirements)
+    for phase in ('red', 'green'):
+        node, (output, receipt, evidence), _ = verify_next(artifacts, runtime.store, monkeypatch)
+        runtime.store.clear_execution_quarantine(node['job_id'], node['attempt_id'], node['fencing_token'])
+        runtime.store.complete_task_verification(node['job_id'], node['attempt_id'], node['fencing_token'],
+                                                output, receipt, evidence=evidence)
+        artifacts.ensure_verification(producer, requirements)
+    assert artifacts.verification_outcome(producer)['status'] == 'VERIFIED'
+    downstream = deepcopy(producer)
+    intent = downstream['payload']['planning_intent']
+    sha = digest(producer['output'])
+    intent.update(stage='MICROTASK_EXECUTION', microtask_id='downstream-final',
+        plan_generation_sha256='a'*64, predecessor_artifact_hashes={'verified-scope': sha})
+    downstream['payload'].update(microtask_node=dict(role='final_test', depends_on=['verified-scope'],
+        deliverables=['tests/test_bound.py'], requirement_ids=requirements),
+        predecessor_outputs={'verified-scope': {'artifact_sha256': sha}},
+        predecessor_artifact_hashes={'verified-scope': sha})
+    # Resolve only the dependency naming port; bytes and verifier proof still
+    # come from the actual cleaned producer in temporary SQLite/file custody.
+    monkeypatch.setattr(artifacts, '_accepted_dependency', lambda *_: producer)
+    downstream['payload']['execution_context'] = artifacts.execution_context(downstream['payload'])
+    assert downstream['payload']['execution_context']['sealed_test_paths'] == ['tests/test_bound.py']
+    weakened = 'def test_unrelated():\n    assert True\n'
+    proposal = dict(artifact_text='Wrong replacement', deliverables=[dict(name='tests/test_bound.py',
+        content=weakened, sha256=hashlib.sha256(weakened.encode()).hexdigest())])
+    runtime.runner = SimpleNamespace(run=lambda *a, **k: (proposal, {}))
+    with pytest.raises(ValueError, match='protected tests'):
+        artifacts.run(downstream, 'slot1', '', lambda: True, lambda _: None, threading.Event(),
+                      on_native_start=lambda _: None, on_native_end=lambda: None)

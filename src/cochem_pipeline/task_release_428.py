@@ -267,7 +267,10 @@ class TaskReleaseRuntime:
         nodes_by_id = {n["microtask_id"]: n for n in nodes}
         impl_nodes = [n for n in nodes if n["role"] == "implementation"]
         asm_nodes = [n for n in nodes if n["role"] == "assembly"]
-        ft_nodes = [n for n in nodes if n["role"] == "final_test"]
+        original_finals = {n['id'] for n in state['microtasks'] if n['role'] == 'final_test'}
+        ft_nodes = [n for n in nodes if n['microtask_id'] in original_finals and n['role'] == 'final_test']
+        if not original_finals or {n['microtask_id'] for n in ft_nodes} != original_finals:
+            return {'ready': False, 'status': 'MISSING_ORIGINAL_FINAL_SCOPE'}
         if not impl_nodes or not asm_nodes or not ft_nodes:
             return {"ready": False, "status": "MISSING_REQUIRED_ROLES"}
 

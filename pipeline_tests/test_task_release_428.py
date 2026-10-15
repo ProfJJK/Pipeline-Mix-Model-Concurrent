@@ -200,3 +200,39 @@ def test_fragment_revision_invalidates_stale_assembly_and_test_evidence(tmp_path
     assert after_by_id["mt-3"]["status"] == "DISPATCHED"
     assert after_by_id["mt-3"]["job_id"] != old_by_id["mt-3"]["job_id"]
     assert after_by_id["mt-4"]["status"] == "WAITING_ON_DEPENDENCIES"
+
+
+@pytest.mark.parametrize('original_present', [False, True])
+def test_inner_fracture_final_proof_cannot_replace_original_release_scope(tmp_path, monkeypatch, original_present):
+    from copy import deepcopy
+    store, journal, broker = _make_store_and_journal(tmp_path)
+    task_id = 'task428-inner-final'
+    _advance_task_to_reassessed_ready(journal, task_id=task_id)
+    release = TaskReleaseRuntime(journal, store, owner_broker=broker)
+    for _ in range(3):
+        snap = _claim_and_complete_all_ready(store, release.board, task_id)
+    assert snap['all_completed']
+    original = next(n for n in snap['nodes'] if n['role'] == 'final_test')
+    inner = deepcopy(original)
+    inner.update(microtask_id='fracture-inner-final', lineage_kind='FAILURE_FRACTURE')
+    snap['nodes'].append(inner)
+    if not original_present:
+        snap['nodes'] = [n for n in snap['nodes'] if n['microtask_id'] != original['microtask_id']]
+    monkeypatch.setattr(release.board, 'materialize', lambda _: deepcopy(snap))
+    monkeypatch.setattr(release.board, 'board_status', lambda _: deepcopy(snap))
+    # An inner scope has a successful controller test receipt; it is not the
+    # original final scope authorized by the durable SRS microtask plan.
+    for final in ([inner, original] if original_present else [inner]):
+        release.record_controller_test_receipt(task_id, final['microtask_id'], passed=True,
+            exit_code=0, cleanup_verified=True, verified_requirements=['req-1', 'req-2', 'req-3'])
+    if original_present:
+        # No inner final receipt should be needed for parent publication. Its
+        # internal proof is independently checked by the fracture join.
+        with journal._write() as conn:
+            conn.execute('DELETE FROM task428_test_receipts WHERE microtask_id=?', (inner['microtask_id'],))
+    result = release.verify_release_readiness(task_id)
+    assert result['ready'] is original_present
+    if original_present:
+        assert [r['microtask_id'] for r in result['release_manifest']['controller_test_receipts']] == [original['microtask_id']]
+    else:
+        assert result['status'] == 'MISSING_ORIGINAL_FINAL_SCOPE'

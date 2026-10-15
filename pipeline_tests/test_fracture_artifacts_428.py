@@ -17,6 +17,20 @@ from pipeline_tests.test_planning_gateway_428 import accepted_receipt
 from pipeline_tests.test_task_content_verification_e2e_428 import content_task
 
 
+@pytest.fixture(autouse=True)
+def captured_fracture_inputs(monkeypatch):
+    # Capture the controller's fracture authority before jobs are queued. The
+    # ordinary board is only an inert execution harness for these scope tests.
+    submit = MicrotaskBoardRuntime._submit_board_job_for_node
+    def scoped(self, task_id, gen_sha, node, *args, **kwargs):
+        node = deepcopy(node)
+        node.update(attempt_lineage_id=node['microtask_id'], lineage_kind='FAILURE_FRACTURE',
+            fracture_context=dict(fracture_id='fracture-fixture', graph_sha256='f'*64,
+                dossier_sha256='d'*64, lineage_root='failed-root', failed_microtask_id='failed-original'))
+        return submit(self, task_id, gen_sha, node, *args, **kwargs)
+    monkeypatch.setattr(MicrotaskBoardRuntime, '_submit_board_job_for_node', scoped)
+
+
 @pytest.fixture
 def joined_scope(content_task):
     store, journal, artifacts, producer, args, outcomes = content_task
@@ -31,11 +45,12 @@ def joined_scope(content_task):
     fracture = FractureRuntime(outcomes.accounting.ledger, producer['payload']['task_catalog'])
     artifacts.runtime.task_planning = SimpleNamespace(fracture_runtime=fracture, journal=journal,
                                                      attempt_runtime=outcomes.accounting)
-    record = dict(fracture_id='fracture-fixture', lineage_root='failed-root', failed_scope_id='failed-root',
-                  graph_sha256=digest(children))
+    record = dict(fracture_id='fracture-fixture', lineage_root='failed-root', failed_scope_id='failed-original',
+                  graph_sha256='f'*64)
+    fracture.ledger.create('failed-root', complexity=5)
     with fracture.ledger._write() as conn:
         conn.execute('INSERT INTO task428_fractures VALUES(?,?,?,?,?,?,?,?,?,?,?)',
-            (record['fracture_id'], 'failed-root', 'failed-root', 10, 'dossier', 'd' * 64,
+            (record['fracture_id'], 'failed-root', 'failed-original', 10, 'dossier', 'd' * 64,
              record['graph_sha256'], 5, 'fixture-family', json.dumps({'children': children}), 1))
         for child in children:
             job = store.get(child['job_id'])
@@ -43,7 +58,7 @@ def joined_scope(content_task):
             profile_id = child['output']['profile_id']
             model = job['payload']['task_catalog']['models'][profile_id]
             fields = dict(child_id=child['microtask_id'], fracture_id=record['fracture_id'],
-                lineage_root='failed-root', failed_scope_id='failed-root', dossier_id='dossier',
+                lineage_root='failed-root', failed_scope_id='failed-original', dossier_id='dossier',
                 dossier_sha256='d'*64, graph_sha256=record['graph_sha256'], role=spec['role'],
                 complexity=spec['complexity'], selected_profile_id=profile_id,
                 selected_model_family=model['family'], selected_effort=model['effort'],
@@ -78,6 +93,8 @@ def test_join_waits_for_review_then_resolves_exact_snapshot_without_rewriting_pr
     accept_review(artifacts.store)
     joined = artifacts.fracture_join('content-task', failed, record, children)
     assert joined['status'] == 'COMPLETED' and joined['job_id'] == producer['job_id']
+    final = next(row for row in children if row['role'] == 'final_test')
+    assert joined['output']['predecessor_artifact_hashes'] == {final['microtask_id']: final['artifact_sha256']}
     intent = dict(task_id='content-task', plan_generation_sha256=failed['plan_generation_sha256'])
     winner = artifacts._accepted_dependency(intent, failed['microtask_id'], joined['output'])
     assert winner['job_id'] == producer['job_id']
@@ -99,3 +116,27 @@ def test_join_refuses_missing_child_wrong_graph_or_fence(joined_scope):
     changed = deepcopy(children); changed[0]['output']['producer_fencing_token'] += 1
     with pytest.raises(ValueError, match='winning producer'):
         artifacts.fracture_join('content-task', failed, record, changed)
+
+
+@pytest.mark.parametrize('changed', ['depends_on', 'attempt_lineage_id', 'fracture_context', 'failed_scope'])
+def test_join_rebinds_compiled_child_authority_and_failed_scope(joined_scope, monkeypatch, changed):
+    artifacts, failed, record, children, _ = joined_scope
+    if changed == 'failed_scope':
+        failed = dict(failed, microtask_id='unrelated-original')
+    else:
+        original_get = artifacts.store.get
+        target = children[0]['job_id']
+        def changed_get(job_id):
+            job = original_get(job_id)
+            if job_id == target:
+                spec = job['payload']['microtask_node']
+                if changed == 'depends_on':
+                    spec['depends_on'] = ['unregistered-dependency']
+                elif changed == 'attempt_lineage_id':
+                    spec['attempt_lineage_id'] = 'unrelated-lineage'
+                else:
+                    spec['fracture_context'] = dict(spec['fracture_context'], dossier_sha256='0'*64)
+            return job
+        monkeypatch.setattr(artifacts.store, 'get', changed_get)
+    with pytest.raises(ValueError, match='compiled|failed scope'):
+        artifacts.fracture_join('content-task', failed, record, children)

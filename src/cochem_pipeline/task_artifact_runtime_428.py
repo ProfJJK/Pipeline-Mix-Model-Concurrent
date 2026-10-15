@@ -203,6 +203,13 @@ class TaskArtifactRuntime:
             prior_nodes[dep] = prior
             inherited = self.store.coding_files(self.accepted_snapshot(prior)['snapshot_sha256'])
             for path, data in inherited.items():
+                # Dependency snapshots are immutable inputs, including tests
+                # introduced by an earlier fracture or terminal producer. A
+                # later final-test agent may add coverage, never weaken it.
+                if project and within(path, project.test_paths):
+                    if path in sealed_tests and sealed_tests[path] != data:
+                        raise ValueError('Dependencies contain conflicting protected tests')
+                    sealed_tests[path] = data
                 if baseline.get(path) != data:
                     writers.setdefault(path, []).append((dep, data))
         for path, versions in writers.items():
@@ -266,10 +273,10 @@ class TaskArtifactRuntime:
                             if path in sealed_tests and sealed_tests[path] != data:
                                 raise ValueError('Recovery has conflicting sealed tests')
                             sealed_tests[path] = data
-            for path, data in sealed_tests.items():
-                if path in before and before[path] != data:
-                    raise ValueError('Recovery cannot overwrite a sealed requirement test')
-                before[path] = data
+        for path, data in sealed_tests.items():
+            if path in before and before[path] != data:
+                raise ValueError('Task inputs cannot overwrite a sealed requirement test')
+            before[path] = data
         validate_project_files(before)
         packet = dict(schema='cochem-task-artifact-staging/4.2.8', workspace_files=before,
                       workspace_manifest=manifest(before), assembly_input_sha256=digest(manifest(before)),
