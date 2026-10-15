@@ -317,13 +317,31 @@ def _handoff(node, example):
     return dict(schema='cochem-job-handoff/1', job_kind=node['kind'],
                 identities={key: node[key] for key in ('job_id', 'workflow_id') if key in node},
                 assignment=context, fixed_bindings=fixed, response=response,
-                unfilled_values='null entries require substantive work; this form is not a completion')
+                unfilled_values='null entries require substantive work except explicitly controller-derived digests; this form is not a completion')
 
 
 def prepare_output_contract(node):
     """Pure preparation: no providers, filesystem, secrets or invented evidence."""
     example, instruction, payload = output_contract_details(node)
     kind = node['kind']
+    stage = (node['payload'].get('planning_intent') or {}).get('stage')
+    generates_deliverables = kind == 'TASK_PLAN' and stage in {
+        'SIMPLE_EXECUTION', 'MICROTASK_EXECUTION', 'MICROTASK_SWARM_BATCH'}
+    if generates_deliverables:
+        def clear_example_digest(value):
+            if isinstance(value, dict):
+                if set(value) == {'name', 'content', 'sha256'}:
+                    value['sha256'] = None
+                for child in value.values():
+                    clear_example_digest(child)
+            elif isinstance(value, list):
+                for child in value:
+                    clear_example_digest(child)
+        clear_example_digest(example)
+        instruction += (' For newly generated deliverables, omit sha256 or return null; '
+                        'the controller computes that digest from the exact UTF-8 content before validation. '
+                        'A supplied non-null digest must be correct and will not be repaired. '
+                        'Copy upstream and evidence hashes exactly; they are never regenerated from claims.')
     optional = {'$.summary'}
     if kind == 'CHAPTER_DRAFT':
         optional.add('$.wbs_tasks_defined')  # controller reconciliation restores it
@@ -339,7 +357,19 @@ def prepare_output_contract(node):
         optional.update({'$.leaves[].dependencies', '$.leaves[].estimated_added_deleted_lines',
                          '$.leaves[].estimated_context_lines'})  # legacy size spelling remains supported
     schema = _schema(example, optional=optional, strict=kind in {'TASK_PLAN', 'PREFLIGHT_REQUEST'})
-    stage = (node['payload'].get('planning_intent') or {}).get('stage')
+    if generates_deliverables:
+        def allow_derived_digest(spec):
+            if isinstance(spec, dict):
+                properties = spec.get('properties', {})
+                if set(properties) == {'name', 'content', 'sha256'}:
+                    properties['sha256'] = {'anyOf': [{'type': 'string'}, {'type': 'null'}]}
+                    spec['required'].remove('sha256')
+                for child in spec.values():
+                    allow_derived_digest(child)
+            elif isinstance(spec, list):
+                for child in spec:
+                    allow_derived_digest(child)
+        allow_derived_digest(schema)
     if kind == 'TASK_PLAN' and stage == 'MICROTASK_SWARM_BATCH':
         # Preserve the semantic validator's accepted map/list forms, while the
         # initial handoff supplies the preferred explicit envelope.
@@ -404,6 +434,46 @@ def validate_output_format(node, output):
 def invalid_json_output(node):
     return OutputFormatError(prepare_output_contract(node)['contract_sha256'],
                              [dict(path='$', code='invalid_json')])
+
+
+def normalize_generated_output(node, output):
+    """Fill only omitted/null new-content digests; preserve every supplied claim.
+
+    Existing semantic validators still verify hashes, requirement coverage and
+    release results. An invalid supplied hash is never fixed. Raw and normalized
+    object digests make this deterministic formatting step auditable.
+    """
+    stage = (node['payload'].get('planning_intent') or {}).get('stage')
+    if node['kind'] != 'TASK_PLAN' or stage not in {
+            'SIMPLE_EXECUTION', 'MICROTASK_EXECUTION', 'MICROTASK_SWARM_BATCH'}:
+        return output, None
+    normalized, changes = deepcopy(output), []
+
+    def fill(answer, path):
+        if not isinstance(answer, dict) or not isinstance(answer.get('deliverables'), list):
+            return
+        for index, item in enumerate(answer['deliverables']):
+            if (isinstance(item, dict) and item.get('sha256') is None
+                    and isinstance(item.get('content'), str)):
+                item['sha256'] = hashlib.sha256(item['content'].encode('utf-8')).hexdigest()
+                changes.append(dict(path=path+'.deliverables['+str(index)+'].sha256',
+                                    sha256=item['sha256']))
+    if stage != 'MICROTASK_SWARM_BATCH':
+        fill(normalized, '$')
+    elif isinstance(normalized, dict):
+        members = normalized.get('subagent_outputs', normalized)
+        if isinstance(members, dict):
+            for index, answer in enumerate(members.values()):
+                fill(answer, '$.subagent_outputs.member['+str(index)+']')
+        elif isinstance(members, list):
+            for index, answer in enumerate(members):
+                if isinstance(answer, dict):
+                    fill(answer.get('output', answer), '$.subagent_outputs['+str(index)+']')
+    if not changes:
+        return output, None
+    return normalized, dict(schema='cochem-generated-output-normalization/1',
+        operation='fill_missing_new_content_sha256', model_output_sha256=_digest(output),
+        accepted_output_sha256=_digest(normalized), changes=changes)
 
 
 def format_feedback_text(node, contract_sha256):

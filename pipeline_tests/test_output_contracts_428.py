@@ -6,7 +6,7 @@ import json
 import pytest
 
 from cochem_pipeline.output_contracts import (
-    OutputFormatError, invalid_json_output, prepare_output_contract, validate_output_format,
+    OutputFormatError, invalid_json_output, prepare_output_contract, validate_output_format, normalize_generated_output,
 )
 from cochem_pipeline.worker import node_prompt
 from cochem_pipeline.store import JobStore
@@ -138,3 +138,61 @@ def test_offline_handoff_script_never_overwrites_existing_file_or_emits_private_
     assert all(value not in raw for value in ('private-attempt', 'private-fence', 'private-token'))
     with pytest.raises(FileExistsError):
         prepare(source, destination)
+
+
+@pytest.mark.parametrize('missing', [True, False])
+def test_new_content_hashes_are_derived_with_raw_and_normalized_bindings(missing):
+    from cochem_pipeline.store import output_digest
+    node = execution_node()
+    answer = prepare_output_contract(node)['handoff']['response']
+    answer['artifact_text'] = 'Summary'
+    answer['deliverables'][0]['content'] = 'Exact unicode α\r\nbytes\n'
+    if missing:
+        del answer['deliverables'][0]['sha256']
+    answer['requirement_evidence'][0].update(deliverable_name='real-output.md', verification_evidence='Exact check')
+    answer['release_criteria_results'][0].update(passed=True, evidence='Exact check')
+    original = deepcopy(answer)
+    validate_output_format(node, answer)  # the advertised input schema accepts omission/null
+    normalized, evidence = normalize_generated_output(node, answer)
+    assert answer == original
+    assert normalized['deliverables'][0]['sha256'] == hashlib.sha256('Exact unicode α\r\nbytes\n'.encode()).hexdigest()
+    assert evidence['model_output_sha256'] == output_digest(answer)
+    assert evidence['accepted_output_sha256'] == output_digest(normalized)
+    assert evidence['model_output_sha256'] != evidence['accepted_output_sha256']
+    validate_output_format(node, normalized)
+    from cochem_pipeline.microtask_board_428 import validate_microtask_execution_output
+    validate_microtask_execution_output(node['payload']['microtask_node'], normalized)
+    assert normalize_generated_output(node, normalized) == (normalized, None)
+
+
+def test_supplied_hash_and_upstream_hashes_are_never_repaired():
+    from cochem_pipeline.microtask_board_428 import validate_microtask_execution_output
+    node = execution_node()
+    answer = prepare_output_contract(node)['handoff']['response']
+    answer['artifact_text'] = 'Summary'
+    answer['deliverables'][0].update(content='content', sha256='f'*64)
+    normalized, evidence = normalize_generated_output(node, answer)
+    assert normalized is answer and evidence is None
+    with pytest.raises(ValueError, match='does not match'):
+        validate_microtask_execution_output(node['payload']['microtask_node'], normalized)
+    assert node['payload']['planning_intent']['predecessor_artifact_hashes'] == {'earlier': 'a'*64}
+    ordinary = chapter()
+    unrelated = {'deliverables': [{'content': 'do not touch', 'sha256': None}], 'chapter_hashes': {'one': None}}
+    result, evidence = normalize_generated_output(ordinary, unrelated)
+    assert result is unrelated and evidence is None
+
+
+def test_swarm_form_uses_real_members_and_normalization_preserves_identity():
+    node = execution_node()
+    node['payload']['planning_intent']['stage'] = 'MICROTASK_SWARM_BATCH'
+    node['payload']['swarm_batch'] = dict(batch_id='real-batch', provider_family='codex',
+        microtask_ids=['actual-task'], subagents=[dict(microtask_id='actual-task', requirement_ids=['REQ-real'],
+                                                     deliverables=['real-output.md'], release_criteria=['Exact criterion'])])
+    form = prepare_output_contract(node)['handoff']['response']
+    assert set(form['subagent_outputs']) == {'actual-task'}
+    assert form['subagent_outputs']['actual-task']['deliverables'][0]['name'] == 'real-output.md'
+    form['subagent_outputs']['actual-task']['deliverables'][0]['content'] = 'Actual content'
+    normalized, evidence = normalize_generated_output(node, form)
+    assert normalized['batch_id'] == 'real-batch' and normalized['provider_family'] == 'codex'
+    assert evidence['changes'][0]['sha256'] == hashlib.sha256(b'Actual content').hexdigest()
+    assert form['subagent_outputs']['actual-task']['deliverables'][0]['sha256'] is None

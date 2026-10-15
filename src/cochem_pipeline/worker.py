@@ -133,9 +133,9 @@ def node_prompt(node: dict, context_xml: str = '') -> str:
     prepared = prepare_output_contract(node)
     contract, instruction, payload = (prepared['example'], prepared['instruction'], prepared['task_payload'])
     instruction += (' The required output schema and handoff form below come from the controller validator. '
-                    'Null form entries are unfinished fields, not valid answers. Replace them with actual work; '
+                    'Null form entries require actual work unless the contract explicitly assigns that field to the controller. '
                     'never copy illustrative example IDs, paths, text or hashes as evidence. '
-                    'Keep fixed bindings exactly. Hash content as UTF-8 SHA-256, without inventing a digest. '
+                    'Keep fixed bindings exactly. Never invent a digest. '
                     'Passing the format check does not satisfy semantic or execution acceptance.')
     instruction += format_feedback_text(node, prepared['contract_sha256'])
     return ('You are executing one CoChem execution node. Return ONLY a JSON object, not Markdown fences.\n'
@@ -970,7 +970,8 @@ class NativeRunner:
                     except (ValueError,TypeError) as exc:
                         from .output_contracts import invalid_json_output
                         raise invalid_json_output(node) from exc
-                    from .output_contracts import validate_output_format
+                    from .output_contracts import normalize_generated_output, validate_output_format
+                    output, output_normalization = normalize_generated_output(node, output)
                     validate_output_format(node, output)
             except ProviderFailure as failure:
                 # receipt.json exists only on success; keep the failed attempt's
@@ -1009,6 +1010,8 @@ class NativeRunner:
                        'subscription_verified':True}
             from .native_evidence import native_usage
             receipt['usage'] = native_usage(provider, parsed.get('usage'))
+            if output_normalization is not None:
+                receipt['output_normalization'] = output_normalization
             if wbs_reconciliation is not None:
                 receipt['wbs_reconciliation'] = wbs_reconciliation
             if provider == 'gemini':
