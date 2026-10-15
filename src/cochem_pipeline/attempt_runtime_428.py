@@ -33,6 +33,7 @@ AVAILABILITY_CATEGORIES = frozenset(
         "resource",
         "rate_limit",
         "capacity",
+        "busy", "backlog", "provider", "context", "compatibility",
     }
 )
 
@@ -45,6 +46,7 @@ QUALITY_FAILURE_CATEGORIES = frozenset(
         "oom",
         "output_limit",
         "execution_error",
+        "code", "protocol",
     }
 )
 
@@ -180,7 +182,10 @@ class AttemptAccountingRuntime:
                 if int(row["fencing_token"]) >= fencing_token:
                     raise ValueError("Stale or duplicate fencing token for board job")
 
-        lease_id = self.ledger.start(lineage_root, actual_member, model_family)
+        # A crash after ledger.start but before outbox insertion must recover
+        # the same lease, never leave an orphan that blocks the lineage forever.
+        lease_id = self.ledger.start(lineage_root, actual_member, model_family,
+                                    lease_id='board428-' + digest({'fence_key': fkey})[:40])
         with self.ledger._write() as conn:
             conn.execute(
                 "INSERT INTO attempt428_outbox VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",

@@ -462,16 +462,24 @@ class AttemptLedger:
         with self._write() as conn:
             return self._read(conn, task_id)
 
-    def start(self, root, task_id, model):
+    def start(self, root, task_id, model, *, lease_id=None):
         _id(model)
         with self._write() as conn:
+            if lease_id is not None:
+                _id(lease_id)
+                existing = conn.execute('SELECT root,task_id,model FROM task428_attempts WHERE lease=?',
+                                        (lease_id,)).fetchone()
+                if existing is not None:
+                    if tuple(existing) != (root, task_id, model):
+                        raise ValueError('Attempt lease belongs to different immutable evidence')
+                    return lease_id
             state = self._read(conn, task_id)
             child_models = state.get('fracture_child_models') or {}
             expected_model = child_models.get(task_id, state['next_model'])
             if (state['root'] != root or state['stage'] != 'READY' or state['failures'] >= 30
                     or expected_model not in (None, model)):
                 raise ValueError('Lineage is held, locked or requires its pivot model')
-            lease = uuid.uuid4().hex
+            lease = lease_id or uuid.uuid4().hex
             try:
                 conn.execute('INSERT INTO task428_attempts VALUES(?,?,?,?,NULL)', (lease, root, task_id, model))
             except sqlite3.IntegrityError as exc:

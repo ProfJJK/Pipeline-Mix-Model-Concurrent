@@ -78,6 +78,7 @@ class PlanningController:
         audit_runtime=None,
         owner_approval_broker=None,
         artifact_runtime=None,
+        outcome_runtime=None,
     ):
         self.journal, self.store, self.clock = journal, store, clock
         self.research_runtime = research_runtime
@@ -93,6 +94,11 @@ class PlanningController:
         self.audit_runtime = audit_runtime
         self.owner_approval_broker = owner_approval_broker
         self.artifact_runtime = artifact_runtime
+        if outcome_runtime is None and attempt_runtime is not None:
+            from .planning_outcomes_428 import PlanningOutcomeRuntime
+            outcome_runtime = PlanningOutcomeRuntime(journal, store, attempt_runtime,
+                research_runtime=research_runtime, dossier_store=dossier_store, decision_store=decision_store)
+        self.outcome_runtime = outcome_runtime
         self._research_thread = None
         self.gateway = PlanningGateway(journal, store)
         self.journal.model_result = self.gateway.model_result
@@ -346,6 +352,9 @@ class PlanningController:
                                  (task_id,)).fetchone()
         if audit is not None:
             result['completion_audit'] = json.loads(audit[0])
+        if self.outcome_runtime is not None:
+            result['attempt_boundaries'] = self.outcome_runtime.status(task_id)
+            result['unclassified_outcome_holds'] = self.outcome_runtime.unresolved_releases(task_id)
         if self.decision_store is not None and self.attempt_ledger is not None:
             try:
                 lstate = self.attempt_ledger.status(task_id)
@@ -374,6 +383,8 @@ class PlanningController:
                 (task_id, version, status, job_id, research_id, error_type, now, now + delay))
 
     def _step_task(self, task_id):
+        if self.outcome_runtime is not None:
+            self.outcome_runtime.reconcile_task(task_id)
         intent = self.journal.intent(task_id)
         version, action = intent['version'], intent['action']
         if intent.get('stage') == 'CANCELLED':
