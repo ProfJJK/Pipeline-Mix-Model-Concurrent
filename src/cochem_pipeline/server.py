@@ -60,10 +60,10 @@ def create_knowledge_server(client:ControlClient):
 
 def create_server(client:ControlClient):
     server=FastMCP(f'CoChem Pipeline {__version__}',lifespan=client_lifespan(client),instructions=(
-        'Only for work explicitly submitted through this pipeline, list configured projects with pipeline_projects '
-        'and submit coding work once with pipeline_code. For those jobs, the controller owns staged edits, '
-        'independent tests, review and configured Git integration. Poll pipeline_code_status; '
-        'only its verified terminal result establishes completion of that submitted job. '
+        'Only for work explicitly submitted through this pipeline, inspect pipeline_health and pipeline_projects '
+        'and choose the intake described below. The controller owns staged edits, independent tests, '
+        'review and configured Git integration for repository jobs. Only verified terminal receipts '
+        'and actual deliverables establish completion of a submitted job. '
         'Direct local maintenance of the pipeline itself does not require these tools or project registration. '
         'This connector does not govern unrelated local coding or documentation work. '
         'Continue to follow the repository and host safety rules during direct maintenance. '

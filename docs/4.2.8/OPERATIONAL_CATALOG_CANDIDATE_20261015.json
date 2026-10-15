@@ -1,0 +1,1283 @@
+{
+  "schema": "cochem-operational-catalog-preparation-audit/1",
+  "source_catalog_sha256": "e53f8e84e5be5dc0972f8abd5f226b27dc62be948121d1e90aeb41f74b3fbc25",
+  "baseline_config_sha256": "daaa4b6a8c15aa49ed39af48c087bfe2fcfefdcbae14520b298d46287414509a",
+  "selected_profiles": [
+    "luna-low",
+    "luna-med",
+    "luna-high",
+    "luna-xhigh",
+    "luna-max",
+    "sol-low",
+    "sol-med",
+    "sol-high",
+    "sol-xhigh",
+    "sol-max",
+    "astra-low",
+    "astra-med",
+    "astra-high",
+    "astra-xhigh",
+    "astra-max",
+    "haiku-med",
+    "haiku-high",
+    "sonnet-med",
+    "sonnet-high",
+    "sonnet-xhigh",
+    "sonnet-max",
+    "opus-high",
+    "opus-xhigh",
+    "opus-max",
+    "fable-max",
+    "flash38-med",
+    "flash38-high"
+  ],
+  "excluded_profiles": [
+    {
+      "profile_id": "haiku-low",
+      "reason": "Missing reviewed installed-CLI model/effort contract"
+    },
+    {
+      "profile_id": "haiku-max",
+      "reason": "Missing reviewed installed-CLI model/effort contract"
+    },
+    {
+      "profile_id": "sonnet-low",
+      "reason": "Missing reviewed installed-CLI model/effort contract"
+    },
+    {
+      "profile_id": "opus-low",
+      "reason": "Missing reviewed installed-CLI model/effort contract"
+    },
+    {
+      "profile_id": "opus-med",
+      "reason": "Missing reviewed installed-CLI model/effort contract"
+    },
+    {
+      "profile_id": "flash35-lite",
+      "reason": "No explicit effort profile"
+    },
+    {
+      "profile_id": "flash38-low",
+      "reason": "Incomplete measured profile"
+    },
+    {
+      "profile_id": "argon-low",
+      "reason": "Incomplete measured profile"
+    },
+    {
+      "profile_id": "argon-med",
+      "reason": "Incomplete measured profile"
+    },
+    {
+      "profile_id": "argon-high",
+      "reason": "Missing reviewed installed-CLI model/effort contract"
+    }
+  ],
+  "coverage": [
+    {
+      "task_type": "AGT-PROJ",
+      "complexity": 1,
+      "eligible_if_native_acceptance_passes": [
+        "luna-med",
+        "luna-high",
+        "luna-xhigh",
+        "haiku-med"
+      ],
+      "review_available_if_native_acceptance_passes": true
+    },
+    {
+      "task_type": "AGT-PROJ",
+      "complexity": 2,
+      "eligible_if_native_acceptance_passes": [
+        "luna-high",
+        "luna-xhigh",
+        "haiku-med",
+        "luna-max",
+        "haiku-high"
+      ],
+      "review_available_if_native_acceptance_passes": true
+    },
+    {
+      "task_type": "AGT-PROJ",
+      "complexity": 3,
+      "eligible_if_native_acceptance_passes": [
+        "haiku-med",
+        "luna-max",
+        "haiku-high",
+        "sol-med"
+      ],
+      "review_available_if_native_acceptance_passes": true
+    },
+    {
+      "task_type": "AGT-PROJ",
+      "complexity": 4,
+      "eligible_if_native_acceptance_passes": [
+        "haiku-med",
+        "haiku-high",
+        "sol-med",
+        "sol-high"
+      ],
+      "review_available_if_native_acceptance_passes": true
+    },
+    {
+      "task_type": "AGT-PROJ",
+      "complexity": 5,
+      "eligible_if_native_acceptance_passes": [
+        "sol-high",
+        "sol-xhigh",
+        "sol-max",
+        "sonnet-high"
+      ],
+      "review_available_if_native_acceptance_passes": true
+    },
+    {
+      "task_type": "AGT-PROJ",
+      "complexity": 6,
+      "eligible_if_native_acceptance_passes": [
+        "sol-max",
+        "sonnet-high",
+        "opus-high"
+      ],
+      "review_available_if_native_acceptance_passes": true
+    },
+    {
+      "task_type": "AGT-PROJ",
+      "complexity": 7,
+      "eligible_if_native_acceptance_passes": [
+        "sol-max",
+        "sonnet-high",
+        "opus-high"
+      ],
+      "review_available_if_native_acceptance_passes": true
+    },
+    {
+      "task_type": "AGT-PROJ",
+      "complexity": 8,
+      "eligible_if_native_acceptance_passes": [
+        "sonnet-max",
+        "opus-max",
+        "opus-xhigh",
+        "sonnet-xhigh",
+        "opus-high"
+      ],
+      "review_available_if_native_acceptance_passes": true
+    },
+    {
+      "task_type": "AGT-PROJ",
+      "complexity": 9,
+      "eligible_if_native_acceptance_passes": [
+        "sonnet-max",
+        "opus-max",
+        "opus-xhigh",
+        "sonnet-xhigh"
+      ],
+      "review_available_if_native_acceptance_passes": true
+    },
+    {
+      "task_type": "AGT-PROJ",
+      "complexity": 10,
+      "eligible_if_native_acceptance_passes": [
+        "sonnet-max",
+        "opus-max"
+      ],
+      "review_available_if_native_acceptance_passes": true
+    },
+    {
+      "task_type": "AGT-DELIV",
+      "complexity": 1,
+      "eligible_if_native_acceptance_passes": [
+        "luna-med",
+        "luna-high",
+        "luna-xhigh",
+        "haiku-med"
+      ],
+      "review_available_if_native_acceptance_passes": true
+    },
+    {
+      "task_type": "AGT-DELIV",
+      "complexity": 2,
+      "eligible_if_native_acceptance_passes": [
+        "luna-med",
+        "luna-high",
+        "luna-xhigh",
+        "haiku-med",
+        "luna-max"
+      ],
+      "review_available_if_native_acceptance_passes": true
+    },
+    {
+      "task_type": "AGT-DELIV",
+      "complexity": 3,
+      "eligible_if_native_acceptance_passes": [
+        "luna-high",
+        "luna-xhigh",
+        "luna-max",
+        "haiku-high",
+        "sol-low"
+      ],
+      "review_available_if_native_acceptance_passes": true
+    },
+    {
+      "task_type": "AGT-DELIV",
+      "complexity": 4,
+      "eligible_if_native_acceptance_passes": [
+        "luna-max",
+        "haiku-high",
+        "sol-med",
+        "sol-high"
+      ],
+      "review_available_if_native_acceptance_passes": true
+    },
+    {
+      "task_type": "AGT-DELIV",
+      "complexity": 5,
+      "eligible_if_native_acceptance_passes": [
+        "sol-high",
+        "sol-xhigh",
+        "sol-max",
+        "sonnet-high"
+      ],
+      "review_available_if_native_acceptance_passes": true
+    },
+    {
+      "task_type": "AGT-DELIV",
+      "complexity": 6,
+      "eligible_if_native_acceptance_passes": [
+        "sol-high",
+        "sol-xhigh",
+        "sol-max",
+        "sonnet-high"
+      ],
+      "review_available_if_native_acceptance_passes": true
+    },
+    {
+      "task_type": "AGT-DELIV",
+      "complexity": 7,
+      "eligible_if_native_acceptance_passes": [
+        "sol-max",
+        "opus-high"
+      ],
+      "review_available_if_native_acceptance_passes": true
+    },
+    {
+      "task_type": "AGT-DELIV",
+      "complexity": 8,
+      "eligible_if_native_acceptance_passes": [
+        "opus-max",
+        "sonnet-max",
+        "opus-xhigh",
+        "fable-max",
+        "sonnet-xhigh"
+      ],
+      "review_available_if_native_acceptance_passes": true
+    },
+    {
+      "task_type": "AGT-DELIV",
+      "complexity": 9,
+      "eligible_if_native_acceptance_passes": [
+        "opus-max",
+        "sonnet-max",
+        "opus-xhigh",
+        "fable-max",
+        "sonnet-xhigh"
+      ],
+      "review_available_if_native_acceptance_passes": false
+    },
+    {
+      "task_type": "AGT-DELIV",
+      "complexity": 10,
+      "eligible_if_native_acceptance_passes": [
+        "opus-max"
+      ],
+      "review_available_if_native_acceptance_passes": false
+    },
+    {
+      "task_type": "AGT-AUTO",
+      "complexity": 1,
+      "eligible_if_native_acceptance_passes": [
+        "luna-med",
+        "luna-high",
+        "luna-xhigh",
+        "haiku-med",
+        "luna-max"
+      ],
+      "review_available_if_native_acceptance_passes": true
+    },
+    {
+      "task_type": "AGT-AUTO",
+      "complexity": 2,
+      "eligible_if_native_acceptance_passes": [
+        "luna-med",
+        "luna-high",
+        "luna-xhigh",
+        "luna-max",
+        "haiku-high"
+      ],
+      "review_available_if_native_acceptance_passes": true
+    },
+    {
+      "task_type": "AGT-AUTO",
+      "complexity": 3,
+      "eligible_if_native_acceptance_passes": [
+        "luna-med",
+        "luna-high",
+        "luna-xhigh",
+        "luna-max",
+        "sol-low"
+      ],
+      "review_available_if_native_acceptance_passes": true
+    },
+    {
+      "task_type": "AGT-AUTO",
+      "complexity": 4,
+      "eligible_if_native_acceptance_passes": [
+        "luna-high",
+        "luna-xhigh",
+        "luna-max",
+        "sol-low",
+        "sol-med"
+      ],
+      "review_available_if_native_acceptance_passes": true
+    },
+    {
+      "task_type": "AGT-AUTO",
+      "complexity": 5,
+      "eligible_if_native_acceptance_passes": [
+        "luna-max",
+        "sol-low",
+        "sol-med",
+        "sol-high",
+        "sol-xhigh"
+      ],
+      "review_available_if_native_acceptance_passes": true
+    },
+    {
+      "task_type": "AGT-AUTO",
+      "complexity": 6,
+      "eligible_if_native_acceptance_passes": [
+        "sol-med",
+        "sol-high",
+        "sol-xhigh",
+        "sol-max",
+        "astra-low"
+      ],
+      "review_available_if_native_acceptance_passes": true
+    },
+    {
+      "task_type": "AGT-AUTO",
+      "complexity": 7,
+      "eligible_if_native_acceptance_passes": [
+        "sol-high",
+        "sol-xhigh",
+        "sol-max",
+        "astra-med",
+        "astra-high"
+      ],
+      "review_available_if_native_acceptance_passes": true
+    },
+    {
+      "task_type": "AGT-AUTO",
+      "complexity": 8,
+      "eligible_if_native_acceptance_passes": [
+        "sonnet-max",
+        "opus-max",
+        "astra-max",
+        "astra-xhigh"
+      ],
+      "review_available_if_native_acceptance_passes": false
+    },
+    {
+      "task_type": "AGT-AUTO",
+      "complexity": 9,
+      "eligible_if_native_acceptance_passes": [
+        "sonnet-max"
+      ],
+      "review_available_if_native_acceptance_passes": false
+    },
+    {
+      "task_type": "AGT-AUTO",
+      "complexity": 10,
+      "eligible_if_native_acceptance_passes": [],
+      "review_available_if_native_acceptance_passes": false
+    },
+    {
+      "task_type": "COD-TERM",
+      "complexity": 1,
+      "eligible_if_native_acceptance_passes": [
+        "haiku-high",
+        "sol-low",
+        "sol-med",
+        "sol-high"
+      ],
+      "review_available_if_native_acceptance_passes": true
+    },
+    {
+      "task_type": "COD-TERM",
+      "complexity": 2,
+      "eligible_if_native_acceptance_passes": [
+        "sol-low",
+        "sol-med",
+        "sol-high",
+        "sol-xhigh"
+      ],
+      "review_available_if_native_acceptance_passes": true
+    },
+    {
+      "task_type": "COD-TERM",
+      "complexity": 3,
+      "eligible_if_native_acceptance_passes": [
+        "sol-low",
+        "sol-med",
+        "sol-high",
+        "sol-xhigh"
+      ],
+      "review_available_if_native_acceptance_passes": true
+    },
+    {
+      "task_type": "COD-TERM",
+      "complexity": 4,
+      "eligible_if_native_acceptance_passes": [
+        "sol-med",
+        "sol-high",
+        "sol-xhigh",
+        "sol-max",
+        "astra-low"
+      ],
+      "review_available_if_native_acceptance_passes": true
+    },
+    {
+      "task_type": "COD-TERM",
+      "complexity": 5,
+      "eligible_if_native_acceptance_passes": [
+        "sol-med",
+        "sol-high",
+        "sol-xhigh",
+        "sol-max",
+        "sonnet-high"
+      ],
+      "review_available_if_native_acceptance_passes": true
+    },
+    {
+      "task_type": "COD-TERM",
+      "complexity": 6,
+      "eligible_if_native_acceptance_passes": [
+        "sol-med",
+        "sol-high",
+        "sol-xhigh",
+        "sol-max"
+      ],
+      "review_available_if_native_acceptance_passes": true
+    },
+    {
+      "task_type": "COD-TERM",
+      "complexity": 7,
+      "eligible_if_native_acceptance_passes": [
+        "sol-high",
+        "sol-xhigh",
+        "sol-max",
+        "astra-high"
+      ],
+      "review_available_if_native_acceptance_passes": true
+    },
+    {
+      "task_type": "COD-TERM",
+      "complexity": 8,
+      "eligible_if_native_acceptance_passes": [
+        "sonnet-max",
+        "astra-xhigh",
+        "opus-xhigh",
+        "opus-max",
+        "astra-max"
+      ],
+      "review_available_if_native_acceptance_passes": true
+    },
+    {
+      "task_type": "COD-TERM",
+      "complexity": 9,
+      "eligible_if_native_acceptance_passes": [
+        "sonnet-max",
+        "astra-xhigh",
+        "opus-xhigh",
+        "opus-max",
+        "astra-max"
+      ],
+      "review_available_if_native_acceptance_passes": false
+    },
+    {
+      "task_type": "COD-TERM",
+      "complexity": 10,
+      "eligible_if_native_acceptance_passes": [
+        "sonnet-max"
+      ],
+      "review_available_if_native_acceptance_passes": false
+    },
+    {
+      "task_type": "COD-SCI",
+      "complexity": 1,
+      "eligible_if_native_acceptance_passes": [
+        "luna-low",
+        "luna-med",
+        "luna-high",
+        "luna-xhigh"
+      ],
+      "review_available_if_native_acceptance_passes": true
+    },
+    {
+      "task_type": "COD-SCI",
+      "complexity": 2,
+      "eligible_if_native_acceptance_passes": [
+        "luna-low",
+        "luna-med",
+        "luna-high",
+        "luna-xhigh"
+      ],
+      "review_available_if_native_acceptance_passes": true
+    },
+    {
+      "task_type": "COD-SCI",
+      "complexity": 3,
+      "eligible_if_native_acceptance_passes": [
+        "luna-low",
+        "luna-med",
+        "luna-high",
+        "luna-xhigh"
+      ],
+      "review_available_if_native_acceptance_passes": true
+    },
+    {
+      "task_type": "COD-SCI",
+      "complexity": 4,
+      "eligible_if_native_acceptance_passes": [
+        "luna-low",
+        "luna-med",
+        "luna-high",
+        "luna-xhigh"
+      ],
+      "review_available_if_native_acceptance_passes": true
+    },
+    {
+      "task_type": "COD-SCI",
+      "complexity": 5,
+      "eligible_if_native_acceptance_passes": [
+        "luna-low",
+        "luna-med",
+        "luna-high",
+        "luna-xhigh"
+      ],
+      "review_available_if_native_acceptance_passes": true
+    },
+    {
+      "task_type": "COD-SCI",
+      "complexity": 6,
+      "eligible_if_native_acceptance_passes": [
+        "luna-med",
+        "luna-high",
+        "luna-xhigh",
+        "luna-max",
+        "sol-low"
+      ],
+      "review_available_if_native_acceptance_passes": true
+    },
+    {
+      "task_type": "COD-SCI",
+      "complexity": 7,
+      "eligible_if_native_acceptance_passes": [
+        "luna-max",
+        "sol-high",
+        "sol-xhigh"
+      ],
+      "review_available_if_native_acceptance_passes": true
+    },
+    {
+      "task_type": "COD-SCI",
+      "complexity": 8,
+      "eligible_if_native_acceptance_passes": [
+        "opus-max",
+        "opus-xhigh",
+        "fable-max",
+        "sonnet-max"
+      ],
+      "review_available_if_native_acceptance_passes": true
+    },
+    {
+      "task_type": "COD-SCI",
+      "complexity": 9,
+      "eligible_if_native_acceptance_passes": [
+        "opus-max",
+        "opus-xhigh",
+        "fable-max"
+      ],
+      "review_available_if_native_acceptance_passes": false
+    },
+    {
+      "task_type": "COD-SCI",
+      "complexity": 10,
+      "eligible_if_native_acceptance_passes": [
+        "opus-max"
+      ],
+      "review_available_if_native_acceptance_passes": false
+    },
+    {
+      "task_type": "SCI-FRONT",
+      "complexity": 1,
+      "eligible_if_native_acceptance_passes": [
+        "luna-low",
+        "luna-med",
+        "luna-high",
+        "luna-xhigh"
+      ],
+      "review_available_if_native_acceptance_passes": true
+    },
+    {
+      "task_type": "SCI-FRONT",
+      "complexity": 2,
+      "eligible_if_native_acceptance_passes": [
+        "luna-low",
+        "luna-med",
+        "luna-high",
+        "luna-xhigh"
+      ],
+      "review_available_if_native_acceptance_passes": true
+    },
+    {
+      "task_type": "SCI-FRONT",
+      "complexity": 3,
+      "eligible_if_native_acceptance_passes": [
+        "luna-med",
+        "luna-high",
+        "luna-xhigh",
+        "haiku-med"
+      ],
+      "review_available_if_native_acceptance_passes": true
+    },
+    {
+      "task_type": "SCI-FRONT",
+      "complexity": 4,
+      "eligible_if_native_acceptance_passes": [
+        "luna-high",
+        "luna-xhigh",
+        "haiku-med",
+        "luna-max",
+        "haiku-high"
+      ],
+      "review_available_if_native_acceptance_passes": true
+    },
+    {
+      "task_type": "SCI-FRONT",
+      "complexity": 5,
+      "eligible_if_native_acceptance_passes": [
+        "luna-max",
+        "haiku-high",
+        "sol-low",
+        "sol-med"
+      ],
+      "review_available_if_native_acceptance_passes": true
+    },
+    {
+      "task_type": "SCI-FRONT",
+      "complexity": 6,
+      "eligible_if_native_acceptance_passes": [
+        "sol-low",
+        "sol-med",
+        "sol-high",
+        "sol-xhigh"
+      ],
+      "review_available_if_native_acceptance_passes": true
+    },
+    {
+      "task_type": "SCI-FRONT",
+      "complexity": 7,
+      "eligible_if_native_acceptance_passes": [
+        "sol-low",
+        "sol-med",
+        "sol-high",
+        "sol-xhigh"
+      ],
+      "review_available_if_native_acceptance_passes": true
+    },
+    {
+      "task_type": "SCI-FRONT",
+      "complexity": 8,
+      "eligible_if_native_acceptance_passes": [
+        "opus-max",
+        "fable-max",
+        "opus-xhigh",
+        "opus-high"
+      ],
+      "review_available_if_native_acceptance_passes": true
+    },
+    {
+      "task_type": "SCI-FRONT",
+      "complexity": 9,
+      "eligible_if_native_acceptance_passes": [
+        "opus-max",
+        "fable-max",
+        "opus-xhigh"
+      ],
+      "review_available_if_native_acceptance_passes": false
+    },
+    {
+      "task_type": "SCI-FRONT",
+      "complexity": 10,
+      "eligible_if_native_acceptance_passes": [
+        "opus-max"
+      ],
+      "review_available_if_native_acceptance_passes": false
+    },
+    {
+      "task_type": "SCI-FORMAL",
+      "complexity": 1,
+      "eligible_if_native_acceptance_passes": [
+        "luna-med",
+        "luna-high",
+        "luna-xhigh",
+        "haiku-med"
+      ],
+      "review_available_if_native_acceptance_passes": true
+    },
+    {
+      "task_type": "SCI-FORMAL",
+      "complexity": 2,
+      "eligible_if_native_acceptance_passes": [
+        "luna-med",
+        "luna-high",
+        "luna-xhigh",
+        "haiku-med"
+      ],
+      "review_available_if_native_acceptance_passes": true
+    },
+    {
+      "task_type": "SCI-FORMAL",
+      "complexity": 3,
+      "eligible_if_native_acceptance_passes": [
+        "luna-high",
+        "luna-xhigh",
+        "haiku-med",
+        "luna-max",
+        "haiku-high"
+      ],
+      "review_available_if_native_acceptance_passes": true
+    },
+    {
+      "task_type": "SCI-FORMAL",
+      "complexity": 4,
+      "eligible_if_native_acceptance_passes": [
+        "luna-high",
+        "luna-xhigh",
+        "luna-max",
+        "haiku-high",
+        "sol-low"
+      ],
+      "review_available_if_native_acceptance_passes": true
+    },
+    {
+      "task_type": "SCI-FORMAL",
+      "complexity": 5,
+      "eligible_if_native_acceptance_passes": [
+        "luna-xhigh",
+        "luna-max",
+        "haiku-high",
+        "sol-low"
+      ],
+      "review_available_if_native_acceptance_passes": true
+    },
+    {
+      "task_type": "SCI-FORMAL",
+      "complexity": 6,
+      "eligible_if_native_acceptance_passes": [
+        "sol-low",
+        "sol-med",
+        "sol-high",
+        "sol-xhigh",
+        "sol-max"
+      ],
+      "review_available_if_native_acceptance_passes": true
+    },
+    {
+      "task_type": "SCI-FORMAL",
+      "complexity": 7,
+      "eligible_if_native_acceptance_passes": [
+        "sol-low",
+        "sol-med",
+        "sol-high",
+        "sol-xhigh",
+        "sol-max"
+      ],
+      "review_available_if_native_acceptance_passes": true
+    },
+    {
+      "task_type": "SCI-FORMAL",
+      "complexity": 8,
+      "eligible_if_native_acceptance_passes": [
+        "sol-xhigh",
+        "sol-max",
+        "astra-max",
+        "opus-xhigh",
+        "opus-max"
+      ],
+      "review_available_if_native_acceptance_passes": true
+    },
+    {
+      "task_type": "SCI-FORMAL",
+      "complexity": 9,
+      "eligible_if_native_acceptance_passes": [
+        "sol-xhigh",
+        "sol-max",
+        "astra-max",
+        "opus-xhigh",
+        "opus-max"
+      ],
+      "review_available_if_native_acceptance_passes": false
+    },
+    {
+      "task_type": "SCI-FORMAL",
+      "complexity": 10,
+      "eligible_if_native_acceptance_passes": [],
+      "review_available_if_native_acceptance_passes": false
+    },
+    {
+      "task_type": "GEN-FACT",
+      "complexity": 1,
+      "eligible_if_native_acceptance_passes": [
+        "haiku-high",
+        "sol-low",
+        "sol-med"
+      ],
+      "review_available_if_native_acceptance_passes": true
+    },
+    {
+      "task_type": "GEN-FACT",
+      "complexity": 2,
+      "eligible_if_native_acceptance_passes": [
+        "sol-low",
+        "sol-med",
+        "sol-high",
+        "sol-xhigh"
+      ],
+      "review_available_if_native_acceptance_passes": true
+    },
+    {
+      "task_type": "GEN-FACT",
+      "complexity": 3,
+      "eligible_if_native_acceptance_passes": [
+        "sol-low",
+        "sol-med",
+        "sol-high",
+        "sol-xhigh"
+      ],
+      "review_available_if_native_acceptance_passes": true
+    },
+    {
+      "task_type": "GEN-FACT",
+      "complexity": 4,
+      "eligible_if_native_acceptance_passes": [
+        "sol-low",
+        "sol-med",
+        "sol-high",
+        "sol-xhigh"
+      ],
+      "review_available_if_native_acceptance_passes": true
+    },
+    {
+      "task_type": "GEN-FACT",
+      "complexity": 5,
+      "eligible_if_native_acceptance_passes": [
+        "sol-low",
+        "sol-med",
+        "sol-high",
+        "sol-xhigh"
+      ],
+      "review_available_if_native_acceptance_passes": true
+    },
+    {
+      "task_type": "GEN-FACT",
+      "complexity": 6,
+      "eligible_if_native_acceptance_passes": [
+        "sol-low",
+        "sol-med",
+        "sol-high",
+        "sol-xhigh"
+      ],
+      "review_available_if_native_acceptance_passes": true
+    },
+    {
+      "task_type": "GEN-FACT",
+      "complexity": 7,
+      "eligible_if_native_acceptance_passes": [
+        "sol-low",
+        "sol-med",
+        "sol-high",
+        "sol-xhigh"
+      ],
+      "review_available_if_native_acceptance_passes": true
+    },
+    {
+      "task_type": "GEN-FACT",
+      "complexity": 8,
+      "eligible_if_native_acceptance_passes": [
+        "opus-max",
+        "astra-high",
+        "fable-max",
+        "astra-xhigh",
+        "astra-max"
+      ],
+      "review_available_if_native_acceptance_passes": true
+    },
+    {
+      "task_type": "GEN-FACT",
+      "complexity": 9,
+      "eligible_if_native_acceptance_passes": [
+        "opus-max",
+        "astra-high",
+        "fable-max",
+        "astra-xhigh",
+        "astra-max"
+      ],
+      "review_available_if_native_acceptance_passes": false
+    },
+    {
+      "task_type": "GEN-FACT",
+      "complexity": 10,
+      "eligible_if_native_acceptance_passes": [
+        "opus-max"
+      ],
+      "review_available_if_native_acceptance_passes": false
+    },
+    {
+      "task_type": "GEN-DOC",
+      "complexity": 1,
+      "eligible_if_native_acceptance_passes": [
+        "luna-low",
+        "luna-med",
+        "luna-high",
+        "luna-xhigh"
+      ],
+      "review_available_if_native_acceptance_passes": true
+    },
+    {
+      "task_type": "GEN-DOC",
+      "complexity": 2,
+      "eligible_if_native_acceptance_passes": [
+        "luna-med",
+        "luna-high",
+        "luna-xhigh",
+        "haiku-med"
+      ],
+      "review_available_if_native_acceptance_passes": true
+    },
+    {
+      "task_type": "GEN-DOC",
+      "complexity": 3,
+      "eligible_if_native_acceptance_passes": [
+        "luna-med",
+        "luna-high",
+        "luna-xhigh",
+        "haiku-med",
+        "luna-max"
+      ],
+      "review_available_if_native_acceptance_passes": true
+    },
+    {
+      "task_type": "GEN-DOC",
+      "complexity": 4,
+      "eligible_if_native_acceptance_passes": [
+        "luna-high",
+        "luna-xhigh",
+        "haiku-med",
+        "luna-max",
+        "haiku-high"
+      ],
+      "review_available_if_native_acceptance_passes": true
+    },
+    {
+      "task_type": "GEN-DOC",
+      "complexity": 5,
+      "eligible_if_native_acceptance_passes": [
+        "luna-high",
+        "luna-xhigh",
+        "luna-max",
+        "haiku-high",
+        "sol-low"
+      ],
+      "review_available_if_native_acceptance_passes": true
+    },
+    {
+      "task_type": "GEN-DOC",
+      "complexity": 6,
+      "eligible_if_native_acceptance_passes": [
+        "luna-max",
+        "sol-low",
+        "sol-med",
+        "sol-high"
+      ],
+      "review_available_if_native_acceptance_passes": true
+    },
+    {
+      "task_type": "GEN-DOC",
+      "complexity": 7,
+      "eligible_if_native_acceptance_passes": [
+        "luna-max",
+        "sol-low",
+        "sol-med",
+        "sol-high",
+        "sol-xhigh"
+      ],
+      "review_available_if_native_acceptance_passes": true
+    },
+    {
+      "task_type": "GEN-DOC",
+      "complexity": 8,
+      "eligible_if_native_acceptance_passes": [
+        "astra-xhigh",
+        "sol-high",
+        "sol-xhigh",
+        "sol-max",
+        "astra-high"
+      ],
+      "review_available_if_native_acceptance_passes": true
+    },
+    {
+      "task_type": "GEN-DOC",
+      "complexity": 9,
+      "eligible_if_native_acceptance_passes": [
+        "astra-xhigh",
+        "sol-high",
+        "sol-xhigh",
+        "sol-max",
+        "astra-high"
+      ],
+      "review_available_if_native_acceptance_passes": true
+    },
+    {
+      "task_type": "GEN-DOC",
+      "complexity": 10,
+      "eligible_if_native_acceptance_passes": [
+        "sol-max",
+        "astra-max"
+      ],
+      "review_available_if_native_acceptance_passes": true
+    },
+    {
+      "task_type": "GEN-LCR",
+      "complexity": 1,
+      "eligible_if_native_acceptance_passes": [
+        "luna-low",
+        "luna-med",
+        "luna-high",
+        "luna-xhigh"
+      ],
+      "review_available_if_native_acceptance_passes": true
+    },
+    {
+      "task_type": "GEN-LCR",
+      "complexity": 2,
+      "eligible_if_native_acceptance_passes": [
+        "luna-low",
+        "luna-med",
+        "luna-high",
+        "luna-xhigh"
+      ],
+      "review_available_if_native_acceptance_passes": true
+    },
+    {
+      "task_type": "GEN-LCR",
+      "complexity": 3,
+      "eligible_if_native_acceptance_passes": [
+        "luna-low",
+        "luna-med",
+        "luna-high",
+        "luna-xhigh"
+      ],
+      "review_available_if_native_acceptance_passes": true
+    },
+    {
+      "task_type": "GEN-LCR",
+      "complexity": 4,
+      "eligible_if_native_acceptance_passes": [
+        "luna-low",
+        "luna-med",
+        "luna-high",
+        "luna-xhigh"
+      ],
+      "review_available_if_native_acceptance_passes": true
+    },
+    {
+      "task_type": "GEN-LCR",
+      "complexity": 5,
+      "eligible_if_native_acceptance_passes": [
+        "luna-low",
+        "luna-med",
+        "luna-high",
+        "luna-xhigh"
+      ],
+      "review_available_if_native_acceptance_passes": true
+    },
+    {
+      "task_type": "GEN-LCR",
+      "complexity": 6,
+      "eligible_if_native_acceptance_passes": [
+        "luna-low",
+        "luna-med",
+        "luna-high",
+        "luna-xhigh"
+      ],
+      "review_available_if_native_acceptance_passes": true
+    },
+    {
+      "task_type": "GEN-LCR",
+      "complexity": 7,
+      "eligible_if_native_acceptance_passes": [
+        "luna-med",
+        "luna-high",
+        "luna-xhigh",
+        "haiku-med",
+        "luna-max"
+      ],
+      "review_available_if_native_acceptance_passes": true
+    },
+    {
+      "task_type": "GEN-LCR",
+      "complexity": 8,
+      "eligible_if_native_acceptance_passes": [
+        "fable-max",
+        "opus-xhigh",
+        "opus-max",
+        "sol-low"
+      ],
+      "review_available_if_native_acceptance_passes": true
+    },
+    {
+      "task_type": "GEN-LCR",
+      "complexity": 9,
+      "eligible_if_native_acceptance_passes": [
+        "fable-max",
+        "opus-xhigh",
+        "opus-max",
+        "sol-low"
+      ],
+      "review_available_if_native_acceptance_passes": true
+    },
+    {
+      "task_type": "GEN-LCR",
+      "complexity": 10,
+      "eligible_if_native_acceptance_passes": [
+        "fable-max",
+        "opus-max"
+      ],
+      "review_available_if_native_acceptance_passes": true
+    },
+    {
+      "task_type": "GEN-DEFAULT",
+      "complexity": 1,
+      "eligible_if_native_acceptance_passes": [
+        "luna-low",
+        "luna-med",
+        "luna-high",
+        "luna-xhigh"
+      ],
+      "review_available_if_native_acceptance_passes": true
+    },
+    {
+      "task_type": "GEN-DEFAULT",
+      "complexity": 2,
+      "eligible_if_native_acceptance_passes": [
+        "luna-med",
+        "luna-high",
+        "luna-xhigh",
+        "haiku-med"
+      ],
+      "review_available_if_native_acceptance_passes": true
+    },
+    {
+      "task_type": "GEN-DEFAULT",
+      "complexity": 3,
+      "eligible_if_native_acceptance_passes": [
+        "luna-xhigh",
+        "haiku-med",
+        "luna-max",
+        "haiku-high",
+        "sol-low"
+      ],
+      "review_available_if_native_acceptance_passes": true
+    },
+    {
+      "task_type": "GEN-DEFAULT",
+      "complexity": 4,
+      "eligible_if_native_acceptance_passes": [
+        "luna-max",
+        "sol-low",
+        "sol-med",
+        "sol-high"
+      ],
+      "review_available_if_native_acceptance_passes": true
+    },
+    {
+      "task_type": "GEN-DEFAULT",
+      "complexity": 5,
+      "eligible_if_native_acceptance_passes": [
+        "sol-low",
+        "sol-med",
+        "sol-high",
+        "sol-xhigh"
+      ],
+      "review_available_if_native_acceptance_passes": true
+    },
+    {
+      "task_type": "GEN-DEFAULT",
+      "complexity": 6,
+      "eligible_if_native_acceptance_passes": [
+        "sol-med",
+        "sol-high",
+        "sol-xhigh",
+        "sol-max",
+        "sonnet-high"
+      ],
+      "review_available_if_native_acceptance_passes": true
+    },
+    {
+      "task_type": "GEN-DEFAULT",
+      "complexity": 7,
+      "eligible_if_native_acceptance_passes": [
+        "sol-high",
+        "sol-xhigh",
+        "sol-max",
+        "astra-high"
+      ],
+      "review_available_if_native_acceptance_passes": true
+    },
+    {
+      "task_type": "GEN-DEFAULT",
+      "complexity": 8,
+      "eligible_if_native_acceptance_passes": [
+        "opus-max",
+        "sonnet-max",
+        "opus-xhigh",
+        "opus-high",
+        "fable-max"
+      ],
+      "review_available_if_native_acceptance_passes": true
+    },
+    {
+      "task_type": "GEN-DEFAULT",
+      "complexity": 9,
+      "eligible_if_native_acceptance_passes": [
+        "opus-max",
+        "sonnet-max",
+        "opus-xhigh"
+      ],
+      "review_available_if_native_acceptance_passes": true
+    },
+    {
+      "task_type": "GEN-DEFAULT",
+      "complexity": 10,
+      "eligible_if_native_acceptance_passes": [
+        "opus-max",
+        "sonnet-max"
+      ],
+      "review_available_if_native_acceptance_passes": true
+    }
+  ],
+  "native_commands_executed": 0,
+  "host_accepted": false,
+  "quota_availability_verified": false
+}
