@@ -351,10 +351,12 @@ class MicrotaskBoardRuntime:
             # authoritative; the board does not manufacture a native completion.
             if not output.get('fracture_join_id') or not result.get('job_id'):
                 raise ValueError('Completed fracture join requires concrete verified producer identity')
-            expected = self._predecessors(node, completed)
+            expected = {dep: completed[dep] for dep in node['depends_on']}
             if output.get('predecessor_artifact_hashes') != {dep: value['artifact_sha256']
                     for dep, value in sorted(expected.items())}:
                 raise ValueError('Fracture join must bind its exact terminal predecessor')
+            from .fracture_recovery_428 import complete_nested_alias
+            complete_nested_alias(self, task_id, gen_sha, node, output)
         with self.journal._write() as conn:
             key = f'{gen_sha[:32]}::{node["microtask_id"]}'
             self._release_node_file_locks(conn, key)
@@ -362,6 +364,11 @@ class MicrotaskBoardRuntime:
                 gen_sha=gen_sha, node=node, candidates=[], status=result['status'],
                 job_id=result.get('job_id'), output_obj=output,
                 artifact_sha256=output['artifact_sha256'] if output else None, now=now)
+            # This row is a projection of the immutable alias, not a rewrite of
+            # the failed native job. Its dependency is now the verified inner
+            # terminal; retain the original contract in the alias binding.
+            conn.execute('UPDATE microtask428_nodes SET depends_on_json=? WHERE node_key=?',
+                         (json.dumps(node['depends_on']), key))
         return output
 
     def _cancel_stale_board_job(self, job_id: str | None) -> None:

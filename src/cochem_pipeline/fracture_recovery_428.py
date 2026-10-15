@@ -1,5 +1,4 @@
 """Reopen registered child projections only for accounted physical failures."""
-from copy import deepcopy
 import json
 
 from .task_routing import digest
@@ -53,3 +52,56 @@ def reopen_physical_children(board, nodes, contexts):
                          (status, float(runtime.clock()), node['microtask_id']))
         conn.execute('INSERT INTO task428_fracture_recoveries VALUES(?,?,?)',
                      (key, raw, json.dumps(previous, sort_keys=True)))
+
+
+def complete_nested_alias(board, task_id, generation, node, output):
+    """Advance an obsolete registered member from an immutable physical alias."""
+    if not node.get('fracture_context'):
+        return
+    runtime = board.fracture_runtime
+    child_id, join_id = node['microtask_id'], output['fracture_join_id']
+    with board.store._connection() as conn:
+        row = conn.execute('SELECT task_id,microtask_id,generation,binding_json,output_json FROM task428_fracture_artifact_joins '
+                           'WHERE join_id=?', (join_id,)).fetchone()
+    if (row is None or row['microtask_id'] != child_id or row['task_id'] != task_id
+            or row['generation'] != generation or json.loads(row['output_json']) != output):
+        raise ValueError('Nested fracture completion requires its exact persisted physical alias')
+    binding = json.loads(row['binding_json'])
+    if join_id != 'fracture-join428-' + digest(binding)[:40]:
+        raise ValueError('Nested fracture alias commitment differs')
+    if (binding['failed_node'] != node['fracture_join']['failed_node']
+            or binding['physical_proof']['status'] != 'VERIFIED'):
+        raise ValueError('Nested fracture alias lacks terminal verified proof')
+    with runtime.ledger._write() as conn:
+        conn.execute('''CREATE TABLE IF NOT EXISTS task428_fracture_alias_completions(
+            join_id TEXT PRIMARY KEY,child_id TEXT NOT NULL,artifact_sha256 TEXT NOT NULL,
+            binding_sha256 TEXT NOT NULL)''')
+        for action in ('UPDATE', 'DELETE'):
+            conn.execute(f'''CREATE TRIGGER IF NOT EXISTS fracture428_completion_no_{action.lower()}
+                BEFORE {action} ON task428_fracture_alias_completions
+                BEGIN SELECT RAISE(ABORT,'fracture alias completion is immutable'); END''')
+        existing = conn.execute('SELECT child_id,artifact_sha256,binding_sha256 FROM task428_fracture_alias_completions '
+                                'WHERE join_id=?', (join_id,)).fetchone()
+        exact = (child_id, output['artifact_sha256'], digest(binding))
+        if existing:
+            if tuple(existing) != exact:
+                raise ValueError('Nested fracture completion cannot be rebound')
+            return
+        old = conn.execute('SELECT * FROM task428_fracture_nodes WHERE child_id=?', (child_id,)).fetchone()
+        obsolete = conn.execute('SELECT * FROM task428_obsolete_scopes WHERE scope_id=?', (child_id,)).fetchone()
+        if (old is None or old['status'] != 'FRACTURED_OBSOLETE' or obsolete is None
+                or obsolete['superseded_by_fracture_id'] != binding['fracture_id']
+                or old['lineage_root'] != node['fracture_context']['lineage_root']):
+            raise ValueError('Nested alias does not replace this registered obsolete member')
+        conn.execute('INSERT INTO task428_fracture_alias_completions VALUES(?,?,?,?)', (join_id, *exact))
+        conn.execute("UPDATE task428_fracture_nodes SET status='COMPLETED',artifact_sha256=?,updated_at=? WHERE child_id=?",
+                     (output['artifact_sha256'], float(runtime.clock()), child_id))
+        siblings = conn.execute('SELECT * FROM task428_fracture_nodes WHERE fracture_id=?', (old['fracture_id'],)).fetchall()
+        completed = {item['child_id'] for item in siblings if item['status'] == 'COMPLETED'}
+        for sibling in siblings:
+            if sibling['status'] != 'BLOCKED_DAG':
+                continue
+            if set(json.loads(sibling['depends_on_json'])) <= completed:
+                next_status = 'HOLD_OWNER_APPROVAL' if sibling['needs_owner_approval'] else 'READY'
+                conn.execute('UPDATE task428_fracture_nodes SET status=?,updated_at=? WHERE child_id=?',
+                             (next_status, float(runtime.clock()), sibling['child_id']))

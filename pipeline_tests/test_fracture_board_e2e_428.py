@@ -69,10 +69,10 @@ def execute_one(store, artifacts, *, reject_review=False, job=None):
     return job
 
 
-def fracture_after_physical_predecessors(env, artifacts, failed_id):
+def fracture_after_physical_predecessors(env, artifacts, failed_id, *, failure_count=10):
     store, _, ledger, board, outcomes, bridge = env
     failures = 0
-    while failures < 10:
+    while failures < failure_count:
         outcomes.reconcile_task('task')
         board.materialize('task')
         job = store.claim('inert-fracture-boundary', worker_slot='slot1',
@@ -183,7 +183,13 @@ def test_nested_physical_alias_advances_old_registered_child_without_rewriting_a
     start = board.materialize('task')
     child = next(row for row in start['nodes'] if row['lineage_kind'] == 'FAILURE_FRACTURE'
                  and row['role'] == 'implementation')
-    failed, second = fracture_after_physical_predecessors(env, artifacts, child['microtask_id'])
+    first_attempt = store.claim('inert-nested-first', worker_slot='slot1', allowed_kinds=['TASK_PLAN'], requires_cleanup=True)
+    assert first_attempt['payload']['microtask_node']['microtask_id'] == child['microtask_id']
+    execute_one(store, artifacts)
+    store.clear_execution_quarantine(first_attempt['job_id'], first_attempt['attempt_id'], first_attempt['fencing_token'])
+    store.fail(first_attempt['job_id'], first_attempt['attempt_id'], first_attempt['fencing_token'],
+               'Inert nested scope failure', retry=True, category='code')
+    failed, second = fracture_after_physical_predecessors(env, artifacts, child['microtask_id'], failure_count=9)
     assert first['lineage_root'] == second['lineage_root']
     assert ledger.status(first['lineage_root'])['failures'] == 20
     for _ in range(20):
@@ -192,7 +198,11 @@ def test_nested_physical_alias_advances_old_registered_child_without_rewriting_a
         projected = next(row for row in status['nodes'] if row['microtask_id'] == child['microtask_id'])
         if projected['status'] == 'COMPLETED':
             break
-        execute_one(store, artifacts)
+        job = store.claim('inert-nested-fracture', worker_slot='slot1',
+                          allowed_kinds=['TASK_PLAN', 'TASK_VERIFY'], requires_cleanup=True)
+        assert job is not None, '\n'.join(str((n['microtask_id'], n['status'], n.get('reason'),
+            store.get(n['job_id']).get('error') if n.get('job_id') else None)) for n in status['nodes'])
+        execute_one(store, artifacts, job=job)
     assert projected['status'] == 'COMPLETED'
     assert projected['output']['fracture_join_id']
     assert board.fracture_runtime.get_fracture_child(child['microtask_id'])['status'] == 'COMPLETED'
