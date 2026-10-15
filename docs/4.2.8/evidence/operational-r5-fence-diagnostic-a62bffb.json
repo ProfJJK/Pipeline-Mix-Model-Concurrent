@@ -1,0 +1,207 @@
+{
+    "schema":  "cochem-operational-fence-diagnostic/4.2.8",
+    "observed_at_utc":  "2026-10-15T18:57:01.4946104Z",
+    "sitting_id":  "a62bffb278044fffbaf21207a866ff81",
+    "protected_state_modified":  false,
+    "provider_commands_executed":  0,
+    "task_mutations":  0,
+    "raw_logs_read":  false,
+    "credentials_read":  false,
+    "records":  [
+                    {
+                        "label":  "install_after",
+                        "projection":  {
+                                           "status":  "STOPPED_RUNTIME_INSTALLED",
+                                           "schema":  "cochem-428-offline-install/1",
+                                           "manifest_sha256":  "775de3a3c0edc9e8355d451728f370089ffce09a5f73c9b745c0d019912787d9",
+                                           "source_commit":  "865a29b113a8b59c822f6aa4d921a45c18407fe5",
+                                           "verified_entries":  15240,
+                                           "tasks_changed":  0,
+                                           "accounts_changed":  0,
+                                           "activation_ready":  false,
+                                           "pipeline_started":  false,
+                                           "credentials_modified":  false,
+                                           "existing_databases_modified":  false,
+                                           "ram_modified":  false
+                                       },
+                        "read_status":  "READ_VERIFIED",
+                        "sha256":  "0d4b036eda13a5381b700d766aa7eb097cbc893f6e0a6ff07b770e53bbe947ae",
+                        "bytes":  1059
+                    },
+                    {
+                        "label":  "owner_result",
+                        "projection":  {
+                                           "phase":  "admission_fence",
+                                           "status":  "R428_OPERATIONAL_HELD_PRESERVE_EVIDENCE",
+                                           "schema":  "cochem-428-operational-owner-result/1",
+                                           "rollback":  "NOT_REQUIRED",
+                                           "error_type":  "RuntimeException",
+                                           "request_sha256":  "8ca37638b5dbe15b877c7505dc2acbabac5f6e9b962b6b90101e5cc268aa814f",
+                                           "launch_manifest_sha256":  "49481181faa25f4b8762b85013bece21afb3f58b3f9b8e7417237fa3dacfc75c",
+                                           "source_commit":  "865a29b113a8b59c822f6aa4d921a45c18407fe5",
+                                           "automatic_retry":  false,
+                                           "cutover_requested":  false,
+                                           "runtime_health_verified":  false
+                                       },
+                        "read_status":  "READ_VERIFIED",
+                        "sha256":  "de2dde03d0cb6abfe681eafe6cc0814cdacfa0c1dce29ce0bd51cb1ac5a83652",
+                        "bytes":  890
+                    }
+                ],
+    "fences":  [
+                   {
+                       "records":  [
+                                       {
+                                           "projection":  {
+                                                              "status":  "WAITING_FOR_IDLE",
+                                                              "schema":  "cochem-owner-admission-fence/4.2.8",
+                                                              "config_sha256":  "daaa4b6a8c15aa49ed39af48c087bfe2fcfefdcbae14520b298d46287414509a",
+                                                              "request_sha256":  "8ca37638b5dbe15b877c7505dc2acbabac5f6e9b962b6b90101e5cc268aa814f",
+                                                              "nonce":  "a232264b12984ff2ab9ef33b7ec24c75",
+                                                              "pid":  46440,
+                                                              "database_rows_modified":  0
+                                                          },
+                                           "read_status":  "READ_VERIFIED",
+                                           "name":  "started.json",
+                                           "sha256":  "ac89c6175162298f10ebf05623bcfaaa884bc740e9673603ce657e73a0c07317",
+                                           "bytes":  400
+                                       },
+                                       {
+                                           "projection":  {
+                                                              "status":  "WRITER_FENCE_HELD",
+                                                              "schema":  "cochem-owner-admission-fence/4.2.8",
+                                                              "config_sha256":  "daaa4b6a8c15aa49ed39af48c087bfe2fcfefdcbae14520b298d46287414509a",
+                                                              "request_sha256":  "8ca37638b5dbe15b877c7505dc2acbabac5f6e9b962b6b90101e5cc268aa814f",
+                                                              "nonce":  "a232264b12984ff2ab9ef33b7ec24c75",
+                                                              "pid":  46440,
+                                                              "database_rows_modified":  0,
+                                                              "counts":  {
+                                                                             "active_leaves":  0,
+                                                                             "active_leases":  0,
+                                                                             "native_reservations":  0,
+                                                                             "uncleared_containment":  0,
+                                                                             "catalog_probes":  0
+                                                                         }
+                                                          },
+                                           "read_status":  "READ_VERIFIED",
+                                           "name":  "ready.json",
+                                           "sha256":  "c13d512da76fefa0ea1b6509eb35282f80d3c0a4135396f7ac5c6814b86f7912",
+                                           "bytes":  710
+                                       },
+                                       {
+                                           "projection":  {
+
+                                                          },
+                                           "read_status":  "ABSENT",
+                                           "name":  "held.json",
+                                           "sha256":  null,
+                                           "bytes":  null
+                                       },
+                                       {
+                                           "projection":  {
+
+                                                          },
+                                           "read_status":  "ABSENT",
+                                           "name":  "release.json",
+                                           "sha256":  null,
+                                           "bytes":  null
+                                       },
+                                       {
+                                           "projection":  {
+                                                              "status":  "FENCE_EXPIRED",
+                                                              "schema":  "cochem-owner-admission-fence/4.2.8",
+                                                              "config_sha256":  "daaa4b6a8c15aa49ed39af48c087bfe2fcfefdcbae14520b298d46287414509a",
+                                                              "request_sha256":  "8ca37638b5dbe15b877c7505dc2acbabac5f6e9b962b6b90101e5cc268aa814f",
+                                                              "ready_sha256":  "c13d512da76fefa0ea1b6509eb35282f80d3c0a4135396f7ac5c6814b86f7912",
+                                                              "nonce":  "a232264b12984ff2ab9ef33b7ec24c75",
+                                                              "pid":  46440,
+                                                              "database_rows_modified":  0,
+                                                              "released":  false,
+                                                              "lock_released":  true
+                                                          },
+                                           "read_status":  "READ_VERIFIED",
+                                           "name":  "result.json",
+                                           "sha256":  "2e808d80b655db392ce0d0dda8b93d828c604e7b296088cc63d1603b1ac8ce28",
+                                           "bytes":  517
+                                       }
+                                   ],
+                       "directory":  "stop-fence-d8196aa484dc4562a213e19faf9e3b05",
+                       "processes":  [
+                                         {
+                                             "status":  "PID_ABSENT",
+                                             "pid":  46440
+                                         }
+                                     ]
+                   }
+               ],
+    "tasks":  [
+                  {
+                      "kind":  "warden",
+                      "projection":  {
+                                         "triggers":  1,
+                                         "instances":  0,
+                                         "sddl_sha256":  "bcacae79e462afbe0623b80a0898c24360cf59472d049fd6bc264d6308c04eff",
+                                         "xml_sha256":  "aa3efe0fce92975a3b407dba19b6195368bfbd7f56fa438c77d3f4e509e93fe5",
+                                         "logon_type":  5,
+                                         "xml_matches_baseline":  true,
+                                         "multiple_instances":  2,
+                                         "system_identity":  true,
+                                         "task_last_run_before_baseline_start":  true,
+                                         "actions":  1,
+                                         "readable":  true,
+                                         "sddl_matches_baseline":  true,
+                                         "state":  3,
+                                         "run_level":  1,
+                                         "restart_count":  0,
+                                         "baseline_pid_present":  false,
+                                         "action_root_matches":  true,
+                                         "action_image_matches":  true,
+                                         "last_run_utc":  "2026-10-15T01:37:07.0000000Z",
+                                         "enabled":  true,
+                                         "action_arguments_match":  true,
+                                         "last_task_result":  1
+                                     }
+                  },
+                  {
+                      "nonce":  "a232264b12984ff2ab9ef33b7ec24c75",
+                      "projection":  {
+                                         "enabled":  true,
+                                         "instances":  0,
+                                         "restart_count":  0,
+                                         "action_image_matches":  true,
+                                         "xml_matches_baseline":  false,
+                                         "readable":  true,
+                                         "triggers":  0,
+                                         "run_level":  1,
+                                         "xml_sha256":  "351e830d81725f0d103ff69347cd4b889b4911548165d829dd725910a2df5004",
+                                         "system_identity":  true,
+                                         "actions":  1,
+                                         "state":  3,
+                                         "logon_type":  5,
+                                         "sddl_sha256":  "bcacae79e462afbe0623b80a0898c24360cf59472d049fd6bc264d6308c04eff",
+                                         "last_run_utc":  "2026-10-15T18:41:18.0000000Z",
+                                         "action_arguments_match":  true,
+                                         "action_root_matches":  true,
+                                         "sddl_matches_baseline":  false,
+                                         "multiple_instances":  2,
+                                         "last_task_result":  2
+                                     },
+                      "directory":  "stop-fence-d8196aa484dc4562a213e19faf9e3b05",
+                      "kind":  "fence"
+                  }
+              ],
+    "baseline":  {
+                     "config_sha256":  "daaa4b6a8c15aa49ed39af48c087bfe2fcfefdcbae14520b298d46287414509a",
+                     "read_status":  "READ_VERIFIED",
+                     "sha256":  "6dfc1cab0ebce9b73d341d03cf99d1e769b4351446d0af7b7ccc5ccd4e150767",
+                     "process":  {
+                                     "status":  "PID_ABSENT",
+                                     "pid":  24424
+                                 }
+                 },
+    "listener":  {
+                     "within_bound":  true,
+                     "count":  0,
+                     "baseline_pid_owns_all":  false
+                 }
+}
