@@ -95,12 +95,13 @@ and Codex preflight completed, but admission fencing held before catalog
 acceptance or cutover. The received diagnostic proves an expired, unreleased
 fence and an ended r4 Warden (unchanged definition, exit 1, no instances or
 listener). Do not claim the previous runtime is healthy or rerun the installer.
-Read `docs/4.2.8/OPERATIONAL_FENCE_HOLD_20261015.md`. Cleanup and task-transition
-repairs are committed. The separately bound installation-reuse continuation is
-prepared at `r428-op-recovery-01f782a`; read
-`docs/4.2.8/OPERATIONAL_RECOVERY_DELIVERY_20261015.md` for its pinned command and
-200-test/read-only-plan evidence. Only the owner executes it. Do not assume Apply
-has run, restart the previous runtime, or submit jobs before verified recovery.
+Read `docs/4.2.8/OPERATIONAL_FENCE_HOLD_20261015.md`. The owner also ran the
+`r428-op-recovery-01f782a` continuation; it is spent. It held in preconditions
+at the process inventory check, which omitted the existing reviewed legacy
+Codex/Claude `cochem_mcp` bridges. No new fence/task change/cutover was reached.
+See `docs/4.2.8/evidence/operational-recovery-01f782a-hold.json`. A focused client
+recognition correction and fresh package are being prepared. Do not rerun either
+old command, close the clients, repeat sign-in, or submit jobs before recovery.
 
 2026-10-15: the owner-approved seven-part operational repair is integrated on
 `fix/428-operational-repair` in the separate local

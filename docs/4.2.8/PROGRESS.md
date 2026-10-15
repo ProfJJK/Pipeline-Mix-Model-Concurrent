@@ -1,5 +1,12 @@
 # 4.2.8 source progress
 
+The owner has now run `r428-op-recovery-01f782a`; it stopped in preconditions and
+is spent. The process check omitted the already-reviewed legacy Codex/Claude MCP
+bridge form. Read-only current process metadata reproduces that category;
+no new fence, task change or cutover was reached. The focused correction and a
+fresh recovery package are in preparation. Preserve both failed packages and
+all evidence. No sign-in or new owner diagnostic is needed for this defect.
+
 The delivered operational r5 launch has run and is spent. Installation and Codex
 preflight passed, then admission fencing held before catalog acceptance/cutover.
 The received diagnostic proves fence expiry without a release request and an

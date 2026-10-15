@@ -1,3 +1,10 @@
+> **Spent — do not rerun this command.** The owner ran it on 15 October and it
+> stopped during preconditions. Its process check omitted the already-reviewed
+> legacy Codex/Claude `cochem_mcp` bridge clients. No fence, task change, catalog
+> acceptance or cutover was reached. See
+> [saved public status and process metadata](evidence/operational-recovery-01f782a-hold.json).
+> A separately packaged correction is being prepared. This delivery record is historical.
+
 # Operational r5 continuation — 15 October 2026
 
 This is the replacement for the spent `r428-op-launch-865a29b` attempt. The
