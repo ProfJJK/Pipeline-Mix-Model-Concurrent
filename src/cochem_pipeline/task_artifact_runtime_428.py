@@ -192,7 +192,12 @@ class TaskArtifactRuntime:
         sealed_tests = {}
         predecessors = payload.get('predecessor_outputs', {})
         if intent['stage'] == 'MICROTASK_EXECUTION':
+            from .planning_fractures_428 import validated_external_predecessors
+            external = validated_external_predecessors(getattr(self.runtime, 'task_planning', None), payload)
             declared = set(payload['microtask_node'].get('depends_on', []))
+            if declared & set(external) or any(predecessors.get(key) != value for key, value in external.items()):
+                raise ValueError('Task workspace external predecessors differ from the failed source capture')
+            declared.update(external)
             committed = {dep: output.get('artifact_sha256') for dep, output in predecessors.items()}
             if (set(predecessors) != declared or committed != intent.get('predecessor_artifact_hashes', {})
                     or committed != payload.get('predecessor_artifact_hashes', {})):

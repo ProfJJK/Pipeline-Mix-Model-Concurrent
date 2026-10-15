@@ -19,6 +19,13 @@ from pipeline_tests.test_task_content_verification_e2e_428 import content_task
 
 @pytest.fixture(autouse=True)
 def captured_fracture_inputs(monkeypatch):
+    # These focused boundary fixtures explicitly stub accepted graph/source
+    # lookup; the separate full-board E2E exercises the real durable adapters.
+    from cochem_pipeline import planning_fractures_428 as plans
+    monkeypatch.setattr(plans, 'validated_external_predecessors', lambda *_: {})
+    def source(planner, task_id, record):
+        return deepcopy(planner.test_sources[record['fracture_id']])
+    monkeypatch.setattr(plans, 'validated_fracture_source', source)
     # Capture the controller's fracture authority before jobs are queued. The
     # ordinary board is only an inert execution harness for these scope tests.
     submit = MicrotaskBoardRuntime._submit_board_job_for_node
@@ -70,7 +77,18 @@ def joined_scope(content_task):
                 ('task_types','requirement_ids','deliverables','release_criteria','depends_on')})
             conn.execute('INSERT INTO task428_fracture_nodes ('+','.join(fields)+') VALUES ('+
                          ','.join('?' for _ in fields)+')', tuple(fields.values()))
+    capture_test_source(artifacts, record, failed)
     return artifacts, failed, record, children, producer
+
+
+def capture_test_source(artifacts, record, failed):
+    planner = artifacts.runtime.task_planning
+    if not hasattr(planner, 'test_sources'):
+        planner.test_sources = {}
+    node = deepcopy(failed)
+    generation = node.pop('plan_generation_sha256')
+    planner.test_sources[record['fracture_id']] = dict(payload=dict(microtask_node=node,
+        planning_intent=dict(plan_generation_sha256=generation)))
 
 
 def accept_review(store):
@@ -178,6 +196,7 @@ def test_failed_final_alias_projects_test_deliverables_not_assembly(joined_scope
     artifacts, failed, record, children, producer = joined_scope
     node = producer['payload']['microtask_node']
     failed.update(role='final_test', deliverables=node['deliverables'], requirement_ids=node['requirement_ids'])
+    capture_test_source(artifacts, record, failed)
     artifacts.fracture_join('content-task', failed, record, children)
     accept_review(artifacts.store)
     joined = artifacts.fracture_join('content-task', failed, record, children)
@@ -199,6 +218,7 @@ def test_nested_alias_consumes_inner_verified_bytes_without_claiming_outer_model
                   fracture_context=outer_context, routed_profile_id=profile)
     with planner.fracture_runtime.ledger._write() as conn:
         conn.execute('INSERT INTO task428_members VALUES(?,?)', ('failed-original', 'failed-root'))
+    capture_test_source(artifacts, record, failed)
     artifacts.fracture_join('content-task', failed, record, children)
     accept_review(store)
     inner = artifacts.fracture_join('content-task', failed, record, children)
@@ -242,6 +262,7 @@ def test_nested_alias_consumes_inner_verified_bytes_without_claiming_outer_model
                 ('task_types','requirement_ids','deliverables','release_criteria','depends_on')})
             conn.execute('INSERT INTO task428_fracture_nodes ('+','.join(fields)+') VALUES ('+
                          ','.join('?' for _ in fields)+')', tuple(fields.values()))
+    capture_test_source(artifacts, outer_record, outer_failed)
     pending = artifacts.fracture_join('content-task', outer_failed, outer_record, outer_children)
     assert pending['status'] == 'WAITING_FOR_PHYSICAL_VERIFICATION'
     verifier = store.claim('inert-integrity', worker_slot='slot2', allowed_kinds=['TASK_VERIFY'], requires_cleanup=True)
@@ -256,3 +277,12 @@ def test_nested_alias_consumes_inner_verified_bytes_without_claiming_outer_model
     assert binding['producer_job_id'] == final['job_id']
     intent = dict(task_id='content-task', plan_generation_sha256=failed['plan_generation_sha256'])
     assert artifacts._accepted_dependency(intent, 'outer-original', outer['output'])['job_id'] == final['job_id']
+
+
+@pytest.mark.parametrize('field,value', [('role','final_test'), ('requirement_ids',[]),
+    ('deliverables',['unrelated.txt']), ('release_criteria',[]), ('complexity',1)])
+def test_join_cannot_narrow_or_replace_original_failed_contract(joined_scope, field, value):
+    artifacts, failed, record, children, _ = joined_scope
+    changed = deepcopy(failed); changed[field] = value
+    with pytest.raises(ValueError, match='immutable original source contract'):
+        artifacts.fracture_join('content-task', changed, record, children)

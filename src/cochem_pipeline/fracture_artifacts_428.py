@@ -75,6 +75,13 @@ def join(artifacts, task_id, failed_node, fracture_record, completed_children):
     if (failed_node['microtask_id'] != record['failed_scope_id']
             or member is None or member[0] != record['lineage_root']):
         raise ValueError('Fracture does not replace this failed scope and captured lineage')
+    from .planning_fractures_428 import validated_fracture_source
+    source = validated_fracture_source(planner, task_id, fracture_record)
+    source_payload = source['payload']
+    expected_scope = dict(source_payload['microtask_node'],
+        plan_generation_sha256=source_payload['planning_intent']['plan_generation_sha256'])
+    if failed_node != expected_scope:
+        raise ValueError('Fracture failed scope differs from its immutable original source contract')
     with planner.journal._write() as conn:
         task = planner.journal._read(conn, task_id)
         state = json.loads(task['state_json'])
