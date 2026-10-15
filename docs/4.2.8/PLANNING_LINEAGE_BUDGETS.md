@@ -61,3 +61,13 @@ adopts the lineage; the historical records themselves stay immutable.
 
 Tests use temporary SQLite databases and inert board claims only. They do not
 constitute native provider, Windows deployment or physical acceptance evidence.
+
+The individual microtask materializer now calls this capture after its
+idempotent existing-job check and before either insertion. It publishes
+`HELD_BUDGET` and `budget_hold_reason` on refusal, without creating another job
+or changing the failure counter. Runtime construction supplies the actual
+attempt ledger. Legacy standalone source fixtures without a ledger retain
+their existing behavior; they are not an enabled runtime configuration.
+Integration validation: 23 serialized budget/physical-recovery tests passed,
+including preserved deadlines, a nine-attempt remainder after one rejected
+producer, and no new job after aggregate dispatch exhaustion.

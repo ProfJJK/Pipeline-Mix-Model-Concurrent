@@ -101,3 +101,38 @@ def test_tenth_failure_holds_recovery_until_researched_pivot(env):
     after = {n['microtask_id']: n for n in env[3].materialize('task')['nodes']}
     assert after['mt-3']['job_id'] == before['mt-3']['job_id']
     assert after['mt-4']['job_id'] == before['mt-4']['job_id']
+
+
+def test_physical_retry_retains_dispatch_limit_expiry_and_quality_window(env):
+    from cochem_pipeline.routing import load_routing_policy
+    store, journal, ledger, board, outcomes, bridge = env
+    before = completed(env)
+    item = feedback(env, before, phase='red')
+    old = store.get(before['mt-4']['job_id'])
+    store.routing_policy = load_routing_policy(store.routing_policy | {
+        'max_dispatches': 3, 'max_routing_seconds': 60})
+    after = {n['microtask_id']: n for n in board.materialize('task')['nodes']}
+    retry = store.get(after['mt-4']['job_id'])
+    assert retry['max_attempts'] == 9
+    assert retry['routing']['max_dispatches'] == 2
+    assert retry['routing']['expires_at'] == old['routing']['created_at'] + 60
+    assert ledger.status(item['lineage_root'])['failures'] == 1
+    assert board.materialize('task')['nodes'] == list(after.values())
+
+
+def test_exhausted_dispatch_budget_holds_without_fresh_job_or_counter_reset(env):
+    from cochem_pipeline.routing import load_routing_policy
+    store, journal, ledger, board, outcomes, bridge = env
+    before = completed(env)
+    item = feedback(env, before, phase='red')
+    store.routing_policy = load_routing_policy(store.routing_policy | {'max_dispatches': 1})
+    with store._connection() as conn:
+        count = conn.execute('SELECT count(*) FROM pipeline_jobs').fetchone()[0]
+    after = {n['microtask_id']: n for n in board.materialize('task')['nodes']}
+    assert after['mt-4']['status'] == 'HELD_BUDGET'
+    assert after['mt-4']['budget_hold_reason'] == 'lineage_dispatch_budget_exhausted'
+    assert after['mt-4']['job_id'] is None
+    board.materialize('task')
+    with store._connection() as conn:
+        assert conn.execute('SELECT count(*) FROM pipeline_jobs').fetchone()[0] == count
+    assert ledger.status(item['lineage_root'])['failures'] == 1

@@ -24,6 +24,7 @@ from typing import Any, Mapping
 
 from . import routing_store as routes
 from .attempt_runtime_428 import AttemptAccountingRuntime
+from .planning_budgets_428 import LineageBudgetHold, capture_lineage_budget
 from .swarm_batch_428 import (
     extract_microtask_files,
     pack_conflict_colored_wave,
@@ -368,6 +369,8 @@ class MicrotaskBoardRuntime:
                 if prior["payload"] != payload:
                     raise ValueError("Existing microtask execution job has different immutable input")
                 return prior
+            budget = (capture_lineage_budget(conn, job_id, payload, policy,
+                attempt_ledger=self.attempt_ledger) if self.attempt_ledger is not None else None)
             self.store._insert(
                 conn,
                 root_id,
@@ -381,7 +384,8 @@ class MicrotaskBoardRuntime:
                     "intent_sha256": identity,
                 },
             )
-            routes.capture_workflow(conn, root_id, policy)
+            routes.capture_workflow(conn, root_id, policy,
+                                    max_dispatches=budget.max_dispatches if budget else None)
             self.store._insert(
                 conn,
                 job_id,
@@ -390,7 +394,7 @@ class MicrotaskBoardRuntime:
                 "TASK_PLAN",
                 "PENDING",
                 payload,
-                max_attempts=10,
+                max_attempts=budget.max_attempts if budget else 10,
             )
             self.store._event(
                 conn,
@@ -1199,16 +1203,17 @@ class MicrotaskBoardRuntime:
                 for key in ('effective_complexity', 'task_types', 'pivot_model', 'pivot_context', 'physical_retry'):
                     if key in admitted_node:
                         execution_node[key] = deepcopy(admitted_node[key])
-                board_job = self._submit_board_job_for_node(
-                    task_id,
-                    gen_sha,
-                    execution_node,
-                    state,
-                    catalog,
-                    limit,
-                    candidates,
-                    pred_outputs,
-                )
+                try:
+                    board_job = self._submit_board_job_for_node(
+                        task_id, gen_sha, execution_node, state, catalog, limit, candidates, pred_outputs)
+                except LineageBudgetHold as hold:
+                    with self.journal._write() as conn:
+                        self._release_node_file_locks(conn, node_key)
+                        self._upsert_node_row(conn, node_key=node_key, task_id=task_id, mt_id=mt_id,
+                            gen_sha=gen_sha, node=dict(admitted_node, budget_hold_reason=hold.reason),
+                            candidates=candidates, status='HELD_BUDGET', job_id=None, output_obj=None,
+                            artifact_sha256=None, now=now)
+                    continue
                 job_id = board_job["job_id"]
                 if board_job["status"] in ("FAILED", "BLOCKED"):
                     desired_status = "HELD"
@@ -1624,6 +1629,7 @@ class MicrotaskBoardRuntime:
                     "depends_on": json.loads(r["depends_on_json"]),
                     "candidate_profiles": json.loads(r["candidate_profiles_json"]),
                     "pending_pivot_approval": node_meta.get("pending_pivot_approval"),
+                    "budget_hold_reason": node_meta.get("budget_hold_reason"),
                     "status": r["status"],
                     "job_id": r["job_id"],
                     "batch_id": node_meta.get("batch_id"),
