@@ -134,6 +134,45 @@ class TaskArtifactRuntime:
                 raise ValueError('Task needs physical staging evidence for its winning cleaned-up attempt')
             return dict(row)
 
+    def _accepted_dependency(self, intent, dep, output):
+        with self.store._connection() as conn:
+            rows = conn.execute('''SELECT j.job_id,j.attempt_id,j.fencing_token FROM task428_fragment_attempts a
+                JOIN pipeline_jobs j ON j.job_id=a.job_id AND j.attempt_id=a.attempt_id
+                AND j.fencing_token=a.fencing_token WHERE a.task_id=? AND a.microtask_id=?
+                AND a.generation=? AND j.status='COMPLETED' ''',
+                (intent['task_id'], dep, intent['plan_generation_sha256'])).fetchall()
+        if output.get('producer_job_id'):
+            rows = [row for row in rows if all(row[key] == output.get('producer_' + key)
+                    for key in ('job_id', 'attempt_id', 'fencing_token'))]
+        if len(rows) != 1:
+            raise ValueError('Assigned predecessor lacks one accepted physical snapshot')
+        prior = self.store.get(rows[0]['job_id'])
+        from .microtask_board_428 import validate_microtask_execution_output
+        committed = validate_microtask_execution_output(prior['payload']['microtask_node'], prior['output'])
+        if (any(committed.get(key) != output.get(key) for key in
+                ('artifact_text', 'deliverables', 'requirement_evidence', 'release_criteria_results'))
+                or output.get('artifact_sha256') != committed['artifact_sha256']):
+            raise ValueError('Predecessor commitment changed')
+        self.accepted_snapshot(prior)
+        return prior
+
+    def _dependency_ancestors(self, node, *, cache, visiting=None):
+        """Exact completed producer ancestry, never narrative artifact hashes."""
+        job_id = node['job_id']
+        if job_id in cache:
+            return cache[job_id]
+        visiting = set(visiting or ())
+        if job_id in visiting or len(visiting) >= 64 or len(cache) >= 512:
+            raise ValueError('Artifact dependency ancestry exceeds its acyclic bound')
+        visiting.add(job_id)
+        payload, ancestors = node['payload'], set()
+        for dep, output in payload.get('predecessor_outputs', {}).items():
+            parent = self._accepted_dependency(payload['planning_intent'], dep, output)
+            ancestors.add(parent['job_id'])
+            ancestors.update(self._dependency_ancestors(parent, cache=cache, visiting=visiting))
+        cache[job_id] = ancestors
+        return ancestors
+
     def _inputs(self, node):
         payload, intent = node['payload'], node['payload']['planning_intent']
         capture = self._capture(intent['task_id'])
@@ -149,29 +188,10 @@ class TaskArtifactRuntime:
             if (set(predecessors) != declared or committed != intent.get('predecessor_artifact_hashes', {})
                     or committed != payload.get('predecessor_artifact_hashes', {})):
                 raise ValueError('Task workspace requires exactly its assigned predecessor commitments')
+        prior_nodes, ancestry = {}, {}
         for dep, output in sorted(predecessors.items()):
-            with self.store._connection() as conn:
-                rows = conn.execute('''SELECT j.job_id,j.attempt_id,j.fencing_token FROM task428_fragment_attempts a JOIN pipeline_jobs j
-                    ON j.job_id=a.job_id AND j.attempt_id=a.attempt_id AND j.fencing_token=a.fencing_token
-                    WHERE a.task_id=? AND a.microtask_id=? AND a.generation=? AND j.status='COMPLETED' ''',
-                    (intent['task_id'], dep, intent['plan_generation_sha256'])).fetchall()
-            # Retry generations preserve the same microtask/plan identity.
-            # Select only the controller-assigned winner, never the newest
-            # snapshot or a coincidentally matching narrative hash.
-            if output.get('producer_job_id'):
-                rows = [row for row in rows if all(row[key] == output.get('producer_' + key)
-                        for key in ('job_id', 'attempt_id', 'fencing_token'))]
-            if len(rows) != 1:
-                raise ValueError('Assigned predecessor lacks one accepted physical snapshot')
-            prior = self.store.get(rows[0]['job_id'])
-            from .microtask_board_428 import validate_microtask_execution_output
-            committed_output = validate_microtask_execution_output(prior['payload']['microtask_node'], prior['output'])
-            # Board outputs add controller metadata, but every model-produced
-            # field must still equal the exact accepted producer output.
-            if (any(committed_output.get(key) != output.get(key) for key in
-                    ('artifact_text', 'deliverables', 'requirement_evidence', 'release_criteria_results'))
-                    or output.get('artifact_sha256') != committed_output['artifact_sha256']):
-                raise ValueError('Predecessor commitment changed')
+            prior = self._accepted_dependency(intent, dep, output)
+            prior_nodes[dep] = prior
             inherited = self.store.coding_files(self.accepted_snapshot(prior)['snapshot_sha256'])
             for path, data in inherited.items():
                 if baseline.get(path) != data:
@@ -180,6 +200,17 @@ class TaskArtifactRuntime:
             if len({data for _, data in versions}) == 1:
                 before[path] = versions[0][1]
             else:
+                # An assembly proposal may intentionally replace its exact
+                # implementation ancestors. Siblings still require assembly;
+                # list order or a newer timestamp never chooses a winner.
+                winners = [(dep, data) for dep, data in versions
+                    if prior_nodes[dep]['payload']['microtask_node']['role'] == 'assembly'
+                    and all(other == dep or prior_nodes[other]['job_id'] in
+                            self._dependency_ancestors(prior_nodes[dep], cache=ancestry)
+                            for other, _ in versions)]
+                if len(winners) == 1:
+                    before[path] = winners[0][1]
+                    continue
                 if payload.get('microtask_node', {}).get('role') != 'assembly':
                     raise ValueError('Conflicting source fragments require explicit assembly')
                 conflicts.append(path)
