@@ -37,17 +37,18 @@ def store(tmp_path):
     board.close()
 
 
-def test_artifact_integrity_uses_four_shared_seats_without_docker_or_model_route(store):
+@pytest.mark.parametrize('kind', ['TASK_VERIFY', 'TASK_DELIVER'])
+def test_artifact_integrity_uses_four_shared_seats_without_docker_or_model_route(store, kind):
     admission = JointAdmission(store, None, capacity=4)
     for index in range(5):
-        stage(store, 'TASK_VERIFY', f'artifact-{index}')
+        stage(store, kind, f'artifact-{index}')
     results = [admission.claim('owner', worker_slot=f'slot{i}') for i in range(1, 6)]
     assert all(result is not None for result in results[:4])
     assert results[-1] is None
     assert admission._native_active() == 4
     assert 'TASK_VERIFY' in _NATIVE_KINDS and 'TASK_TEST' not in _NATIVE_KINDS
     for node, reservation in results[:4]:
-        assert node['kind'] == 'TASK_VERIFY' and reservation is None
+        assert node['kind'] == kind and reservation is None
         assert node.get('route') is None and node.get('routing') is None
         with store._write() as conn:
             preview = routing_store.preview_next_route(conn, node)
@@ -135,17 +136,18 @@ def test_artifact_integrity_waits_for_drain_of_full_warm_pool(store, tmp_path):
     assert admission._drain_target == 3
 
 
-def test_mixed_task_tests_and_artifact_checks_share_the_same_four_seats(store, tmp_path):
+@pytest.mark.parametrize('kind', ['TASK_VERIFY', 'TASK_DELIVER'])
+def test_mixed_task_tests_and_artifact_checks_share_the_same_four_seats(store, tmp_path, kind):
     docker = DockerRunner(policy(), tmp_path/'containers')
     admission = JointAdmission(store, docker, capacity=4)
     for index in range(3):
         prepared_metadata(docker)
         stage(store, 'TASK_TEST', f'code-{index}', docker.policy)
-    stage(store, 'TASK_VERIFY', 'artifact')
+    stage(store, kind, 'artifact')
     stage(store, 'TASK_VERIFY', 'overflow')
     results = [admission.claim('owner', worker_slot=f'slot{i}') for i in range(1, 5)]
     assert all(result is not None for result in results)
     assert [node['kind'] for node, _ in results].count('TASK_TEST') == 3
-    assert [node['kind'] for node, _ in results].count('TASK_VERIFY') == 1
+    assert [node['kind'] for node, _ in results].count(kind) == 1
     assert admission._native_active() + docker.census()['owned'] == 4
     assert admission.claim('owner', worker_slot='slot5') is None

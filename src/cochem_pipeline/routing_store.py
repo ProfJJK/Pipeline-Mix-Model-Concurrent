@@ -167,7 +167,7 @@ def capture_workflow(conn, workflow_id, policy, max_dispatches=None):
 def ensure_job(conn, job_id, *, quality_routing=None):
     row = conn.execute('''SELECT j.*,w.policy_json,w.max_dispatches FROM pipeline_jobs j
         JOIN pipeline_routing_workflows w ON w.workflow_id=j.workflow_id WHERE j.job_id=?''', (job_id,)).fetchone()
-    if row is None or row['kind'] in ('MACRO_PLANNING_REQUEST','CODE_REQUEST','CODE_TEST','CODE_INTEGRATE','TASK_VERIFY','TASK_TEST') or (row['kind']=='SYNTHESIS' and row['status']=='BLOCKED'):
+    if row is None or row['kind'] in ('MACRO_PLANNING_REQUEST','CODE_REQUEST','CODE_TEST','CODE_INTEGRATE','TASK_VERIFY','TASK_TEST','TASK_DELIVER') or (row['kind']=='SYNTHESIS' and row['status']=='BLOCKED'):
         return
     existing = conn.execute('SELECT * FROM pipeline_routing_jobs WHERE job_id=?', (job_id,)).fetchone()
     from .routing import load_routing_policy, score_task
@@ -540,7 +540,7 @@ def preview_next_route(conn, job, current_policy=None, now=None):
     result = {'prediction_only':True, 'unknown_until_atomic_claim':True, 'observed_at':observed,
               'eligible_candidate':None, 'candidate_index':None, 'skipped':[],
               'next_eligible_at':None, 'context_check':'pending_complete_prompt_and_oracle_validation'}
-    if job['kind'] in ('MACRO_PLANNING_REQUEST','CODE_REQUEST','CODE_TEST','CODE_INTEGRATE','TASK_VERIFY','TASK_TEST'):
+    if job['kind'] in ('MACRO_PLANNING_REQUEST','CODE_REQUEST','CODE_TEST','CODE_INTEGRATE','TASK_VERIFY','TASK_TEST','TASK_DELIVER'):
         return {**result,'state':'not_model_job'}
     if job['status'] not in ('PENDING','PENDING_RETRY'):
         return {**result,'state':'not_queued','job_status':job['status']}

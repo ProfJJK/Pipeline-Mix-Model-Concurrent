@@ -18,7 +18,7 @@ from .coding_store import CODING_KINDS
 _DOCKER_KINDS=('CODE_TEST','TASK_TEST')
 # This is the no-Docker seat group; CODE_INTEGRATE and TASK_VERIFY are local
 # controller work, not native model dispatches.
-_NATIVE_KINDS=tuple(kind for kind in ('MANIFEST_GENERATOR','CHAPTER_DRAFT','SYNTHESIS','PREFLIGHT_REQUEST','TASK_PLAN','TASK_VERIFY',*CODING_KINDS)
+_NATIVE_KINDS=tuple(kind for kind in ('MANIFEST_GENERATOR','CHAPTER_DRAFT','SYNTHESIS','PREFLIGHT_REQUEST','TASK_PLAN','TASK_VERIFY','TASK_DELIVER',*CODING_KINDS)
                     if kind not in {'CODE_REQUEST','CODE_TEST'})
 
 
