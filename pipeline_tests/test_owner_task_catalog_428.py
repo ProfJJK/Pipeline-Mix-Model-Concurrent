@@ -108,6 +108,9 @@ def invoke(env, **kwargs):
 def test_owner_phase_publishes_exact_new_files_and_validates_normal_loader(phase_env):
     env = phase_env
     result = invoke(env)
+    started = json.loads((env.args[-1] / 'phase-started.json').read_bytes())
+    assert started['pid'] == owner.os.getpid()
+    assert type(started['started_at']) is float and started['started_at'] > 0
     assert result['status'] == 'TASK_CATALOG_CANDIDATE_READY'
     assert result['cleanup_verified'] is True
     assert result['publication_state'] == 'COMMITTED'

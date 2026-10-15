@@ -145,7 +145,8 @@ def run_owner_phase(bootstrap_config, bootstrap_sha256, request_path, request_sh
             raise ValueError('Owner output directory must be fresh and empty')
         # Exclusive creation also fences a concurrent invocation using this root.
         write_fresh(output_root / 'phase-started.json', dict(schema='cochem-owner-task-catalog-start/4.2.8',
-            bootstrap_sha256=bootstrap_sha256, request_sha256=request_sha256))
+            bootstrap_sha256=bootstrap_sha256, request_sha256=request_sha256,
+            pid=os.getpid(), started_at=time.time()))
         try:
             raw = _strict_json(pinned_bytes(input_custody, bootstrap_config, bootstrap_sha256).decode('utf-8-sig'))
             config = load_config(str(bootstrap_config))
