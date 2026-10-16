@@ -1,5 +1,11 @@
 # 4.2.8 source progress
 
+Current agent transition: [operational passover](AGENT_PASSOVER_20261015.md)
+and [starter prompt](NEW_AGENT_PROMPT_20261015.txt). The owner will append the
+latest PowerShell result; `90c9c1d` host acceptance is unknown at this checkpoint.
+Reconcile that result first. Older launch instructions below are historical,
+and their packages are spent; do not replay them.
+
 Observer-only ACL compatibility is corrected at `90c9c1d`. **315 serialized
 source/inert tests passed**, including real descriptor parsing and backing-file
 custody fixtures; the packaged read-only plan passed. The new

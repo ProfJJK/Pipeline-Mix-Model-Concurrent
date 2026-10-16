@@ -1,0 +1,17 @@
+Take over the authorized Pipeline 4.2.8 operational recovery and Codex integration. Read the PowerShell result I paste immediately after this prompt before deciding what to do next.
+
+Repository: C:\Users\ansac\source\repos\Pipeline-Mix-Model-Concurrent-428-repair
+Branch: fix/428-operational-repair
+Origin: https://github.com/ProfJJK/Pipeline-Mix-Model-Concurrent.git
+
+Read AGENTS.md, docs/4.2.8/AGENT_PASSOVER_20261015.md and docs/4.2.8/OPERATIONAL_OBSERVER_ACL_RECOVERY_20261015.md first. Inspect Git status and preserve later changes. Direct local pipeline repairs are authorized and exempt from pipeline_code; do not wait for another handoff or ask again for source-maintenance permission.
+
+The latest owner package is C:\Users\ansac\CoChem427\r428-op-recovery-90c9c1d, with manifest SHA256 a0cb076c2bfa31600d60de1c4969372601af5ac64a44bdc0b67390445d1f22a2 and recovery ID 09bc46790fa14c2cbf85450f158550fe. It preserves installed runtime source 865a29b113a8b59c822f6aa4d921a45c18407fe5. Its result was pending at handoff. All earlier launch/recovery packages are spent; this package is also spent once started. Never replay a command or alter an existing package.
+
+If the appended result holds, diagnose its exact phase and sanitized evidence, reproduce the failing boundary, repair and test source, then prepare a fresh independently reviewed owner-only continuation. Preserve all evidence and running processes; do not weaken checks or assume the old runtime is healthy. If it succeeds, verify controller identity, enabled planning, connected execution, catalog coverage and Codex integration. Use the codex-pipeline skill and cochem-pipeline MCP for health/projects and completion checks. Continue the three already-approved useful jobs with their existing deterministic IDs and permanent submission ledger; verify actual artifacts and terminal receipts. Never use windows-acceptance as the repository project or duplicate submissions after a timeout.
+
+315 source/inert tests and the packaged read-only plan passed; these are not host acceptance. Completion-audit dispatch and independent repair callbacks remain unconfigured. Preserve reasoning floors, quota/backoff decisions, four shared slots, credentials, databases, old captures, budgets and R:. Leave exam, YouTube and Antigravity specialist configurations alone.
+
+No agent elevation, Apply, protected writes, provider/headless CLI launches or host lifecycle actions. Use repository Python 3.12 and the serialized test harness from the handoff. Only I run the reviewed Administrator command. All planned user input must be at the beginning, within 20 active minutes; unattended execution may take longer. Existing sign-ins should be reused. Continue the work through verified recovery and useful-job testing, reporting source results separately from live evidence.
+
+PowerShell result follows:

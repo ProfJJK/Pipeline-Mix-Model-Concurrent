@@ -90,6 +90,14 @@ This is the preferred interface, not a claim that all three adapters have been
 implemented or accepted on this host. Reuse verified sessions before asking for input.
 
 ## Current handoff
+For the owner-requested agent change, start with
+[the 15 October operational passover](docs/4.2.8/AGENT_PASSOVER_20261015.md)
+and [the saved starter prompt](docs/4.2.8/NEW_AGENT_PROMPT_20261015.txt).
+The latest `90c9c1d` owner result was pending when that handoff was written;
+reconcile the newly pasted PowerShell result before any dependent action.
+All older packages below are spent. Never infer that a pending package is fresh
+or that source verification proves deployment.
+
 The owner has now run `r428-op-launch-865a29b`; it is spent. Its r5 installation
 and Codex preflight completed, but admission fencing held before catalog
 acceptance or cutover. The received diagnostic proves an expired, unreleased
