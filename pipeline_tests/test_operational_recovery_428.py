@@ -156,16 +156,17 @@ function Get-428Health {throw 'Forbidden old health'}
 function Get-Item {param($LiteralPath)[pscustomobject]@{Length=42}}
 function Copy-VerifiedPayload {param($r)$script:seen.Add('copy-request')}
 function Assert-OpRecoveryQuiescent {param($r,$f)if('FAULT' -eq 'orphan'){throw 'Native orphan'};$script:seen.Add('quiescent')}
+function Assert-OpRecoveryRuntimeDependencies {param($b,$h)$script:seen.Add('runtime-dependencies')}
 function Start-OpFence {param($l,$s,$k)
     $script:seen.Add('fresh-fence');$catalog=@{active_policy_sha256='policy';active_catalog_sha256=$null}
     if('FAULT' -eq 'catalog_changed'){$catalog.active_policy_sha256='changed'}
-    $f=@{ready=@{catalog=$catalog}};$s[$k]=$f;return $f
+    $f=@{ready=@{catalog=$catalog;expires_at=([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()/1000.0+240)}};$s[$k]=$f;return $f
 }
 function Assert-OpFence {param($f)$script:seen.Add('fence-proof')}
 function Assert-428WardenTask {param($t,$x,$s,$r,$a,$e,$tr,$count)if($t.Enabled -ne $e){throw 'Unexpected enable state'}}
 function Assert-428PortFree {$script:seen.Add('port-free')}
 if('FAULT' -eq 'last_run_changed'){$script:task.LastRunTime=$when.AddSeconds(1)}
-$m=@{request_sha256=('a'*64)};$Directory='C:\fixture\package';$pins=[Collections.Generic.List[IO.Stream]]::new();$state=@{phase='fixture';stopped=$false;
+$m=@{request_sha256=('a'*64);bootstrap_sha256=('b'*64)};$Directory='C:\fixture\package';$pins=[Collections.Generic.List[IO.Stream]]::new();$state=@{phase='fixture';stopped=$false;
     old_task_last_run=$when.ToUniversalTime();recovery_catalog=@{active_policy_sha256='policy';active_catalog_sha256=$null}}
 $held=$false
 try{foreach($name in @('offline_install','admission_fence','stop_previous')){
@@ -179,6 +180,7 @@ try{foreach($name in @('offline_install','admission_fence','stop_previous')){
     if fault=='none':
         assert result['stopped'] and not result['enabled']
         assert result['seen'].count('fresh-fence')==result['seen'].count('disable-trigger')==1
+        assert result['seen'].index('runtime-dependencies')<result['seen'].index('fresh-fence')
     else:
         assert not result['stopped'] and result['enabled']
         assert 'disable-trigger' not in result['seen']

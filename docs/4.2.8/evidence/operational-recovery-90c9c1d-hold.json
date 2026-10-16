@@ -1,0 +1,124 @@
+{
+  "schema": "cochem-428-recovery-pid-reuse-hold-evidence/1",
+  "recorded_utc": "2026-10-16T02:23:54.855887Z",
+  "spent_package": "r428-op-recovery-90c9c1d",
+  "launcher_source_commit": "90c9c1df400ed831c1bbb82683d05e4eaaba8847",
+  "recovery_id": "09bc46790fa14c2cbf85450f158550fe",
+  "public_status_records": [
+    {
+      "name": "status-20261016T0038031613980-0808d35419834532a2c72f01fd115f88.json",
+      "sha256": "f1a98c92cc07e8caded3d746a6c8dab5618711c624d7276b0048e5bbf46e0441",
+      "content": {
+        "result": null,
+        "automatic_retry": false,
+        "utc": "2026-10-16T00:38:03.1655138Z",
+        "substage": null,
+        "status": "RUNNING",
+        "late_prompt": false,
+        "phase": "preconditions",
+        "schema": "cochem-428-operational-status/1"
+      }
+    },
+    {
+      "name": "status-20261016T0039060768321-a96096f43e8a4425ba49057425f49ec1.json",
+      "sha256": "b0fa4cab05bf2c545855c5ea06165e440275bf89224af1983ce2069cbea6214f",
+      "content": {
+        "result": null,
+        "automatic_retry": false,
+        "utc": "2026-10-16T00:39:06.0768321Z",
+        "substage": "verify_original_recovery_evidence",
+        "status": "RUNNING",
+        "late_prompt": false,
+        "phase": "preconditions",
+        "schema": "cochem-428-operational-status/1"
+      }
+    },
+    {
+      "name": "status-20261016T0039072167779-e6f9fc1e07ae4c1fb3a974e7af382600.json",
+      "sha256": "5c4c479809e2e5d6f7ad94bea556659bb86b0088137a4ad442d902ba036988db",
+      "content": {
+        "result": {
+          "rollback": "NOT_REQUIRED",
+          "phase": "preconditions",
+          "coverage_holds": null,
+          "fence_cleanup": null,
+          "launcher_failure": {
+            "frames": [
+              {
+                "function": "Assert-OpRecoveryQuiescent",
+                "line": 137
+              },
+              {
+                "function": "Assert-OpRecoveryEvidence",
+                "line": 486
+              },
+              {
+                "function": "<ScriptBlock>",
+                "line": 1091
+              },
+              {
+                "function": "Invoke-OpTransaction",
+                "line": 539
+              },
+              {
+                "function": "Invoke-OperationalLaunch",
+                "line": 1269
+              },
+              {
+                "function": "<ScriptBlock>",
+                "line": 1290
+              }
+            ],
+            "observer_proof": null,
+            "substage": "verify_original_recovery_evidence",
+            "process_rejection": {
+              "pid": 46440,
+              "name": "cmd.exe",
+              "reason": "PRESERVED_PID_OCCUPIED",
+              "command_sha256": "8a3926606b2a7587c6ffd14fda3fb4d8545934aaafd66744b4a13eb4fd145946"
+            },
+            "error_type": "InvalidOperationException"
+          },
+          "verified_stopped_at_entry": false,
+          "publication_state": "UNKNOWN",
+          "source_commit": "865a29b113a8b59c822f6aa4d921a45c18407fe5",
+          "error_type": "InvalidOperationException",
+          "all_routes_usable": false,
+          "launch_manifest_sha256": "a0cb076c2bfa31600d60de1c4969372601af5ac64a44bdc0b67390445d1f22a2",
+          "schema": "cochem-428-operational-owner-result/1",
+          "useful_job_acceptance": false,
+          "late_prompt": false,
+          "codex_integration_status": "NOT_APPLIED",
+          "request_sha256": "8ca37638b5dbe15b877c7505dc2acbabac5f6e9b962b6b90101e5cc268aa814f",
+          "cutover_requested": false,
+          "codex_session_refresh_required": false,
+          "status": "R428_OPERATIONAL_HELD_PRESERVE_EVIDENCE",
+          "runtime_health_verified": false,
+          "launcher_source_commit": "90c9c1df400ed831c1bbb82683d05e4eaaba8847",
+          "automatic_retry": false,
+          "acceptance_failure": null
+        },
+        "automatic_retry": false,
+        "utc": "2026-10-16T00:39:07.2177844Z",
+        "substage": null,
+        "status": "R428_OPERATIONAL_HELD_PRESERVE_EVIDENCE",
+        "late_prompt": false,
+        "phase": "preconditions",
+        "schema": "cochem-428-operational-status/1"
+      }
+    }
+  ],
+  "recovery_claim_readable_by_ordinary_session": false,
+  "failure_call": "Assert-OpRecoveryQuiescent preserved-PID loop (launcher 90c9c1d lines 135-137) rejected any process holding recorded fence PID 46440",
+  "rejected_occupant": {
+    "pid": 46440,
+    "name": "cmd.exe",
+    "command_sha256": "8a3926606b2a7587c6ffd14fda3fb4d8545934aaafd66744b4a13eb4fd145946",
+    "preserved_role": "expired 865a29b stop fence (Python interpreter, ready.pid)"
+  },
+  "occupant_alive_at_agent_inspection": false,
+  "source_mismatch": "The check used PID alone as identity. Windows recycles PIDs; an image never changes, so a cmd.exe cannot be the original Python fence. The owner diagnostic had recorded PID 46440 absent at 2026-10-15T18:57:01Z and the 490bf2e sitting passed this loop at 00:26Z.",
+  "native_task_mutations_executed": 0,
+  "provider_commands_executed": 0,
+  "protected_state_modified": false
+}

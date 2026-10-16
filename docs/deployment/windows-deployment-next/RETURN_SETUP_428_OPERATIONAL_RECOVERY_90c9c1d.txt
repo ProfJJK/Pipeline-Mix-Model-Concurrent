@@ -1,3 +1,8 @@
+SPENT — DO NOT RUN THIS COMMAND AGAIN.
+The owner run held in preconditions before any task or runtime change: the recorded
+expired-fence PID 46440 had been reused by an unrelated cmd.exe, and the
+launcher treated PID alone as identity. Preserve all evidence.
+
 PIPELINE 4.2.8 — OBSERVER TASK PERMISSION COMPATIBILITY
 
 The previous recovery used the Warden permission rules for the old observer.

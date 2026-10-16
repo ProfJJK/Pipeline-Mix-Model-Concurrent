@@ -129,43 +129,166 @@ function Assert-OpRecoveryTask {
         $d.Triggers.Item(1).UserId -cne 'AETHERDESK\ansac')){throw 'Recovery Warden trigger changed.'}
 }
 
-function Assert-OpRecoveryQuiescent {
-    param($Recovery,$AllowedFence=$null,$Pins=$null,$State=$null)
-    Assert-428PortFree
-    foreach($id in @($Recovery.warden.pid,$Recovery.fence.pid)){
-        $occupied=Get-CimInstance Win32_Process -Filter ('ProcessId='+[int]$id)
-        if($null -ne $occupied){throw (New-OpProcessRejection $occupied 'PRESERVED_PID_OCCUPIED')}
-    }
-    # Read-only bounded inventory. MCP clients are permitted only in their exact
-    # module form; no daemon, provider, unknown launcher or competing owner phase
-    # is accepted merely because the task has zero visible instances.
-    $rows=@(Get-CimInstance Win32_Process)
-    if($rows.Count -gt 4096){throw 'Recovery native inventory exceeds bound.'}
-    $byId=@{};foreach($row in $rows){$byId[[int]$row.ProcessId]=$row}
-    $observerIds=@()
-    foreach($row in $rows){
-        if(Test-OpHeldObserverCommand ([string]$row.ExecutablePath) ([string]$row.CommandLine)){
-            try{$observerIds=@(Assert-OpHeldObserver $rows $Pins $State)}
-            catch{
-                $proof=Get-OpFailure $_ 'observer_proof';$rejection=New-OpProcessRejection $row 'OBSERVER_PROOF_UNVERIFIED'
-                $rejection.Data['cochem_observer_proof']=@{error_type=$proof.error_type;frames=$proof.frames}
-                throw $rejection
-            }
-            break
+function ConvertFrom-OpUnixTime {
+    # Pinned records carry Python time.time() values; Windows PowerShell 5.1
+    # JSON parsing yields decimal, double or integer types for them.
+    param($Value)
+    if($Value -isnot [double] -and $Value -isnot [decimal] -and $Value -isnot [int] -and $Value -isnot [long]){return $null}
+    $seconds=[double]$Value
+    if([double]::IsNaN($seconds) -or $seconds -lt 1577836800 -or $seconds -gt 4102444800){return $null}
+    return [DateTime]::new(1970,1,1,0,0,0,[DateTimeKind]::Utc).AddSeconds($seconds)
+}
+
+function Test-OpMayBePythonOriginal {
+    # Images never change during a process lifetime. Only a nameless row, a
+    # Python-family image or a runtime/pipeline executable can still be an
+    # original Python fence or Warden process.
+    param($Row)
+    $image=[string](Get-OpProperty $Row 'ExecutablePath');$name=[string](Get-OpProperty $Row 'Name')
+    $base=if($image){[IO.Path]::GetFileName($image)}else{$name}
+    if(-not $base){return $true}
+    return ($base -match '^(?:python(?:w|[0-9]+(?:\.[0-9]+)?)?|py)\.exe$' -or
+        $null -ne (Get-OpPipelineProcessReason $image ([string](Get-OpProperty $Row 'CommandLine')) $name))
+}
+
+function Test-OpPidReused {
+    # Windows recycles a PID once its process ends, so occupancy alone never
+    # identifies the original. A possible original (Test-OpMayBePythonOriginal)
+    # is a different process only when created more than two minutes after
+    # $CreatedBy, a pinned time by which the original already existed.
+    # Anything ambiguous returns $false and stays an occupied hold.
+    param($Row,$CreatedBy)
+    if(-not (Test-OpMayBePythonOriginal $Row)){return $true}
+    $created=Get-OpProperty $Row 'CreationDate'
+    if($CreatedBy -isnot [DateTime] -or $created -isnot [DateTime]){return $false}
+    return $created.ToUniversalTime() -gt $CreatedBy.AddSeconds(120)
+}
+
+function Get-OpObserverTransientIds {
+    # Each held-observer cycle runs its sterile detector: the handle-proven
+    # observer child starts a venv launcher, which starts the base interpreter
+    # (plus a console host), all bounded by a 5 s timeout. A row qualifies only
+    # when its whole ancestry (at most two levels) to that child is present in
+    # this same snapshot and each process was created no earlier than its parent.
+    param($Rows,[int]$ObserverChild)
+    $byId=@{};foreach($row in $Rows){$byId[[int]$row.ProcessId]=$row}
+    $ids=@()
+    if(-not $byId.ContainsKey($ObserverChild)){return $ids}
+    foreach($row in $Rows){
+        $node=$row
+        for($depth=1;$depth -le 2;$depth++){
+            $parentId=[int]$node.ParentProcessId
+            if($parentId -eq [int]$node.ProcessId -or -not $byId.ContainsKey($parentId)){break}
+            $parent=$byId[$parentId]
+            $created=Get-OpProperty $node 'CreationDate';$parentCreated=Get-OpProperty $parent 'CreationDate'
+            if($created -isnot [DateTime] -or $parentCreated -isnot [DateTime] -or $created -lt $parentCreated){break}
+            if($parentId -eq $ObserverChild){$ids+=[int]$row.ProcessId;break}
+            $node=$parent
         }
     }
-    foreach($row in $rows){
-        $image=[string]$row.ExecutablePath;$command=[string]$row.CommandLine
-        $reason=Get-OpPipelineProcessReason $image $command ([string](Get-OpProperty $row 'Name'))
-        if($null -eq $reason){continue}
-        if(Test-OpExactMcpProcess $image $command){continue}
-        if([int]$row.ProcessId -in $observerIds){continue}
-        if($null -ne $AllowedFence -and $command.IndexOf($AllowedFence.arguments,[StringComparison]::Ordinal) -ge 0 -and
-            (([int]$row.ProcessId -eq [int]$AllowedFence.ready.pid -and $image -ceq $script:python) -or
-             ($image -ceq (Join-Path $script:OpRoot '.venv\Scripts\python.exe') -and
-              $byId.ContainsKey([int]$AllowedFence.ready.pid) -and
-              [int]$byId[[int]$AllowedFence.ready.pid].ParentProcessId -eq [int]$row.ProcessId))){continue}
-        throw (New-OpProcessRejection $row $reason)
+    return $ids
+}
+
+function Wait-OpProcessesExited {
+    # Waits, bounded, for these exact processes (PID and creation time) to end.
+    # It never accepts them: the caller takes a complete new inventory.
+    param($Rows,[int]$Seconds)
+    $deadline=[DateTime]::UtcNow.AddSeconds($Seconds)
+    foreach($row in @($Rows)){
+        do{
+            # A failed poll only ends this wait early; the next inventory decides.
+            try{$now=Get-CimInstance Win32_Process -Filter ('ProcessId='+[int]$row.ProcessId)}catch{break}
+            if($null -eq $now -or (Get-OpProperty $now 'CreationDate') -ne (Get-OpProperty $row 'CreationDate')){break}
+            Start-Sleep -Milliseconds 100
+        }while([DateTime]::UtcNow -lt $deadline)
+    }
+}
+
+function Get-OpNamedPipes {
+    return @([IO.Directory]::GetFiles('\\.\pipe\'))
+}
+
+function Test-OpNamedPipePath {
+    # Only used when listing fails on an unrelated pipe name; probes one exact pipe.
+    param([string]$Path)
+    return [IO.File]::Exists($Path)
+}
+
+function Assert-OpRecoveryRuntimeDependencies {
+    # Recovery starts with no controller, so nothing has proven the catalog
+    # runtime's RAM-disk workspace or Docker engine pipe since r4 ended. Check
+    # the pinned bootstrap values read-only before the first fence or task change.
+    param([string]$Bootstrap,[string]$Sha256)
+    $stream=Open-428Pin $Bootstrap $Sha256
+    try{$config=Read-428Json $stream}finally{$stream.Dispose()}
+    $ramdisk=Get-OpProperty $config 'ramdisk';$docker=Get-OpProperty $config 'docker'
+    $root=[string](Get-OpProperty $ramdisk 'mount_root');$workspace=[string](Get-OpProperty $ramdisk 'workspace_subdirectory')
+    # [IO.Path]::Combine, unlike Join-Path, does not require the drive to exist.
+    if(-not $root -or -not $workspace -or -not (Test-Path -LiteralPath ([IO.Path]::Combine($root,$workspace)) -PathType Container)){
+        throw 'Pinned RAM-disk workspace is unavailable; hold before any fence or task change.'}
+    if([string](Get-OpProperty $docker 'endpoint') -cnotmatch '^npipe:////\./pipe/([A-Za-z0-9_.-]+)$'){throw 'Pinned Docker endpoint is not a local named pipe.'}
+    $pipe='\\.\pipe\'+$Matches[1]
+    $present=try{(Get-OpNamedPipes) -contains $pipe}catch{Test-OpNamedPipePath $pipe}
+    if(-not $present){throw 'Pinned Docker engine pipe is unavailable; hold before any fence or task change.'}
+}
+
+function Assert-OpRecoveryQuiescent {
+    # $NotAfter (UTC) stops further bounded waits, so a caller with a deadline
+    # gets the normal rejection instead of a late inventory.
+    param($Recovery,$AllowedFence=$null,$Pins=$null,$State=$null,$NotAfter=$null)
+    Assert-428PortFree
+    $createdBy=if($State -is [Collections.IDictionary] -and $State.Contains('preserved_pid_created_by')){$State.preserved_pid_created_by}else{@{}}
+    foreach($id in @($Recovery.warden.pid,$Recovery.fence.pid)){
+        # A reused PID is only a free PID; the inventory below still judges
+        # every live process, including that occupant, by its executable role.
+        $occupied=Get-CimInstance Win32_Process -Filter ('ProcessId='+[int]$id)
+        if($null -ne $occupied -and -not (Test-OpPidReused $occupied $createdBy[[string][int]$id])){
+            throw (New-OpProcessRejection $occupied 'PRESERVED_PID_OCCUPIED')}
+    }
+    for($attempt=1;;$attempt++){
+        if($attempt -gt 1){Assert-428PortFree}
+        # Read-only bounded inventory. MCP clients are permitted only in their exact
+        # module form; no daemon, provider, unknown launcher or competing owner phase
+        # is accepted merely because the task has zero visible instances.
+        $rows=@(Get-CimInstance Win32_Process)
+        if($rows.Count -gt 4096){throw 'Recovery native inventory exceeds bound.'}
+        $byId=@{};foreach($row in $rows){$byId[[int]$row.ProcessId]=$row}
+        $observerIds=@()
+        foreach($row in $rows){
+            if(Test-OpHeldObserverCommand ([string]$row.ExecutablePath) ([string]$row.CommandLine)){
+                try{$observerIds=@(Assert-OpHeldObserver $rows $Pins $State)}
+                catch{
+                    $proof=Get-OpFailure $_ 'observer_proof';$rejection=New-OpProcessRejection $row 'OBSERVER_PROOF_UNVERIFIED'
+                    $rejection.Data['cochem_observer_proof']=@{error_type=$proof.error_type;frames=$proof.frames}
+                    throw $rejection
+                }
+                break
+            }
+        }
+        $transient=if($observerIds.Count){@(Get-OpObserverTransientIds $rows $observerIds[0])}else{@()}
+        $pending=@()
+        foreach($row in $rows){
+            $image=[string]$row.ExecutablePath;$command=[string]$row.CommandLine
+            $reason=Get-OpPipelineProcessReason $image $command ([string](Get-OpProperty $row 'Name'))
+            if($null -eq $reason){continue}
+            if(Test-OpExactMcpProcess $image $command){continue}
+            if([int]$row.ProcessId -in $observerIds){continue}
+            if($null -ne $AllowedFence -and $command.IndexOf($AllowedFence.arguments,[StringComparison]::Ordinal) -ge 0 -and
+                (([int]$row.ProcessId -eq [int]$AllowedFence.ready.pid -and $image -ceq $script:python) -or
+                 ($image -ceq (Join-Path $script:OpRoot '.venv\Scripts\python.exe') -and
+                  $byId.ContainsKey([int]$AllowedFence.ready.pid) -and
+                  [int]$byId[[int]$AllowedFence.ready.pid].ParentProcessId -eq [int]$row.ProcessId))){continue}
+            # The observer's bounded detector, and a row whose image or command line
+            # was unreadable (typically a process exiting between the snapshot and
+            # its detail read), is never accepted: wait for those exact processes
+            # to end, then require a complete clean inventory. A readable rejected
+            # row still holds at once.
+            if($attempt -lt 6 -and ([int]$row.ProcessId -in $transient -or -not $image -or -not $command) -and
+                ($null -eq $NotAfter -or [DateTime]::UtcNow.AddSeconds(10) -lt $NotAfter)){$pending+=$row;continue}
+            throw (New-OpProcessRejection $row $reason)
+        }
+        if(-not $pending.Count){return}
+        Wait-OpProcessesExited $pending 8
     }
 }
 
@@ -478,6 +601,10 @@ function Assert-OpRecoveryEvidence {
         $result.ready_sha256 -cne $Recovery.fence.ready_sha256 -or
         (Test-Path -LiteralPath (Join-Path $froot 'release.json')) -or (Test-Path -LiteralPath (Join-Path $froot 'held.json'))){throw 'Original fence did not expire at the reviewed boundary.'}
     foreach($p in $ready.counts.PSObject.Properties){if($p.Value -ne 0){throw 'Original fence contained active execution.'}}
+    # Each original process existed when it wrote these pinned values, so a
+    # holder of its recycled PID created later is a different process.
+    $State.preserved_pid_created_by=@{([string][int]$Recovery.fence.pid)=(ConvertFrom-OpUnixTime (Get-OpProperty $ready 'ready_at'));
+        ([string][int]$Recovery.warden.pid)=(ConvertFrom-OpUnixTime (Get-OpProperty $baseline.health 'process_started_at'))}
     $script:OpOriginalXml=$baseline.xml;$script:OpOriginalSddl=$baseline.sddl
     Assert-OpRecoveryTask ($script:OpFolder.GetTask('CoChem-4.2.7-Warden')) $Recovery.warden $script:OpOldRoot $script:OpOldArgs 1
     $fargs='-I -B -m cochem_pipeline.owner_admission_fence_428 --config "'+$script:OpOldConfig+'" --config-sha256 '+$Manifest.previous_config_sha256+
@@ -948,14 +1075,27 @@ function Release-OpFence {
         $r.pid -ne $Fence.ready.pid -or $r.lock_released -ne $true){throw 'Admission fence terminal receipt did not verify.'}
     if($null -ne $Fence.process){
         if(-not $Fence.process.WaitForExit(5000)){throw 'Fence native process did not exit.'}
-    }elseif($null -ne (Get-CimInstance Win32_Process -Filter ('ProcessId='+[int]$r.pid))){throw 'Terminal fence PID is still occupied; preserve evidence.'}
+    }else{
+        # Without a retained handle, only a provably different occupant of the
+        # recycled PID shows that the fence process (alive at ready_at) exited.
+        # No inventory follows here, so an occupant carrying this fence's nonce
+        # or an unreadable Python command line also holds, independent of clocks.
+        $occupied=Get-CimInstance Win32_Process -Filter ('ProcessId='+[int]$r.pid)
+        if($null -ne $occupied){
+            $command=[string](Get-OpProperty $occupied 'CommandLine')
+            if($command.IndexOf($Fence.nonce,[StringComparison]::Ordinal) -ge 0 -or
+                (-not $command -and (Test-OpMayBePythonOriginal $occupied)) -or
+                -not (Test-OpPidReused $occupied (ConvertFrom-OpUnixTime (Get-OpProperty $Fence.ready 'ready_at')))){
+                throw 'Terminal fence PID is still occupied; preserve evidence.'}
+        }
+    }
     $Fence.released=$r.released -eq $true
     $Fence.completion=@{status=$r.status;lock_released=$true;native_exit_verified=$true;release_requested=$sent}
 }
 
 function Wait-OpHealth {
-    param([string]$Root,[bool]$RequirePlanning)
-    $deadline=[DateTime]::UtcNow.AddSeconds(300);$previous=$null
+    param([string]$Root,[bool]$RequirePlanning,[int]$Seconds=300)
+    $deadline=[DateTime]::UtcNow.AddSeconds($Seconds);$previous=$null
     do{
         try{
             $health=Get-428Health;Assert-428Health $health $Root (-not $RequirePlanning)
@@ -993,7 +1133,8 @@ function Restore-OpPrevious {
         $definition=$script:OpScheduler.NewTask(0);$definition.XmlText=$script:OpOriginalXml;$definition.Triggers.Item(1).Enabled=$false
         $null=$script:OpFolder.RegisterTaskDefinition('CoChem-4.2.7-Warden',$definition,20,'SYSTEM',$null,5,$script:OpOriginalSddl)
         $task=$script:OpFolder.GetTask('CoChem-4.2.7-Warden');Assert-428WardenTask $task $script:OpOriginalXml $script:OpOriginalSddl $script:OpOldRoot $script:OpOldArgs $true $false 1
-        $instance=$task.Run($null);$health=Wait-OpHealth $script:OpOldRoot $false;$held=Open-OpProcessProof $health $script:OpOldRoot $script:OpOldConfig
+        # The restored Warden also waits up to 900 s for Docker (--docker-wait-seconds).
+        $instance=$task.Run($null);$health=Wait-OpHealth $script:OpOldRoot $false 1200;$held=Open-OpProcessProof $health $script:OpOldRoot $script:OpOldConfig
         try{
             $task=$script:OpFolder.GetTask('CoChem-4.2.7-Warden')
             if($task.GetInstances(0).Count -ne 1 -or $task.GetInstances(0).Item(1).InstanceGuid -cne $instance.InstanceGuid){throw 'Restored task instance differs.'}
@@ -1129,6 +1270,8 @@ function Invoke-OperationalLaunch {
                 Set-OpSubstage $state 'recheck_stopped_recovery_baseline'
                 Assert-OpRecoveryTask ($script:OpFolder.GetTask('CoChem-4.2.7-Warden')) $script:OpRecovery.warden $script:OpOldRoot $script:OpOldArgs 1
                 Assert-OpRecoveryQuiescent $script:OpRecovery $null $pins $state
+                Set-OpSubstage $state 'recheck_runtime_dependencies'
+                Assert-OpRecoveryRuntimeDependencies (Join-Path $Directory 'pipeline.json') $m.bootstrap_sha256
                 $state.fence=Start-OpFence 'stop-fence' $state 'fence'
                 Assert-OpRecoveryCatalog $state.recovery_catalog $state.fence.ready.catalog;return
             }
@@ -1155,6 +1298,14 @@ function Invoke-OperationalLaunch {
                 Assert-OpRecoveryTask $task $script:OpRecovery.warden $script:OpOldRoot $script:OpOldArgs 1
                 Assert-OpRecoveryQuiescent $script:OpRecovery $state.fence $pins $state;Assert-OpFence $state.fence
                 Assert-OpRecoveryCatalog $state.recovery_catalog $state.fence.ready.catalog
+                # The post-disable re-check must end while the fence keeps its 150 s
+                # margin (Assert-OpFence); without room for it, hold before any change.
+                Set-OpSubstage $state 'fence_budget_before_trigger_disable'
+                $expires=ConvertFrom-OpUnixTime (Get-OpProperty $state.fence.ready 'expires_at')
+                if($null -eq $expires){throw 'Fence expiry is unreadable; hold before any task change.'}
+                $notAfter=$expires.AddSeconds(-160)
+                if([DateTime]::UtcNow.AddSeconds(30) -gt $notAfter){throw 'Fence validity is too short for the post-disable re-check; hold before any task change.'}
+                Set-OpSubstage $state 'disable_warden_trigger'
                 $d=$task.Definition;$d.Triggers.Item(1).Enabled=$false
                 $null=$script:OpFolder.RegisterTaskDefinition('CoChem-4.2.7-Warden',$d,20,'SYSTEM',$null,5,$script:OpOriginalSddl)
                 $task=$script:OpFolder.GetTask('CoChem-4.2.7-Warden')
@@ -1162,7 +1313,7 @@ function Invoke-OperationalLaunch {
                 if($task.GetInstances(0).Count -or [int]$task.State -ne 3 -or
                     ([DateTime]$task.LastRunTime).ToUniversalTime() -ne $state.old_task_last_run -or
                     [int64]$task.LastTaskResult -ne $script:OpRecovery.warden.last_task_result){throw 'Stopped Warden changed during trigger disable.'}
-                Assert-OpRecoveryQuiescent $script:OpRecovery $state.fence $pins $state;Assert-OpFence $state.fence
+                Assert-OpRecoveryQuiescent $script:OpRecovery $state.fence $pins $state $notAfter;Assert-OpFence $state.fence
                 $task.Enabled=$false
                 Assert-428WardenTask $task $script:OpOriginalXml $script:OpOriginalSddl $script:OpOldRoot $script:OpOldArgs $false $false 1
                 Assert-428PortFree;$state.stopped=$true;return
@@ -1221,7 +1372,9 @@ function Invoke-OperationalLaunch {
             $instance=$task.Run($null);$state.new_instance=[string]$instance.InstanceGuid
         }
         $actions.verify_running={param($state)
-            Write-OpStatus $state.phase;$health=Wait-OpHealth $script:OpRoot $true
+            # The new Warden may wait up to 900 s for Docker before serving health
+            # (--docker-wait-seconds); allow that plus startup, as the r4 launch did.
+            Write-OpStatus $state.phase;$health=Wait-OpHealth $script:OpRoot $true 1200
             $state.new_processes=Open-OpProcessProof $health $script:OpRoot $state.final_config
             $task=$script:OpFolder.GetTask('CoChem-4.2.7-Warden')
             if($task.GetInstances(0).Count -ne 1 -or [string]$task.GetInstances(0).Item(1).InstanceGuid -cne $state.new_instance){throw 'New Warden instance differs.'}
