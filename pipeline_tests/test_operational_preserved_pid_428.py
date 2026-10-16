@@ -296,6 +296,7 @@ function Invoke-428Native {throw 'Forbidden installer/native launch'}
 function Get-428Health {throw 'Forbidden old health'}
 function Get-Item {param($LiteralPath)[pscustomobject]@{Length=42}}
 function Copy-VerifiedPayload {param($r)$script:seen.Add('copy-request')}
+$script:OpCatalogRequest=@{name='task-catalog-request.json';sha256=('a'*64);request_id=('c'*32);previous_policy_digest='policy';previous_task_catalog_sha256=$null}
 function Start-OpFence {param($l,$s,$k)
     $script:seen.Add('fresh-fence')
     $f=@{arguments='NEW_ARGS';ready=@{pid=46440;expires_at=EXPIRES;catalog=@{active_policy_sha256='policy';active_catalog_sha256=$null}}}

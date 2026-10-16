@@ -21,7 +21,9 @@ for entry in (str(SCRIPTS), str(SCRIPTS.parent / 'src')):
     if entry not in sys.path:
         sys.path.insert(0, entry)
 
-from cochem_pipeline.routing import _strict_json
+from cochem_pipeline.catalog_activation import compile_change
+from cochem_pipeline.routing import _strict_json, load_routing_policy
+from cochem_pipeline.task_catalog_acceptance_428 import decode_request, encoded, execution_bindings, prepare_request
 from prepare_428_release import _assert_fresh_destination, sha
 from prepare_operational_release_428 import (
     PREVIOUS_ROOT, TARGET_ROOT, REVISION, PREVIOUS_CONFIG_SHA256,
@@ -46,6 +48,16 @@ _REQUIRED_FILES = {LAUNCHER, 'pipeline.json', 'install-manifest.json', 'source-t
     'codex-integration.json', 'reviewed_428_launch_helpers.ps1', 'install_operational_428_runtime.ps1',
     'stage_aetherdesk_427_payloads.ps1', 'runtime-requirements.txt'}
 _RESERVED_NAMES = {RECOVERY_NAME, EVIDENCE_NAME, ORIGINAL_NAME, 'launch-manifest.json', 'launch-prepared.json'}
+
+# The board's active routing policy is the one r4's own launch published on
+# 2026-10-14 (bundle 3dab7f2, request b8ef2785...; live health reports it). The
+# original 865a29b request was prepared from the r5 bootstrap's baseline routing
+# instead, so the installed catalog phase rejects it as stale (the d5d6094 hold).
+ACTIVE_CATALOG_BUNDLE = Path(r'C:\Users\ansac\CoChem427\r428-bundle-3dab7f2')
+ACTIVE_CATALOG_BUNDLE_MANIFEST_SHA256 = 'ac43248ab659e8597df38820c65c318cfeb724c7b43105ce89c39424cb277383'
+BASELINE_POLICY_DIGEST = '6a76497a281e5ec23fca7f4a8d14a5581c5a35e71a94a0757ac95e7687e0e3c4'
+ACTIVE_POLICY_DIGEST = 'c8444fe2fd46b0f53edeaefc677ef7ff698c3e11cb83348a70255026a81da43d'
+CATALOG_REQUEST_NAME = 'task-catalog-request-active.json'
 
 
 def _hex(value, length):
@@ -201,6 +213,86 @@ def _read_test_evidence(path, pin, launcher_source_commit):
     return raw
 
 
+def _require_runtime_source(repository):
+    """The request is prepared with the imported runtime code, which must be the
+    installed r5 source exactly (no edits, no untracked files)."""
+    import subprocess
+    import cochem_pipeline
+    src = (Path(repository) / 'src').resolve()
+    if Path(cochem_pipeline.__file__).resolve().parents[1] != src:
+        raise ValueError('Preparation must import the repository runtime source')
+    diff = subprocess.run(['git', '-C', str(repository), 'diff', '--quiet', RUNTIME_SOURCE_COMMIT, '--', 'src'], timeout=60)
+    untracked = subprocess.run(['git', '-C', str(repository), 'ls-files', '--others', '--exclude-standard', '--', 'src'],
+                               capture_output=True, check=True, timeout=60).stdout
+    if diff.returncode != 0 or untracked.strip():
+        raise ValueError('Repository runtime source differs from the installed r5 source')
+
+
+def active_routing_policy(bundle=ACTIVE_CATALOG_BUNDLE):
+    """Rebuild the board's active policy exactly as r4's launch published it."""
+    bundle = Path(bundle)
+    raw = read_regular(bundle / 'launch-manifest.json', maximum=1024 * 1024)
+    if sha(raw) != ACTIVE_CATALOG_BUNDLE_MANIFEST_SHA256:
+        raise ValueError('Active catalog bundle manifest differs from its pin')
+    launch = _strict_json(raw.decode('utf-8'))
+    if (launch.get('baseline_policy_digest') != BASELINE_POLICY_DIGEST
+            or launch.get('catalog_policy_digest') != ACTIVE_POLICY_DIGEST):
+        raise ValueError('Active catalog bundle does not publish the reviewed policy')
+    rows = {row['name']: row for row in launch['files']}
+    config = _pinned(bundle / 'pipeline.json', rows['pipeline.json']['sha256'], rows['pipeline.json']['length'])
+    proposal_raw = _pinned(bundle / 'proposal.json', rows['proposal.json']['sha256'], rows['proposal.json']['length'])
+    if sha(config) != PREVIOUS_CONFIG_SHA256 or sha(proposal_raw) != launch.get('proposal_sha256'):
+        raise ValueError('Active catalog baseline or proposal differs from its pins')
+    baseline = load_routing_policy(_strict_json(config.decode('utf-8'))['routing'])
+    proposal = _strict_json(proposal_raw.decode('utf-8'))
+    if (baseline.digest != BASELINE_POLICY_DIGEST or proposal.get('schema') != 'cochem-catalog-change-request/1'
+            or proposal.get('previous_policy_digest') != BASELINE_POLICY_DIGEST):
+        raise ValueError('Active catalog proposal does not extend the reviewed baseline')
+    policy = compile_change(baseline, proposal['catalog'], expected_policy_digest=BASELINE_POLICY_DIGEST).policy
+    if policy.digest != ACTIVE_POLICY_DIGEST:
+        raise ValueError('Rebuilt policy differs from the board-active digest')
+    basis = dict(schema='cochem-428-catalog-request-basis/1', active_bundle_launch_manifest_sha256=sha(raw),
+        baseline_policy_digest=BASELINE_POLICY_DIGEST, active_policy_digest=ACTIVE_POLICY_DIGEST,
+        proposal_sha256=sha(proposal_raw), baseline_config_sha256=sha(config))
+    return policy, basis
+
+
+def active_catalog_request(files, original, *, request_id, bundle=ACTIVE_CATALOG_BUNDLE):
+    """The original request's catalog, bindings and profiles, re-prepared exactly as
+    prepare_task_catalog_428 does, but against the board-active policy."""
+    policy, basis = active_routing_policy(bundle)
+    old = _strict_json(files['task-catalog-request.json'].decode('utf-8'))
+    bootstrap = _strict_json(files['pipeline.json'].decode('utf-8'))
+    bindings = execution_bindings(bootstrap['providers'], bootstrap['workers'])
+    if (bindings != old['execution_bindings'] or old['previous_task_catalog_sha256'] is not None
+            or old['retired_profile_ids'] != [] or old['activation_authorized'] is not False):
+        raise ValueError('Original request bindings or preceding catalog differ from the bootstrap')
+    # The cause, proven with the installed code: the original request is stale here.
+    try:
+        decode_request(files['task-catalog-request.json'], policy, None, expected_sha256=original['request_sha256'])
+    except ValueError as error:
+        if 'stale' not in str(error):
+            raise
+    else:
+        raise ValueError('Original request already targets the active policy; no replacement is needed')
+    request = prepare_request(policy, old['catalog'], old['binary_bindings'], request_id=_hex(request_id, 32),
+        execution_bindings=bindings, previous_task_catalog=None, candidate_profile_ids=old['candidate_profile_ids'],
+        allow_partial_publication=old['allow_partial_publication'])
+    data = encoded(request)
+    decoded = decode_request(data, policy, None, expected_sha256=sha(data))
+    # After publication the installed phase requires the bootstrap it is given to
+    # route exactly the published policy (enabled_candidate). With the original
+    # bootstrap that fails only after COMMIT, leaving r4 stopped; refuse instead.
+    if load_routing_policy(bootstrap['routing']).digest != decoded.plan.policy.digest:
+        raise ValueError('Bootstrap routing differs from the request policy; its candidate would be rejected after publication')
+    if (request['candidate_profile_ids'] != old['candidate_profile_ids'] or list(decoded.plan.selected_profile_ids) != old['candidate_profile_ids']
+            or request['catalog'] != old['catalog'] or request['binary_bindings'] != old['binary_bindings']
+            or request['previous_policy_digest'] != ACTIVE_POLICY_DIGEST):
+        raise ValueError('Replacement request changes more than its policy authority')
+    basis.update(original_request_sha256=original['request_sha256'], original_request_id=original['request_id'])
+    return data, request, basis
+
+
 def _encode(value):
     return (json.dumps(value, indent=2, allow_nan=False) + '\n').encode('utf-8')
 
@@ -214,7 +306,8 @@ def _write(path, raw):
 
 def prepare_operational_recovery(original_launch, destination, repository, *, launcher_source_commit,
                                  recovery_source_tests, recovery_source_tests_sha256, recovery_id=None,
-                                 scenario='stopped'):
+                                 scenario='stopped', catalog_request='original', catalog_request_id=None,
+                                 active_catalog_bundle=ACTIVE_CATALOG_BUNDLE):
     original_launch, destination, repository = map(Path, (original_launch, destination, repository))
     if not all(path.is_absolute() for path in (original_launch, destination, repository, Path(recovery_source_tests))):
         raise ValueError('Recovery preparation requires explicit absolute ordinary paths')
@@ -229,6 +322,20 @@ def prepare_operational_recovery(original_launch, destination, repository, *, la
     if scenario == 'running' and b'function Assert-OpRunningRecoveryEvidence' not in launcher:
         raise ValueError('Chosen committed launcher lacks the running-r4 recovery entrypoint')
     evidence = _read_test_evidence(Path(recovery_source_tests), recovery_source_tests_sha256, launcher_source_commit)
+    if catalog_request not in ('original', 'active'):
+        raise ValueError('Catalog request must be the original or the board-active replacement')
+    replacement = None
+    if catalog_request == 'active':
+        if b'function Assert-OpCatalogRequestBoard' not in launcher:
+            raise ValueError('Chosen committed launcher cannot submit a replacement catalog request')
+        _require_runtime_source(repository)
+        data, request, basis = active_catalog_request(files, original,
+            request_id=catalog_request_id if catalog_request_id is not None else uuid.uuid4().hex,
+            bundle=active_catalog_bundle)
+        files[CATALOG_REQUEST_NAME] = data
+        replacement = dict(catalog_request=CATALOG_REQUEST_NAME, catalog_request_sha256=sha(data),
+            catalog_request_id=request['request_id'], catalog_request_previous_policy_digest=request['previous_policy_digest'],
+            catalog_request_basis=basis)
     files[LAUNCHER] = launcher
     files[ORIGINAL_NAME] = original_raw
     files[RECOVERY_NAME] = _encode(recovery)
@@ -237,12 +344,16 @@ def prepare_operational_recovery(original_launch, destination, repository, *, la
     manifest.update(launcher_source_commit=launcher_source_commit, recovery_manifest=RECOVERY_NAME,
                     recovery_sha256=sha(files[RECOVERY_NAME]),
                     files=[dict(name=name, sha256=sha(blob), length=len(blob)) for name, blob in sorted(files.items())])
+    if replacement is not None:
+        manifest.update(replacement)
     manifest_raw = _encode(manifest)
     result = dict(schema='cochem-428-operational-recovery-prepared/1', status='OWNER_RECOVERY_PACKAGE_PREPARED_FOR_REVIEW',
         destination=str(destination), source_commit=RUNTIME_SOURCE_COMMIT, launcher_source_commit=launcher_source_commit,
         recovery_id=recovery['recovery_id'], scenario=recovery['scenario'], original_launch_manifest_sha256=ORIGINAL_LAUNCH_SHA256,
         launch_manifest_sha256=sha(manifest_raw), recovery_sha256=manifest['recovery_sha256'],
         recovery_source_tests_sha256=sha(evidence), launch_inputs_verified=len(files),
+        catalog_request=catalog_request, catalog_request_sha256=(replacement or {}).get('catalog_request_sha256', original['request_sha256']),
+        catalog_request_previous_policy_digest=(replacement or {}).get('catalog_request_previous_policy_digest'),
         original_install_inputs_verified=install_count, original_install_input_bytes=install_size,
         host_executed=False, native_acceptance_executed=False, source_tests_executed_by_preparer=False,
         administrator_review_required=True)
@@ -269,6 +380,9 @@ def main():
     parser.add_argument('--recovery-id')
     # Explicit: a package for the wrong host state is spent on its first hold.
     parser.add_argument('--scenario', choices=('stopped', 'running'), required=True)
+    # Explicit too: 'active' re-prepares the request against the board's live policy.
+    parser.add_argument('--catalog-request', choices=('original', 'active'), required=True)
+    parser.add_argument('--catalog-request-id')
     args = parser.parse_args()
     print(json.dumps(prepare_operational_recovery(**vars(args)), indent=2))
 

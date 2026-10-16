@@ -200,10 +200,12 @@ function Open-OpProcessProof {
     if($script:fenced){throw 'Native capture after fence'}
     $script:seen.Add('handles');return ,$script:processes
 }
+$script:OpCatalogRequest=@{name='task-catalog-request.json';sha256=('b'*64);request_id=('c'*32);previous_policy_digest='policy';previous_task_catalog_sha256=$null}
 function Start-OpFence {
     param($label)$script:seen.Add('ready');$script:fenced=$true
     if($script:endedAtReady){$script:count=0;foreach($p in $script:processes){$p.HasExited=$true}}
-    return @{released=$false;ready=@{ready_at=([DateTimeOffset]$script:when.AddMinutes(1)).ToUnixTimeSeconds()}}
+    return @{released=$false;ready=@{ready_at=([DateTimeOffset]$script:when.AddMinutes(1)).ToUnixTimeSeconds();
+        catalog=@{active_policy_sha256='policy';active_catalog_sha256=$null}}}
 }
 function Assert-OpFence {param($fence)if(-not $script:fenced){throw 'Fence absent'}}
 function Assert-428WardenTask {param($task,$xml,$sddl,$root,$args,$enabled,$trigger,$count)}
@@ -325,6 +327,7 @@ def test_phase_ack_is_atomic_and_follows_retained_identity(tmp_path, fault):
 $script:seen=[Collections.Generic.List[string]]::new()
 $script:start=[pscustomobject]@{schema='cochem-owner-task-catalog-start/4.2.8';nonce=('a'*32);pid=123;
     bootstrap_sha256=('b'*64);request_sha256=('c'*64);started_at=[DateTimeOffset]::UtcNow.ToUnixTimeSeconds()}
+$script:OpCatalogRequest=@{name='task-catalog-request.json';sha256=('c'*64)}
 if('FAULT' -ceq 'nonce'){$script:start.nonce='wrong'}
 function Get-428FileSha256 {param($p)return ('d'*64)}
 function Open-428Pin {param($p,$h)return [IO.MemoryStream]::new()}

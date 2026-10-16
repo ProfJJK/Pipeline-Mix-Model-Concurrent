@@ -246,6 +246,8 @@ function Assert-OpRecoveryRuntimeDependencies {param($b,$h)if($script:fenced){th
 function Get-428Health {if($script:fenced){throw 'HTTP health under SQLite fence'};$script:seen.Add('health');[pscustomobject]@{pid=27208;instance_id='runtime'}}
 function Assert-428Health {param($h,$root,$allow)}
 function Open-OpProcessProof {param($h,$root,$config)if($script:fenced){throw 'Native capture after fence'};$script:seen.Add('handles');return ,$script:processes}
+$script:OpCatalogRequest=@{name='task-catalog-request.json';sha256=('a'*64);request_id=('c'*32);
+    previous_policy_digest=$(if('MODE' -eq 'stale_request'){'baseline'}else{'policy'});previous_task_catalog_sha256=$null}
 function Start-OpFence {param($label,$s,$k)
     $script:seen.Add('ready');$script:fenced=$true
     if('MODE' -eq 'ended_at_ready'){$script:count=0;foreach($p in $script:processes){$p.HasExited=$true}}
@@ -324,6 +326,9 @@ def test_real_running_actions_hold_when_the_exact_run_is_not_proven_ended(mode, 
     ('catalog_changed', 'Assert-OpRecoveryCatalog', 'recheck_catalog_authority'),
     ('live_xml_changed', '<ScriptBlock>', 'previous_task_identity'),
     ('exiting_at_stop', 'Get-OpRetainedTaskState', 'verify_retained_previous'),   # orphan: hold before any change
+    # The d5d6094 cause: a request prepared against a policy the board no longer
+    # has active now holds right after READY, before r4 is touched.
+    ('stale_request', 'Assert-OpCatalogRequestBoard', 'recheck_catalog_request'),
 ])
 def test_real_running_actions_hold_before_any_task_change(mode, function, substage):
     result=running_actions(mode)

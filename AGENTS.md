@@ -90,6 +90,8 @@ This is the preferred interface, not a claim that all three adapters have been
 implemented or accepted on this host. Reuse verified sessions before asking for input.
 
 ## Current handoff
+2026-10-16 (night): `r428-op-recovery-d5d6094` is spent. It held in catalog_acceptance on a stale catalog request; r4 was restored and is serving. The installed 865a29b runtime cannot complete catalog acceptance (`docs/4.2.8/CATALOG_ACCEPTANCE_BLOCKERS_20261016.md`), so do not prepare another recovery package against it. A corrected runtime release and installation are required first. There is NO current owner command. The paragraphs below record the earlier state.
+
 2026-10-16 (evening): the owner ran `r428-op-recovery-ab900e9`; it is spent. It
 passed every host check up to fence creation, including the Codex re-capture.
 It then held at `Start-OpFence` because `New-OpOneShot` pinned raw XML from the

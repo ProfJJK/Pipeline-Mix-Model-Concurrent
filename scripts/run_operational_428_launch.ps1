@@ -582,6 +582,49 @@ function Assert-OpHeldObserver {
     }finally{foreach($p in $held){$p.Dispose()}}
 }
 
+function Get-OpCatalogRequest {
+    # The one validated catalog request this sitting submits: the original, or a
+    # reviewed replacement prepared against the board's live routing policy.
+    $r=Get-Variable -Scope Script -Name OpCatalogRequest -ValueOnly -ErrorAction SilentlyContinue
+    if($null -eq $r){throw 'Catalog request authority was not established.'}
+    return $r
+}
+
+function Resolve-OpCatalogRequest {
+    # The catalog request this sitting submits: the original, or (recovery only)
+    # a reviewed replacement re-prepared against the board-active policy. The
+    # original request pin stays the identity of the original inputs and fences.
+    param($Manifest,[string]$Directory,$Pins,[bool]$Recovery)
+    $name='task-catalog-request.json';$pin=[string]$Manifest.request_sha256
+    if($null -ne (Get-OpProperty $Manifest 'catalog_request')){
+        $row=@($Manifest.files|Where-Object{$_.name -ceq [string]$Manifest.catalog_request})
+        if(-not $Recovery -or $Manifest.catalog_request -cne 'task-catalog-request-active.json' -or $row.Count -ne 1 -or
+            [string]$Manifest.catalog_request_sha256 -cnotmatch '^[a-f0-9]{64}$' -or $row[0].sha256 -cne $Manifest.catalog_request_sha256 -or
+            $Manifest.catalog_request_sha256 -ceq $Manifest.request_sha256 -or [string]$Manifest.catalog_request_id -cnotmatch '^[a-f0-9]{32}$' -or
+            [string]$Manifest.catalog_request_previous_policy_digest -cnotmatch '^[a-f0-9]{64}$'){throw 'Catalog request replacement identity differs.'}
+        $name=[string]$Manifest.catalog_request;$pin=[string]$Manifest.catalog_request_sha256
+    }elseif($null -ne (Get-OpProperty $Manifest 'catalog_request_sha256') -or $null -ne (Get-OpProperty $Manifest 'catalog_request_id')){
+        throw 'Incomplete catalog request replacement.'}
+    $s=Open-428Pin (Join-Path $Directory $name) $pin;$Pins.Add($s);$request=Read-428Json $s
+    if($request.schema -cne 'cochem-task-catalog-request/4.2.8' -or $request.activation_authorized -ne $false -or
+        [string]$request.request_id -cnotmatch '^[a-f0-9]{32}$' -or [string]$request.previous_policy_digest -cnotmatch '^[a-f0-9]{64}$' -or
+        ($name -cne 'task-catalog-request.json' -and ($request.request_id -cne $Manifest.catalog_request_id -or
+            $request.previous_policy_digest -cne $Manifest.catalog_request_previous_policy_digest))){throw 'Catalog request identity differs.'}
+    return @{name=$name;sha256=$pin;request_id=[string]$request.request_id;
+        previous_policy_digest=[string]$request.previous_policy_digest;previous_task_catalog_sha256=$request.previous_task_catalog_sha256}
+}
+
+function Assert-OpCatalogRequestBoard {
+    # The installed catalog phase rejects a request whose recorded authority is
+    # not the board's live one (the d5d6094 hold, found only after r4 was
+    # stopped). The fence reports the live identity, so prove it before any task change.
+    param($Request,$Catalog)
+    if([string](Get-OpProperty $Request 'previous_policy_digest') -cne [string](Get-OpProperty $Catalog 'active_policy_sha256')){
+        throw 'Catalog request does not target the live routing policy; hold before any task change.'}
+    if((Get-OpProperty $Request 'previous_task_catalog_sha256') -cne (Get-OpProperty $Catalog 'active_catalog_sha256')){
+        throw 'Catalog request does not target the live task catalog; hold before any task change.'}
+}
+
 function Assert-OpRecoveryCatalog {
     param($Original,$Current)
     foreach($key in @('active_policy_sha256','active_catalog_sha256')){
@@ -707,6 +750,7 @@ function New-OpResultRecord {
     param([hashtable]$State,$Manifest,[string]$ManifestHash)
     return @{schema='cochem-428-operational-owner-result/1';status=$State.status;phase=$State.phase;rollback=$State.rollback;
         source_commit=$Manifest.source_commit;launch_manifest_sha256=$ManifestHash;request_sha256=$Manifest.request_sha256;
+        catalog_request_sha256=(Get-OpProperty (Get-Variable -Scope Script -Name OpCatalogRequest -ValueOnly -ErrorAction SilentlyContinue) 'sha256');
         launcher_source_commit=(Get-OpProperty $Manifest 'launcher_source_commit' $Manifest.source_commit);
         verified_stopped_at_entry=(Get-OpProperty $State 'verified_stopped_at_entry' $false);
         publication_state=(Get-OpProperty $State.acceptance 'publication_state' 'UNKNOWN');cutover_requested=$State.cutover_requested;
@@ -1113,18 +1157,18 @@ function Open-OpOneShotProcess {
 function Confirm-OpPhaseStart {
     param($Handle,[string]$StartPath,[string]$Nonce,$Manifest)
     $pin=Get-428FileSha256 $StartPath;$retained=Open-428Pin $StartPath $pin
-    $processes=$null
+    $processes=$null;$requestSha=(Get-OpCatalogRequest).sha256
     try{
         $start=Read-OpPrivateRecord $StartPath
         if($Nonce -cnotmatch '^[0-9a-f]{32}$' -or $start.schema -cne 'cochem-owner-task-catalog-start/4.2.8' -or
-            $start.nonce -cne $Nonce -or $start.bootstrap_sha256 -cne $Manifest.bootstrap_sha256 -or $start.request_sha256 -cne $Manifest.request_sha256 -or
+            $start.nonce -cne $Nonce -or $start.bootstrap_sha256 -cne $Manifest.bootstrap_sha256 -or $start.request_sha256 -cne $requestSha -or
             [double]$start.started_at -lt ([DateTimeOffset]$Handle.started).ToUnixTimeSeconds()-2 -or
             [double]$start.started_at -gt [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()+2){throw 'Catalog phase start identity differs.'}
         $null=Assert-OpOneShot $Handle $true
         $processes=Open-OpOneShotProcess $Handle ([int]$start.pid)
         foreach($p in $processes){if($p.HasExited){throw 'Catalog phase exited before custody acknowledgment.'}}
         $ack=@{schema='cochem-owner-task-catalog-start-ack/4.2.8';nonce=$Nonce;start_sha256=$pin;pid=[int]$start.pid;
-            bootstrap_sha256=$Manifest.bootstrap_sha256;request_sha256=$Manifest.request_sha256}
+            bootstrap_sha256=$Manifest.bootstrap_sha256;request_sha256=$requestSha}
         # The phase polls this final name; publish only flushed complete bytes.
         $pending=Join-Path (Split-Path -Parent $StartPath) 'phase-start-ack.pending'
         Write-OpRecord $pending $ack
@@ -1572,7 +1616,7 @@ function Restore-OpPrevious {
 
 function Invoke-OperationalLaunch {
     param([string]$ManifestPath,[string]$ManifestHash,[bool]$ApplyRequested,[string]$Directory)
-    $script:OpSitting=$null;$script:Headers428=$null;$script:OpRecovery=$null;$pins=[Collections.Generic.List[IO.Stream]]::new()
+    $script:OpSitting=$null;$script:Headers428=$null;$script:OpRecovery=$null;$script:OpCatalogRequest=$null;$pins=[Collections.Generic.List[IO.Stream]]::new()
     $mutex=$null;$locked=$false;$awake=$null;$state=$null;$processes=$null
     try{
         foreach($text in @(Import-OpHelpers $Directory)){. ([scriptblock]::Create($text))}
@@ -1619,10 +1663,12 @@ function Invoke-OperationalLaunch {
         if($inventory.source_commit -cne $m.source_commit){throw 'Installed source and launcher differ.'}
         foreach($row in $inventory.files){$pins.Add((Open-428Pin $row.source $row.sha256 $row.length))}
         $pins.Add((Open-428Pin (Join-Path $Directory 'pipeline.json') $m.bootstrap_sha256));$pins.Add((Open-428Pin (Join-Path $Directory 'task-catalog-request.json') $m.request_sha256))
+        $script:OpCatalogRequest=Resolve-OpCatalogRequest $m $Directory $pins ($null -ne $script:OpRecovery)
         if(-not $ApplyRequested){
             @{schema='cochem-428-operational-launch-plan/1';status='READ_ONLY_PLAN_VERIFIED';source_commit=$m.source_commit;target_root=$script:OpRoot;
                 payload_files=@($inventory.files).Count;host_executed=$false;input_window_minutes=20;late_prompts=$false;maximum_shared_slots=4;pending_backlog_allowed=$true;
-                recovery_scenario=(Get-OpProperty $script:OpRecovery 'scenario')}|ConvertTo-Json;return
+                recovery_scenario=(Get-OpProperty $script:OpRecovery 'scenario');catalog_request_sha256=$script:OpCatalogRequest.sha256;
+                catalog_request_previous_policy_digest=$script:OpCatalogRequest.previous_policy_digest}|ConvertTo-Json;return
         }
         $identity=[Security.Principal.WindowsIdentity]::GetCurrent()
         if($PSVersionTable.PSEdition -cne 'Desktop' -or -not [Environment]::Is64BitProcess -or $env:COMPUTERNAME -cne 'AETHERDESK' -or
@@ -1693,8 +1739,9 @@ function Invoke-OperationalLaunch {
               $r=Read-OpPrivateRecord (Join-Path $script:OpRoot 'install-after.json')
               if($r.status -cne 'STOPPED_RUNTIME_INSTALLED' -or $r.manifest_sha256 -cne $m.install_manifest_sha256 -or $r.source_commit -cne $m.source_commit){throw 'Fresh installation did not verify.'}
             }else{Set-OpSubstage $state 'reuse_verified_installation'}
+            $request=Get-OpCatalogRequest
             $script:OpRequest=Join-Path $script:OpPrivate 'task-catalog-request.json'
-            Copy-VerifiedPayload ([pscustomobject]@{source=(Join-Path $Directory 'task-catalog-request.json');destination=$script:OpRequest;sha256=$m.request_sha256;length=(Get-Item -LiteralPath (Join-Path $Directory 'task-catalog-request.json')).Length})
+            Copy-VerifiedPayload ([pscustomobject]@{source=(Join-Path $Directory $request.name);destination=$script:OpRequest;sha256=$request.sha256;length=(Get-Item -LiteralPath (Join-Path $Directory $request.name)).Length})
         }
         $actions.admission_fence={param($state)
             Write-OpStatus $state.phase
@@ -1710,7 +1757,9 @@ function Invoke-OperationalLaunch {
                 Set-OpSubstage $state 'recheck_runtime_dependencies'
                 Assert-OpRecoveryRuntimeDependencies (Join-Path $Directory 'pipeline.json') $m.bootstrap_sha256
                 $state.fence=Start-OpFence 'stop-fence' $state 'fence'
-                Assert-OpRecoveryCatalog $state.recovery_catalog $state.fence.ready.catalog;return
+                Assert-OpRecoveryCatalog $state.recovery_catalog $state.fence.ready.catalog
+                Set-OpSubstage $state 'recheck_catalog_request'
+                Assert-OpCatalogRequestBoard (Get-OpCatalogRequest) $state.fence.ready.catalog;return
             }
             # Finish HTTP/native health verification before excluding writers.
             # Active work may still drain during Start-OpFence; its locked
@@ -1731,6 +1780,9 @@ function Invoke-OperationalLaunch {
                 Set-OpSubstage $state 'recheck_catalog_authority'
                 Assert-OpRecoveryCatalog $state.recovery_catalog $state.fence.ready.catalog
             }
+            # While r4 can still run on: the request must name the live authority.
+            Set-OpSubstage $state 'recheck_catalog_request'
+            Assert-OpCatalogRequestBoard (Get-OpCatalogRequest) $state.fence.ready.catalog
         }
         $actions.stop_previous={param($state)
             Write-OpStatus $state.phase;Assert-OpFence $state.fence
@@ -1793,9 +1845,9 @@ function Invoke-OperationalLaunch {
         $actions.catalog_acceptance={param($state)
             Write-OpStatus $state.phase;Assert-428PortFree
             $root=Join-Path $script:OpPrivate 'catalog-phase';New-OpPrivateDirectory $root;$state.phase_root=$root
-            $nonce=[Guid]::NewGuid().ToString('N')
+            $nonce=[Guid]::NewGuid().ToString('N');$request=Get-OpCatalogRequest
             $args='-I -B -m cochem_pipeline.owner_task_catalog_428 --bootstrap-config "'+(Join-Path $script:OpRoot 'pipeline.json')+'" --bootstrap-sha256 '+$m.bootstrap_sha256+
-                ' --request "'+$script:OpRequest+'" --request-sha256 '+$m.request_sha256+' --output-root "'+$root+'" --timeout-seconds 7200 --start-gate --start-nonce '+$nonce
+                ' --request "'+$script:OpRequest+'" --request-sha256 '+$request.sha256+' --output-root "'+$root+'" --timeout-seconds 7200 --start-gate --start-nonce '+$nonce
             $handle=New-OpOneShot $script:OpScheduler $script:OpFolder ('CoChem-4.2.8-Catalog-'+[Guid]::NewGuid().ToString('N')) $args 7500
             $startPath=Join-Path $root 'phase-started.json';$startDeadline=[DateTime]::UtcNow.AddSeconds(90)
             while(-not (Test-Path -LiteralPath $startPath)){
@@ -1808,7 +1860,7 @@ function Invoke-OperationalLaunch {
             foreach($p in $state.phase_processes){if(-not $p.WaitForExit(5000)){$state.acceptance_exited=$false;throw 'Catalog phase native process remains; preserve state.'}}
             $path=Join-Path $root $(if($code -eq 0){'result.json'}else{'held.json'})
             $r=Read-OpPrivateRecord $path
-            if($r.schema -cne 'cochem-owner-task-catalog-result/4.2.8' -or $r.request_sha256 -cne $m.request_sha256 -or $r.bootstrap_sha256 -cne $m.bootstrap_sha256){throw 'Acceptance terminal receipt is unbound.'}
+            if($r.schema -cne 'cochem-owner-task-catalog-result/4.2.8' -or $r.request_sha256 -cne $request.sha256 -or $r.bootstrap_sha256 -cne $m.bootstrap_sha256){throw 'Acceptance terminal receipt is unbound.'}
             $state.acceptance=$r
             if($code -ne 0 -or $r.status -cne 'TASK_CATALOG_CANDIDATE_READY' -or $r.cleanup_verified -ne $true -or $r.runtime_resources_closed -ne $true -or
                 $r.publication_state -cne 'COMMITTED' -or $r.publication_proof.catalog_probe_cleanup_verified -ne $true){throw 'Native catalog acceptance held; preserve its evidence.'}

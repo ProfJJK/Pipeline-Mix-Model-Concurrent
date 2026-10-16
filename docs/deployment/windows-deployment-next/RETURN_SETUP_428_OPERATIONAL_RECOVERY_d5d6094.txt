@@ -1,3 +1,9 @@
+SPENT — DO NOT RUN THIS COMMAND AGAIN.
+The owner run passed the write lock, the r4 stop and the lock release, then
+held at catalog acceptance: the catalog request named an older routing policy
+than the job board has active. Nothing was published; the launcher restarted
+r4 and verified its health. Preserve all evidence.
+
 PIPELINE 4.2.8 — RECOVERY WITH ONE-SHOT IDENTITY FIX (d5d6094)
 
 The last run (ab900e9) stopped at the job-board write lock. The launcher

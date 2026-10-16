@@ -157,6 +157,7 @@ function Get-Item {param($LiteralPath)[pscustomobject]@{Length=42}}
 function Copy-VerifiedPayload {param($r)$script:seen.Add('copy-request')}
 function Assert-OpRecoveryQuiescent {param($r,$f)if('FAULT' -eq 'orphan'){throw 'Native orphan'};$script:seen.Add('quiescent')}
 function Assert-OpRecoveryRuntimeDependencies {param($b,$h)$script:seen.Add('runtime-dependencies')}
+$script:OpCatalogRequest=@{name='task-catalog-request.json';sha256=('a'*64);request_id=('c'*32);previous_policy_digest='policy';previous_task_catalog_sha256=$null}
 function Start-OpFence {param($l,$s,$k)
     $script:seen.Add('fresh-fence');$catalog=@{active_policy_sha256='policy';active_catalog_sha256=$null}
     if('FAULT' -eq 'catalog_changed'){$catalog.active_policy_sha256='changed'}

@@ -1,5 +1,7 @@
 # 4.2.8 source progress
 
+2026-10-16 (night): the owner ran `d5d6094`; it is spent. The fence, r4 stop and release worked on the host. Catalog acceptance then rejected the request as stale: it named the baseline policy, not the board-active `c8444fe2…` that r4 published on 10-14. Nothing was published, and r4 was restored with its health verified. Review then found that the installed 865a29b runtime cannot complete catalog acceptance at all: a missing `catalog_containment_id` attribute, Codex effort evidence that is never recorded, and bootstrap routing that must equal the published policy. A corrected runtime and a new installation are needed. See [the blockers](CATALOG_ACCEPTANCE_BLOCKERS_20261016.md). The launcher now holds before stopping r4 when the request does not name the live policy. No owner package is current.
+
 2026-10-16 (evening): the owner ran `ab900e9`; it is spent. Every host check
 passed up to fence creation, including the running-r4 binding and the Codex
 re-capture. It then held at the first one-shot identity check: the raw XML
