@@ -15,7 +15,16 @@ if($script:mode -eq 'stale'){$when=$when.AddSeconds(-210)}
 if($script:mode -like 'terminal_*'){$when=$when.AddSeconds(-300);$script:count=0}
 $args='-I -B -m cochem_pipeline.owner_admission_fence_428 --config "'+$script:OpOldConfig+'" --config-sha256 '+$script:OpManifest.previous_config_sha256+
     ' --output-root "'+$root+'" --nonce '+$nonce+' --request-sha256 '+$script:OpManifest.request_sha256+' --wait-seconds 1800 --hold-seconds 240'
-$script:task=[pscustomobject]@{State=4;Xml='exact-xml';LastRunTime=$when;LastTaskResult=0}
+$script:OpRoot='C:\fixture\new'
+# The one-shot's registered definition, read from a fresh task copy (structural identity).
+$fixtureAction=[pscustomobject]@{Type=0;Arguments=$args}
+# Registered under whatever r5 root the test sets before the fence is checked.
+$fixtureAction|Add-Member ScriptProperty Path {Join-Path $script:OpRoot '.venv\Scripts\python.exe'}
+$fixtureAction|Add-Member ScriptProperty WorkingDirectory {$script:OpRoot}
+$fixtureActions=[pscustomobject]@{Count=1;A=$fixtureAction};$fixtureActions|Add-Member ScriptMethod Item {param($i)$this.A}
+$script:task=[pscustomobject]@{State=4;Xml='exact-xml';LastRunTime=$when;LastTaskResult=0;
+    Definition=[pscustomobject]@{Triggers=[pscustomobject]@{Count=0};Actions=$fixtureActions;Principal=[pscustomobject]@{UserId='SYSTEM';LogonType=5;RunLevel=1};
+        Settings=[pscustomobject]@{Enabled=$true;RestartCount=0;MultipleInstances=2;AllowDemandStart=$true;ExecutionTimeLimit='PT2100S'}}}
 if($script:mode -like 'terminal_*'){$script:task.LastTaskResult=2;$script:task.State=3}
 $script:task|Add-Member ScriptMethod GetSecurityDescriptor {param($f)'exact-sddl'}
 $script:task|Add-Member ScriptMethod GetInstances {
@@ -24,7 +33,7 @@ $script:task|Add-Member ScriptMethod GetInstances {
 }
 $script:OpFolder=[pscustomobject]@{}
 $script:OpFolder|Add-Member ScriptMethod GetTask {param($n)return $script:task}
-$handle=@{name=('CoChem-4.2.8-Fence-'+$nonce);arguments=$args;instance='exact-instance';started=$when;xml='exact-xml';sddl='exact-sddl'}
+$handle=@{name=('CoChem-4.2.8-Fence-'+$nonce);arguments=$args;instance='exact-instance';started=$when;seconds=2100;sddl='exact-sddl'}
 $script:ready=[pscustomobject]@{schema='cochem-owner-admission-fence/4.2.8';status='WRITER_FENCE_HELD';nonce=$nonce;
     config_sha256=('a'*64);request_sha256=('b'*64);database_path='C:\fixture\board\job_board.db';pid=123;
     ready_at=([DateTimeOffset]$when).ToUnixTimeSeconds();expires_at=([DateTimeOffset]$when).ToUnixTimeSeconds()+240;
@@ -37,7 +46,7 @@ switch($script:mode){
     'foreign_request' {$script:ready.request_sha256='d'*64}
     'foreign_config' {$script:ready.config_sha256='d'*64}
     'foreign_database' {$script:ready.database_path='C:\foreign\board.db'}
-    'foreign_task' {$script:task.Xml='changed'}
+    'foreign_task' {$fixtureAction.Arguments='changed'}
     'incomplete_handle' {$fence.owned=$false}
     'changed_ready_pin' {$fence.ready_pin='d'*64}
 }

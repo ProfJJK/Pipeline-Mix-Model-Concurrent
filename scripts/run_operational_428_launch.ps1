@@ -649,7 +649,9 @@ function Assert-OpRunningRecoveryEvidence {
     # was enforced above through the reviewed invariant definition and SDDL.
     $State.previous_task_xml=$Task.Xml;$State.previous_task_sddl=$Task.GetSecurityDescriptor(7)
     Set-OpSubstage $State 'verify_running_previous_controller'
-    $health=Get-428Health;Assert-428Health $health $script:OpOldRoot $true
+    # A just-started r4 can still be in its Docker wait before serving health:
+    # wait (bounded, read-only) for two consistent answers instead of one read.
+    $health=Wait-OpHealth $script:OpOldRoot $false ([int](Get-OpProperty $State 'previous_health_seconds' 1200)) $State
     if($health.version -cne '4.2.8'){throw 'Current runtime version differs.'}
     $State.baseline_processes=Open-OpProcessProof $health $script:OpOldRoot $script:OpOldConfig
     $State.old_pid=$health.pid;$State.old_instance=$health.instance_id
@@ -719,6 +721,9 @@ function New-OpResultRecord {
         launcher_failure=(Get-OpProperty $State 'launcher_failure');
         fence_cleanup=(Get-OpProperty $State 'fence_cleanup');
         previous_runtime_at_hold=(Get-OpProperty $State 'previous_runtime_at_hold');
+        previous_state_at_stop=(Get-OpProperty $State 'previous_state_at_stop');
+        previous_state_at_exit_timeout=(Get-OpProperty $State 'previous_state_at_exit_timeout');
+        health_last_attempt=(Get-OpProperty $State 'health_last_attempt');
         restore_fence_cleanup=(Get-OpProperty $State 'restore_fence_cleanup');
         recovery_error_type=(Get-OpProperty $State 'recovery_error_type');recovery_failure=(Get-OpProperty $State 'recovery_failure');
         acceptance_failure=(Get-OpProperty $State.acceptance 'failure');
@@ -909,7 +914,11 @@ function Get-OpRetainedTaskState {
     # native processes exiting as EXITING; only bounded polls use it.
     param($Task,[string]$Instance,[DateTime]$LastRunTime,$Processes,$FenceReadyAt=$null,[bool]$AllowExiting=$false)
     if(@($Processes).Count -ne 2){throw 'Retained native identities differ.'}
-    if(([DateTime]$Task.LastRunTime).ToUniversalTime() -ne $LastRunTime.ToUniversalTime()){throw 'Previous task run changed.'}
+    # The trigger disable re-registers the definition; the host has never shown
+    # whether that keeps the scheduler's run history or resets it to its
+    # never-run value (year < 2000). Either is the same run; any other time is not.
+    $observedRun=([DateTime]$Task.LastRunTime).ToUniversalTime()
+    if($observedRun -ne $LastRunTime.ToUniversalTime() -and $observedRun.Year -ge 2000){throw 'Previous task run changed.'}
     foreach($process in $Processes){
         if($process.HasExited -and ($null -eq $FenceReadyAt -or
             ([DateTimeOffset]$process.ExitTime.ToUniversalTime()).ToUnixTimeMilliseconds()/1000.0 -lt [double]$FenceReadyAt)){
@@ -929,6 +938,8 @@ function Get-OpRetainedTaskState {
 
 function Stop-OpRetainedTask {
     param($Task,[string]$Instance,[DateTime]$LastRunTime,$Processes,$FenceReadyAt,[int]$Seconds=30)
+    # A listed instance whose processes are ending is RUNNING here; an ended
+    # instance with a live process is an orphan, which holds before Stop.
     if((Get-OpRetainedTaskState $Task $Instance $LastRunTime $Processes $FenceReadyAt) -ceq 'ENDED'){return}
     try{$Task.Stop(0)}catch{
         # A writer timeout can end the exact old instance between readback and
@@ -1012,16 +1023,40 @@ function New-OpOneShot {
         $r.Settings.RestartCount -ne 0 -or $r.Settings.MultipleInstances -ne 2 -or -not $r.Settings.AllowDemandStart -or
         [Xml.XmlConvert]::ToTimeSpan($r.Settings.ExecutionTimeLimit).TotalSeconds -ne $Seconds -or $task.Enabled -or $task.GetInstances(0).Count){throw 'One-shot task readback differs.'}
     $task.Enabled=$true;$requested=[DateTime]::UtcNow;$instance=$task.Run($null)
-    return @{name=$Name;task=$task;instance=[string]$instance.InstanceGuid;arguments=$Arguments;xml=$task.Xml;sddl=$task.GetSecurityDescriptor(7);started=$requested}
+    # No definition data is read back from the registration's own COM object
+    # after Enabled/Run: two owner sittings (865a29b, ab900e9) held because its
+    # raw XML no longer matched a fresh copy of the registered task. Identity is
+    # structural (Assert-OpOneShotDefinition); the descriptor baseline is taken
+    # from the first fresh copy that passes the ACL policy.
+    return @{name=$Name;task=$task;instance=[string]$instance.InstanceGuid;arguments=$Arguments;seconds=$Seconds;sddl=$null;started=$requested}
+}
+
+function Assert-OpOneShotDefinition {
+    # Everything this sitting registered, except Enabled, which it toggles itself.
+    # One group per line: the sanitized frame line names the group that held.
+    param($Task,$Handle)
+    $r=$Task.Definition
+    if($r.Triggers.Count -ne 0){throw 'One-shot definition changed.'}
+    if($r.Actions.Count -ne 1 -or $r.Actions.Item(1).Type -ne 0){throw 'One-shot definition changed.'}
+    if($r.Actions.Item(1).Path -cne (Join-Path $script:OpRoot '.venv\Scripts\python.exe')){throw 'One-shot definition changed.'}
+    if($r.Actions.Item(1).Arguments -cne $Handle.arguments){throw 'One-shot definition changed.'}
+    if($r.Actions.Item(1).WorkingDirectory -cne $script:OpRoot){throw 'One-shot definition changed.'}
+    if($r.Principal.UserId -notin @('SYSTEM','S-1-5-18','NT AUTHORITY\SYSTEM') -or $r.Principal.LogonType -ne 5 -or $r.Principal.RunLevel -ne 1){throw 'One-shot definition changed.'}
+    if($r.Settings.RestartCount -ne 0){throw 'One-shot definition changed.'}
+    if($r.Settings.MultipleInstances -ne 2 -or -not $r.Settings.AllowDemandStart){throw 'One-shot definition changed.'}
+    if([Xml.XmlConvert]::ToTimeSpan($r.Settings.ExecutionTimeLimit).TotalSeconds -ne [int](Get-OpProperty $Handle 'seconds' -1)){throw 'One-shot definition changed.'}
 }
 
 function Assert-OpOneShot {
     param($Handle,[bool]$Running)
     # One check per line: the sanitized frame line identifies which one held.
+    # Every read is from a fresh copy of the registered task.
     $t=$script:OpFolder.GetTask($Handle.name)
     Assert-428TaskAcl $t
-    if($t.Xml -cne $Handle.xml){throw 'One-shot definition changed.'}
-    if($t.GetSecurityDescriptor(7) -cne $Handle.sddl){throw 'One-shot security descriptor changed.'}
+    Assert-OpOneShotDefinition $t $Handle
+    $sddl=$t.GetSecurityDescriptor(7)
+    if($null -eq (Get-OpProperty $Handle 'sddl')){$Handle.sddl=$sddl}
+    if($sddl -cne $Handle.sddl){throw 'One-shot security descriptor changed.'}
     $instances=$t.GetInstances(0)
     if($Running -and $instances.Count -ne 1){throw 'One-shot no longer has exactly one running instance.'}
     if($Running -and [string]$instances.Item(1).InstanceGuid -cne $Handle.instance){throw 'One-shot is no longer the exact running instance.'}
@@ -1335,13 +1370,19 @@ function Stop-OpOwnedFenceTask {
     # never widens what may be ended. A just-queued run can look stopped once
     # (see Start-OpFence), so settlement needs this run's terminal record and
     # no nonce process in two observations at least one second apart.
-    $deadline=[DateTime]::UtcNow.AddSeconds($Seconds);$last=$null;$settledSince=$null;$observed=$null
+    $deadline=[DateTime]::UtcNow.AddSeconds($Seconds);$last=$null;$lastTask=$null;$settledSince=$null;$observed=$null
     do{
+        # Task.Stop needs a verified task copy; the nonce processes are bound by
+        # their own exact identity, so they are ended even when no copy verifies
+        # this pass (the ab900e9 hold left its fence running on such a failure).
+        $task=$null;$observed=$null
+        try{$task=Assert-OpOneShot $Fence.handle $false}catch{$last=$_;$lastTask=$_;$settledSince=$null}
         try{
-            $observed=$null
-            $task=Assert-OpOneShot $Fence.handle $false
-            if($task.GetInstances(0).Count){try{$task.Stop(0)}catch{}}
+            if($null -ne $task -and $task.GetInstances(0).Count){try{$task.Stop(0)}catch{}}
             foreach($row in @(Get-OpFenceNativeRows $Fence)){Stop-OpFenceNative $row}
+            if($null -eq $task){
+                $observed=@{task_verified=$false;native_processes=[int]@(Get-OpFenceNativeRows $Fence).Count}
+                Start-Sleep -Milliseconds 500;continue}
             $task=Assert-OpOneShot $Fence.handle $false
             $terminal=Test-OpTaskTerminal $task $Fence.handle.started;$native=@(Get-OpFenceNativeRows $Fence).Count
             $observed=@{terminal=[bool]$terminal;native_processes=[int]$native;state=[int]$task.State;
@@ -1361,10 +1402,13 @@ function Stop-OpOwnedFenceTask {
         }catch{$last=$_;$settledSince=$null;$observed=$null}
         Start-Sleep -Milliseconds 500
     }while([DateTime]::UtcNow -lt $deadline)
-    # Sanitized evidence: the last pass's observation (or that it threw) and the
-    # most recent exception (type and frames only), which may be older.
+    # Sanitized evidence (type and frames only): the last pass's observation or
+    # that it threw, the most recent exception, and the most recent task-copy
+    # verification failure, which a later exception cannot overwrite.
     $exception=$null;if($null -ne $last){try{$exception=Get-OpFailure $last 'fence_stop'}catch{}}
-    $Fence.stop_failure=@{last_pass=$(if($null -eq $observed){'EXCEPTION'}else{'NOT_SETTLED'});observation=$observed;exception=$exception}
+    $taskException=$null;if($null -ne $lastTask){try{$taskException=Get-OpFailure $lastTask 'fence_stop_task'}catch{}}
+    $lastPass=if($null -eq $observed){'EXCEPTION'}elseif($observed.Contains('task_verified')){'TASK_UNVERIFIED'}else{'NOT_SETTLED'}
+    $Fence.stop_failure=@{last_pass=$lastPass;observation=$observed;exception=$exception;task_exception=$taskException}
     throw 'Owned fence task did not stop; preserve state.'
 }
 
@@ -1438,7 +1482,9 @@ function Test-OpFenceSettled {
 }
 
 function Wait-OpHealth {
-    param([string]$Root,[bool]$RequirePlanning,[int]$Seconds=300)
+    # $Evidence (optional) keeps the last attempt's sanitized failure (type and
+    # frames), so a timeout still names the check that kept failing.
+    param([string]$Root,[bool]$RequirePlanning,[int]$Seconds=300,[hashtable]$Evidence=$null)
     $deadline=[DateTime]::UtcNow.AddSeconds($Seconds);$previous=$null
     do{
         try{
@@ -1448,7 +1494,7 @@ function Wait-OpHealth {
                 (Get-OpProperty $health.task_planning 'execution_materialization') -cne 'CONNECTED')){throw 'Task planning execution is not connected.'}
             if($null -ne $previous -and $previous.pid -eq $health.pid -and $previous.instance_id -ceq $health.instance_id){return $health}
             $previous=$health
-        }catch{$previous=$null}
+        }catch{$previous=$null;if($null -ne $Evidence){$Evidence.health_last_attempt=Get-OpFailure $_ 'health_attempt'}}
         Start-Sleep -Seconds 2
     }while([DateTime]::UtcNow -lt $deadline)
     throw 'Runtime health/planning/admission did not verify within its bound.'
@@ -1710,7 +1756,8 @@ function Invoke-OperationalLaunch {
                     ([DateTime]$task.LastRunTime).ToUniversalTime() -ne $state.old_task_last_run -or
                     [int64]$task.LastTaskResult -ne $script:OpRecovery.warden.last_task_result){throw 'Stopped Warden changed during trigger disable.'}
                 Assert-OpRecoveryQuiescent $script:OpRecovery $state.fence $pins $state $notAfter;Assert-OpFence $state.fence
-                $task.Enabled=$false
+                # Verify the change on a fresh copy, never on the mutated COM object.
+                $task.Enabled=$false;$task=$script:OpFolder.GetTask('CoChem-4.2.7-Warden')
                 Assert-428WardenTask $task $script:OpOriginalXml $script:OpOriginalSddl $script:OpOldRoot $script:OpOldArgs $false $false 1
                 Assert-428PortFree;$state.stopped=$true;return
             }
@@ -1726,13 +1773,20 @@ function Invoke-OperationalLaunch {
             Set-OpSubstage $state 'stop_previous_task'
             Assert-OpFence $state.fence;Stop-OpRetainedTask $task $state.old_task_instance $state.old_task_last_run $state.processes $state.fence.ready.ready_at
             Set-OpSubstage $state 'wait_previous_exit'
-            $deadline=[DateTime]::UtcNow.AddSeconds(120)
+            # Exact run identity on every poll: the same run, ending, or ended.
+            $deadline=[DateTime]::UtcNow.AddSeconds([int](Get-OpProperty $state 'previous_exit_seconds' 120));$ended=$null
             do{
-                $task=$script:OpFolder.GetTask('CoChem-4.2.7-Warden');$gone=@($state.processes|Where-Object{-not $_.HasExited}).Count -eq 0
-                if($gone -and $task.GetInstances(0).Count -eq 0){break};Start-Sleep -Seconds 1
+                $task=$script:OpFolder.GetTask('CoChem-4.2.7-Warden')
+                $ended=Get-OpRetainedTaskState $task $state.old_task_instance $state.old_task_last_run $state.processes $state.fence.ready.ready_at $true
+                if($ended -ceq 'ENDED'){break};Start-Sleep -Seconds 1
             }while([DateTime]::UtcNow -lt $deadline)
-            if(-not $gone -or $task.GetInstances(0).Count){throw 'Exact old processes did not exit; preserve state.'}
-            $task.Enabled=$false;Assert-428WardenTask $task $script:OpOriginalXml $script:OpOriginalSddl $script:OpOldRoot $script:OpOldArgs $false $false 1
+            if($ended -cne 'ENDED'){$state.previous_state_at_exit_timeout=$ended;throw 'Exact old processes did not exit; preserve state.'}
+            # Verify the change on a fresh copy, never on the mutated COM object.
+            # Once disabled no run can start, so the exact run is still the last.
+            $task.Enabled=$false;$task=$script:OpFolder.GetTask('CoChem-4.2.7-Warden')
+            Assert-428WardenTask $task $script:OpOriginalXml $script:OpOriginalSddl $script:OpOldRoot $script:OpOldArgs $false $false 1
+            if((Get-OpRetainedTaskState $task $state.old_task_instance $state.old_task_last_run $state.processes $state.fence.ready.ready_at) -cne 'ENDED'){
+                throw 'Previous task run changed during stop.'}
             Assert-428PortFree;$state.stopped=$true
         }
         $actions.release_fence={param($state)Write-OpStatus $state.phase;Release-OpFence $state.fence}

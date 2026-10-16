@@ -123,7 +123,10 @@ if($null -ne $state.fence){$retained=@{root=$state.fence.root;nonce=$state.fence
 
 @pytest.mark.parametrize('scenario,held,stops', [
     ('running', False, 1), ('ended', False, 0), ('exit_during_stop', False, 1),
+    # 'orphan': the instance ended while a retained process lives on (a venv
+    # launcher always outlives its interpreter), so it holds before any Stop.
     ('other_instance', True, 0), ('later_run', True, 0), ('orphan', True, 0),
+    ('history_reset', False, 1),
     ('stop_error_still_running', True, 1), ('ended_before_fence', True, 0),
     ('stop_error_while_exiting', False, 1), ('stop_error_then_new_run', True, 1),
 ])
@@ -135,6 +138,8 @@ $script:processes=@([pscustomobject]@{HasExited=$false;ExitTime=[DateTime]'2026-
 $when=[DateTime]'2026-10-15T12:00:00Z'
 $task=[pscustomobject]@{LastRunTime=$when}
 if($script:scenario -eq 'later_run'){$task.LastRunTime=$when.AddSeconds(1)}
+# The trigger-disable re-registration reset the scheduler's run history to never-run.
+if($script:scenario -eq 'history_reset'){$task.LastRunTime=[DateTime]'1899-12-30'}
 if($script:scenario -in @('ended','orphan','ended_before_fence')){
     $script:count=0;$script:processes[0].HasExited=$true
     $script:processes[1].HasExited=$script:scenario -ne 'orphan'

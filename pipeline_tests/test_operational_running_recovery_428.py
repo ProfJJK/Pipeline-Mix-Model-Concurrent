@@ -145,10 +145,12 @@ function Write-OpRecord {param($p,$record)
     if($p -cne 'C:\fixture\fresh\private\baseline.json' -or $record.verified_stopped_at_entry -ne $false -or
         $record.original_baseline_sha256 -cne $script:recovery.baseline_sha256 -or $null -eq $record.health){throw 'Unexpected running baseline'}
     $script:seen.Add('running-baseline')}
+$state.previous_health_seconds=4
 CHANGE
 $held=$false;$failure=$null
 try{Assert-OpRunningRecoveryEvidence $script:recovery $m $inventory $pins $state $script:running}catch{$held=$true;$failure=Get-OpFailure $_ 'fixture'}
 @{held=$held;failure=$failure;seen=@($script:seen);pins=$pins.Count;substage=(Get-OpProperty $state 'substage');
+  health_attempt=(Get-OpProperty $state 'health_last_attempt');
   verified=(Get-OpProperty $state 'verified_stopped_at_entry');old_pid=(Get-OpProperty $state 'old_pid');
   task_instance=(Get-OpProperty $state 'old_task_instance');previous_xml=(Get-OpProperty $state 'previous_task_xml');
   catalog=(Get-OpProperty $state 'recovery_catalog');original=$script:OpOriginalXml}|ConvertTo-Json -Depth 8 -Compress
@@ -165,6 +167,8 @@ def test_running_evidence_reverifies_pins_and_binds_the_live_r4_run():
     assert result['pins']==8 and result['verified'] is False
     assert result['old_pid']==27208 and result['task_instance']=='{run-guid}' and result['previous_xml']=='live-xml'
     assert result['original']=='baseline-xml'
+    # Two consistent health answers (a just-started r4 may still be in its Docker wait).
+    assert result['seen'].count('health')>=2, result
     assert 'warden-definition:baseline-xml:baseline-sddl:C:\\fixture\\old:exact-daemon-args:True:True' in result['seen']
     # Only the expired fence task is checked against the stopped contract helper.
     assert 'task-proof:0' in result['seen'] and 'task-proof:1' not in result['seen']
@@ -202,13 +206,16 @@ Invoke-Extracted 'preconditions' $state
     ('$trigger.Type=8', 'Assert-OpRunningRecoveryEvidence'),
     ("$def.Principal.UserId='OTHER'", 'Assert-OpRunningRecoveryEvidence'),
     ("$script:definition='changed'", 'Assert-428WardenTask'),
-    ("$script:version='4.2.7'", 'Assert-OpRunningRecoveryEvidence'),
+    ("$script:version='4.2.7'", 'Wait-OpHealth'),   # bounded wait for a consistent 4.2.8 answer, then hold
     ("$script:records[(Join-Path $prior 'owner-result.json')].pin='0'*64", 'Open-428Pin'),
 ])
 def test_running_evidence_holds_on_any_unverified_fact(change, function):
     result=running_evidence(change)
     assert result['held'], result
     assert result['failure']['frames'][0]['function']==function, result
+    if function=='Wait-OpHealth':
+        # The timeout keeps the last attempt's own sanitized failure.
+        assert result['health_attempt']['substage']=='health_attempt' and result['health_attempt']['frames'], result
     assert 'running-baseline' not in result['seen'] and 'installed-payload' not in result['seen']
 
 
@@ -242,6 +249,8 @@ function Open-OpProcessProof {param($h,$root,$config)if($script:fenced){throw 'N
 function Start-OpFence {param($label,$s,$k)
     $script:seen.Add('ready');$script:fenced=$true
     if('MODE' -eq 'ended_at_ready'){$script:count=0;foreach($p in $script:processes){$p.HasExited=$true}}
+    # Instance gone while a retained process lives on: an orphan, never accepted.
+    if('MODE' -eq 'exiting_at_stop'){$script:count=0;$script:processes[0].HasExited=$true}
     $now=[DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
     $f=@{released=$false;ready=@{ready_at=$now-1;expires_at=$now+239;
         catalog=@{active_policy_sha256=$(if('MODE' -eq 'catalog_changed'){'changed'}else{'policy'});active_catalog_sha256=$null}}}
@@ -250,13 +259,37 @@ function Assert-OpFence {param($fence)if(-not $script:fenced){throw 'Fence absen
 function Assert-428WardenTask {param($task,$xml,$sddl,$root,$a,$enabled,$trigger,$count)if($xml -cne 'baseline-xml' -or $sddl -cne 'baseline-sddl'){throw 'Not the pinned baseline'}}
 function Assert-428PortFree {$script:seen.Add('port-free')}
 if('MODE' -eq 'live_xml_changed'){$script:task.Xml='edited-xml'}
+# The trigger-disable update may reset the scheduler's run history (never-run),
+# or a different run may appear; only the former is the same run.
+$script:OpFolder|Add-Member -Force ScriptMethod RegisterTaskDefinition {param($n,$d,$f,$u,$p,$l,$s)$script:seen.Add('disable-trigger')
+    if('MODE' -eq 'history_reset'){$script:task.LastRunTime=[DateTime]'1899-12-30'}
+    if('MODE' -eq 'new_run_after_disable'){$script:task.LastRunTime=[DateTime]::UtcNow}}
+# Stop ends the launcher but the interpreter never exits.
+if('MODE' -eq 'never_exits'){$script:task|Add-Member -Force ScriptMethod Stop {param($f)$script:seen.Add('stop');$script:count=0;$script:processes[1].HasExited=$true}}
+if('MODE' -eq 'stale_objects'){
+    # Each GetTask is a fresh copy; a copy keeps the definition it was fetched
+    # with even after its own Enabled is changed, so only a re-fetch verifies.
+    $script:OpFolder|Add-Member -Force ScriptMethod GetTask {param($n)
+        $c=[pscustomobject]@{Xml=$script:task.Xml;LastRunTime=$script:task.LastRunTime;
+            Definition=[pscustomobject]@{Triggers=$script:task.Definition.Triggers;Settings=[pscustomobject]@{Enabled=[bool]$script:task.Enabled}}}
+        $c|Add-Member ScriptProperty Enabled {[bool]$script:task.Enabled} {param($v)$script:task.Enabled=[bool]$v}
+        $c|Add-Member ScriptMethod GetSecurityDescriptor {param($f)'live-sddl'}
+        $c|Add-Member ScriptMethod GetInstances {param($f)$script:task.GetInstances($f)}
+        $c|Add-Member ScriptMethod Stop {param($f)$script:task.Stop($f)}
+        return $c}
+    function Assert-428WardenTask {param($task,$xml,$sddl,$root,$a,$enabled,$trigger,$count)
+        if($xml -cne 'baseline-xml' -or $sddl -cne 'baseline-sddl'){throw 'Not the pinned baseline'}
+        if([bool]$task.Definition.Settings.Enabled -ne $enabled){throw 'Verified a stale task definition'}}
+}
 $m=@{request_sha256=('a'*64);bootstrap_sha256=('b'*64)};$Directory='C:\fixture\package'
 $state=@{phase='admission_fence';old_pid=27208;old_instance='runtime';old_task_instance='instance';old_task_last_run=$script:when;stopped=$false;
     previous_task_xml='live-xml';previous_task_sddl='live-sddl';recovery_catalog=@{active_policy_sha256='policy';active_catalog_sha256=$null};verified_stopped_at_entry=$false}
+if('MODE' -eq 'never_exits'){$state.previous_exit_seconds=1}
 $held=$false;$failure=$null
 try{foreach($name in @('offline_install','codex_preflight','admission_fence','stop_previous')){$state.phase=$name;Invoke-Extracted $name $state}}
 catch{$held=$true;$failure=Get-OpFailure $_ 'fixture'}
 @{held=$held;failure=$failure;seen=@($script:seen);stopped=$state.stopped;end=(Get-OpProperty $state 'previous_state_at_stop');
+  exit_timeout=(Get-OpProperty $state 'previous_state_at_exit_timeout');
   enabled=$script:task.Enabled;substage=(Get-OpProperty $state 'substage')}|ConvertTo-Json -Depth 8 -Compress
 """
 
@@ -265,7 +298,8 @@ def running_actions(mode='normal'):
     return inert_ps(RUNNING_ACTIONS.replace('MODE', mode))
 
 
-@pytest.mark.parametrize('mode,end,stops', [('normal', 'RUNNING', 1), ('ended_at_ready', 'ENDED', 0)])
+@pytest.mark.parametrize('mode,end,stops', [('normal', 'RUNNING', 1), ('ended_at_ready', 'ENDED', 0), ('stale_objects', 'RUNNING', 1),
+                                            ('history_reset', 'RUNNING', 1)])
 def test_real_running_actions_fence_and_stop_r4_with_live_identity_only(mode, end, stops):
     result=running_actions(mode)
     assert not result['held'], result
@@ -274,9 +308,22 @@ def test_real_running_actions_fence_and_stop_r4_with_live_identity_only(mode, en
     assert result['seen']==expected, result
 
 
+@pytest.mark.parametrize('mode,substage,stops', [
+    ('never_exits', 'wait_previous_exit', 1),          # Stop ended the launcher; the interpreter never exits
+    ('new_run_after_disable', 'stop_previous_task', 0),  # a different run is never stopped or accepted
+])
+def test_real_running_actions_hold_when_the_exact_run_is_not_proven_ended(mode, substage, stops):
+    result=running_actions(mode)
+    assert result['held'] and not result['stopped'] and result['substage']==substage, result
+    assert 'disable-trigger' in result['seen'] and result['seen'].count('stop')==stops and 'port-free' not in result['seen'], result
+    # A timeout records whether the run was still listed or only a process remained.
+    assert result['exit_timeout']==('EXITING' if mode=='never_exits' else None), result
+
+
 @pytest.mark.parametrize('mode,function,substage', [
     ('catalog_changed', 'Assert-OpRecoveryCatalog', 'recheck_catalog_authority'),
     ('live_xml_changed', '<ScriptBlock>', 'previous_task_identity'),
+    ('exiting_at_stop', 'Get-OpRetainedTaskState', 'verify_retained_previous'),   # orphan: hold before any change
 ])
 def test_real_running_actions_hold_before_any_task_change(mode, function, substage):
     result=running_actions(mode)
@@ -434,10 +481,15 @@ def test_unreleasable_owned_fence_is_stopped_not_left_to_take_the_board(release,
 
 STOP_FENCE=r"""
 $nonce='a'*32;$name='CoChem-4.2.8-Fence-'+$nonce;$argv='-m cochem_pipeline.owner_admission_fence_428 --nonce '+$nonce
-$fence=@{owned=$true;nonce=$nonce;name=$name;arguments=$argv;handle=@{name=$name;arguments=$argv;xml='x';sddl='s';instance='i';started=[DateTime]::UtcNow}}
+$script:OpRoot='C:\fixture\new'
+$fence=@{owned=$true;nonce=$nonce;name=$name;arguments=$argv;handle=@{name=$name;arguments=$argv;seconds=2100;sddl=$null;instance='i';started=[DateTime]::UtcNow}}
 $script:inst=INST;$script:stops=0;$script:native=NATIVE;$script:kills=0
-$script:task=[pscustomobject]@{Name=$fence.name;State=$(if($script:inst){4}else{3});Enabled=$true;Xml='x';
-    LastRunTime=[DateTime]::UtcNow;LastTaskResult=$(if($script:inst){0x41301}else{2})}
+$fixtureAction=[pscustomobject]@{Type=0;Path='C:\fixture\new\.venv\Scripts\python.exe';Arguments=$argv;WorkingDirectory='C:\fixture\new'}
+$fixtureActions=[pscustomobject]@{Count=1;A=$fixtureAction};$fixtureActions|Add-Member ScriptMethod Item {param($i)$this.A}
+$script:task=[pscustomobject]@{Name=$fence.name;State=$(if($script:inst){4}else{3});Enabled=$true;
+    LastRunTime=[DateTime]::UtcNow;LastTaskResult=$(if($script:inst){0x41301}else{2});
+    Definition=[pscustomobject]@{Triggers=[pscustomobject]@{Count=0};Actions=$fixtureActions;Principal=[pscustomobject]@{UserId='SYSTEM';LogonType=5;RunLevel=1};
+        Settings=[pscustomobject]@{Enabled=$true;RestartCount=0;MultipleInstances=2;AllowDemandStart=$true;ExecutionTimeLimit='PT2100S'}}}
 # 'queued': Run() was accepted but the action never started; it only looks stopped.
 if('MODE' -eq 'queued'){$script:task.LastRunTime=[DateTime]'1899-12-30';$script:task.LastTaskResult=0x41303}
 $script:task|Add-Member ScriptMethod GetSecurityDescriptor {param($f)'s'}
@@ -480,7 +532,9 @@ try{$status=Stop-OpOwnedFenceTask $fence BOUND}catch{$held=$true}
     ('normal', 1, 0, "$fence.root='C:\\fixture\\private\\stop-fence-x';$script:releaseOnDisk=$true", False, 1, 0),
     ('normal', 1, 0, "$fence.nonce='b'*32", True, 0, 0),
     ('normal', 1, 0, '$fence.owned=$false', True, 0, 0),
-    ('normal', 1, 0, "$fence.handle.xml='changed'", True, 0, 0),
+    ('normal', 1, 0, "$fixtureAction.Arguments='tampered'", True, 0, 0),
+    # The task copy never verifies, yet the exact nonce processes are still ended.
+    ('normal', 1, 1, "$fixtureAction.Arguments='tampered'", True, 0, None),
     ('normal', 1, 0, "$fence.handle.sddl='changed'", True, 0, 0),
 ])
 def test_owned_fence_stop_ends_every_nonce_process_and_proves_exit(mode, inst, native, change, held, stops, kills):
@@ -490,11 +544,15 @@ def test_owned_fence_stop_ends_every_nonce_process_and_proves_exit(mode, inst, n
     assert result['held']==held, result
     if not held:
         assert result['elapsed']>=1 and result['requested'] is ('releaseOnDisk' in change), result
-    if 'handle.' in change:
-        # The refusing check is kept for the owner record (type and frames only).
+    if 'handle.' in change or 'tampered' in change:
+        # The refusing check is kept for the owner record (type and frames only),
+        # with what the unverified passes still observed after ending nonce processes.
         failure=result['stop_failure']
-        assert failure['last_pass']=='EXCEPTION' and failure['observation'] is None, result
-        assert failure['exception']['frames'][0]['function']=='Assert-OpOneShot', result
+        assert failure['last_pass']=='TASK_UNVERIFIED', result
+        assert failure['observation']=={'task_verified': False, 'native_processes': 0}, result
+        refusing='Assert-OpOneShotDefinition' if 'tampered' in change else 'Assert-OpOneShot'
+        assert failure['task_exception']['frames'][0]['function']==refusing, result
+        assert failure['exception']['frames'][0]['function']==refusing, result
     if mode in ('stuck', 'queued', 'unkillable'):
         # No exception: the last pass's observation says why it did not settle.
         failure=result['stop_failure']
@@ -792,24 +850,9 @@ def test_fence_wait_needs_two_consecutive_terminal_observations(pattern, ready_a
         assert result['message']=='Admission fence ended without readiness.'
 
 
-@pytest.mark.parametrize('xml,sddl,count,guid,message', [
-    ('x', 's', 1, 'i', None),
-    ('changed', 's', 1, 'i', 'One-shot definition changed.'),
-    ('x', 'changed', 1, 'i', 'One-shot security descriptor changed.'),
-    ('x', 's', 0, 'i', 'One-shot no longer has exactly one running instance.'),
-    ('x', 's', 1, 'other', 'One-shot is no longer the exact running instance.'),
-])
-def test_one_shot_identity_checks_hold_separately(xml, sddl, count, guid, message):
-    result=inert_ps(r"""
-$h=@{name='n';xml='x';sddl='s';instance='i'}
-$t=[pscustomobject]@{Xml='XML'};$t|Add-Member ScriptMethod GetSecurityDescriptor {param($f)'SDDL'}
-$t|Add-Member ScriptMethod GetInstances {param($f)$c=[pscustomobject]@{Count=COUNT};$c|Add-Member ScriptMethod Item {param($i)[pscustomobject]@{InstanceGuid='GUID'}};$c}
-$script:OpFolder=[pscustomobject]@{};$script:OpFolder|Add-Member ScriptMethod GetTask {param($n)$t}
-function Assert-428TaskAcl {param($x)}
-$message=$null;try{$null=Assert-OpOneShot $h $true}catch{$message=$_.Exception.Message}
-@{message=$message}|ConvertTo-Json -Compress
-""".replace('XML', xml).replace('SDDL', sddl).replace('COUNT', str(count)).replace('GUID', guid))
-    assert result['message']==message
+# One-shot identity (structural definition, ACL, fresh-copy descriptor baseline,
+# instance) is covered against a Task Scheduler model in
+# test_operational_oneshot_identity_428.py, including the exact ab900e9 hold.
 
 
 # --- Restore-OpPrevious in the running scenario --------------------------------

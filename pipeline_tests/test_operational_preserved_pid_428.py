@@ -584,14 +584,16 @@ def test_runtime_dependencies_are_read_from_the_pinned_bootstrap(case, held):
 
 
 def test_every_health_wait_allows_the_daemons_docker_wait():
-    # Both Wait-OpHealth callers start a Warden with --docker-wait-seconds 900.
+    # Every Wait-OpHealth caller waits on a Warden started with --docker-wait-seconds 900
+    # (the running-r4 preconditions may meet an r4 the owner has just started).
     result=inert_ps(r"""
 $calls=@($ast.FindAll({param($n)$n -is [Management.Automation.Language.CommandAst] -and $n.GetCommandName() -ceq 'Wait-OpHealth'},$true))
 $args900=@($ast.FindAll({param($n)$n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -ceq 'Get-OpDaemonArguments'},$true))[0].Extent.Text
 @{calls=@($calls|ForEach-Object{@($_.CommandElements|Select-Object -Skip 1|ForEach-Object{$_.Extent.Text}) -join ' '});docker_wait=($args900 -match '--docker-wait-seconds 900')}|ConvertTo-Json -Compress
 """)
     assert result['docker_wait'], result
-    assert sorted(result['calls'])==sorted(['$script:OpOldRoot $false 1200', '$script:OpRoot $true 1200']), result
+    assert sorted(result['calls'])==sorted(['$script:OpOldRoot $false 1200', '$script:OpRoot $true 1200',
+        "$script:OpOldRoot $false ([int](Get-OpProperty $State 'previous_health_seconds' 1200)) $State"]), result
 
 
 def test_health_wait_bound_is_enforced():
