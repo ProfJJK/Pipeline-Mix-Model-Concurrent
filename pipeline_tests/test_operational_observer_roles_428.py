@@ -46,15 +46,22 @@ $script:task=[pscustomobject]@{Name=$e.task;State=4;Enabled=$true;LastRunTime=$s
  Settings=[pscustomobject]@{AllowDemandStart=$true;ExecutionTimeLimit='PT0S';RestartCount=0;MultipleInstances=2};
  Triggers=(Collection ([pscustomobject]@{Type=8;Enabled=$true}))}}
 $script:task|Add-Member ScriptMethod GetInstances {param($flags)return (Collection ([pscustomobject]@{InstanceGuid='{11111111-1111-1111-1111-111111111111}'}))}
-$script:task|Add-Member ScriptMethod GetSecurityDescriptor {param($flags)return 'fixed-task-acl'}
-$script:OpFolder=[pscustomobject]@{};$script:OpFolder|Add-Member ScriptMethod GetTask {param($name)return $script:task}
+$script:observerSddl='O:BAG:BAD:(A;;FA;;;SY)(A;;FA;;;BA)(A;;FR;;;SY)'
+$script:task|Add-Member ScriptMethod GetSecurityDescriptor {param($flags)return $script:observerSddl}
+$script:OpFolder=[pscustomobject]@{};$script:OpFolder|Add-Member ScriptMethod GetTask {param($name)$script:taskChecks++;return $script:task}
 $script:rows=@([pscustomobject]@{ProcessId=9612;ParentProcessId=3132;Name='python.exe';ExecutablePath=$script:python;CommandLine=('"'+$script:python+'" '+$args)},
  [pscustomobject]@{ProcessId=3132;ParentProcessId=2768;Name='python.exe';ExecutablePath=$e.python;CommandLine=('"'+$e.python+'" '+$args)})
 $script:fileProofs=0;$script:taskChecks=0
 function Assert-OpObserverFiles {param($pins)$script:fileProofs++;return @{provision=$script:provision;config=$script:config}}
 function Read-OpObserverSnapshot {param($p)return $script:runtime}
 function Open-OpObserverProcess {param($row)return [Diagnostics.Process]::GetCurrentProcess()}
-function Assert-428TaskAcl {param($t)$script:taskChecks++}
+function Get-Item {param($LiteralPath,[switch]$Force,$ErrorAction)
+ if($LiteralPath -cne ('C:\Windows\System32\Tasks\'+$e.task)){throw 'Forbidden protected fixture path'}
+ return [pscustomobject]@{PSIsContainer=$false;Attributes=[IO.FileAttributes]::Normal;Length=42}}
+function Get-FileHash {param($LiteralPath,$Algorithm,$ErrorAction)return @{Hash=('a'*64)}}
+function Open-VerifiedFile {param($Path,$Sha256,$Length)return [IO.MemoryStream]::new()}
+function Get-Acl {param($LiteralPath,$ErrorAction)
+ $acl=[Security.AccessControl.FileSecurity]::new();$acl.SetSecurityDescriptorSddlForm('O:BAG:BAD:P(A;;FA;;;SY)(A;;FA;;;BA)');return $acl}
 function Assert-ProtectedPath {}
 function Assert-428PortFree {}
 function Get-CimInstance {param($class,$filter)if($filter){return $null};return $script:rows}

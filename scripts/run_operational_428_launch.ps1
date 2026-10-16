@@ -324,10 +324,63 @@ function Assert-OpObserverFiles {
     return @{provision=$provision;config=$config}
 }
 
+function Assert-OpObserverTaskAcl {
+    # Preserve the observer installer's reviewed task-private-acl-v8 policy.
+    # Scheduler may project its protected task-file DACL as an unprotected
+    # three-ACE service descriptor. Only this exact observer may use that path;
+    # Warden/one-shot validators remain unchanged.
+    param($Task)
+    $expected=Get-OpHeldObserverExpected
+    if($Task.Name -cne $expected.task){throw 'Observer ACL requires the exact root task name.'}
+    $sd=[Security.AccessControl.RawSecurityDescriptor]::new($Task.GetSecurityDescriptor(7))
+    if($null -eq $sd.Owner -or $sd.Owner.Value -notin @('S-1-5-18','S-1-5-32-544') -or
+        $null -eq $sd.DiscretionaryAcl -or $sd.DiscretionaryAcl.Count -notin @(2,3)){throw 'Observer task ownership/private DACL differs.'}
+    $seen=[Collections.Generic.HashSet[string]]::new();$systemRead=$false
+    foreach($ace in $sd.DiscretionaryAcl){
+        if($ace.AceType -ne [Security.AccessControl.AceType]::AccessAllowed -or
+            $ace.AceFlags -ne [Security.AccessControl.AceFlags]::None){throw 'Observer task ACL grants differ.'}
+        $sid=$ace.SecurityIdentifier.Value
+        if($ace.AccessMask -eq 2032127 -and $sid -in @('S-1-5-18','S-1-5-32-544')){
+            if(-not $seen.Add($sid)){throw 'Observer task ACL grants differ.'}
+        }elseif($ace.AccessMask -eq 1179785 -and $sid -ceq 'S-1-5-18' -and -not $systemRead){$systemRead=$true}
+        else{throw 'Observer task ACL grants differ.'}
+    }
+    if($seen.Count -ne 2 -or -not $seen.Contains('S-1-5-18') -or -not $seen.Contains('S-1-5-32-544')){throw 'Observer task ACL grants differ.'}
+    if($sd.ControlFlags -band [Security.AccessControl.ControlFlags]::DiscretionaryAclProtected){return}
+    if($sd.DiscretionaryAcl.Count -ne 3 -or -not $systemRead){throw 'Observer descriptor is not the reviewed Scheduler projection.'}
+    $path=[IO.Path]::Combine('C:\Windows\System32\Tasks',$expected.task)
+    $item=Get-Item -LiteralPath $path -Force -ErrorAction Stop
+    if($item.PSIsContainer -isnot [bool] -or $item.PSIsContainer -or
+        ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -or ($item.Attributes -band [IO.FileAttributes]::Directory) -or
+        $item.Length -lt 1 -or $item.Length -gt 131072){throw 'Observer task backing file is not ordinary and bounded.'}
+    $hash=Get-FileHash -LiteralPath $path -Algorithm SHA256 -ErrorAction Stop
+    if($hash.Hash -isnot [string] -or $hash.Hash -cnotmatch '\A[a-fA-F0-9]{64}\z'){throw 'Observer task backing digest is invalid.'}
+    $stream=$null
+    try{
+        # This existing custody boundary verifies non-reparse ancestors, resolved
+        # handle identity, one link, length and digest while denying replacement.
+        $stream=Open-VerifiedFile $path $hash.Hash.ToLowerInvariant() ([long]$item.Length)
+        if($null -eq $stream){throw 'Observer task backing custody is missing.'}
+        $acl=Get-Acl -LiteralPath $path -ErrorAction Stop
+        $sections=[Security.AccessControl.AccessControlSections]::Owner -bor [Security.AccessControl.AccessControlSections]::Access
+        $backing=[Security.AccessControl.RawSecurityDescriptor]::new($acl.GetSecurityDescriptorSddlForm($sections))
+        if($null -eq $backing.Owner -or $backing.Owner.Value -notin @('S-1-5-18','S-1-5-32-544') -or
+            -not ($backing.ControlFlags -band [Security.AccessControl.ControlFlags]::DiscretionaryAclProtected) -or
+            $null -eq $backing.DiscretionaryAcl -or $backing.DiscretionaryAcl.Count -ne 2){throw 'Observer task backing ownership/private DACL differs.'}
+        $backingSeen=[Collections.Generic.HashSet[string]]::new()
+        foreach($ace in $backing.DiscretionaryAcl){
+            if($ace.AceType -ne [Security.AccessControl.AceType]::AccessAllowed -or
+                $ace.AceFlags -ne [Security.AccessControl.AceFlags]::None -or $ace.AccessMask -ne 2032127 -or
+                $ace.SecurityIdentifier.Value -notin @('S-1-5-18','S-1-5-32-544') -or
+                -not $backingSeen.Add($ace.SecurityIdentifier.Value)){throw 'Observer task backing ACL grants differ.'}
+        }
+    }finally{if($null -ne $stream){$stream.Dispose()}}
+}
+
 function Assert-OpObserverTask {
     param($Task)
     $e=Get-OpHeldObserverExpected;$d=$Task.Definition
-    Assert-428TaskAcl $Task
+    Assert-OpObserverTaskAcl $Task
     if($Task.Name -cne $e.task -or [int]$Task.State -ne 4 -or -not $Task.Enabled -or
         $d.Principal.UserId -notin @('SYSTEM','S-1-5-18') -or $d.Principal.LogonType -ne 5 -or $d.Principal.RunLevel -ne 1 -or
         $d.Actions.Count -ne 1 -or $d.Actions.Item(1).Type -ne 0 -or $d.Actions.Item(1).Path -cne $e.python -or
