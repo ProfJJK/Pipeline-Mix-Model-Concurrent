@@ -1,0 +1,16 @@
+{
+    "schema":  "cochem-428-observer-file-record-proof/1",
+    "status":  "ACTUAL_PROTECTED_FILES_AND_PUBLIC_RECORDS_VERIFIED",
+    "source_launcher_sha256":  "a85a02953de092d768ffa9a2c85ee0c75fa790dc8ea2826ffc0f6de7b85c846b",
+    "retained_file_count":  120,
+    "immutable_package_file_count":  109,
+    "observer_pid":  9612,
+    "observer_creation_filetime":  134364756554327555,
+    "observation_only":  true,
+    "protected_state_modified":  false,
+    "provider_commands_executed":  0,
+    "task_calls_executed":  0,
+    "process_identity_calls_executed":  0,
+    "task_and_native_process_acceptance":  "NOT_EXECUTED",
+    "elapsed_seconds":  0.716
+}
