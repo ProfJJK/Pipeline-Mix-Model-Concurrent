@@ -130,7 +130,7 @@ function Assert-OpRecoveryTask {
 }
 
 function Assert-OpRecoveryQuiescent {
-    param($Recovery,$AllowedFence=$null)
+    param($Recovery,$AllowedFence=$null,$Pins=$null,$State=$null)
     Assert-428PortFree
     foreach($id in @($Recovery.warden.pid,$Recovery.fence.pid)){
         $occupied=Get-CimInstance Win32_Process -Filter ('ProcessId='+[int]$id)
@@ -142,11 +142,24 @@ function Assert-OpRecoveryQuiescent {
     $rows=@(Get-CimInstance Win32_Process)
     if($rows.Count -gt 4096){throw 'Recovery native inventory exceeds bound.'}
     $byId=@{};foreach($row in $rows){$byId[[int]$row.ProcessId]=$row}
+    $observerIds=@()
+    foreach($row in $rows){
+        if(Test-OpHeldObserverCommand ([string]$row.ExecutablePath) ([string]$row.CommandLine)){
+            try{$observerIds=@(Assert-OpHeldObserver $rows $Pins $State)}
+            catch{
+                $proof=Get-OpFailure $_ 'observer_proof';$rejection=New-OpProcessRejection $row 'OBSERVER_PROOF_UNVERIFIED'
+                $rejection.Data['cochem_observer_proof']=@{error_type=$proof.error_type;frames=$proof.frames}
+                throw $rejection
+            }
+            break
+        }
+    }
     foreach($row in $rows){
         $image=[string]$row.ExecutablePath;$command=[string]$row.CommandLine
         $reason=Get-OpPipelineProcessReason $image $command ([string](Get-OpProperty $row 'Name'))
         if($null -eq $reason){continue}
         if(Test-OpExactMcpProcess $image $command){continue}
+        if([int]$row.ProcessId -in $observerIds){continue}
         if($null -ne $AllowedFence -and $command.IndexOf($AllowedFence.arguments,[StringComparison]::Ordinal) -ge 0 -and
             (([int]$row.ProcessId -eq [int]$AllowedFence.ready.pid -and $image -ceq $script:python) -or
              ($image -ceq (Join-Path $script:OpRoot '.venv\Scripts\python.exe') -and
@@ -166,12 +179,13 @@ function Get-OpPipelineProcessReason {
     # merely mentioning a source module is not evidence of Python execution.
     param([string]$Image,[string]$Command,[string]$Name='')
     if($Image -cmatch ('^(?:'+(Get-OpKnownPythonPattern)+')$')){return 'PROTECTED_PYTHON'}
+    if($Image -ieq ((Get-OpHeldObserverExpected).python)){return 'PROTECTED_PYTHON'}
     if($Image.StartsWith($script:OpOldRoot+'\',[StringComparison]::OrdinalIgnoreCase) -or
         $Image.StartsWith($script:OpRoot+'\',[StringComparison]::OrdinalIgnoreCase)){return 'RUNTIME_IMAGE'}
     $base=if($Image){[IO.Path]::GetFileName($Image)}else{$Name}
     if($base -match '^(?:python(?:w|[0-9]+(?:\.[0-9]+)?)?|py)\.exe$'){
         if(-not $Image -or -not $Command){return 'UNINSPECTABLE_PYTHON'}
-        if($Command -match 'cochem_(?:pipeline|mcp|supervisor)'){return 'PIPELINE_PYTHON'}
+        if($Command -match 'cochem_(?:pipeline|mcp|supervisor)|held-supervisor-observation'){return 'PIPELINE_PYTHON'}
     }
     if($base -match '^cochem-(?:pipeline|supervisor)\.exe$'){return 'PIPELINE_ENTRYPOINT'}
     return $null
@@ -203,6 +217,170 @@ function Test-OpExactMcpProcess {
     if($Command -cnotmatch $pattern -and $Command -cnotmatch $legacy){return $false}
     Assert-ProtectedPath $Image
     return $true
+}
+
+function Get-OpHeldObserverExpected {
+    return @{root='C:\Program Files\CoChem\SupervisorObservation4.2.7-windows-20261007-r3-v1';
+        staging='C:\Program Files\CoChem\Supervisor4.2.7-windows-20261007-staging-v1';
+        python='C:\Program Files\CoChem\Supervisor4.2.7-windows-20261007-staging-v1\.venv\Scripts\python.exe';
+        task='CoChem-4.2.7-HeldSupervisorObservation-20261007-r3-v1';
+        helper='held-supervisor-observation-r3-v1.py';
+        helper_sha256='d2fd68543963a05ba918c6194729a8bca642322565235ab18c7ba17ccad17640';
+        configuration_sha256='e3f2ce4d4ace15f6428c181c158507f286ce974a0e2fefd6757c350c4744d49f';
+        provisioning_sha256='beff7c79325f1c123ba7ae01aba4e810c033769063ba4aae5f9a9c5a67656e50';
+        inputs_sha256='e65f44e1396a1f02802372a69579008e118ef93d1987d8edf7301a45b1218c61';
+        nonce='10c0d0613b1740108e38138630b6b4ad';
+        manifest_sha256='6aec5eaf82205be34e5849e73700f2e817e157be5c5ddd4366f04e549b75f0c4'}
+}
+
+function Test-OpHeldObserverCommand {
+    param([string]$Image,[string]$Command)
+    $e=Get-OpHeldObserverExpected
+    if($Image -ine $script:python -and $Image -ine $e.python){return $false}
+    $exe='(?i:'+[regex]::Escape($Image)+')'
+    $helper='(?i:'+[regex]::Escape((Join-Path $e.root $e.helper))+')'
+    return $Command -cmatch ('^\s*"'+$exe+'"\s+-I\s+-B\s+"'+$helper+'"\s+--observe\s*$')
+}
+
+function Read-OpObserverSnapshot {
+    param([string]$Path)
+    # The held observer atomically replaces this public heartbeat. Never pin it
+    # against writes/deletes: doing so would break the observer we are inspecting.
+    Assert-ProtectedPath $Path
+    $stream=[IO.File]::Open($Path,'Open','Read',([IO.FileShare]::ReadWrite -bor [IO.FileShare]::Delete))
+    try{
+        [CoChemStagedFileIdentity]::Check($stream,$Path)
+        if($stream.Length -le 0 -or $stream.Length -gt 65536){throw 'Observer snapshot size differs.'}
+        $raw=[byte[]]::new([int]$stream.Length);$offset=0
+        while($offset -lt $raw.Length){$n=$stream.Read($raw,$offset,$raw.Length-$offset);if($n -le 0){throw 'Observer snapshot shortened.'};$offset+=$n}
+        if($stream.ReadByte() -ne -1){throw 'Observer snapshot grew.'}
+        [CoChemStagedFileIdentity]::Check($stream,$Path)
+        return ([Text.UTF8Encoding]::new($false,$true).GetString($raw)|ConvertFrom-Json)
+    }finally{$stream.Dispose()}
+}
+
+function Assert-OpObserverRecords {
+    param($Provision,$Config,$Runtime)
+    $e=Get-OpHeldObserverExpected
+    if($Provision.schema -cne 'cochem-held-supervisor-provision/1' -or $Provision.status -cne 'HELD_OBSERVATION_PROVISIONED' -or
+        $Provision.phase -cne 'complete' -or $Provision.root -cne $e.root -or $Provision.nonce -cne $e.nonce -or
+        $Config.observation_only_contract.schema -cne 'cochem-held-observation/1' -or
+        $Config.observation_only_contract.authority_evidence_sha256 -cne '1cf291591724b6edef17ba7e8d48fc6cce75830872ff6183ac1139aa313a3177' -or
+        $Config.observation_only_contract.all_actuation_disabled -isnot [bool] -or -not $Config.observation_only_contract.all_actuation_disabled -or
+        $Runtime.schema -cne 'cochem-held-supervisor-runtime/1' -or $Runtime.status -cne 'HELD_SUPERVISOR_OBSERVATION_RUNNING' -or
+        $Runtime.provision_nonce -cne $e.nonce -or $Runtime.service_identity -cne 'SYSTEM' -or
+        $Runtime.instance_id -cnotmatch '^[a-f0-9]{32}$' -or $Runtime.sequence -lt 1 -or
+        ($Runtime.pid -isnot [int] -and $Runtime.pid -isnot [long]) -or $Runtime.pid -le 0 -or
+        ($Runtime.process_creation_filetime -isnot [long] -and $Runtime.process_creation_filetime -isnot [int]) -or $Runtime.process_creation_filetime -le 0){throw 'Observer public identity differs.'}
+    foreach($name in @('configuration_sha256','helper_sha256','inputs_sha256')){
+        if($Provision.$name -cne $e[$name] -or $Runtime.$name -cne $e[$name]){throw 'Observer immutable binding differs.'}
+    }
+    foreach($pair in @(@($Config,'auto_deploy'),@($Config.observation_only_contract,'warden_task_or_pointer_changes_authorized'),
+        @($Provision,'paid_repair_enabled'),@($Provision,'component_recovery_enabled'),@($Provision,'existing_warden_changed'),
+        @($Provision,'existing_pipeline_pointer_changed'),@($Runtime,'paid_repair_enabled'),@($Runtime,'component_recovery_enabled'),
+        @($Runtime,'warden_actuation_enabled'),@($Runtime,'full_srs_acceptance'))){
+        $v=Get-OpProperty $pair[0] $pair[1];if($v -isnot [bool] -or $v){throw 'Observer actuation is not permanently held.'}
+    }
+    $checked=$Runtime.checked_at
+    if(($checked -isnot [double] -and $checked -isnot [decimal] -and $checked -isnot [long] -and $checked -isnot [int]) -or
+        [double]::IsNaN([double]$checked) -or [double]::IsInfinity([double]$checked) -or
+        [Math]::Abs([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()/1000.0-[double]$checked) -gt 30){throw 'Observer heartbeat is not fresh.'}
+}
+
+function Assert-OpObserverFiles {
+    param($Pins)
+    if($null -eq $Pins){throw 'Observer custody retention is missing.'}
+    $e=Get-OpHeldObserverExpected
+    $provision=Read-OpRecoveryRecord (Join-Path $e.root 'provisioning.json') $e.provisioning_sha256 $Pins
+    $config=Read-OpRecoveryRecord (Join-Path $e.root 'supervisor.json') $e.configuration_sha256 $Pins
+    $null=Read-OpRecoveryRecord (Join-Path $e.root 'inputs.json') $e.inputs_sha256 $Pins
+    foreach($file in @(@((Join-Path $e.root $e.helper),$e.helper_sha256),
+        @((Join-Path $e.staging 'controls\stage-independent-supervisor-holds-r3-v1.py'),'215af8db414c7bbc4352c825dbf250b7bbc244a8a2dbc2d4addadc72cf1acb74'),
+        @((Join-Path $e.staging '.venv\pyvenv.cfg'),'0c2b1a15dcdfe67436882fcf0f8d567d79442bcac41f3b744153c17c21df727d'),
+        @($e.python,'560b9ef7d856608ab8da02ded2dc8a1951ad1f424c382c0ec6a698874165a18e'),
+        @($script:python,'d8e3f0adf246db00358c0c4ed349cf714898178f9558fb0e944f79f5c07f8eaa'))){
+        Assert-ProtectedPath $file[0];$Pins.Add((Open-428Pin $file[0] $file[1]))
+    }
+    $manifest=Read-OpRecoveryRecord (Join-Path $e.staging 'controls\staging-manifest.json') $e.manifest_sha256 $Pins
+    if($manifest.schema -cne 'cochem-independent-supervisor-staging-freeze/1' -or $manifest.target_root -cne $e.staging -or
+        $manifest.complete_source_freeze -ne $true -or $manifest.activation_authorized -ne $false){throw 'Observer staged import manifest differs.'}
+    $site=Join-Path $e.staging '.venv\Lib\site-packages'
+    $rows=@($manifest.source_files|Where-Object{$_.relative -cmatch '^src/(cochem_pipeline|cochem_mcp|cochem_supervisor)/'})
+    if($rows.Count -ne 109){throw 'Observer installed import inventory differs.'}
+    foreach($row in $rows){
+        # The exact pinned manifest authorizes package files only, never unrelated
+        # source artifacts (for example src/x.py) or a fresh package substitution.
+        $path=Join-Path $site $row.relative.Substring(4);Assert-ProtectedPath $path
+        $Pins.Add((Open-VerifiedFile $path $row.sha256 $row.bytes))
+    }
+    $pth=@{'_virtualenv.pth'='69ac3d8f27e679c81b94ab30b3b56e9cd138219b1ba94a1fa3606d5a76a1433d';
+        'pywin32.pth'='e7cd73df98b91c407dfd96d1f4dd18b7f9a60f29902b92cf5ece79b6eb637b81'}
+    $startup=@(Get-ChildItem -LiteralPath $site -Filter '*.pth' -File -Force)
+    if($startup.Count -ne $pth.Count){throw 'Observer import startup inventory differs.'}
+    foreach($item in $startup){
+        if(-not $pth.ContainsKey($item.Name)){throw 'Observer import startup name differs.'}
+        Assert-ProtectedPath $item.FullName;$Pins.Add((Open-428Pin $item.FullName $pth[$item.Name]))
+    }
+    return @{provision=$provision;config=$config}
+}
+
+function Assert-OpObserverTask {
+    param($Task)
+    $e=Get-OpHeldObserverExpected;$d=$Task.Definition
+    Assert-428TaskAcl $Task
+    if($Task.Name -cne $e.task -or [int]$Task.State -ne 4 -or -not $Task.Enabled -or
+        $d.Principal.UserId -notin @('SYSTEM','S-1-5-18') -or $d.Principal.LogonType -ne 5 -or $d.Principal.RunLevel -ne 1 -or
+        $d.Actions.Count -ne 1 -or $d.Actions.Item(1).Type -ne 0 -or $d.Actions.Item(1).Path -cne $e.python -or
+        $d.Actions.Item(1).Arguments -cne ('-I -B "'+(Join-Path $e.root $e.helper)+'" --observe') -or
+        $d.Actions.Item(1).WorkingDirectory -cne $e.root -or $d.Settings.AllowDemandStart -ne $true -or
+        [Xml.XmlConvert]::ToTimeSpan($d.Settings.ExecutionTimeLimit).Ticks -ne 0 -or
+        $d.Settings.RestartCount -ne 0 -or $d.Settings.MultipleInstances -ne 2 -or
+        $d.Triggers.Count -ne 1 -or $d.Triggers.Item(1).Type -ne 8 -or -not $d.Triggers.Item(1).Enabled){throw 'Observer task is not the held definition.'}
+    $instances=$Task.GetInstances(0)
+    if($instances.Count -ne 1 -or [string]$instances.Item(1).InstanceGuid -notmatch '^\{?[a-fA-F0-9-]{36}\}?$'){throw 'Observer running instance differs.'}
+    return [string]$instances.Item(1).InstanceGuid
+}
+
+function Open-OpObserverProcess {
+    param($Row)
+    if((Invoke-CimMethod -InputObject $Row -MethodName GetOwnerSid).Sid -cne 'S-1-5-18'){throw 'Observer process is not SYSTEM.'}
+    $p=[Diagnostics.Process]::GetProcessById([int]$Row.ProcessId)
+    try{
+        $null=$p.Handle
+        if($p.HasExited -or $p.MainModule.FileName -ine $Row.ExecutablePath -or
+            [Math]::Abs(($p.StartTime.ToUniversalTime()-([DateTime]$Row.CreationDate).ToUniversalTime()).TotalSeconds) -gt 1){throw 'Observer native creation changed.'}
+        return $p
+    }catch{$p.Dispose();throw}
+}
+
+function Assert-OpHeldObserver {
+    param($Rows,$Pins,$State)
+    if($null -eq $State){throw 'Observer identity retention is missing.'}
+    $e=Get-OpHeldObserverExpected
+    if(-not $State.ContainsKey('observer_files')){$State.observer_files=Assert-OpObserverFiles $Pins}
+    $files=$State.observer_files
+    $runtime=Read-OpObserverSnapshot (Join-Path $e.root 'observation-runtime.json')
+    Assert-OpObserverRecords $files.provision $files.config $runtime
+    $matches=@($Rows|Where-Object{Test-OpHeldObserverCommand ([string]$_.ExecutablePath) ([string]$_.CommandLine)})
+    $child=@($matches|Where-Object{$_.ProcessId -eq $runtime.pid -and $_.ExecutablePath -ieq $script:python})
+    if($matches.Count -ne 2 -or $child.Count -ne 1){throw 'Observer native pair differs.'}
+    $parent=@($matches|Where-Object{$_.ProcessId -eq $child[0].ParentProcessId -and $_.ExecutablePath -ieq $e.python})
+    if($parent.Count -ne 1){throw 'Observer launcher pair differs.'}
+    $task=$script:OpFolder.GetTask($e.task);$instance=Assert-OpObserverTask $task
+    $taskXml=$task.Xml;$taskSddl=$task.GetSecurityDescriptor(7);$lastRun=[DateTime]$task.LastRunTime
+    $held=[Collections.Generic.List[Diagnostics.Process]]::new()
+    try{
+        foreach($row in @($child[0],$parent[0])){$held.Add((Open-OpObserverProcess $row))}
+        if($held[0].StartTime.ToUniversalTime().ToFileTimeUtc() -ne $runtime.process_creation_filetime -or
+            $held[1].StartTime -gt $held[0].StartTime){throw 'Observer heartbeat/native creation binding differs.'}
+        $again=$script:OpFolder.GetTask($e.task)
+        if((Assert-OpObserverTask $again) -cne $instance -or $again.Xml -cne $taskXml -or
+            $again.GetSecurityDescriptor(7) -cne $taskSddl -or ([DateTime]$again.LastRunTime) -ne $lastRun -or
+            @($held|Where-Object{$_.HasExited}).Count){throw 'Observer changed during read-only verification.'}
+        if(-not $State.ContainsKey('observer_processes')){$State.observer_processes=[Collections.Generic.List[Diagnostics.Process]]::new()}
+        foreach($p in $held){$State.observer_processes.Add($p)};$held.Clear()
+        return @([int]$child[0].ProcessId,[int]$parent[0].ProcessId)
+    }finally{foreach($p in $held){$p.Dispose()}}
 }
 
 function Assert-OpRecoveryCatalog {
@@ -252,7 +430,7 @@ function Assert-OpRecoveryEvidence {
     $fargs='-I -B -m cochem_pipeline.owner_admission_fence_428 --config "'+$script:OpOldConfig+'" --config-sha256 '+$Manifest.previous_config_sha256+
         ' --output-root "'+$froot+'" --nonce '+$Recovery.fence.nonce+' --request-sha256 '+$Manifest.request_sha256+' --wait-seconds 1800 --hold-seconds 240'
     Assert-OpRecoveryTask ($script:OpFolder.GetTask('CoChem-4.2.8-Fence-'+$Recovery.fence.nonce)) $Recovery.fence $script:OpRoot $fargs 0
-    Assert-OpRecoveryQuiescent $Recovery
+    Assert-OpRecoveryQuiescent $Recovery $null $Pins $State
     $Pins.Add((Open-428Pin (Join-Path $script:OpRoot 'install-manifest.json') $Manifest.install_manifest_sha256))
     $null=Assert-428Tree;Assert-428Interpreter
     foreach($file in @(Get-428InstallFiles $Inventory)){
@@ -372,7 +550,7 @@ function Get-OpFailure {
         }
         if($frames.Count -eq 8){break}
     }
-    $process=$null;$exception=$Record.Exception
+    $process=$null;$observer=$null;$exception=$Record.Exception
     for($i=0;$i -lt 4 -and $null -ne $exception;$i++){
         $v=$exception.Data['cochem_recovery_process']
         if($v -is [Collections.IDictionary] -and $v.Count -eq 4 -and
@@ -380,13 +558,27 @@ function Get-OpFailure {
             ($v.pid -is [int] -or $v.pid -is [long]) -and $v.pid -gt 0 -and $v.pid -le [uint32]::MaxValue -and
             $v.name -is [string] -and $v.reason -is [string] -and
             $v.name -cin @('python.exe','pythonw.exe','py.exe','node.exe','powershell.exe','pwsh.exe','cmd.exe','cochem-pipeline.exe','cochem-supervisor.exe','uv.exe','other') -and
-            $v.reason -cin @('PROTECTED_PYTHON','RUNTIME_IMAGE','PIPELINE_PYTHON','UNINSPECTABLE_PYTHON','PIPELINE_ENTRYPOINT','PRESERVED_PID_OCCUPIED') -and
+            $v.reason -cin @('PROTECTED_PYTHON','RUNTIME_IMAGE','PIPELINE_PYTHON','UNINSPECTABLE_PYTHON','PIPELINE_ENTRYPOINT','PRESERVED_PID_OCCUPIED','OBSERVER_PROOF_UNVERIFIED') -and
             $v.command_sha256 -is [string] -and $v.command_sha256 -cmatch '^[a-f0-9]{64}$'){
-            $process=@{pid=$v.pid;name=$v.name;reason=$v.reason;command_sha256=$v.command_sha256};break
+            $process=@{pid=$v.pid;name=$v.name;reason=$v.reason;command_sha256=$v.command_sha256}
+            $o=$exception.Data['cochem_observer_proof']
+            if($v.reason -ceq 'OBSERVER_PROOF_UNVERIFIED' -and $o -is [Collections.IDictionary] -and $o.Count -eq 2 -and
+                $o.Contains('error_type') -and $o.Contains('frames') -and $o.error_type -cin @('RuntimeException','InvalidOperationException',
+                    'UnauthorizedAccessException','IOException','FileNotFoundException','DirectoryNotFoundException','MethodInvocationException',
+                    'ParameterBindingException','ParameterBindingValidationException','PropertyNotFoundException')){
+                $safe=@()
+                foreach($f in @($o.frames)){
+                    if($safe.Count -eq 8){break}
+                    $name=Get-OpProperty $f 'function';$line=Get-OpProperty $f 'line'
+                    if($name -is [string] -and $name -cmatch '^(Assert|Read|Open|Test)-Op(Observer[A-Za-z]*|HeldObserver)$' -and
+                        $line -is [int] -and $line -gt 0 -and $line -le 100000){$safe+=@{function=$name;line=$line}}
+                }
+                $observer=@{error_type=$o.error_type;frames=$safe}
+            };break
         }
         $exception=$exception.InnerException
     }
-    return @{error_type=$Record.Exception.GetType().Name;substage=$Substage;frames=$frames;process_rejection=$process}
+    return @{error_type=$Record.Exception.GetType().Name;substage=$Substage;frames=$frames;process_rejection=$process;observer_proof=$observer}
 }
 
 function Set-OpSubstage {
@@ -883,7 +1075,7 @@ function Invoke-OperationalLaunch {
             if($null -ne $script:OpRecovery){
                 Set-OpSubstage $state 'recheck_stopped_recovery_baseline'
                 Assert-OpRecoveryTask ($script:OpFolder.GetTask('CoChem-4.2.7-Warden')) $script:OpRecovery.warden $script:OpOldRoot $script:OpOldArgs 1
-                Assert-OpRecoveryQuiescent $script:OpRecovery
+                Assert-OpRecoveryQuiescent $script:OpRecovery $null $pins $state
                 $state.fence=Start-OpFence 'stop-fence' $state 'fence'
                 Assert-OpRecoveryCatalog $state.recovery_catalog $state.fence.ready.catalog;return
             }
@@ -908,7 +1100,7 @@ function Invoke-OperationalLaunch {
             if($null -ne $script:OpRecovery){
                 Set-OpSubstage $state 'disable_verified_stopped_baseline'
                 Assert-OpRecoveryTask $task $script:OpRecovery.warden $script:OpOldRoot $script:OpOldArgs 1
-                Assert-OpRecoveryQuiescent $script:OpRecovery $state.fence;Assert-OpFence $state.fence
+                Assert-OpRecoveryQuiescent $script:OpRecovery $state.fence $pins $state;Assert-OpFence $state.fence
                 Assert-OpRecoveryCatalog $state.recovery_catalog $state.fence.ready.catalog
                 $d=$task.Definition;$d.Triggers.Item(1).Enabled=$false
                 $null=$script:OpFolder.RegisterTaskDefinition('CoChem-4.2.7-Warden',$d,20,'SYSTEM',$null,5,$script:OpOriginalSddl)
@@ -917,7 +1109,7 @@ function Invoke-OperationalLaunch {
                 if($task.GetInstances(0).Count -or [int]$task.State -ne 3 -or
                     ([DateTime]$task.LastRunTime).ToUniversalTime() -ne $state.old_task_last_run -or
                     [int64]$task.LastTaskResult -ne $script:OpRecovery.warden.last_task_result){throw 'Stopped Warden changed during trigger disable.'}
-                Assert-OpRecoveryQuiescent $script:OpRecovery $state.fence;Assert-OpFence $state.fence
+                Assert-OpRecoveryQuiescent $script:OpRecovery $state.fence $pins $state;Assert-OpFence $state.fence
                 $task.Enabled=$false
                 Assert-428WardenTask $task $script:OpOriginalXml $script:OpOriginalSddl $script:OpOldRoot $script:OpOldArgs $false $false 1
                 Assert-428PortFree;$state.stopped=$true;return
@@ -1028,7 +1220,7 @@ function Invoke-OperationalLaunch {
         if($state.status -cne 'R428_OPERATIONAL_RUNNING_VERIFIED'){throw 'Operational upgrade held. Preserve reports; do not repeat this spent launch.'}
     }finally{
         if($null -ne $state){
-            foreach($key in @('baseline_processes','processes','new_processes','phase_processes')){if($state.ContainsKey($key)){foreach($p in $state[$key]){$p.Dispose()}}}
+            foreach($key in @('baseline_processes','processes','new_processes','phase_processes','observer_processes')){if($state.ContainsKey($key)){foreach($p in $state[$key]){$p.Dispose()}}}
             foreach($key in @('fence','restore_fence')){
                 if($null -ne $state[$key] -and -not $state[$key].released){try{Release-OpFence $state[$key]}catch{}}
                 if($null -ne $state[$key] -and $null -ne $state[$key].process){$state[$key].process.Dispose()}

@@ -165,7 +165,7 @@ function Assert-OpFence {param($f)$script:seen.Add('fence-proof')}
 function Assert-428WardenTask {param($t,$x,$s,$r,$a,$e,$tr,$count)if($t.Enabled -ne $e){throw 'Unexpected enable state'}}
 function Assert-428PortFree {$script:seen.Add('port-free')}
 if('FAULT' -eq 'last_run_changed'){$script:task.LastRunTime=$when.AddSeconds(1)}
-$m=@{request_sha256=('a'*64)};$Directory='C:\fixture\package';$state=@{phase='fixture';stopped=$false;
+$m=@{request_sha256=('a'*64)};$Directory='C:\fixture\package';$pins=[Collections.Generic.List[IO.Stream]]::new();$state=@{phase='fixture';stopped=$false;
     old_task_last_run=$when.ToUniversalTime();recovery_catalog=@{active_policy_sha256='policy';active_catalog_sha256=$null}}
 $held=$false
 try{foreach($name in @('offline_install','admission_fence','stop_previous')){
