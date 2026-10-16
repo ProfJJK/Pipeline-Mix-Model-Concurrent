@@ -90,6 +90,20 @@ This is the preferred interface, not a claim that all three adapters have been
 implemented or accepted on this host. Reuse verified sessions before asking for input.
 
 ## Current handoff
+2026-10-16: the owner ran `r428-op-recovery-90c9c1d`; it is spent. It held in
+preconditions before any task or runtime change: the preserved-PID check
+treated an unrelated `cmd.exe` on the recycled expired-fence PID 46440 as the
+surviving fence. See `docs/4.2.8/evidence/operational-recovery-90c9c1d-hold.json`.
+The correction at `7a5e785` binds process identity beyond PIDs, waits out the
+held observer's per-cycle detector and unreadable exiting rows (never accepting
+them), checks the pinned Docker pipe and R: workspace before any fence, and
+guards the fence budget before the Warden trigger disable. 416 serialized
+source/inert tests passed; the packaged read-only plan passed. The only current
+owner command is in `docs/4.2.8/OPERATIONAL_PID_IDENTITY_RECOVERY_20261016.md`
+(package `r428-op-recovery-7a5e785`, recovery ID `f47844af…`). Do not run
+agent tests, builds or cochem Python commands while the owner run is active.
+The paragraphs below record the earlier state.
+
 For the owner-requested agent change, start with
 [the 15 October operational passover](docs/4.2.8/AGENT_PASSOVER_20261015.md)
 and [the saved starter prompt](docs/4.2.8/NEW_AGENT_PROMPT_20261015.txt).

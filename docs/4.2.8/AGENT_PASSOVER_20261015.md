@@ -1,5 +1,15 @@
 # Pipeline 4.2.8 operational recovery: agent passover
 
+> **2026-10-16 update.** The `90c9c1d` result was received: held in
+> preconditions, `PRESERVED_PID_OCCUPIED` on a recycled PID (an unrelated
+> `cmd.exe` at the expired fence's PID 46440); no task or runtime change. It is
+> spent ([hold](evidence/operational-recovery-90c9c1d-hold.json)). The
+> correction is `7a5e785` and the only current owner package is
+> `r428-op-recovery-7a5e785` (recovery ID `f47844af074547798477c85a9a9a0eb0`,
+> manifest `58ee18e1…`); see
+> [the recovery page](OPERATIONAL_PID_IDENTITY_RECOVERY_20261016.md). The
+> "result pending" section below describes the earlier `90c9c1d` package.
+
 ## Start here
 
 The owner is changing agents because of quota, not cancelling the work. Read the

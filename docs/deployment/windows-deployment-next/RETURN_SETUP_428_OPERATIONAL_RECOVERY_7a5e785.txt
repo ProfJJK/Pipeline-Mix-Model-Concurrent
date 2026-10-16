@@ -1,0 +1,38 @@
+PIPELINE 4.2.8 — RECOVERY WITH PROCESS-IDENTITY CHECKS (7a5e785)
+
+The last run stopped because Windows had reused the old fence's process
+number (46440) for an unrelated cmd.exe, and the launcher mistook it for the
+old fence. This version checks a process's program and start time, not just
+its number. It also waits out the held observer's short detector processes
+instead of stopping on them, and checks Docker and R: before changing anything.
+The observer keeps running. Existing sign-ins and installed r5 are reused.
+
+Before you paste the command:
+1. Docker Desktop shows its engine running, and R: is visible in Explorer.
+2. Pause Windows Update (Settings > Windows Update > Pause updates) and keep
+   the PC plugged in.
+3. Leave Codex and Claude open but idle: start no tasks, tests or builds, and
+   do not restart, update or change settings in Codex until the final JSON.
+4. Close heavy apps (games, virtual machines, large copies or backups).
+
+Paste this NEW command ONCE into Administrator Windows PowerShell:
+
+C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -File "C:\Users\ansac\CoChem427\r428-op-recovery-7a5e785\run_operational_428_launch.ps1" -LaunchManifest "C:\Users\ansac\CoChem427\r428-op-recovery-7a5e785\launch-manifest.json" -LaunchManifestSha256 58ee18e120fbe1c0cfbe2afade324f19e20a2dd89dab0143c100b2091515f6fd -Apply
+
+No sign-in, browser, choices, reboot or later input is planned. Leave the
+PowerShell window and computer running until the final JSON appears; do not
+sign out, restart or sleep the PC. Do not close the observer or MCP clients.
+
+Success: R428_OPERATIONAL_RUNNING_VERIFIED.
+If held: copy the final JSON back. Do not repeat this one-use command,
+change permissions, delete evidence or stop processes.
+
+Status directory:
+C:\Program Files\CoChem\R428OperationalRecovery-20261015-a62bffb278044fffbaf21207a866ff81-f47844af074547798477c85a9a9a0eb0
+
+416 source/inert tests passed at 7a5e785 and the packaged read-only plan
+passed. Independent package review rehashed 15 direct and 406 original inputs (130,560,536 bytes): no blocking findings.
+These are source and package checks, not deployment acceptance. The held
+observer's task/native proof runs on this host for the first time in this
+sitting; any hold there comes before any task or runtime change.
+Preserve every old package and all original r428-op input directories.
