@@ -1,11 +1,18 @@
 # 4.2.8 source progress
 
+Observer-only ACL compatibility is corrected at `90c9c1d`. **315 serialized
+source/inert tests passed**, including real descriptor parsing and backing-file
+custody fixtures; the packaged read-only plan passed. The new
+[owner command](OPERATIONAL_OBSERVER_ACL_RECOVERY_20261015.md) reuses installed
+r5 and existing sessions. Warden task rules remain unchanged. Actual protected
+task/native checks and deployment acceptance are pending owner execution.
+
 The owner ran `490bf2e`; it is spent. Its immutable observer file/record checks
 passed, but the task ACL call held before any mutation. The verifier used the
 Warden-only ACL policy and omitted the observer's original v8 Scheduler
 projection/private backing-file validation. That source mismatch is proven;
 the exact current live descriptor has not been read by the ordinary session.
-The original tests stubbed the ACL boundary. The narrow correction will test
+The original tests stubbed the ACL boundary. The narrow correction above tests
 actual descriptor parsing and the independently verified backing-file rules.
 See [the current hold](evidence/operational-recovery-490bf2e-hold.json).
 

@@ -113,8 +113,12 @@ fresh packaged read-only plan passed, but the owner has now run `490bf2e` too;
 it is spent. It held at the observer task ACL call before mutations. The
 verifier incorrectly applied Warden-only ACL rules instead of the original
 observer's v8 Scheduler projection/private task backing-file proof. Read
-`docs/4.2.8/evidence/operational-recovery-490bf2e-hold.json`. A separate narrow
-correction is being prepared; do not run its old owner command.
+`docs/4.2.8/evidence/operational-recovery-490bf2e-hold.json`. The observer-only
+ACL correction at `90c9c1d` passed 315 source/inert tests with real descriptor
+parsing and retained backing-file proof. The actual packaged read-only plan
+passed. Use only the new owner command in
+`docs/4.2.8/OPERATIONAL_OBSERVER_ACL_RECOVERY_20261015.md`; all earlier commands
+are spent. Actual protected task/native and deployment acceptance remain pending.
 Do not rerun old commands, close clients or the observer, repeat sign-in, or
 submit jobs before verified recovery. Source/package proof is not deployment.
 

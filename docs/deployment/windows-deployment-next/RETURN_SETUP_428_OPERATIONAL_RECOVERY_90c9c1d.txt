@@ -1,0 +1,25 @@
+PIPELINE 4.2.8 — OBSERVER TASK PERMISSION COMPATIBILITY
+
+The previous recovery used the Warden permission rules for the old observer.
+This correction restores the observer's original private backing-file proof.
+The observer keeps running. Existing sign-ins and installed r5 are reused.
+
+Paste this NEW command ONCE into Administrator Windows PowerShell:
+
+C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -File "C:\Users\ansac\CoChem427\r428-op-recovery-90c9c1d\run_operational_428_launch.ps1" -LaunchManifest "C:\Users\ansac\CoChem427\r428-op-recovery-90c9c1d\launch-manifest.json" -LaunchManifestSha256 a0cb076c2bfa31600d60de1c4969372601af5ac64a44bdc0b67390445d1f22a2 -Apply
+
+No sign-in, browser, choices, reboot or later input is planned. Leave the
+PowerShell window and computer running while verification continues.
+Do not repeat any previous command or close the observer or MCP clients.
+
+Success: R428_OPERATIONAL_RUNNING_VERIFIED.
+If held: preserve and return the final sanitized JSON. Do not repeat this
+one-use command, change permissions, delete evidence or stop processes.
+
+Status directory:
+C:\Program Files\CoChem\R428OperationalRecovery-20261015-a62bffb278044fffbaf21207a866ff81-09bc46790fa14c2cbf85450f158550fe
+
+315 source/inert tests passed with real ACL parsing and backing-file custody
+fixtures. The packaged read-only plan passed. Actual protected task/native
+checks and deployment remain pending; these tests do not attest acceptance.
+Preserve every old package and all original r428-op input directories.
