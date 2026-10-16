@@ -1,0 +1,138 @@
+{
+  "schema": "cochem-428-recovery-reboot-hold-evidence/1",
+  "recorded_utc": "2026-10-16T11:33:19.058689Z",
+  "spent_package": "r428-op-recovery-7a5e785",
+  "launcher_source_commit": "7a5e785447e5fa49a4cd7edc1c912ede529f961c",
+  "recovery_id": "f47844af074547798477c85a9a9a0eb0",
+  "public_status_records": [
+    {
+      "name": "status-20261016T1124072278366-1c55a84d43c04302992befa4f9a958b7.json",
+      "sha256": "c39ac35e647935b30f8cf1247a19641734f570b261c74f41499a6e6314ecf516",
+      "content": {
+        "result": null,
+        "automatic_retry": false,
+        "utc": "2026-10-16T11:24:07.2323465Z",
+        "substage": null,
+        "status": "RUNNING",
+        "late_prompt": false,
+        "phase": "preconditions",
+        "schema": "cochem-428-operational-status/1"
+      }
+    },
+    {
+      "name": "status-20261016T1127083255514-b32617a160354b4691f1d567167aacba.json",
+      "sha256": "67ee142b5dba18464759200ee78674aaefbacd44c56fd107aa4bcdb52c36494e",
+      "content": {
+        "result": null,
+        "automatic_retry": false,
+        "utc": "2026-10-16T11:27:08.3255514Z",
+        "substage": "verify_original_recovery_evidence",
+        "status": "RUNNING",
+        "late_prompt": false,
+        "phase": "preconditions",
+        "schema": "cochem-428-operational-status/1"
+      }
+    },
+    {
+      "name": "status-20261016T1127085055505-6f16777a0f584366bdb802d7231e9722.json",
+      "sha256": "9abf7dd8ed0c409b39d52a587fe3453aa77ba93d353752b84942444e3414503b",
+      "content": {
+        "result": {
+          "rollback": "NOT_REQUIRED",
+          "phase": "preconditions",
+          "coverage_holds": null,
+          "fence_cleanup": null,
+          "launcher_failure": {
+            "frames": [
+              {
+                "function": "Assert-OpRecoveryTask",
+                "line": 127
+              },
+              {
+                "function": "Assert-OpRecoveryEvidence",
+                "line": 609
+              },
+              {
+                "function": "<ScriptBlock>",
+                "line": 1232
+              },
+              {
+                "function": "Invoke-OpTransaction",
+                "line": 666
+              },
+              {
+                "function": "Invoke-OperationalLaunch",
+                "line": 1422
+              },
+              {
+                "function": "<ScriptBlock>",
+                "line": 1443
+              }
+            ],
+            "observer_proof": null,
+            "substage": "verify_original_recovery_evidence",
+            "process_rejection": null,
+            "error_type": "RuntimeException"
+          },
+          "verified_stopped_at_entry": false,
+          "publication_state": "UNKNOWN",
+          "source_commit": "865a29b113a8b59c822f6aa4d921a45c18407fe5",
+          "error_type": "RuntimeException",
+          "all_routes_usable": false,
+          "launch_manifest_sha256": "58ee18e120fbe1c0cfbe2afade324f19e20a2dd89dab0143c100b2091515f6fd",
+          "schema": "cochem-428-operational-owner-result/1",
+          "useful_job_acceptance": false,
+          "late_prompt": false,
+          "codex_integration_status": "NOT_APPLIED",
+          "request_sha256": "8ca37638b5dbe15b877c7505dc2acbabac5f6e9b962b6b90101e5cc268aa814f",
+          "cutover_requested": false,
+          "codex_session_refresh_required": false,
+          "status": "R428_OPERATIONAL_HELD_PRESERVE_EVIDENCE",
+          "runtime_health_verified": false,
+          "launcher_source_commit": "7a5e785447e5fa49a4cd7edc1c912ede529f961c",
+          "automatic_retry": false,
+          "acceptance_failure": null
+        },
+        "automatic_retry": false,
+        "utc": "2026-10-16T11:27:08.5055505Z",
+        "substage": null,
+        "status": "R428_OPERATIONAL_HELD_PRESERVE_EVIDENCE",
+        "late_prompt": false,
+        "phase": "preconditions",
+        "schema": "cochem-428-operational-status/1"
+      }
+    }
+  ],
+  "failure_call": "Assert-OpRecoveryTask (launcher 7a5e785 line 127 'Exact stopped recovery task no longer matches.') for CoChem-4.2.7-Warden, called from Assert-OpRecoveryEvidence line 609",
+  "host_observations_read_only": {
+    "last_boot_local": "2026-10-15T23:17:06-05:00",
+    "interactive_logon_local": "2026-10-16T06:19:14-05:00",
+    "r4_controller": {
+      "health_version": "4.2.8",
+      "source_root": "C:\\Program Files\\CoChem\\Pipeline4.2.8-windows-20261014-r4\\.venv\\Lib",
+      "pid": 27208,
+      "venv_launcher_parent": 26952,
+      "instance_id": "586fc1c89f304d229bc531465b615be9",
+      "process_started_at": 1792149656.5902488,
+      "admission_capacity": 4,
+      "task_planning": "DISABLED",
+      "active_jobs": 0,
+      "routing_counts": {
+        "BLOCKED": 14,
+        "COMPLETED": 524
+      }
+    },
+    "held_observer_restarted_at_boot": {
+      "parent_pid": 3252,
+      "child_pid": 10068
+    },
+    "previous_observer_pids_absent": [
+      3132,
+      9612
+    ]
+  },
+  "cause": "The host rebooted and the owner signed in; the r4 Warden logon trigger started r4 again, so the pinned STOPPED Warden state (last run 2026-10-15T01:37:07Z, result 1, no instances) no longer exists. The INSTALLED_R5_EXPIRED_FENCE_20261015 contract cannot match this host again.",
+  "native_task_mutations_executed": 0,
+  "provider_commands_executed": 0,
+  "protected_state_modified": false
+}

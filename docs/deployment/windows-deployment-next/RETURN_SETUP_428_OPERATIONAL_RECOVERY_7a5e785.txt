@@ -1,3 +1,8 @@
+SPENT — DO NOT RUN THIS COMMAND AGAIN.
+The owner run held in preconditions before any task or runtime change: the
+host had rebooted and the r4 Warden logon trigger had started r4 again, so the
+pinned stopped-Warden contract no longer matches. Preserve all evidence.
+
 PIPELINE 4.2.8 — RECOVERY WITH PROCESS-IDENTITY CHECKS (7a5e785)
 
 The last run stopped because Windows had reused the old fence's process

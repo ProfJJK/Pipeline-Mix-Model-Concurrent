@@ -1,5 +1,17 @@
 # 4.2.8 source progress
 
+2026-10-16 (later): the owner ran `7a5e785`; it is spent. It held in
+preconditions before any change: the host had rebooted, and the r4 Warden
+logon trigger restarted r4, so the pinned stopped-Warden contract cannot match
+([hold](evidence/operational-recovery-7a5e785-hold.json)). `ab900e9` adds the
+running-r4 scenario. It binds the live r4 run, fences and stops it, and
+integrates Codex in the same sitting: `config.toml` is re-captured live, and the
+rules, skill and metadata files stay pinned. Holds settle the fence first and
+restore r4 only on a proven end. **558 serialized source/inert tests passed**;
+the packaged read-only plan passed. The new
+[owner command](OPERATIONAL_RUNNING_RECOVERY_20261016.md) is the only current
+one. Host acceptance and useful-job completion are still pending.
+
 2026-10-16: the owner ran `90c9c1d`; it is spent. It held in preconditions on
 `PRESERVED_PID_OCCUPIED`: Windows had recycled the expired fence's PID 46440
 for an unrelated `cmd.exe` ([hold](evidence/operational-recovery-90c9c1d-hold.json)).
@@ -7,9 +19,9 @@ for an unrelated `cmd.exe` ([hold](evidence/operational-recovery-90c9c1d-hold.js
 out the held observer's sterile detector and unreadable exiting rows without
 accepting them, checks the pinned Docker pipe and R: workspace before any fence,
 and guards the fence budget before the Warden trigger disable. **416 serialized
-source/inert tests passed**; the packaged read-only plan passed. The new
-[owner command](OPERATIONAL_PID_IDENTITY_RECOVERY_20261016.md) is the only
-current one. Host acceptance and useful-job completion are still pending.
+source/inert tests passed**; the packaged read-only plan passed. That
+[owner command](OPERATIONAL_PID_IDENTITY_RECOVERY_20261016.md) has since run
+and is spent (see above).
 
 Current agent transition: [operational passover](AGENT_PASSOVER_20261015.md)
 and [starter prompt](NEW_AGENT_PROMPT_20261015.txt). The owner will append the

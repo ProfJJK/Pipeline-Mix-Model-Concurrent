@@ -1,5 +1,14 @@
 # Pipeline 4.2.8 operational recovery: agent passover
 
+> **2026-10-16 later update.** The `7a5e785` result was received: held in
+> preconditions because a reboot restarted r4 through its Warden logon trigger;
+> no task or runtime change. It is spent
+> ([hold](evidence/operational-recovery-7a5e785-hold.json)). The correction is
+> `ab900e9` (running-r4 scenario, Codex integrated in the sitting). The only
+> current owner package is `r428-op-recovery-ab900e9` (recovery ID
+> `8a78c86d7a5b4bf4b52964451110ffef`, manifest `a7fcb35a…`); see
+> [the recovery page](OPERATIONAL_RUNNING_RECOVERY_20261016.md).
+>
 > **2026-10-16 update.** The `90c9c1d` result was received: held in
 > preconditions, `PRESERVED_PID_OCCUPIED` on a recycled PID (an unrelated
 > `cmd.exe` at the expired fence's PID 46440); no task or runtime change. It is

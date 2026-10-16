@@ -90,6 +90,25 @@ This is the preferred interface, not a claim that all three adapters have been
 implemented or accepted on this host. Reuse verified sessions before asking for input.
 
 ## Current handoff
+2026-10-16 (later): the owner ran `r428-op-recovery-7a5e785`; it is spent. It
+held in preconditions before any change because the host had rebooted and the
+r4 Warden logon trigger restarted r4, so no stopped-Warden contract can match
+again (`docs/4.2.8/evidence/operational-recovery-7a5e785-hold.json`). The
+correction at `ab900e9` adds the running-r4 scenario and integrates Codex in the
+same sitting:
+- `config.toml` is re-captured live;
+- the rules, skill and metadata files stay pinned;
+- the module still patches only the `cochem-pipeline` table.
+
+Holds settle the fence first and restore r4 only on a proven end. Windows
+PowerShell hides .NET property-getter exceptions, so the new process checks
+use `get_` methods. 558 serialized source/inert tests passed; the packaged
+read-only plan passed. The only current owner command is in
+`docs/4.2.8/OPERATIONAL_RUNNING_RECOVERY_20261016.md` (package
+`r428-op-recovery-ab900e9`, recovery ID `8a78c86d…`). Do not run agent tests,
+builds or cochem Python commands while the owner run is active. The paragraph
+below records the earlier state.
+
 2026-10-16: the owner ran `r428-op-recovery-90c9c1d`; it is spent. It held in
 preconditions before any task or runtime change: the preserved-PID check
 treated an unrelated `cmd.exe` on the recycled expired-fence PID 46440 as the
@@ -98,10 +117,9 @@ The correction at `7a5e785` binds process identity beyond PIDs, waits out the
 held observer's per-cycle detector and unreadable exiting rows (never accepting
 them), checks the pinned Docker pipe and R: workspace before any fence, and
 guards the fence budget before the Warden trigger disable. 416 serialized
-source/inert tests passed; the packaged read-only plan passed. The only current
-owner command is in `docs/4.2.8/OPERATIONAL_PID_IDENTITY_RECOVERY_20261016.md`
-(package `r428-op-recovery-7a5e785`, recovery ID `f47844af…`). Do not run
-agent tests, builds or cochem Python commands while the owner run is active.
+source/inert tests passed; the packaged read-only plan passed. That owner
+command (`docs/4.2.8/OPERATIONAL_PID_IDENTITY_RECOVERY_20261016.md`, package
+`r428-op-recovery-7a5e785`, recovery ID `f47844af…`) has since run and is spent.
 The paragraphs below record the earlier state.
 
 For the owner-requested agent change, start with

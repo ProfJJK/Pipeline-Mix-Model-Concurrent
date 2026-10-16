@@ -1,0 +1,71 @@
+{
+  "schema": "cochem-428-recovery-independent-package-review/1",
+  "reviewed_at_utc": "2026-10-16T15:12:01Z",
+  "status": "VERIFIED_NO_BLOCKING_FINDINGS",
+  "package": "C:\\Users\\ansac\\CoChem427\\r428-op-recovery-ab900e9",
+  "scenario": "INSTALLED_R5_RUNNING_R4_20261016",
+  "manifest_sha256": "a7fcb35afa4fa52007b014feea978ef3f0bae6066371cc3207aa5988d14253bf",
+  "launcher_source_commit": "ab900e9703fba0a05e7a72324540924cc68f22c4",
+  "runtime_source_commit": "865a29b113a8b59c822f6aa4d921a45c18407fe5",
+  "exact_committed_launcher_sha256": "d9f24c87b3d1485891e2f1eb49104e78b79928ffd56631d6a24616dab75d0926",
+  "direct_inputs_verified": 15,
+  "external_original_inputs_verified": 406,
+  "external_original_input_bytes": 130560536,
+  "original_inputs_preserved_except_launcher": true,
+  "original_protected_evidence_contract_unchanged": true,
+  "recovery_matches_preparer_running_spec": true,
+  "powershell_and_python_contracts_identical": true,
+  "unexpected_package_inputs": false,
+  "common_warden_helper_unchanged": true,
+  "helper_pin_sha256": "e4ac275f8bc32e41c6503e0c04472139dce10930768fbfcada3e3d1e5fcd9dcd",
+  "codex_manifest_unchanged_from_original": true,
+  "codex_manifest_sha256": "2929c96e128533f077db4187bc02617083b4df9a0eb989c354fddc5b46134d31",
+  "recovery_sha256": "38dcd8b42e9f6b19d01ab55cd1340c5797923d215e8c96d96250952abe62b6d1",
+  "source_test_report_sha256": "a818e1e12691d7f5240373c2cb5a98eeedb3648e3e44c723a895f4ff722d3d1e",
+  "source_tests_reported_passed": 558,
+  "reviewer_ran_tests": false,
+  "packaged_readonly_plan_observed": true,
+  "packaged_readonly_plan_state": "READ_ONLY_PLAN_VERIFIED",
+  "packaged_readonly_plan_log": "C:\\Users\\ansac\\CoChem427\\r428-op-recovery-tests-ab900e9\\read-only-plan.log",
+  "packaged_readonly_plan_log_sha256": "5812c7652275fd5e4ec5cea55ca9d710e28b28ede96bb0a51fba9820685a8b29",
+  "recovery_id": "8a78c86d7a5b4bf4b52964451110ffef",
+  "recovery_id_differs_from_prior_packages": true,
+  "prior_package_identifiers_compared": 5,
+  "target_sitting_absent_at_review": true,
+  "one_use_claim_guard_reviewed": true,
+  "protected_state_accessed_by_reviewer": false,
+  "host_actions_executed_by_reviewer": false,
+  "host_acceptance_attested": false,
+  "read_only_host_observations": {
+    "docker_linux_engine_pipe_present": true,
+    "ramdisk_workspace_present": true,
+    "codex_rules_skill_metadata_match_pins": true,
+    "codex_config_differs_from_pin": true,
+    "windows_update_paused": false,
+    "ac_power": true
+  },
+  "running_r4_binding_executed_on_host": "NOT_EXECUTED",
+  "actual_observer_native_acceptance": "NOT_EXECUTED",
+  "source_fixture_scope": "Real running-mode evidence/actions, transaction catch, owned-fence termination against an inert process identity, real ready-file checks and Codex re-capture on temporary files; not host acceptance.",
+  "findings": [
+    {
+      "severity": "non_blocking",
+      "finding": "Step 8 (one-use claim guard). New-OpRecoverySitting refuses reuse with a Test-Path check that throws 'This recovery sitting is spent'. It then calls New-ProtectedDirectory, which runs Test-Path again, then Assert-ProtectedPath on the parent, then DirectoryInfo.Create with the code ACL. That create is not CreateNew and would succeed on an existing directory, so the directory step on its own is check-then-create. The atomic one-use claim is the next step: Write-OpRecord opens recovery-claim.json with FileMode.CreateNew and FileShare.None, binding recovery_id, recovery_sha256, the launch-manifest"
+    },
+    {
+      "severity": "non_blocking",
+      "finding": "Informational. In the running scenario, warden.pid 24424 is still pinned in the contract, but Assert-OpRunningRecoveryEvidence does not use it. The live r4 is bound by: task XML and SDDL against the pinned baseline, State=4 with exactly one instance, LastRunTime later than last_run_after_utc 2026-10-15T01:37:07Z, health, and native process proof. reviewed_428_launch_helpers.ps1 is not tracked in git at ab900e9; its provenance rests on byte identity with the original package plus the hardcoded pin. The repo worktree has uncommitted documentation-only changes (a new docs/4.2.8/evidence/operation"
+    }
+  ],
+  "owner_sheet_conditions": [
+    "Before pasting, Docker Desktop must be running its Linux engine (pipe \\\\.\\pipe\\dockerDesktopLinuxEngine; the docker_engine pipe alone is not enough). R: must be mounted with the folder R:\\CoChem427-windows-20261007 present. Both must stay up for the whole run: catalog acceptance and the r5 Warden (which waits up to 900 s for Docker) depend on them. If either is missing at the pre-fence check, the run holds with r4 untouched, but this one-use package is spent.",
+    "Nobody, including any Claude or Codex agent session, may edit ~/.codex/AGENTS.md, ~/.agents/skills/codex-pipeline/SKILL.md or agents/openai.yaml before or during the run; any change holds the run. config.toml may differ from preparation, but it must keep exactly one [mcp_servers.\"cochem-pipeline\"] table, with no keys beyond command, args, enabled, startup_timeout_sec and tool_timeout_sec. Codex must not rewrite config.toml during the sitting; a write between the final capture and --apply holds a",
+    "Paste only while the r4 pipeline is running and healthy. Do not stop, restart, disable or edit the CoChem-4.2.7-Warden task. Keep anything else off TCP 47824. Do not sign out or restart between the readiness check and pasting. If r4 restarts or dies between preconditions and the fence, the run holds (spent).",
+    "No pipeline job may be in progress when the command is pasted, and none may be submitted until the final JSON appears. Pause the YouTube specialist and every submitter, including Claude Code or Codex agent sessions and orchestration workflows that call cochem-pipeline MCP tools such as pipeline_submit or pipeline_code. Do not activate or publish any catalog on r4 beforehand.",
+    "Do not run, delete or edit the expired fence task CoChem-4.2.8-Fence-a232264b..., any prior R428Operational/R428OperationalRecovery directory, or anything under C:\\Program Files\\CoChem\\Pipeline4.2.8-windows-20261015-r5. Do not start any r5 executable before the run. Any change there holds in preconditions.",
+    "Use exactly one elevated 'Windows PowerShell' (not pwsh, not x86) window signed in as AETHERDESK\\ansac, and paste the command once with -Apply. No other owner-sitting window may be open, and no earlier launcher may have been killed (an abandoned mutex holds). Do not repeat the command after any outcome.",
+    "Pause Windows Update before pasting (it is not paused now). Stay on AC power. Do not sleep, hibernate, sign out, lock-and-switch-user or restart until the final JSON appears. Close heavy GPU, CPU, memory or disk loads (games, VMs, OBS, large copies or backups) so r5 admission becomes ready within 1200 s after cutover. Otherwise the run holds with r5 in place.",
+    "Before pasting, confirm that the existing provider sign-ins (Codex, Claude and the other configured CLIs) are valid and not quota-exhausted. Do not sign out of or re-sign-in to any provider during the run. Accept that a held catalog phase leaves no pipeline running until a reviewed follow-up.",
+    "Replace the __REVIEW__ placeholders before handing over the sheet. State the exact readiness checks: R:\\CoChem427-windows-20261007 exists, \\\\.\\pipe\\dockerDesktopLinuxEngine exists, the Codex rules/skill/metadata files are unchanged and Windows Update is paused. Keep the exact command with -LaunchManifestSha256 a7fcb35afa4fa52007b014feea978ef3f0bae6066371cc3207aa5988d14253bf."
+  ]
+}

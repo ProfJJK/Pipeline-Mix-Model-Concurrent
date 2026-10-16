@@ -1,0 +1,70 @@
+PIPELINE 4.2.8 — RUNNING-R4 RECOVERY WITH CODEX INTEGRATION (ab900e9)
+
+The last run (7a5e785) stopped before changing anything. The PC had
+restarted, and the old r4 pipeline started again when you signed in, so
+checks written for a stopped r4 could no longer match. This version starts
+from the running r4. It:
+1. verifies r4;
+2. takes the job board's write lock so r4 stops itself;
+3. switches to the already installed r5.
+
+Codex is connected to r5 in this same run. Codex rewrote its config.toml
+after sign-in, so the launcher reads that file's current state. It changes
+only the pipeline server entry; Codex's rules, skill and metadata files must
+be unchanged.
+
+Before you paste the command:
+1. Docker Desktop shows its Linux engine running, and R: is visible in
+   Explorer with the folder R:\CoChem427-windows-20261007 on it.
+2. Pause Windows Update (Settings > Windows Update > Pause updates); it was
+   not paused at review. Keep the PC plugged in.
+3. The old r4 pipeline is running as it is now. Do not stop, restart or edit
+   the CoChem-4.2.7-Warden task, the old expired fence task, or anything under
+   C:\Program Files\CoChem.
+4. No pipeline job is in progress. Pause the YouTube specialist, any agent
+   session or workflow that submits pipeline jobs, and anything else that
+   submits them. No OBS recording.
+5. Leave Codex and Claude open but idle. Until the final JSON appears:
+   - start no tasks, tests, builds or pipeline submissions;
+   - do not sign in again, update, restart or change settings in Codex;
+   - do not edit the Codex AGENTS.md or the codex-pipeline skill files.
+   Existing provider sign-ins are reused; do not sign out of any of them.
+6. Close heavy apps (games, virtual machines, large copies or backups).
+7. Use one Administrator "Windows PowerShell" window (not PowerShell 7), and
+   have no earlier launcher window open.
+
+Paste this NEW command ONCE into Administrator Windows PowerShell:
+
+C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -File "C:\Users\ansac\CoChem427\r428-op-recovery-ab900e9\run_operational_428_launch.ps1" -LaunchManifest "C:\Users\ansac\CoChem427\r428-op-recovery-ab900e9\launch-manifest.json" -LaunchManifestSha256 a7fcb35afa4fa52007b014feea978ef3f0bae6066371cc3207aa5988d14253bf -Apply
+
+No sign-in, browser, choices, reboot or later input is planned. Leave the
+PowerShell window and the PC running until the final JSON appears. Most of the
+time goes to catalog acceptance and the Docker wait, so this can take up to
+about three hours. Do not sign out, restart or sleep the PC. Do not close the
+observer or MCP clients. The pipeline's MCP tools stop answering once r4 is
+fenced and come back when r5 is verified; that gap is expected.
+
+Success: R428_OPERATIONAL_RUNNING_VERIFIED. Then fully quit and reopen Codex
+(and Claude) so they load the r5 pipeline connection.
+
+If held: copy the final JSON back. Do not repeat this one-use command, change
+permissions, delete evidence or stop processes. What a hold leaves:
+- Before the write lock: nothing changed; r4 keeps running.
+- After the lock, before catalog acceptance: the launcher restarts r4 and
+  checks its health, but only when it can prove r4 ended. Otherwise it
+  preserves the state for a reviewed follow-up.
+- During catalog acceptance with an uncertain outcome: no pipeline controller
+  runs until a reviewed follow-up.
+- After the switch: r5 stays in place.
+
+Status directory:
+C:\Program Files\CoChem\R428OperationalRecovery-20261015-a62bffb278044fffbaf21207a866ff81-8a78c86d7a5b4bf4b52964451110ffef
+
+558 serialized source/inert tests passed at ab900e9, and the packaged
+read-only plan passed (running-r4 scenario). The independent package review
+rehashed 15 direct and 406 original inputs (130,560,536 bytes) and found no
+blocking findings.
+These are source and package checks, not deployment acceptance. This is the
+first host run of the running-r4 path and the Codex re-capture. Catalog
+acceptance is the largest remaining risk. Preserve every old package and all
+original r428-op input directories.
