@@ -1,0 +1,20 @@
+{
+  "schema": "cochem-428-operational-recovery-prepared/1",
+  "status": "OWNER_RECOVERY_PACKAGE_PREPARED_FOR_REVIEW",
+  "destination": "C:\\Users\\ansac\\CoChem427\\r428-op-recovery-d5d6094",
+  "source_commit": "865a29b113a8b59c822f6aa4d921a45c18407fe5",
+  "launcher_source_commit": "d5d6094f90d24606bd68a10de11300ea3df8b2fb",
+  "recovery_id": "e3009266c1b048088c7fa58c860c2cff",
+  "scenario": "INSTALLED_R5_RUNNING_R4_20261016",
+  "original_launch_manifest_sha256": "49481181faa25f4b8762b85013bece21afb3f58b3f9b8e7417237fa3dacfc75c",
+  "launch_manifest_sha256": "b07c9c2be9cf12f15bb82566d2f92915cf87ad1f39e6f7c4f028cf4d374d6052",
+  "recovery_sha256": "c55934380e67926b3096281b7640bc2bb68559692887b794fb12cf71c87657af",
+  "recovery_source_tests_sha256": "4698c22acaf2367258da9989b8b411197caa90ad55f98d5a867f7651eaab725d",
+  "launch_inputs_verified": 15,
+  "original_install_inputs_verified": 406,
+  "original_install_input_bytes": 130560536,
+  "host_executed": false,
+  "native_acceptance_executed": false,
+  "source_tests_executed_by_preparer": false,
+  "administrator_review_required": true
+}

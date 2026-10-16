@@ -1,0 +1,13 @@
+{
+    "recovery_scenario":  "INSTALLED_R5_RUNNING_R4_20261016",
+    "target_root":  "C:\\Program Files\\CoChem\\Pipeline4.2.8-windows-20261015-r5",
+    "maximum_shared_slots":  4,
+    "late_prompts":  false,
+    "payload_files":  406,
+    "host_executed":  false,
+    "pending_backlog_allowed":  true,
+    "source_commit":  "865a29b113a8b59c822f6aa4d921a45c18407fe5",
+    "schema":  "cochem-428-operational-launch-plan/1",
+    "status":  "READ_ONLY_PLAN_VERIFIED",
+    "input_window_minutes":  20
+}

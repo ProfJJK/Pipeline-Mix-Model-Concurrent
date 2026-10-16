@@ -1,3 +1,8 @@
+SPENT — DO NOT RUN THIS COMMAND AGAIN.
+The owner run held in admission_fence: the launcher could not verify its own
+fence task (one-shot identity check), so the fence ran on and r4 ended. No
+Warden task change and no Codex file change. Preserve all evidence.
+
 PIPELINE 4.2.8 — RUNNING-R4 RECOVERY WITH CODEX INTEGRATION (ab900e9)
 
 The last run (7a5e785) stopped before changing anything. The PC had

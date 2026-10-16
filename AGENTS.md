@@ -90,6 +90,28 @@ This is the preferred interface, not a claim that all three adapters have been
 implemented or accepted on this host. Reuse verified sessions before asking for input.
 
 ## Current handoff
+2026-10-16 (evening): the owner ran `r428-op-recovery-ab900e9`; it is spent. It
+passed every host check up to fence creation, including the Codex re-capture.
+It then held at `Start-OpFence` because `New-OpOneShot` pinned raw XML from the
+registration COM object. The fence could be neither verified nor stopped, took
+the writer, and r4 ended; the Warden task is unchanged
+(`docs/4.2.8/evidence/operational-recovery-ab900e9-hold.json`). `865a29b` held
+at the same boundary.
+
+The fix at `d5d6094`:
+- verifies one-shots structurally on fresh copies;
+- always ends its own fence's nonce processes;
+- verifies Warden changes on re-fetched copies;
+- waits for r4 health in preconditions.
+
+583 serialized source/inert tests passed, including a reproduction of the owner
+hold on the exact `ab900e9` bytes; the packaged read-only plan passed. r4 is
+DOWN, so the owner must first run `Start-ScheduledTask -TaskPath '\' -TaskName
+'CoChem-4.2.7-Warden'`. Then confirm r4 health read-only and run the only
+current command in `docs/4.2.8/OPERATIONAL_ONESHOT_IDENTITY_RECOVERY_20261016.md`
+(package `r428-op-recovery-d5d6094`, recovery ID `e3009266…`). The paragraph
+below records the earlier state.
+
 2026-10-16 (later): the owner ran `r428-op-recovery-7a5e785`; it is spent. It
 held in preconditions before any change because the host had rebooted and the
 r4 Warden logon trigger restarted r4, so no stopped-Warden contract can match
@@ -103,11 +125,11 @@ same sitting:
 Holds settle the fence first and restore r4 only on a proven end. Windows
 PowerShell hides .NET property-getter exceptions, so the new process checks
 use `get_` methods. 558 serialized source/inert tests passed; the packaged
-read-only plan passed. The only current owner command is in
-`docs/4.2.8/OPERATIONAL_RUNNING_RECOVERY_20261016.md` (package
-`r428-op-recovery-ab900e9`, recovery ID `8a78c86d…`). Do not run agent tests,
-builds or cochem Python commands while the owner run is active. The paragraph
-below records the earlier state.
+read-only plan passed. That command
+(`docs/4.2.8/OPERATIONAL_RUNNING_RECOVERY_20261016.md`, package
+`r428-op-recovery-ab900e9`, recovery ID `8a78c86d…`) has since run and is spent.
+Do not run agent tests, builds or cochem Python commands while an owner run is
+active. The paragraph below records the earlier state.
 
 2026-10-16: the owner ran `r428-op-recovery-90c9c1d`; it is spent. It held in
 preconditions before any task or runtime change: the preserved-PID check

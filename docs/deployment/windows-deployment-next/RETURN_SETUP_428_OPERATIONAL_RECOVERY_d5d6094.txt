@@ -1,0 +1,86 @@
+PIPELINE 4.2.8 — RECOVERY WITH ONE-SHOT IDENTITY FIX (d5d6094)
+
+The last run (ab900e9) stopped at the job-board write lock. The launcher
+compared its own lock task against an out-of-date copy of that task's
+definition, so it could neither use nor stop the task. The lock task then held
+the lock on its own for four minutes, and the old r4 pipeline stopped. The same
+check also stopped the first r5 run on 15 October.
+
+This version:
+- checks the lock task by its actual contents, read fresh from Task Scheduler;
+- can always end its own lock task.
+
+Everything before that point already passed on this PC in the last run,
+including the Codex settings check. Codex is again connected to r5 in this run.
+
+r4 is stopped right now, so this takes TWO steps.
+
+STEP 1 — restart r4. In Administrator Windows PowerShell, paste this one line.
+It starts the unchanged r4 task exactly as signing in does, but only if the
+task is idle and Ready:
+
+$t=Get-ScheduledTask -TaskPath '\' -TaskName 'CoChem-4.2.7-Warden'; "Before: $($t.State)"; if($t.State -eq 'Ready'){Start-ScheduledTask -TaskPath '\' -TaskName 'CoChem-4.2.7-Warden'; Start-Sleep -Seconds 5; "After: $((Get-ScheduledTask -TaskPath '\' -TaskName 'CoChem-4.2.7-Warden').State)"}
+
+Expected output: "Before: Ready" and "After: Running". If it shows anything
+else (Disabled, Running, Queued), stop and tell Claude what it printed. Then
+tell Claude "r4 started". Claude confirms read-only that r4 answers health,
+version 4.2.8 and idle, before step 2. Do not start step 2 until Claude
+confirms. From now on, nobody (you, Codex, Claude or other agents) submits,
+resumes or cancels pipeline jobs, or changes the pipeline catalog, until the
+final JSON.
+
+STEP 2 — before you paste the command:
+1. Docker Desktop shows its Linux engine running, and R: is visible in
+   Explorer with the folder R:\CoChem427-windows-20261007 on it.
+2. Windows Update is paused (Settings > Windows Update > Pause updates); it
+   was not paused at review. Otherwise, start early enough to finish well
+   before 01:00, when active hours end. Keep the PC plugged in.
+3. r4 is running from step 1. Do not stop, restart or edit the
+   CoChem-4.2.7-Warden task, any CoChem-4.2.8-Fence task, or anything under
+   C:\Program Files\CoChem.
+4. No pipeline job is in progress. Pause the YouTube specialist, any agent
+   session or workflow that submits pipeline jobs, and anything else that
+   submits them. No OBS recording.
+5. Leave Codex and Claude open but idle. Until the final JSON appears:
+   - start no tasks, tests, builds or pipeline submissions;
+   - do not sign in again, update, restart or change settings in Codex;
+   - do not edit the Codex AGENTS.md or the codex-pipeline skill files.
+   Existing provider sign-ins are reused; do not sign out of any of them.
+6. Close heavy apps (games, virtual machines, large copies or backups).
+7. Use one Administrator "Windows PowerShell" window (not PowerShell 7), and
+   have no earlier launcher window open.
+
+Paste this NEW command ONCE into Administrator Windows PowerShell:
+
+C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -File "C:\Users\ansac\CoChem427\r428-op-recovery-d5d6094\run_operational_428_launch.ps1" -LaunchManifest "C:\Users\ansac\CoChem427\r428-op-recovery-d5d6094\launch-manifest.json" -LaunchManifestSha256 b07c9c2be9cf12f15bb82566d2f92915cf87ad1f39e6f7c4f028cf4d374d6052 -Apply
+
+No sign-in, browser, choices, reboot or later input is planned. Leave the
+PowerShell window and the PC running until the final JSON appears. This can
+take up to about three hours; most of the time goes to catalog acceptance and
+the Docker wait. Do not sign out, restart or sleep the PC. Do not close the
+observer or MCP clients. The pipeline's MCP tools stop answering once r4 is
+fenced and come back when r5 is verified; that gap is expected.
+
+Success: R428_OPERATIONAL_RUNNING_VERIFIED. Then fully quit and reopen Codex
+(and Claude) so they load the r5 pipeline connection.
+
+If held: copy the final JSON back. Do not repeat this one-use command, change
+permissions, delete evidence or stop processes. What a hold leaves:
+- Before the write lock: nothing changed; r4 keeps running.
+- After the lock, before catalog acceptance: the launcher ends its own lock
+  task. It restarts r4 and checks its health only when it can prove r4 ended;
+  otherwise it preserves the state for a reviewed follow-up.
+- During catalog acceptance with an uncertain outcome: no pipeline controller
+  runs until a reviewed follow-up.
+- After the switch: r5 stays in place.
+
+Status directory:
+C:\Program Files\CoChem\R428OperationalRecovery-20261015-a62bffb278044fffbaf21207a866ff81-e3009266c1b048088c7fa58c860c2cff
+
+583 serialized source/inert tests passed at d5d6094, and the packaged
+read-only plan passed (running-r4 scenario). The independent package review
+rehashed 15 direct and 406 original inputs (130,560,536 bytes) and found no
+blocking findings. These are source and package checks, not deployment
+acceptance. The path from the write lock onward has not yet run on this PC.
+Catalog acceptance is the largest remaining risk. Preserve
+every old package and all original r428-op input directories.

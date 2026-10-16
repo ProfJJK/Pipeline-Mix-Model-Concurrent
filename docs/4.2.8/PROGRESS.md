@@ -1,5 +1,18 @@
 # 4.2.8 source progress
 
+2026-10-16 (evening): the owner ran `ab900e9`; it is spent. Every host check
+passed up to fence creation, including the running-r4 binding and the Codex
+re-capture. It then held at the first one-shot identity check: the raw XML
+pinned from the registration COM object did not match a fresh copy
+([hold](evidence/operational-recovery-ab900e9-hold.json)). The fence could be
+neither verified nor stopped, and r4 ended; `865a29b` held at the same boundary.
+`d5d6094` verifies one-shots structurally on fresh copies, always ends its own
+fence's processes, verifies Warden changes on re-fetched copies, and waits for
+r4 health. **583 serialized source/inert tests passed**, including a
+reproduction on the exact delivered bytes; the packaged read-only plan passed.
+The new [owner steps](OPERATIONAL_ONESHOT_IDENTITY_RECOVERY_20261016.md) first
+restart r4, then run the only current command.
+
 2026-10-16 (later): the owner ran `7a5e785`; it is spent. It held in
 preconditions before any change: the host had rebooted, and the r4 Warden
 logon trigger restarted r4, so the pinned stopped-Warden contract cannot match
@@ -8,9 +21,9 @@ running-r4 scenario. It binds the live r4 run, fences and stops it, and
 integrates Codex in the same sitting: `config.toml` is re-captured live, and the
 rules, skill and metadata files stay pinned. Holds settle the fence first and
 restore r4 only on a proven end. **558 serialized source/inert tests passed**;
-the packaged read-only plan passed. The new
-[owner command](OPERATIONAL_RUNNING_RECOVERY_20261016.md) is the only current
-one. Host acceptance and useful-job completion are still pending.
+the packaged read-only plan passed. That
+[owner command](OPERATIONAL_RUNNING_RECOVERY_20261016.md) has since run and is
+spent (see above).
 
 2026-10-16: the owner ran `90c9c1d`; it is spent. It held in preconditions on
 `PRESERVED_PID_OCCUPIED`: Windows had recycled the expired fence's PID 46440

@@ -1,0 +1,12 @@
+COCHEM_CHECKOUT_428 {"branch": "fix/428-operational-repair", "checkout": "C:\\Users\\ansac\\source\\repos\\Pipeline-Mix-Model-Concurrent-428-repair", "commit": "d5d6094f90d24606bd68a10de11300ea3df8b2fb", "src": "C:\\Users\\ansac\\source\\repos\\Pipeline-Mix-Model-Concurrent-428-repair\\src"}
+COCHEM_SOURCE_RUNNER_428 {"checkout": "C:\\Users\\ansac\\source\\repos\\Pipeline-Mix-Model-Concurrent-428-repair", "origins": {"cochem": "C:\\Users\\ansac\\source\\repos\\Pipeline-Mix-Model-Concurrent-428-repair\\src\\cochem\\__init__.py", "cochem_pipeline": "C:\\Users\\ansac\\source\\repos\\Pipeline-Mix-Model-Concurrent-428-repair\\src\\cochem_pipeline\\__init__.py", "cochem_supervisor": "C:\\Users\\ansac\\source\\repos\\Pipeline-Mix-Model-Concurrent-428-repair\\src\\cochem_supervisor\\__init__.py", "pipeline_tests": "C:\\Users\\ansac\\source\\repos\\Pipeline-Mix-Model-Concurrent-428-repair\\pipeline_tests\\__init__.py"}, "src": "C:\\Users\\ansac\\source\\repos\\Pipeline-Mix-Model-Concurrent-428-repair\\src"}
+........................................................................ [ 12%]
+........................................................................ [ 24%]
+........................................................................ [ 37%]
+........................................................................ [ 49%]
+........................................................................ [ 61%]
+........................................................................ [ 74%]
+........................................................................ [ 86%]
+........................................................................ [ 98%]
+.......                                                                  [100%]
+583 passed in 273.14s (0:04:33)

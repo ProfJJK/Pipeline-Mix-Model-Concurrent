@@ -1,0 +1,451 @@
+{
+  "schema": "cochem-428-recovery-hold-evidence/1",
+  "recorded_utc": "2026-10-16T18:39:18Z",
+  "spent_package": "r428-op-recovery-ab900e9",
+  "launcher_source_commit": "ab900e9703fba0a05e7a72324540924cc68f22c4",
+  "recovery_id": "8a78c86d7a5b4bf4b52964451110ffef",
+  "launch_manifest_sha256": "a7fcb35afa4fa52007b014feea978ef3f0bae6066371cc3207aa5988d14253bf",
+  "public_status_records": [
+    {
+      "name": "status-20261016T1733384382202-7adf94ce7fa841d6aea5f168c41a838b.json",
+      "sha256": "f507360a4e72da8577e126028605ef6c0a209ec0c0bfbb75328e416c470b7fd0",
+      "content": {
+        "result": null,
+        "automatic_retry": false,
+        "utc": "2026-10-16T17:33:38.4417295Z",
+        "substage": null,
+        "status": "RUNNING",
+        "late_prompt": false,
+        "phase": "preconditions",
+        "schema": "cochem-428-operational-status/1"
+      }
+    },
+    {
+      "name": "status-20261016T1735212604805-2083af1f180144c0b621ad6d71cec4ae.json",
+      "sha256": "bd46096b0a92c2a44c52cccbf7cec366777122a103e7fbb7d9b705c7164b408e",
+      "content": {
+        "result": null,
+        "automatic_retry": false,
+        "utc": "2026-10-16T17:35:21.2604805Z",
+        "substage": "verify_original_recovery_evidence",
+        "status": "RUNNING",
+        "late_prompt": false,
+        "phase": "preconditions",
+        "schema": "cochem-428-operational-status/1"
+      }
+    },
+    {
+      "name": "status-20261016T1735213385449-35d60c534ed543be97406d21eddc7b1f.json",
+      "sha256": "03d1e4c8ba337373936bcfdeafb59c463cfee23bd1b58b927913fb2c22cee19f",
+      "content": {
+        "result": null,
+        "automatic_retry": false,
+        "utc": "2026-10-16T17:35:21.3385449Z",
+        "substage": "verify_running_previous_task",
+        "status": "RUNNING",
+        "late_prompt": false,
+        "phase": "preconditions",
+        "schema": "cochem-428-operational-status/1"
+      }
+    },
+    {
+      "name": "status-20261016T1735214322683-321c585745ad413a8f0b6f003ea6c854.json",
+      "sha256": "8ce2310641225c5194e6b22dc324e448ac8eefadf7ad76c0a0a66d7cb7b0b58d",
+      "content": {
+        "result": null,
+        "automatic_retry": false,
+        "utc": "2026-10-16T17:35:21.4322683Z",
+        "substage": "verify_running_previous_controller",
+        "status": "RUNNING",
+        "late_prompt": false,
+        "phase": "preconditions",
+        "schema": "cochem-428-operational-status/1"
+      }
+    },
+    {
+      "name": "status-20261016T1735235732505-3ff05940104441bfad0dceaabb2ecbf8.json",
+      "sha256": "359d2a06044d5a5a769132a35fad8323df1f7e995bd1ec0871cedfa415b6d571",
+      "content": {
+        "result": null,
+        "automatic_retry": false,
+        "utc": "2026-10-16T17:35:23.5753470Z",
+        "substage": "verify_expired_fence_task",
+        "status": "RUNNING",
+        "late_prompt": false,
+        "phase": "preconditions",
+        "schema": "cochem-428-operational-status/1"
+      }
+    },
+    {
+      "name": "status-20261016T1735235919394-e33a836ca9ef48739446f82d9e011fa0.json",
+      "sha256": "83a1d16ba2c47f2754af8c490c044b7a80b5d8f13f683fcaa68d9e3e234e70cc",
+      "content": {
+        "result": null,
+        "automatic_retry": false,
+        "utc": "2026-10-16T17:35:23.5919394Z",
+        "substage": "verify_reused_installation",
+        "status": "RUNNING",
+        "late_prompt": false,
+        "phase": "preconditions",
+        "schema": "cochem-428-operational-status/1"
+      }
+    },
+    {
+      "name": "status-20261016T1738313383998-9db21e1acf2e4f618a9d2aebd2a09836.json",
+      "sha256": "fcc1e36749c0ff506be958262402c5acd3c61ccd55a2447f096949360e5cbce2",
+      "content": {
+        "result": null,
+        "automatic_retry": false,
+        "utc": "2026-10-16T17:38:31.3383998Z",
+        "substage": null,
+        "status": "RUNNING",
+        "late_prompt": false,
+        "phase": "offline_install",
+        "schema": "cochem-428-operational-status/1"
+      }
+    },
+    {
+      "name": "status-20261016T1738313438296-ef7fd079fa634f14bd0e6c0f64553af5.json",
+      "sha256": "51af82388a116e26c3928a0367b7352a2fbb59d89f99f0757e756abcf45c6db6",
+      "content": {
+        "result": null,
+        "automatic_retry": false,
+        "utc": "2026-10-16T17:38:31.3438296Z",
+        "substage": "reuse_verified_installation",
+        "status": "RUNNING",
+        "late_prompt": false,
+        "phase": "offline_install",
+        "schema": "cochem-428-operational-status/1"
+      }
+    },
+    {
+      "name": "status-20261016T1738313745271-c121a5418308447f808648bdf2b04884.json",
+      "sha256": "a47565970925b7b320eeb9198c050cc83fd9c29036d97d772e42556148cd35e4",
+      "content": {
+        "result": null,
+        "automatic_retry": false,
+        "utc": "2026-10-16T17:38:31.3745271Z",
+        "substage": null,
+        "status": "RUNNING",
+        "late_prompt": false,
+        "phase": "codex_preflight",
+        "schema": "cochem-428-operational-status/1"
+      }
+    },
+    {
+      "name": "status-20261016T1738313825679-98d6f1068eb248c8b7c1096c47b91858.json",
+      "sha256": "d883083ae06a5440aecf5d2d301e9f298230c7fb7b773a65bebdfb4dab3ea8c3",
+      "content": {
+        "result": null,
+        "automatic_retry": false,
+        "utc": "2026-10-16T17:38:31.3825679Z",
+        "substage": "codex_capture_live_settings",
+        "status": "RUNNING",
+        "late_prompt": false,
+        "phase": "codex_preflight",
+        "schema": "cochem-428-operational-status/1"
+      }
+    },
+    {
+      "name": "status-20261016T1738315754084-b3411a8f3a6f4f2b974cdf2e1e5404d7.json",
+      "sha256": "ecc9d958020e9c86876660c5abf8c16a6e09dc41469232442f0297c56d0cd876",
+      "content": {
+        "result": null,
+        "automatic_retry": false,
+        "utc": "2026-10-16T17:38:31.5754084Z",
+        "substage": null,
+        "status": "RUNNING",
+        "late_prompt": false,
+        "phase": "admission_fence",
+        "schema": "cochem-428-operational-status/1"
+      }
+    },
+    {
+      "name": "status-20261016T1738315809388-b5d8ac693fff4633bce1d1580d177073.json",
+      "sha256": "6449255c376fe9ab25a80d089d4650b7cfc7d56ae6d46b301fc483e6c51dd974",
+      "content": {
+        "result": null,
+        "automatic_retry": false,
+        "utc": "2026-10-16T17:38:31.5809388Z",
+        "substage": "recheck_runtime_dependencies",
+        "status": "RUNNING",
+        "late_prompt": false,
+        "phase": "admission_fence",
+        "schema": "cochem-428-operational-status/1"
+      }
+    },
+    {
+      "name": "status-20261016T1738315997725-860f8f416fa5442683a909293d01611f.json",
+      "sha256": "da217b9fc3e2bef6b38cede1f22da2bb89de87b796195d66b47874fcf66d5bc1",
+      "content": {
+        "result": null,
+        "automatic_retry": false,
+        "utc": "2026-10-16T17:38:31.5997725Z",
+        "substage": "previous_health",
+        "status": "RUNNING",
+        "late_prompt": false,
+        "phase": "admission_fence",
+        "schema": "cochem-428-operational-status/1"
+      }
+    },
+    {
+      "name": "status-20261016T1738316305838-b596bdf11bde485d902257d49d217c3e.json",
+      "sha256": "4332fe7560aed6b8ae73cc7589a2ca43cf78f6fd0c3f5c8602963114fe2a9071",
+      "content": {
+        "result": null,
+        "automatic_retry": false,
+        "utc": "2026-10-16T17:38:31.6305838Z",
+        "substage": "previous_native_identity",
+        "status": "RUNNING",
+        "late_prompt": false,
+        "phase": "admission_fence",
+        "schema": "cochem-428-operational-status/1"
+      }
+    },
+    {
+      "name": "status-20261016T1738324715445-44741c0d1b224630bcdeca228079588d.json",
+      "sha256": "654c037f7e75c08baffbd3ccbadd3dc43712de03b83e57c0e3aa1db63ccbcf80",
+      "content": {
+        "result": null,
+        "automatic_retry": false,
+        "utc": "2026-10-16T17:38:32.4715445Z",
+        "substage": "previous_task_identity",
+        "status": "RUNNING",
+        "late_prompt": false,
+        "phase": "admission_fence",
+        "schema": "cochem-428-operational-status/1"
+      }
+    },
+    {
+      "name": "status-20261016T1738324903368-73096a7e6f7e464bb84463d1225a85e7.json",
+      "sha256": "5c336446d831001b5bebe3c83a1717f249425f9afada6a9435f8d596b026fe2c",
+      "content": {
+        "result": null,
+        "automatic_retry": false,
+        "utc": "2026-10-16T17:38:32.4913528Z",
+        "substage": "fence_create_directory",
+        "status": "RUNNING",
+        "late_prompt": false,
+        "phase": "admission_fence",
+        "schema": "cochem-428-operational-status/1"
+      }
+    },
+    {
+      "name": "status-20261016T1738325079813-52e09cd43f5c4f32ba90b8dd7e2c408e.json",
+      "sha256": "d39b0f1c1bc8e9aec76b2e537b9010286fd6e8c4df6867a70e365248a7b9c9b0",
+      "content": {
+        "result": null,
+        "automatic_retry": false,
+        "utc": "2026-10-16T17:38:32.5086429Z",
+        "substage": "fence_create_task",
+        "status": "RUNNING",
+        "late_prompt": false,
+        "phase": "admission_fence",
+        "schema": "cochem-428-operational-status/1"
+      }
+    },
+    {
+      "name": "status-20261016T1738325637427-c6caa31edf234f79ab1fdc987cc35ffe.json",
+      "sha256": "2b05d7169c681375abfbc6feff319304e937dd18ba8bf0797dbf519c16e857e0",
+      "content": {
+        "result": null,
+        "automatic_retry": false,
+        "utc": "2026-10-16T17:38:32.5637427Z",
+        "substage": "fence_wait_ready",
+        "status": "RUNNING",
+        "late_prompt": false,
+        "phase": "admission_fence",
+        "schema": "cochem-428-operational-status/1"
+      }
+    },
+    {
+      "name": "status-20261016T1739330659226-b44225614a3846399f023856df0194bd.json",
+      "sha256": "2d6bb9615d0110b3ab5be2787b28be53730fd83aaea8042824812326669c452a",
+      "content": {
+        "result": {
+          "phase": "admission_fence",
+          "late_prompt": false,
+          "launcher_failure": {
+            "frames": [
+              {
+                "function": "Assert-OpOneShot",
+                "line": 1023
+              },
+              {
+                "function": "Start-OpFence",
+                "line": 1131
+              },
+              {
+                "function": "<ScriptBlock>",
+                "line": 1683
+              },
+              {
+                "function": "Invoke-OpTransaction",
+                "line": 750
+              },
+              {
+                "function": "Invoke-OperationalLaunch",
+                "line": 1842
+              },
+              {
+                "function": "<ScriptBlock>",
+                "line": 1863
+              }
+            ],
+            "observer_proof": null,
+            "substage": "fence_wait_ready",
+            "process_rejection": null,
+            "error_type": "RuntimeException"
+          },
+          "error_type": "RuntimeException",
+          "cutover_requested": false,
+          "automatic_retry": false,
+          "launcher_source_commit": "ab900e9703fba0a05e7a72324540924cc68f22c4",
+          "useful_job_acceptance": false,
+          "source_commit": "865a29b113a8b59c822f6aa4d921a45c18407fe5",
+          "fence_cleanup": {
+            "stop_error": {
+              "frames": [
+                {
+                  "function": "Stop-OpOwnedFenceTask",
+                  "line": 1368
+                },
+                {
+                  "function": "Invoke-OpTransaction",
+                  "line": 773
+                },
+                {
+                  "function": "Invoke-OperationalLaunch",
+                  "line": 1842
+                },
+                {
+                  "function": "<ScriptBlock>",
+                  "line": 1863
+                }
+              ],
+              "observer_proof": null,
+              "substage": "fence_stop_call",
+              "process_rejection": null,
+              "error_type": "RuntimeException"
+            },
+            "status": "HELD_PRESERVE_FENCE",
+            "failure": {
+              "frames": [
+                {
+                  "function": "Assert-ProtectedPath",
+                  "line": 3
+                },
+                {
+                  "function": "Read-OpFenceReady",
+                  "line": 1158
+                },
+                {
+                  "function": "Release-OpFence",
+                  "line": 1209
+                },
+                {
+                  "function": "Invoke-OpTransaction",
+                  "line": 768
+                },
+                {
+                  "function": "Invoke-OperationalLaunch",
+                  "line": 1842
+                },
+                {
+                  "function": "<ScriptBlock>",
+                  "line": 1863
+                }
+              ],
+              "observer_proof": null,
+              "substage": "fence_cleanup",
+              "process_rejection": null,
+              "error_type": "ItemNotFoundException"
+            },
+            "stop_failure": {
+              "last_pass": "EXCEPTION",
+              "exception": {
+                "frames": [
+                  {
+                    "function": "Assert-OpOneShot",
+                    "line": 1023
+                  },
+                  {
+                    "function": "Stop-OpOwnedFenceTask",
+                    "line": 1342
+                  },
+                  {
+                    "function": "Invoke-OpTransaction",
+                    "line": 773
+                  },
+                  {
+                    "function": "Invoke-OperationalLaunch",
+                    "line": 1842
+                  },
+                  {
+                    "function": "<ScriptBlock>",
+                    "line": 1863
+                  }
+                ],
+                "observer_proof": null,
+                "substage": "fence_stop",
+                "process_rejection": null,
+                "error_type": "RuntimeException"
+              },
+              "observation": null
+            }
+          },
+          "status": "R428_OPERATIONAL_HELD_PRESERVE_EVIDENCE",
+          "recovery_error_type": null,
+          "runtime_health_verified": false,
+          "codex_manifest_sha256": {
+            "apply": null,
+            "preflight": "254d68d3ed92ad4b85915119e73250db049e29a814f96968cc026ec4126b7563"
+          },
+          "previous_runtime_at_hold": "UNSETTLED",
+          "all_routes_usable": false,
+          "acceptance_failure": null,
+          "request_sha256": "8ca37638b5dbe15b877c7505dc2acbabac5f6e9b962b6b90101e5cc268aa814f",
+          "codex_config_recaptured": true,
+          "rollback": "HELD_PRESERVE_STOPPED_OR_RUNNING_STATE",
+          "verified_stopped_at_entry": false,
+          "codex_session_refresh_required": false,
+          "codex_integration_status": "NOT_APPLIED",
+          "restore_fence_cleanup": null,
+          "recovery_failure": null,
+          "publication_state": "UNKNOWN",
+          "schema": "cochem-428-operational-owner-result/1",
+          "coverage_holds": null,
+          "launch_manifest_sha256": "a7fcb35afa4fa52007b014feea978ef3f0bae6066371cc3207aa5988d14253bf"
+        },
+        "automatic_retry": false,
+        "utc": "2026-10-16T17:39:33.0659226Z",
+        "substage": null,
+        "status": "R428_OPERATIONAL_HELD_PRESERVE_EVIDENCE",
+        "late_prompt": false,
+        "phase": "admission_fence",
+        "schema": "cochem-428-operational-status/1"
+      }
+    }
+  ],
+  "failure_call": "Assert-OpOneShot (launcher ab900e9 line 1023 'One-shot definition changed.') from Start-OpFence line 1131 at substage fence_wait_ready; every Stop-OpOwnedFenceTask pass failed on the same check for its 60 s bound (fence_cleanup HELD_PRESERVE_FENCE, stop_failure last_pass EXCEPTION).",
+  "timeline_utc": {
+    "fence_wait_ready": "2026-10-16T17:38:32Z",
+    "held": "2026-10-16T17:39:33Z"
+  },
+  "passed_on_host_first_time": [
+    "running-r4 preconditions (Warden, controller health and native identity)",
+    "expired fence task",
+    "reused r5 installation",
+    "Codex live config re-capture and installed-module plan (CODEX_UPDATE_PLAN_VERIFIED)",
+    "runtime dependencies re-check",
+    "previous health/native/task identity",
+    "fence one-shot creation and readback"
+  ],
+  "host_observations_read_only": {
+    "r4_mcp_health_after_hold": "connection refused (WinError 10061)"
+  },
+  "cause": "New-OpOneShot pinned the raw XML read back from the COM object RegisterTaskDefinition returned, after Enabled=true and Run(); every check reads a fresh GetTask copy, whose XML differed on the first read. The fence one-shot therefore could be neither verified nor stopped; it took the board writer and r4 ended on its busy timeout. The original 865a29b sitting held at the same boundary (unrecovered RuntimeException, fence READY on its own, r4 ended).",
+  "native_task_mutations_executed": "fence one-shot registered and run (unchanged since); Warden task untouched",
+  "provider_commands_executed": 0,
+  "codex_files_changed": 0
+}

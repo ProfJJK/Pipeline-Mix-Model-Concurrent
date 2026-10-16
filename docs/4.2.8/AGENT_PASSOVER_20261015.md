@@ -1,5 +1,14 @@
 # Pipeline 4.2.8 operational recovery: agent passover
 
+> **2026-10-16 evening update.** The `ab900e9` result was received: it held at
+> the first fence one-shot identity check (raw XML pinned from the registration
+> COM object). The fence ran on and r4 ended; the Warden is unchanged. It is
+> spent ([hold](evidence/operational-recovery-ab900e9-hold.json)). The
+> correction is `d5d6094`; the only current package is `r428-op-recovery-d5d6094`
+> (recovery ID `e3009266c1b048088c7fa58c860c2cff`, manifest `b07c9c2b…`). r4 must
+> be restarted first; see
+> [the recovery page](OPERATIONAL_ONESHOT_IDENTITY_RECOVERY_20261016.md).
+>
 > **2026-10-16 later update.** The `7a5e785` result was received: held in
 > preconditions because a reboot restarted r4 through its Warden logon trigger;
 > no task or runtime change. It is spent
