@@ -1,5 +1,12 @@
 # Corrected MCP client recognition — owner recovery
 
+> **Spent — do not rerun.** The owner ran this package on 15 October. It held
+> before mutations because PID 9612 is the existing held supervisor observer,
+> a second historical role omitted by this classifier. Its command hash exactly
+> matches the preserved observer record; see
+> [the saved hold evidence](evidence/operational-recovery-4eabf2e-hold.json).
+> A separate, narrowly verified observer correction is in preparation.
+
 The owner ran `r428-op-recovery-01f782a` and it stopped in preconditions,
 before any new fence, task change, catalog acceptance or cutover. The process
 classifier omitted the existing, previously reviewed legacy Codex/Claude

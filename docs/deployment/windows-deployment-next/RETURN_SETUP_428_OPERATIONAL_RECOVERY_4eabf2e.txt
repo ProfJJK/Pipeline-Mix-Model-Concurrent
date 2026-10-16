@@ -1,3 +1,8 @@
+SPENT — DO NOT RUN THIS COMMAND AGAIN.
+The owner run identified the existing held supervisor observer as an omitted
+process role. A separately reviewed correction is in preparation. Preserve
+this historical sheet, the observer, and all failed-package evidence.
+
 PIPELINE 4.2.8 — CORRECTED MCP CLIENT RECOGNITION
 
 Paste the following command once into Administrator Windows PowerShell.

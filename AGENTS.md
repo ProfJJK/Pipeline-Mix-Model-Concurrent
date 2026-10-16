@@ -101,12 +101,14 @@ at the process inventory check, which omitted the existing reviewed legacy
 Codex/Claude `cochem_mcp` bridges. No new fence/task change/cutover was reached.
 See `docs/4.2.8/evidence/operational-recovery-01f782a-hold.json`. The corrected
 launcher at `4eabf2e` passed 233 source/inert tests; its fresh packaged read-only
-plan passed. Read `docs/4.2.8/OPERATIONAL_CLIENT_RECOVERY_20261015.md` for the
-new owner-only command and pins. Owner execution is pending. All 24 visible MCP
-client processes were recognized; two SYSTEM Python rows remain uninspectable
-in this ordinary session and must be resolved by the existing Administrator
-checks, not exempted. Do not rerun either old command, close clients, repeat
-sign-in, or submit jobs before verified recovery.
+plan passed, but the owner has now run that package too; it is spent. It held
+in preconditions on PID 9612, the existing held supervisor observer. The public
+command hash exactly matches the old documented observation-only invocation;
+see `docs/4.2.8/evidence/operational-recovery-4eabf2e-hold.json`. No new fence,
+task mutation or cutover occurred. A narrowly bound observer correction is in
+preparation. Do not rerun any old command, close clients or the observer, repeat
+sign-in, or submit jobs before verified recovery. Current protected observer
+identity/configuration still require validation; a historical PID is not proof.
 
 2026-10-15: the owner-approved seven-part operational repair is integrated on
 `fix/428-operational-repair` in the separate local

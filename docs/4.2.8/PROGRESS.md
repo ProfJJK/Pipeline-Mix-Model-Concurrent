@@ -1,12 +1,20 @@
 # 4.2.8 source progress
 
+The `4eabf2e` recovery has now run and is spent too. Its public rejection names
+PID 9612 and a command hash that exactly matches the old held supervisor
+observer. This is another omitted historical process role, not a provider or
+authentication failure. No new fence/task mutation/cutover was reached. A narrow
+protected observer verification is being prepared; preserve the running
+observer and all prior packages. See
+[exact hash and public status evidence](evidence/operational-recovery-4eabf2e-hold.json).
+
 The owner has now run `r428-op-recovery-01f782a`; it stopped in preconditions and
 is spent. The process check omitted the already-reviewed legacy Codex/Claude MCP
 bridge form. Read-only current process metadata reproduces that category;
 no new fence, task change or cutover was reached. The focused correction at
 `4eabf2e` passed 233 source/inert tests and its fresh packaged read-only plan
-passed. The [replacement owner command](OPERATIONAL_CLIENT_RECOVERY_20261015.md)
-reuses the installation and sign-ins; owner execution remains pending. Preserve
+passed. That [replacement command](OPERATIONAL_CLIENT_RECOVERY_20261015.md)
+has also run and is spent as described above. Preserve
 both failed packages and all evidence. No new owner diagnostic is needed.
 
 The delivered operational r5 launch has run and is spent. Installation and Codex
