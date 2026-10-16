@@ -1,5 +1,14 @@
 # 4.2.8 source progress
 
+The owner ran `490bf2e`; it is spent. Its immutable observer file/record checks
+passed, but the task ACL call held before any mutation. The verifier used the
+Warden-only ACL policy and omitted the observer's original v8 Scheduler
+projection/private backing-file validation. That source mismatch is proven;
+the exact current live descriptor has not been read by the ordinary session.
+The original tests stubbed the ACL boundary. The narrow correction will test
+actual descriptor parsing and the independently verified backing-file rules.
+See [the current hold](evidence/operational-recovery-490bf2e-hold.json).
+
 The observer compatibility correction is ready at `490bf2e`: 273 serialized
 source/inert tests passed; the final verifier checked 120 actual immutable
 observer files and its fresh public heartbeat; the actual packaged read-only

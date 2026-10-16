@@ -1,5 +1,12 @@
 # Held observer recognition — owner recovery
 
+> **Spent — do not rerun.** The owner ran `490bf2e`; immutable observer files
+> and public records passed, then the observer task ACL check held before
+> mutations. The new verifier incorrectly reused the Warden-only ACL policy.
+> The original observer installer uses the v8 Scheduler projection/private
+> backing-file validation. See `evidence/operational-recovery-490bf2e-hold.json`.
+> A separate correction is being prepared; preserve this package unchanged.
+
 The `4eabf2e` recovery stopped before mutations because the launcher rejected
 PID 9612 as `PROTECTED_PYTHON`. Its reported command hash exactly matches the
 preserved 4.2.7 held observer invocation. The current public heartbeat identifies

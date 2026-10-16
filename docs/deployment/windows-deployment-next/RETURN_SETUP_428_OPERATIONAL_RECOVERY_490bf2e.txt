@@ -1,3 +1,8 @@
+SPENT — DO NOT RUN THIS COMMAND AGAIN.
+The owner run held at the observer task ACL check before mutations.
+The verifier used the Warden ACL policy instead of the observer's original
+Scheduler projection/private backing-file proof. Preserve all evidence.
+
 PIPELINE 4.2.8 — VERIFIED HELD OBSERVER COMPATIBILITY
 
 The previous recovery rejected the existing observation-only supervisor.

@@ -109,8 +109,12 @@ task mutation or cutover occurred. The correction at `490bf2e` passed 273
 serialized source/inert tests. The actual protected observer files and public
 heartbeat passed the final read-only verifier (120 immutable files including
 109 application files); task/native identity checks remain owner-only. The
-fresh packaged read-only plan passed. Use only the reviewed new package and
-owner command in `docs/4.2.8/OPERATIONAL_OBSERVER_RECOVERY_20261015.md`.
+fresh packaged read-only plan passed, but the owner has now run `490bf2e` too;
+it is spent. It held at the observer task ACL call before mutations. The
+verifier incorrectly applied Warden-only ACL rules instead of the original
+observer's v8 Scheduler projection/private task backing-file proof. Read
+`docs/4.2.8/evidence/operational-recovery-490bf2e-hold.json`. A separate narrow
+correction is being prepared; do not run its old owner command.
 Do not rerun old commands, close clients or the observer, repeat sign-in, or
 submit jobs before verified recovery. Source/package proof is not deployment.
 
