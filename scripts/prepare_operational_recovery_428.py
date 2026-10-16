@@ -54,9 +54,16 @@ def _hex(value, length):
     return value
 
 
-def make_recovery_spec(launcher_source_commit, *, recovery_id=None):
-    """Literal reviewed evidence shared with Get-OpRecoveryExpected in launcher."""
-    return dict(schema='cochem-428-admission-recovery/1', scenario='INSTALLED_R5_EXPIRED_FENCE_20261015',
+STOPPED_SCENARIO = 'INSTALLED_R5_EXPIRED_FENCE_20261015'
+RUNNING_SCENARIO = 'INSTALLED_R5_RUNNING_R4_20261016'
+
+
+def make_recovery_spec(launcher_source_commit, *, recovery_id=None, scenario='stopped'):
+    """Literal reviewed evidence shared with Get-OpRecoveryExpected (stopped) and
+    Get-OpRunningRecoveryExpected (running) in the launcher."""
+    if scenario not in ('stopped', 'running'):
+        raise ValueError('Recovery scenario must be stopped or running')
+    spec = dict(schema='cochem-428-admission-recovery/1', scenario='INSTALLED_R5_EXPIRED_FENCE_20261015',
         recovery_id=_hex(recovery_id if recovery_id is not None else uuid.uuid4().hex, 32),
         launcher_source_commit=_hex(launcher_source_commit, 40), runtime_source_commit=RUNTIME_SOURCE_COMMIT,
         original_launch_manifest_sha256=ORIGINAL_LAUNCH_SHA256,
@@ -75,12 +82,20 @@ def make_recovery_spec(launcher_source_commit, *, recovery_id=None):
         warden=dict(pid=24424, task_xml_sha256='aa3efe0fce92975a3b407dba19b6195368bfbd7f56fa438c77d3f4e509e93fe5',
             task_sddl_sha256='bcacae79e462afbe0623b80a0898c24360cf59472d049fd6bc264d6308c04eff',
             last_run_utc='2026-10-15T01:37:07Z', last_task_result=1))
+    if scenario == 'running':
+        # The reboot-started r4 is bound live; only reboot-stable facts stay pinned.
+        old = spec['warden']
+        spec.update(schema='cochem-428-admission-recovery/2', scenario=RUNNING_SCENARIO,
+            warden=dict(pid=old['pid'], task_xml_sha256=old['task_xml_sha256'],
+                task_sddl_sha256=old['task_sddl_sha256'], last_run_after_utc=old['last_run_utc']))
+    return spec
 
 
 def validate_recovery_spec(value):
     if not isinstance(value, dict):
         raise ValueError('Recovery must use the exact reviewed contract')
-    expected = make_recovery_spec(value.get('launcher_source_commit'), recovery_id=value.get('recovery_id'))
+    scenario = 'running' if value.get('scenario') == RUNNING_SCENARIO else 'stopped'
+    expected = make_recovery_spec(value.get('launcher_source_commit'), recovery_id=value.get('recovery_id'), scenario=scenario)
     # JSON comparison also distinguishes booleans from integer receipt fields.
     if json.dumps(value, sort_keys=True, allow_nan=False) != json.dumps(expected, sort_keys=True):
         raise ValueError('Recovery differs from the exact reviewed evidence contract')
@@ -198,18 +213,21 @@ def _write(path, raw):
 
 
 def prepare_operational_recovery(original_launch, destination, repository, *, launcher_source_commit,
-                                 recovery_source_tests, recovery_source_tests_sha256, recovery_id=None):
+                                 recovery_source_tests, recovery_source_tests_sha256, recovery_id=None,
+                                 scenario='stopped'):
     original_launch, destination, repository = map(Path, (original_launch, destination, repository))
     if not all(path.is_absolute() for path in (original_launch, destination, repository, Path(recovery_source_tests))):
         raise ValueError('Recovery preparation requires explicit absolute ordinary paths')
     destination = _assert_fresh_destination(destination)
     _hex(launcher_source_commit, 40)
-    recovery = make_recovery_spec(launcher_source_commit, recovery_id=recovery_id)
+    recovery = make_recovery_spec(launcher_source_commit, recovery_id=recovery_id, scenario=scenario)
     validate_recovery_spec(recovery)
     original_raw, original, files, install_count, install_size = _read_original(original_launch)
     launcher = _committed_script(repository, launcher_source_commit, LAUNCHER)
     if b'function Assert-OpRecoveryManifest' not in launcher:
         raise ValueError('Chosen committed launcher lacks the reviewed recovery entrypoint')
+    if scenario == 'running' and b'function Assert-OpRunningRecoveryEvidence' not in launcher:
+        raise ValueError('Chosen committed launcher lacks the running-r4 recovery entrypoint')
     evidence = _read_test_evidence(Path(recovery_source_tests), recovery_source_tests_sha256, launcher_source_commit)
     files[LAUNCHER] = launcher
     files[ORIGINAL_NAME] = original_raw
@@ -222,7 +240,7 @@ def prepare_operational_recovery(original_launch, destination, repository, *, la
     manifest_raw = _encode(manifest)
     result = dict(schema='cochem-428-operational-recovery-prepared/1', status='OWNER_RECOVERY_PACKAGE_PREPARED_FOR_REVIEW',
         destination=str(destination), source_commit=RUNTIME_SOURCE_COMMIT, launcher_source_commit=launcher_source_commit,
-        recovery_id=recovery['recovery_id'], original_launch_manifest_sha256=ORIGINAL_LAUNCH_SHA256,
+        recovery_id=recovery['recovery_id'], scenario=recovery['scenario'], original_launch_manifest_sha256=ORIGINAL_LAUNCH_SHA256,
         launch_manifest_sha256=sha(manifest_raw), recovery_sha256=manifest['recovery_sha256'],
         recovery_source_tests_sha256=sha(evidence), launch_inputs_verified=len(files),
         original_install_inputs_verified=install_count, original_install_input_bytes=install_size,
@@ -249,6 +267,8 @@ def main():
     parser.add_argument('--launcher-source-commit', required=True)
     parser.add_argument('--recovery-source-tests-sha256', required=True)
     parser.add_argument('--recovery-id')
+    # Explicit: a package for the wrong host state is spent on its first hold.
+    parser.add_argument('--scenario', choices=('stopped', 'running'), required=True)
     args = parser.parse_args()
     print(json.dumps(prepare_operational_recovery(**vars(args)), indent=2))
 

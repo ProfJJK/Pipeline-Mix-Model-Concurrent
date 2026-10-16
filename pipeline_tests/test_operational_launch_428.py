@@ -125,10 +125,11 @@ if($null -ne $state.fence){$retained=@{root=$state.fence.root;nonce=$state.fence
     ('running', False, 1), ('ended', False, 0), ('exit_during_stop', False, 1),
     ('other_instance', True, 0), ('later_run', True, 0), ('orphan', True, 0),
     ('stop_error_still_running', True, 1), ('ended_before_fence', True, 0),
+    ('stop_error_while_exiting', False, 1), ('stop_error_then_new_run', True, 1),
 ])
 def test_fenced_stop_accepts_only_exact_retained_run_or_its_complete_exit(scenario, held, stops):
     result = inert_ps(r"""
-$script:scenario='SCENARIO';$script:stops=0;$script:count=1
+$script:scenario='SCENARIO';$script:stops=0;$script:count=1;$script:polls=0
 $script:guid=if($script:scenario -eq 'other_instance'){'replacement'}else{'original'}
 $script:processes=@([pscustomobject]@{HasExited=$false;ExitTime=[DateTime]'2026-10-15T12:02:00Z'},[pscustomobject]@{HasExited=$false;ExitTime=[DateTime]'2026-10-15T12:02:00Z'})
 $when=[DateTime]'2026-10-15T12:00:00Z'
@@ -140,17 +141,22 @@ if($script:scenario -in @('ended','orphan','ended_before_fence')){
     if($script:scenario -eq 'ended_before_fence'){$script:processes[0].ExitTime=$when}
 }
 $task|Add-Member ScriptMethod GetInstances {
-    param($flags)$c=[pscustomobject]@{Count=$script:count}
+    param($flags)$script:polls++
+    # The instance ends at Stop(); its second native process exits a poll later.
+    if($script:scenario -eq 'stop_error_while_exiting' -and $script:polls -ge 3){$script:processes[1].HasExited=$true}
+    $c=[pscustomobject]@{Count=$script:count}
     $c|Add-Member ScriptMethod Item {param($i)[pscustomobject]@{InstanceGuid=$script:guid}};return $c
 }
 $task|Add-Member ScriptMethod Stop {
     param($flags)$script:stops++
     if($script:scenario -eq 'stop_error_still_running'){throw 'stop rejected'}
+    if($script:scenario -eq 'stop_error_while_exiting'){$script:count=0;$script:processes[0].HasExited=$true;throw 'instance already ending'}
+    if($script:scenario -eq 'stop_error_then_new_run'){$script:task.LastRunTime=$script:task.LastRunTime.AddSeconds(5);throw 'replaced'}
     $script:count=0;foreach($p in $script:processes){$p.HasExited=$true}
     if($script:scenario -eq 'exit_during_stop'){throw 'exact old run already ended'}
 }
-$held=$false
-try{Stop-OpRetainedTask $task 'original' $when $script:processes ([DateTimeOffset]$when.AddMinutes(1)).ToUnixTimeSeconds()}catch{$held=$true}
+$script:task=$task;$held=$false
+try{Stop-OpRetainedTask $task 'original' $when $script:processes ([DateTimeOffset]$when.AddMinutes(1)).ToUnixTimeSeconds() 2}catch{$held=$true}
 @{held=$held;stops=$script:stops}|ConvertTo-Json -Compress
 """.replace('SCENARIO', scenario))
     assert result == dict(held=held, stops=stops)

@@ -55,6 +55,29 @@ function Get-OpRecoveryExpected {
             last_run_utc='2026-10-15T01:37:07Z';last_task_result=1}}
 }
 
+function Get-OpRunningRecoveryExpected {
+    # Second reviewed scenario: the 2026-10-15 reboot and owner sign-in let the r4
+    # Warden logon trigger start r4 again. Only reboot-stable facts stay pinned
+    # (original sitting, expired fence, r5 receipt, baseline Warden definition and
+    # its recorded PID). The running controller, task instance and run time are
+    # bound live during the sitting; the run must be newer than the stopped run.
+    $r=Get-OpRecoveryExpected
+    $r.schema='cochem-428-admission-recovery/2';$r.scenario='INSTALLED_R5_RUNNING_R4_20261016'
+    $r.warden=@{pid=$r.warden.pid;task_xml_sha256=$r.warden.task_xml_sha256;task_sddl_sha256=$r.warden.task_sddl_sha256;
+        last_run_after_utc=$r.warden.last_run_utc}
+    return $r
+}
+
+function Get-OpRecoveryExpectedFor {
+    param($Recovery)
+    if((Get-OpProperty $Recovery 'scenario') -ceq 'INSTALLED_R5_RUNNING_R4_20261016'){return Get-OpRunningRecoveryExpected}
+    return Get-OpRecoveryExpected
+}
+
+function Test-OpRunningRecovery {
+    return ($null -ne $script:OpRecovery -and (Get-OpProperty $script:OpRecovery 'scenario') -ceq 'INSTALLED_R5_RUNNING_R4_20261016')
+}
+
 function Assert-OpExactFields {
     param($Actual,[Collections.IDictionary]$Expected,[string[]]$Additional=@())
     $names=if($Actual -is [Collections.IDictionary]){@($Actual.Keys)}else{@($Actual.PSObject.Properties.Name)}
@@ -70,7 +93,7 @@ function Assert-OpExactFields {
 
 function Assert-OpRecoveryManifest {
     param($Recovery,$Manifest,$Original)
-    Assert-OpExactFields $Recovery (Get-OpRecoveryExpected) @('recovery_id','launcher_source_commit')
+    Assert-OpExactFields $Recovery (Get-OpRecoveryExpectedFor $Recovery) @('recovery_id','launcher_source_commit')
     if($Recovery.recovery_id -cnotmatch '^[a-f0-9]{32}$' -or $Recovery.launcher_source_commit -cnotmatch '^[a-f0-9]{40}$' -or
         $Recovery.launcher_source_commit -cne $Manifest.launcher_source_commit -or
         $Manifest.source_commit -cne $Recovery.runtime_source_commit -or $Original.source_commit -cne $Recovery.runtime_source_commit){throw 'Recovery source/claim identity differs.'}
@@ -568,6 +591,80 @@ function Assert-OpRecoveryCatalog {
 
 function Assert-OpRecoveryEvidence {
     param($Recovery,$Manifest,$Inventory,$Pins,[hashtable]$State)
+    $records=Assert-OpRecoveryRecords $Recovery $Manifest $Pins
+    $baseline=$records.baseline;$ready=$records.ready;$froot=$records.fence_root
+    # Each original process existed when it wrote these pinned values, so a
+    # holder of its recycled PID created later is a different process.
+    $State.preserved_pid_created_by=@{([string][int]$Recovery.fence.pid)=(ConvertFrom-OpUnixTime (Get-OpProperty $ready 'ready_at'));
+        ([string][int]$Recovery.warden.pid)=(ConvertFrom-OpUnixTime (Get-OpProperty $baseline.health 'process_started_at'))}
+    $script:OpOriginalXml=$baseline.xml;$script:OpOriginalSddl=$baseline.sddl
+    Assert-OpRecoveryTask ($script:OpFolder.GetTask('CoChem-4.2.7-Warden')) $Recovery.warden $script:OpOldRoot $script:OpOldArgs 1
+    Assert-OpExpiredFenceTask $Recovery $Manifest $froot
+    Assert-OpRecoveryQuiescent $Recovery $null $Pins $State
+    Assert-OpReusedInstallation $Manifest $Inventory $Pins
+    $State.recovery_catalog=$ready.catalog
+    $State.verified_stopped_at_entry=$true;$State.old_task_last_run=[DateTime]::Parse($Recovery.warden.last_run_utc).ToUniversalTime()
+    Write-OpRecord (Join-Path $script:OpPrivate 'baseline.json') @{xml=$script:OpOriginalXml;sddl=$script:OpOriginalSddl;
+        config_sha256=$Manifest.previous_config_sha256;original_baseline_sha256=$Recovery.baseline_sha256;verified_stopped_at_entry=$true}
+}
+
+function Assert-OpExpiredFenceTask {
+    param($Recovery,$Manifest,[string]$FenceRoot)
+    $fargs='-I -B -m cochem_pipeline.owner_admission_fence_428 --config "'+$script:OpOldConfig+'" --config-sha256 '+$Manifest.previous_config_sha256+
+        ' --output-root "'+$FenceRoot+'" --nonce '+$Recovery.fence.nonce+' --request-sha256 '+$Manifest.request_sha256+' --wait-seconds 1800 --hold-seconds 240'
+    Assert-OpRecoveryTask ($script:OpFolder.GetTask('CoChem-4.2.8-Fence-'+$Recovery.fence.nonce)) $Recovery.fence $script:OpRoot $fargs 0
+}
+
+function Assert-OpReusedInstallation {
+    # Reuse the completed r5 installation only after rehashing every installed file.
+    param($Manifest,$Inventory,$Pins)
+    $Pins.Add((Open-428Pin (Join-Path $script:OpRoot 'install-manifest.json') $Manifest.install_manifest_sha256))
+    $null=Assert-428Tree;Assert-428Interpreter
+    foreach($file in @(Get-428InstallFiles $Inventory)){
+        $p=Open-VerifiedFile $file.destination $file.sha256 $file.length;$Pins.Add($p)
+    }
+}
+
+function Assert-OpRunningRecoveryEvidence {
+    # Running-r4 scenario: the original sitting, expired fence and completed r5
+    # installation are pinned and re-verified exactly; the r4 Warden must match
+    # the pinned baseline definition and be running a run that started after
+    # the pinned stopped run. Its controller, task instance and run time are
+    # bound live here with native handles, as the fresh path does.
+    param($Recovery,$Manifest,$Inventory,$Pins,[hashtable]$State,$Task)
+    $records=Assert-OpRecoveryRecords $Recovery $Manifest $Pins
+    $script:OpOriginalXml=$records.baseline.xml;$script:OpOriginalSddl=$records.baseline.sddl
+    Set-OpSubstage $State 'verify_running_previous_task'
+    $d=$Task.Definition
+    if($d.Principal.UserId -notin @('SYSTEM','S-1-5-18') -or $d.Principal.LogonType -ne 5 -or $d.Principal.RunLevel -ne 1 -or
+        $d.Settings.RestartCount -ne 0 -or $d.Settings.MultipleInstances -ne 2 -or $d.Triggers.Count -ne 1){throw 'Running r4 Warden principal or settings differ.'}
+    if($d.Triggers.Item(1).Type -ne 9 -or $d.Triggers.Item(1).UserId -cne 'AETHERDESK\ansac'){throw 'Running r4 Warden trigger differs.'}
+    Assert-428WardenTask $Task $script:OpOriginalXml $script:OpOriginalSddl $script:OpOldRoot $script:OpOldArgs $true $true 1
+    if([int]$Task.State -ne 4){throw 'The r4 Warden is not running.'}
+    $instances=$Task.GetInstances(0)
+    if($instances.Count -ne 1){throw 'The r4 Warden does not have exactly one running instance.'}
+    $lastRun=[DateTime]$Task.LastRunTime
+    if($lastRun.ToUniversalTime() -le [DateTime]::Parse($Recovery.warden.last_run_after_utc).ToUniversalTime()){throw 'The running r4 Warden run is not newer than the pinned stopped run.'}
+    # Later change detection compares with this live text; the pinned baseline
+    # was enforced above through the reviewed invariant definition and SDDL.
+    $State.previous_task_xml=$Task.Xml;$State.previous_task_sddl=$Task.GetSecurityDescriptor(7)
+    Set-OpSubstage $State 'verify_running_previous_controller'
+    $health=Get-428Health;Assert-428Health $health $script:OpOldRoot $true
+    if($health.version -cne '4.2.8'){throw 'Current runtime version differs.'}
+    $State.baseline_processes=Open-OpProcessProof $health $script:OpOldRoot $script:OpOldConfig
+    $State.old_pid=$health.pid;$State.old_instance=$health.instance_id
+    $State.old_task_instance=[string]$instances.Item(1).InstanceGuid;$State.old_task_last_run=$lastRun
+    Set-OpSubstage $State 'verify_expired_fence_task'
+    Assert-OpExpiredFenceTask $Recovery $Manifest $records.fence_root
+    Set-OpSubstage $State 'verify_reused_installation'
+    Assert-OpReusedInstallation $Manifest $Inventory $Pins
+    $State.recovery_catalog=$records.ready.catalog;$State.verified_stopped_at_entry=$false
+    Write-OpRecord (Join-Path $script:OpPrivate 'baseline.json') @{xml=$script:OpOriginalXml;sddl=$script:OpOriginalSddl;health=$health;
+        config_sha256=$Manifest.previous_config_sha256;original_baseline_sha256=$Recovery.baseline_sha256;verified_stopped_at_entry=$false}
+}
+
+function Assert-OpRecoveryRecords {
+    param($Recovery,$Manifest,$Pins)
     $prior=Join-Path $Recovery.original_sitting 'private';$froot=Join-Path $prior $Recovery.fence.directory
     foreach($name in @('catalog-phase','final-config.json')){
         if(Test-Path -LiteralPath (Join-Path $prior $name)){throw 'The original attempt has later phase evidence; hold.'}
@@ -601,25 +698,7 @@ function Assert-OpRecoveryEvidence {
         $result.ready_sha256 -cne $Recovery.fence.ready_sha256 -or
         (Test-Path -LiteralPath (Join-Path $froot 'release.json')) -or (Test-Path -LiteralPath (Join-Path $froot 'held.json'))){throw 'Original fence did not expire at the reviewed boundary.'}
     foreach($p in $ready.counts.PSObject.Properties){if($p.Value -ne 0){throw 'Original fence contained active execution.'}}
-    # Each original process existed when it wrote these pinned values, so a
-    # holder of its recycled PID created later is a different process.
-    $State.preserved_pid_created_by=@{([string][int]$Recovery.fence.pid)=(ConvertFrom-OpUnixTime (Get-OpProperty $ready 'ready_at'));
-        ([string][int]$Recovery.warden.pid)=(ConvertFrom-OpUnixTime (Get-OpProperty $baseline.health 'process_started_at'))}
-    $script:OpOriginalXml=$baseline.xml;$script:OpOriginalSddl=$baseline.sddl
-    Assert-OpRecoveryTask ($script:OpFolder.GetTask('CoChem-4.2.7-Warden')) $Recovery.warden $script:OpOldRoot $script:OpOldArgs 1
-    $fargs='-I -B -m cochem_pipeline.owner_admission_fence_428 --config "'+$script:OpOldConfig+'" --config-sha256 '+$Manifest.previous_config_sha256+
-        ' --output-root "'+$froot+'" --nonce '+$Recovery.fence.nonce+' --request-sha256 '+$Manifest.request_sha256+' --wait-seconds 1800 --hold-seconds 240'
-    Assert-OpRecoveryTask ($script:OpFolder.GetTask('CoChem-4.2.8-Fence-'+$Recovery.fence.nonce)) $Recovery.fence $script:OpRoot $fargs 0
-    Assert-OpRecoveryQuiescent $Recovery $null $Pins $State
-    $Pins.Add((Open-428Pin (Join-Path $script:OpRoot 'install-manifest.json') $Manifest.install_manifest_sha256))
-    $null=Assert-428Tree;Assert-428Interpreter
-    foreach($file in @(Get-428InstallFiles $Inventory)){
-        $p=Open-VerifiedFile $file.destination $file.sha256 $file.length;$Pins.Add($p)
-    }
-    $State.recovery_catalog=$ready.catalog
-    $State.verified_stopped_at_entry=$true;$State.old_task_last_run=[DateTime]::Parse($Recovery.warden.last_run_utc).ToUniversalTime()
-    Write-OpRecord (Join-Path $script:OpPrivate 'baseline.json') @{xml=$script:OpOriginalXml;sddl=$script:OpOriginalSddl;
-        config_sha256=$Manifest.previous_config_sha256;original_baseline_sha256=$Recovery.baseline_sha256;verified_stopped_at_entry=$true}
+    return @{baseline=$baseline;ready=$ready;fence_root=$froot}
 }
 
 function New-OpResultRecord {
@@ -632,11 +711,16 @@ function New-OpResultRecord {
         runtime_health_verified=($null -ne (Get-OpProperty $State 'health'));
         codex_integration_status=(Get-OpProperty (Get-OpProperty $State 'integration') 'status' 'NOT_APPLIED');
         codex_session_refresh_required=($null -ne (Get-OpProperty $State 'integration'));
+        codex_config_recaptured=(Get-OpProperty $State 'codex_config_recaptured');
+        codex_manifest_sha256=(Get-OpProperty $State 'codex_manifest_sha256');
         all_routes_usable=(Get-OpProperty $State.acceptance 'all_routes_usable' $false);
         coverage_holds=(Get-OpProperty $State.acceptance 'coverage_holds');
         error_type=(Get-OpProperty $State 'error_type');
         launcher_failure=(Get-OpProperty $State 'launcher_failure');
         fence_cleanup=(Get-OpProperty $State 'fence_cleanup');
+        previous_runtime_at_hold=(Get-OpProperty $State 'previous_runtime_at_hold');
+        restore_fence_cleanup=(Get-OpProperty $State 'restore_fence_cleanup');
+        recovery_error_type=(Get-OpProperty $State 'recovery_error_type');recovery_failure=(Get-OpProperty $State 'recovery_failure');
         acceptance_failure=(Get-OpProperty $State.acceptance 'failure');
         late_prompt=$false;automatic_retry=$false;useful_job_acceptance=$false}
 }
@@ -674,17 +758,46 @@ function Invoke-OpTransaction {
         if((Get-OpProperty $State 'verified_stopped_at_entry' $false) -and -not $State.stop_requested){
             $State.rollback='NO_RESTART_ATTEMPTED_PREVIOUS_ALREADY_STOPPED'
         }
-        if(-not $State.stop_requested -and $null -ne (Get-OpProperty $State 'fence')){
+        $running=Test-OpRunningRecovery;$fence=Get-OpProperty $State 'fence'
+        $fenceReady=$null -ne (Get-OpProperty $fence 'ready')
+        if($null -ne $fence -and (-not $State.stop_requested -or ($running -and $fenceReady))){
             # Starting a writer fence is meaningful even when READY validation
             # fails before the stop action. Retain and settle only this sitting's
             # exact verified one-shot; never infer old-runtime health/restoration.
-            try{Release-OpFence $State.fence;$State.fence_cleanup=$State.fence.completion}
-            catch{$State.fence_cleanup=@{status='HELD_PRESERVE_FENCE';failure=(Get-OpFailure $_ 'fence_cleanup')}}
+            # Running-r4 recovery settles it before judging the old runtime.
+            try{Release-OpFence $fence;$State.fence_cleanup=$fence.completion}
+            catch{
+                $failure=Get-OpFailure $_ 'fence_cleanup'
+                # A fence that cannot be released (e.g. before READY) must not be
+                # left to take the board writer later; stop this exact one-shot.
+                try{$State.fence_cleanup=Stop-OpOwnedFenceTask $fence;$State.fence_cleanup.failure=$failure}
+                catch{$State.fence_cleanup=@{status='HELD_PRESERVE_FENCE';failure=$failure;stop_failure=(Get-OpProperty $fence 'stop_failure');
+                    stop_error=(Get-OpFailure $_ 'fence_stop_call')}}
+            }
         }
-        if($State.stopped -and (Test-OpRestoreAuthority $State.acceptance $State.acceptance_started $State.acceptance_exited $State.cutover_requested)){
+        # Running-r4 recovery: after READY the old runtime ends on its writer
+        # timeout. Only a settled fence and the exact retained run's complete
+        # exit after READY restore it like a stopped one. An unsettled fence may
+        # still take the writer from r4 later, so it is never "no rollback".
+        # Readiness is re-read: settlement can be the first to see ready.json, and
+        # the fence can publish it after the release attempt and before the owner
+        # stop ended it, so the file on disk is the marker. Unreadable is unsettled.
+        $readyUnread=$false
+        if($running -and $null -ne $fence -and $null -eq (Get-OpProperty $fence 'ready') -and $null -ne (Get-OpProperty $fence 'root')){
+            try{if(Test-Path -LiteralPath (Join-Path $fence.root 'ready.json')){$readyUnread=$true;Read-OpFenceReady $fence;$readyUnread=$false}}catch{}
+        }
+        $fenceReady=$null -ne (Get-OpProperty $fence 'ready');$previous=$null
+        if($running -and $State.stopped){$previous='ENDED_AT_STOP'}
+        elseif($running -and $null -ne $fence -and -not (Test-OpFenceSettled $fence)){$previous='UNSETTLED'}
+        elseif($running -and $readyUnread){$previous='UNSETTLED'}
+        elseif($running -and $fenceReady){$previous=Wait-OpPreviousRuntimeSettled $State}
+        if($null -ne $previous){$State.previous_runtime_at_hold=$previous}
+        if(($State.stopped -or $previous -ceq 'ENDED') -and (Test-OpRestoreAuthority $State.acceptance $State.acceptance_started $State.acceptance_exited $State.cutover_requested)){
             try{& $Actions.restore_previous $State;$State.rollback='PREVIOUS_RUNTIME_RESTORED_HEALTH_VERIFIED'}
-            catch{$State.rollback='HELD_PRESERVE_STOPPED_OR_RUNNING_STATE';$State.recovery_error_type=$_.Exception.GetType().Name}
-        }elseif($State.stop_requested -or $State.acceptance_started -or $State.cutover_requested){
+            catch{$State.rollback='HELD_PRESERVE_STOPPED_OR_RUNNING_STATE';$State.recovery_error_type=$_.Exception.GetType().Name
+                $State.recovery_failure=Get-OpFailure $_ 'restore_previous'}
+        }elseif($State.stop_requested -or $State.acceptance_started -or $State.cutover_requested -or
+            ($null -ne $previous -and $previous -cnotin @('RUNNING','ENDED_AT_STOP'))){
             $State.rollback='HELD_PRESERVE_STOPPED_OR_RUNNING_STATE'
         }
     }
@@ -792,9 +905,11 @@ function Get-OpRetainedTaskState {
     # holds its board, HTTP health may wait behind that writer and is not a
     # usable stop dependency. These native handles and task identity were
     # captured while health was still available, before requesting the fence.
-    param($Task,[string]$Instance,[DateTime]$LastRunTime,$Processes,$FenceReadyAt=$null)
-    if(@($Processes).Count -ne 2 -or ([DateTime]$Task.LastRunTime).ToUniversalTime() -ne $LastRunTime.ToUniversalTime()){
-        throw 'Previous task run or retained native identities differ.'}
+    # $AllowExiting reports the instant between the instance ending and its
+    # native processes exiting as EXITING; only bounded polls use it.
+    param($Task,[string]$Instance,[DateTime]$LastRunTime,$Processes,$FenceReadyAt=$null,[bool]$AllowExiting=$false)
+    if(@($Processes).Count -ne 2){throw 'Retained native identities differ.'}
+    if(([DateTime]$Task.LastRunTime).ToUniversalTime() -ne $LastRunTime.ToUniversalTime()){throw 'Previous task run changed.'}
     foreach($process in $Processes){
         if($process.HasExited -and ($null -eq $FenceReadyAt -or
             ([DateTimeOffset]$process.ExitTime.ToUniversalTime()).ToUnixTimeMilliseconds()/1000.0 -lt [double]$FenceReadyAt)){
@@ -805,19 +920,60 @@ function Get-OpRetainedTaskState {
         if([string]$instances.Item(1).InstanceGuid -cne $Instance){throw 'Previous task instance changed.'}
         return 'RUNNING'
     }
-    if($instances.Count -ne 0 -or @($Processes|Where-Object{-not $_.HasExited}).Count){
+    if($instances.Count -ne 0){throw 'Previous task has more than one instance.'}
+    if(@($Processes|Where-Object{-not $_.HasExited}).Count){
+        if($AllowExiting){return 'EXITING'}
         throw 'Task ended without verified exit of both retained native processes.'}
     return 'ENDED'
 }
 
 function Stop-OpRetainedTask {
-    param($Task,[string]$Instance,[DateTime]$LastRunTime,$Processes,$FenceReadyAt)
+    param($Task,[string]$Instance,[DateTime]$LastRunTime,$Processes,$FenceReadyAt,[int]$Seconds=30)
     if((Get-OpRetainedTaskState $Task $Instance $LastRunTime $Processes $FenceReadyAt) -ceq 'ENDED'){return}
     try{$Task.Stop(0)}catch{
         # A writer timeout can end the exact old instance between readback and
-        # Stop(). Accept only its complete retained exit, never another run.
-        if((Get-OpRetainedTaskState $Task $Instance $LastRunTime $Processes $FenceReadyAt) -cne 'ENDED'){throw}
+        # Stop(), and its processes exit shortly after the instance. Accept only
+        # the complete retained exit within the bound, never another run.
+        $failure=$_;$deadline=[DateTime]::UtcNow.AddSeconds($Seconds)
+        do{
+            if((Get-OpRetainedTaskState $Task $Instance $LastRunTime $Processes $FenceReadyAt $true) -ceq 'ENDED'){return}
+            Start-Sleep -Milliseconds 500
+        }while([DateTime]::UtcNow -lt $deadline)
+        throw $failure
     }
+}
+
+function Wait-OpPreviousRuntimeSettled {
+    # Running-r4 recovery only. After this sitting's fence reached READY the old
+    # runtime is expected to end on its five-second writer timeout. ENDED means
+    # the exact retained run, both native processes exited after READY and no
+    # task instance; RUNNING means still exactly that run after the bound with
+    # neither process exited and the exact old controller still serving with
+    # admission ready. Anything else is UNSETTLED. Only ENDED is ever restored.
+    param([hashtable]$State,[int]$Seconds=90)
+    $readyAt=Get-OpProperty (Get-OpProperty (Get-OpProperty $State 'fence') 'ready') 'ready_at'
+    if($null -eq $readyAt -or @(Get-OpProperty $State 'processes').Count -ne 2){return 'UNSETTLED'}
+    $deadline=[DateTime]::UtcNow.AddSeconds($Seconds);$observed=$null
+    do{
+        try{$observed=Get-OpRetainedTaskState ($script:OpFolder.GetTask('CoChem-4.2.7-Warden')) $State.old_task_instance $State.old_task_last_run $State.processes $readyAt $true}
+        catch{return 'UNSETTLED'}
+        if($observed -ceq 'ENDED'){return 'ENDED'}
+        Start-Sleep -Milliseconds 500
+    }while([DateTime]::UtcNow -lt $deadline)
+    if($observed -cne 'RUNNING' -or @($State.processes|Where-Object{$_.HasExited}).Count){return 'UNSETTLED'}
+    # A listed instance with live processes can still be shutting down; the
+    # exact old controller must answer twice, apart, with admission ready.
+    try{
+        $first=Get-428Health;Start-Sleep -Seconds 2;$second=Get-428Health
+        foreach($h in @($first,$second)){
+            Assert-428Health $h $script:OpOldRoot $false
+            if([int64]$h.pid -ne [int64]$State.old_pid -or [string]$h.instance_id -cne [string]$State.old_instance -or
+                [string]$h.process_started_at -cne [string]$first.process_started_at){return 'UNSETTLED'}
+        }
+        $observed=Get-OpRetainedTaskState ($script:OpFolder.GetTask('CoChem-4.2.7-Warden')) $State.old_task_instance $State.old_task_last_run $State.processes $readyAt $true
+    }catch{return 'UNSETTLED'}
+    if($observed -ceq 'RUNNING' -and @($State.processes|Where-Object{$_.HasExited}).Count -eq 0){return 'RUNNING'}
+    return 'UNSETTLED'
 }
 
 function Open-OpProcessProof {
@@ -861,10 +1017,14 @@ function New-OpOneShot {
 
 function Assert-OpOneShot {
     param($Handle,[bool]$Running)
-    $t=$script:OpFolder.GetTask($Handle.name);Assert-428TaskAcl $t
-    if($t.Xml -cne $Handle.xml -or $t.GetSecurityDescriptor(7) -cne $Handle.sddl){throw 'One-shot identity changed.'}
+    # One check per line: the sanitized frame line identifies which one held.
+    $t=$script:OpFolder.GetTask($Handle.name)
+    Assert-428TaskAcl $t
+    if($t.Xml -cne $Handle.xml){throw 'One-shot definition changed.'}
+    if($t.GetSecurityDescriptor(7) -cne $Handle.sddl){throw 'One-shot security descriptor changed.'}
     $instances=$t.GetInstances(0)
-    if($Running -and ($instances.Count -ne 1 -or [string]$instances.Item(1).InstanceGuid -cne $Handle.instance)){throw 'One-shot is no longer the exact running instance.'}
+    if($Running -and $instances.Count -ne 1){throw 'One-shot no longer has exactly one running instance.'}
+    if($Running -and [string]$instances.Item(1).InstanceGuid -cne $Handle.instance){throw 'One-shot is no longer the exact running instance.'}
     return $t
 }
 
@@ -959,7 +1119,7 @@ function Start-OpFence {
     Set-OpSubstage $State 'fence_create_task'
     $handle=New-OpOneShot $script:OpScheduler $script:OpFolder $fence.name $args 2100
     $fence.handle=$handle;$fence.owned=$true
-    $deadline=[DateTime]::UtcNow.AddSeconds(1830)
+    $deadline=[DateTime]::UtcNow.AddSeconds(1830);$terminalSince=$null
     do{
         if(Test-Path -LiteralPath (Join-Path $root 'ready.json')){
             Set-OpSubstage $State 'fence_read_ready'
@@ -969,7 +1129,12 @@ function Start-OpFence {
         }
         Set-OpSubstage $State 'fence_wait_ready'
         $t=Assert-OpOneShot $handle $false
-        if(Test-OpTaskTerminal $t $handle.started){throw 'Admission fence ended without readiness.'}
+        # A single terminal-looking observation can be a queued/starting race;
+        # require it again at least one second later, with still no readiness.
+        if(Test-OpTaskTerminal $t $handle.started){
+            if($null -eq $terminalSince){$terminalSince=[DateTime]::UtcNow}
+            elseif(([DateTime]::UtcNow-$terminalSince).TotalSeconds -ge 1){throw 'Admission fence ended without readiness.'}
+        }else{$terminalSince=$null}
         Start-Sleep -Seconds 1
     }while([DateTime]::UtcNow -lt $deadline)
     throw 'Admission did not drain within the bound; old runtime is preserved.'
@@ -1093,6 +1258,185 @@ function Release-OpFence {
     $Fence.completion=@{status=$r.status;lock_released=$true;native_exit_verified=$true;release_requested=$sent}
 }
 
+function Get-OpBytesSha256 {
+    param([byte[]]$Bytes)
+    $sha=[Security.Cryptography.SHA256]::Create()
+    try{return [BitConverter]::ToString($sha.ComputeHash($Bytes)).Replace('-','').ToLowerInvariant()}finally{$sha.Dispose()}
+}
+
+function Get-OpSharedFileSha256 {
+    # Codex may hold its settings open; read with full sharing.
+    param([string]$Path)
+    $stream=[IO.File]::Open($Path,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::ReadWrite -bor [IO.FileShare]::Delete)
+    try{
+        $sha=[Security.Cryptography.SHA256]::Create()
+        try{return [BitConverter]::ToString($sha.ComputeHash($stream)).Replace('-','').ToLowerInvariant()}finally{$sha.Dispose()}
+    }finally{$stream.Dispose()}
+}
+
+function Read-OpStreamBytes {
+    param([IO.Stream]$Stream)
+    $Stream.Position=0;$buffer=[IO.MemoryStream]::new()
+    try{$Stream.CopyTo($buffer);return ,$buffer.ToArray()}finally{$buffer.Dispose();$Stream.Position=0}
+}
+
+function Write-OpPrivateBytes {
+    param([string]$Path,[byte[]]$Bytes)
+    Assert-ProtectedPath (Split-Path -Parent $Path)
+    $s=[IO.FileStream]::new($Path,[IO.FileMode]::CreateNew,[Security.AccessControl.FileSystemRights]::Write,[IO.FileShare]::None,4096,[IO.FileOptions]::None,(New-OpPrivateAcl $false))
+    try{$s.Write($Bytes,0,$Bytes.Length);$s.Flush($true)}finally{$s.Dispose()}
+}
+
+function New-OpCodexLiveManifest {
+    # Codex rewrites its own config.toml (for example at sign-in), so its
+    # pre-update digest is captured inside the sitting, immediately before the
+    # installed module plans or applies. The module still replaces only the
+    # pipeline server table, proves every other setting unchanged, backs up and
+    # rolls back on any concurrent edit. The managed rule, skill and metadata
+    # files stay pinned: any change there holds before anything is written.
+    param([byte[]]$Raw,$Integration,[string]$Name)
+    $files=@{config='.codex\config.toml';rules='.codex\AGENTS.md';skill='.agents\skills\codex-pipeline\SKILL.md';
+        metadata='.agents\skills\codex-pipeline\agents\openai.yaml'}
+    $live=@{}
+    foreach($key in @('config','rules','skill','metadata')){
+        $path=Join-Path ([string]$Integration.user_home) $files[$key]
+        if(-not (Test-Path -LiteralPath $path -PathType Leaf)){throw 'A Codex integration target is missing.'}
+        $live[$key]=Get-OpSharedFileSha256 $path
+    }
+    foreach($key in @('rules','skill','metadata')){
+        if($live[$key] -cne [string](Get-OpProperty $Integration.expected $key)){throw 'Codex managed integration files changed since preparation; hold.'}
+    }
+    $pinned=[string](Get-OpProperty $Integration.expected 'config')
+    if($pinned -cnotmatch '^[a-f0-9]{64}$'){throw 'Codex configuration pin is malformed.'}
+    $text=[Text.UTF8Encoding]::new($false,$true).GetString($Raw)
+    if([regex]::Matches($text,[regex]::Escape('"'+$pinned+'"')).Count -ne 1){throw 'Codex configuration pin is not unique in the reviewed manifest.'}
+    $bytes=[Text.UTF8Encoding]::new($false).GetBytes($text.Replace('"'+$pinned+'"','"'+$live.config+'"'))
+    if([string](([Text.UTF8Encoding]::new($false).GetString($bytes)|ConvertFrom-Json).expected.config) -cne $live.config){throw 'Live Codex manifest did not bind the captured digest.'}
+    $path=Join-Path $script:OpPrivate $Name
+    Write-OpPrivateBytes $path $bytes
+    return @{path=$path;sha256=(Get-OpBytesSha256 $bytes);config_recaptured=($live.config -cne $pinned)}
+}
+
+function Stop-OpOwnedFenceTask {
+    # Used only after Release-OpFence could not settle this sitting's fence (for
+    # example before READY, when no release protocol exists). An orphaned fence
+    # would later take the board writer and stop the old runtime. The fence
+    # module only reads (SELECT/READ/TRANSACTION), so ending this exact
+    # nonce-named one-shot changes no rows and its exit releases any lock.
+    # Task Stop ends the action (the venv launcher) but can leave the base
+    # interpreter it started holding the lock, so every process carrying this
+    # sitting's unique nonce is ended by exact identity and its exit proven.
+    param($Fence,[int]$Seconds=60)
+    if($null -eq $Fence -or -not $Fence.owned -or $null -eq $Fence.handle -or $Fence.nonce -cnotmatch '^[a-f0-9]{32}$' -or
+        $Fence.name -cne ('CoChem-4.2.8-Fence-'+$Fence.nonce) -or $Fence.handle.name -cne $Fence.name -or
+        $Fence.handle.arguments -cne $Fence.arguments -or $Fence.arguments.IndexOf($Fence.nonce,[StringComparison]::Ordinal) -lt 0){throw 'No exact owned fence task to stop.'}
+    # Stop() is asynchronous, so a process can vanish mid-check: every pass is
+    # retried until the bound. Identity is verified before any kill, so a retry
+    # never widens what may be ended. A just-queued run can look stopped once
+    # (see Start-OpFence), so settlement needs this run's terminal record and
+    # no nonce process in two observations at least one second apart.
+    $deadline=[DateTime]::UtcNow.AddSeconds($Seconds);$last=$null;$settledSince=$null;$observed=$null
+    do{
+        try{
+            $observed=$null
+            $task=Assert-OpOneShot $Fence.handle $false
+            if($task.GetInstances(0).Count){try{$task.Stop(0)}catch{}}
+            foreach($row in @(Get-OpFenceNativeRows $Fence)){Stop-OpFenceNative $row}
+            $task=Assert-OpOneShot $Fence.handle $false
+            $terminal=Test-OpTaskTerminal $task $Fence.handle.started;$native=@(Get-OpFenceNativeRows $Fence).Count
+            $observed=@{terminal=[bool]$terminal;native_processes=[int]$native;state=[int]$task.State;
+                instances=[int]$task.GetInstances(0).Count;last_task_result=[int64]$task.LastTaskResult}
+            if($terminal -and $native -eq 0){
+                if($null -eq $settledSince){$settledSince=[DateTime]::UtcNow}
+                elseif(([DateTime]::UtcNow-$settledSince).TotalSeconds -ge 1){
+                    # Process exit releases its SQLite file locks; no fence process remains.
+                    # A release the fence protocol already received stays visible.
+                    $requested=$false;try{$requested=[bool](Test-Path -LiteralPath (Join-Path (Get-OpProperty $Fence 'root') 'release.json'))}catch{}
+                    $Fence.stopped_by_owner=$true
+                    $Fence.completion=@{status='STOPPED_OWNED_FENCE_TASK';lock_released=$true;native_exit_verified=$true;release_requested=$requested}
+                    try{$task.Enabled=$false}catch{}
+                    return $Fence.completion.Clone()
+                }
+            }else{$settledSince=$null}
+        }catch{$last=$_;$settledSince=$null;$observed=$null}
+        Start-Sleep -Milliseconds 500
+    }while([DateTime]::UtcNow -lt $deadline)
+    # Sanitized evidence: the last pass's observation (or that it threw) and the
+    # most recent exception (type and frames only), which may be older.
+    $exception=$null;if($null -ne $last){try{$exception=Get-OpFailure $last 'fence_stop'}catch{}}
+    $Fence.stop_failure=@{last_pass=$(if($null -eq $observed){'EXCEPTION'}else{'NOT_SETTLED'});observation=$observed;exception=$exception}
+    throw 'Owned fence task did not stop; preserve state.'
+}
+
+function Get-OpProcessById {
+    # Seam for inert tests; $null when no such process is running.
+    param([int]$ProcessId)
+    try{return [Diagnostics.Process]::GetProcessById($ProcessId)}catch [ArgumentException]{return $null}
+}
+
+function Test-OpSameLiveProcess {
+    # True while the row's PID is still that live process (start within 1 s of
+    # its creation time). Absent, exited or recycled is false; a live process
+    # whose times cannot be compared counts as the same one.
+    param($Row)
+    # Windows PowerShell returns $null when a .NET property getter throws, so the
+    # explicit get_ methods are used: an unanswerable question is never "no".
+    $p=Get-OpProcessById ([int]$Row.ProcessId);if($null -eq $p){return $false}
+    try{
+        try{if($p.get_HasExited()){return $false}}catch{}
+        if($null -eq $Row.CreationDate){return $true}
+        try{$start=$p.get_StartTime().ToUniversalTime()}catch{try{return (-not $p.get_HasExited())}catch{return $true}}
+        return [Math]::Abs(($start-([DateTime]$Row.CreationDate).ToUniversalTime()).TotalSeconds) -le 1
+    }finally{$p.Dispose()}
+}
+
+function Get-OpFenceNativeRows {
+    # Every live process carrying this sitting's fence nonce: the one-shot's venv
+    # launcher and the base interpreter it starts. A row whose process ended after
+    # the snapshot is gone, not a mismatch; any other identity of a live process holds.
+    param($Fence)
+    $launcher=Join-Path $script:OpRoot '.venv\Scripts\python.exe'
+    $live=[Collections.Generic.List[object]]::new()
+    foreach($row in @(Get-CimInstance Win32_Process -Filter ("CommandLine LIKE '%"+$Fence.nonce+"%'"))){
+        $sid=$null;try{$sid=(Invoke-CimMethod -InputObject $row -MethodName GetOwnerSid).Sid}catch{}
+        if(([string]$row.CommandLine).IndexOf($Fence.arguments,[StringComparison]::Ordinal) -lt 0 -or
+            ($row.ExecutablePath -cne $script:python -and $row.ExecutablePath -cne $launcher) -or $sid -cne 'S-1-5-18' -or
+            $null -eq $row.CreationDate -or ([DateTime]$row.CreationDate).ToUniversalTime() -lt $Fence.handle.started.AddSeconds(-2)){
+            if(Test-OpSameLiveProcess $row){throw 'A fence-nonce process has an unexpected identity; preserve state.'}
+            continue
+        }
+        $live.Add($row)
+    }
+    # Enumerated: callers collect with @(), so none means an empty array.
+    return $live
+}
+
+function Stop-OpFenceNative {
+    # Ends only the exact process of a row just verified; a recycled PID holds.
+    param($Row)
+    $p=Get-OpProcessById ([int]$Row.ProcessId);if($null -eq $p){return}
+    try{
+        # Pin one handle first: every later check, Kill and wait then use it,
+        # so a PID recycled after this point can never be the one ended. The
+        # get_ methods throw where Windows PowerShell properties return $null.
+        try{$null=$p.get_Handle()}catch{if(-not (Test-OpSameLiveProcess $Row)){return};throw}
+        if($p.get_HasExited()){return}
+        try{$start=$p.get_StartTime().ToUniversalTime()}catch{if($p.get_HasExited()){return};throw}
+        if([Math]::Abs(($start-([DateTime]$Row.CreationDate).ToUniversalTime()).TotalSeconds) -gt 1){throw 'Fence process identity changed before termination.'}
+        # A process already terminating rejects Kill (access denied); its exit is proven below.
+        try{$p.Kill()}catch{}
+        if(-not $p.WaitForExit(10000)){throw 'Fence process did not exit.'}
+    }finally{$p.Dispose()}
+}
+
+function Test-OpFenceSettled {
+    # No fence, or this sitting's fence verifiably released its lock and exited.
+    param($Fence)
+    if($null -eq $Fence){return $true}
+    $c=Get-OpProperty $Fence 'completion'
+    return ((Get-OpProperty $c 'lock_released') -eq $true -and (Get-OpProperty $c 'native_exit_verified') -eq $true)
+}
+
 function Wait-OpHealth {
     param([string]$Root,[bool]$RequirePlanning,[int]$Seconds=300)
     $deadline=[DateTime]::UtcNow.AddSeconds($Seconds);$previous=$null
@@ -1111,9 +1455,11 @@ function Wait-OpHealth {
 }
 
 function Restore-OpPrevious {
-    param($State)
-    if($null -ne $State.fence -and -not $State.fence.released){Release-OpFence $State.fence}
-    if($State.acceptance_started){
+    param($State,[int]$ClearSeconds=60)
+    if($null -ne $State.fence -and -not $State.fence.released -and -not (Get-OpProperty $State.fence 'stopped_by_owner' $false)){Release-OpFence $State.fence}
+    if(-not (Test-OpFenceSettled $State.fence)){throw 'Stop fence is not verifiably settled; restoration would contend with it.'}
+    try{
+      if($State.acceptance_started){
         if(-not (Test-OpRestoreAuthority $State.acceptance $true $State.acceptance_exited $State.cutover_requested)){throw 'Catalog state does not authorize previous-runtime restoration.'}
         # Exact pinned config and stopped task must still match. A fresh writer
         # fence independently proves the board has no unreconciled native work.
@@ -1123,26 +1469,59 @@ function Restore-OpPrevious {
             if((Get-OpProperty $before $key) -cne (Get-OpProperty $after $key) -or
                 (Get-OpProperty $before $key) -cne (Get-OpProperty $phase $key)){throw 'Old catalog authority is no longer compatible with restoration.'}
         }
-    }
-    try{
-        Assert-428PortFree;$task=$script:OpFolder.GetTask('CoChem-4.2.7-Warden')
-        Assert-428WardenTask $task $script:OpOriginalXml $script:OpOriginalSddl $script:OpOldRoot $script:OpOldArgs $false $false 1
+      }
+        # The old runtime's instance and listener can trail its process exit.
+        $deadline=[DateTime]::UtcNow.AddSeconds($ClearSeconds)
+        while($true){
+            $task=$script:OpFolder.GetTask('CoChem-4.2.7-Warden');$free=$true
+            try{Assert-428PortFree}catch{$free=$false}
+            if($free -and $task.GetInstances(0).Count -eq 0){break}
+            if([DateTime]::UtcNow -ge $deadline){throw 'A controller instance or listener remains; preserve state.'}
+            Start-Sleep -Seconds 1
+        }
+        # A running-r4 sitting can hold after READY but before stop_previous
+        # disabled anything: the old runtime ended on its own and its task is
+        # still the unchanged enabled baseline, so it only needs to run again.
+        # A hold between the trigger disable and the task disable leaves it enabled
+        # with the trigger off; both re-register the baseline with the trigger off.
+        $enabled=[bool]$task.Enabled;$trigger=$task.Definition.Triggers.Count -eq 1 -and [bool]$task.Definition.Triggers.Item(1).Enabled
+        $untouched=(Test-OpRunningRecovery) -and $enabled -and $trigger
+        if($untouched){Assert-428WardenTask $task $script:OpOriginalXml $script:OpOriginalSddl $script:OpOldRoot $script:OpOldArgs $true $true 1}
+        elseif((Test-OpRunningRecovery) -and $enabled){Assert-428WardenTask $task $script:OpOriginalXml $script:OpOriginalSddl $script:OpOldRoot $script:OpOldArgs $true $false 1}
+        else{Assert-428WardenTask $task $script:OpOriginalXml $script:OpOriginalSddl $script:OpOldRoot $script:OpOldArgs $false $false 1}
         if($task.GetInstances(0).Count){throw 'A controller is still running.'}
         $pin=Open-428Pin $script:OpOldConfig $script:OpManifest.previous_config_sha256;$pin.Dispose()
         if($null -ne $State.restore_fence){Release-OpFence $State.restore_fence}
-        $definition=$script:OpScheduler.NewTask(0);$definition.XmlText=$script:OpOriginalXml;$definition.Triggers.Item(1).Enabled=$false
-        $null=$script:OpFolder.RegisterTaskDefinition('CoChem-4.2.7-Warden',$definition,20,'SYSTEM',$null,5,$script:OpOriginalSddl)
-        $task=$script:OpFolder.GetTask('CoChem-4.2.7-Warden');Assert-428WardenTask $task $script:OpOriginalXml $script:OpOriginalSddl $script:OpOldRoot $script:OpOldArgs $true $false 1
+        if(-not $untouched){
+            $definition=$script:OpScheduler.NewTask(0);$definition.XmlText=$script:OpOriginalXml;$definition.Triggers.Item(1).Enabled=$false
+            $null=$script:OpFolder.RegisterTaskDefinition('CoChem-4.2.7-Warden',$definition,20,'SYSTEM',$null,5,$script:OpOriginalSddl)
+            $task=$script:OpFolder.GetTask('CoChem-4.2.7-Warden');Assert-428WardenTask $task $script:OpOriginalXml $script:OpOriginalSddl $script:OpOldRoot $script:OpOldArgs $true $false 1
+        }
         # The restored Warden also waits up to 900 s for Docker (--docker-wait-seconds).
         $instance=$task.Run($null);$health=Wait-OpHealth $script:OpOldRoot $false 1200;$held=Open-OpProcessProof $health $script:OpOldRoot $script:OpOldConfig
         try{
             $task=$script:OpFolder.GetTask('CoChem-4.2.7-Warden')
             if($task.GetInstances(0).Count -ne 1 -or $task.GetInstances(0).Item(1).InstanceGuid -cne $instance.InstanceGuid){throw 'Restored task instance differs.'}
-            $d=$task.Definition;$d.Triggers.Item(1).Enabled=$true
-            $null=$script:OpFolder.RegisterTaskDefinition('CoChem-4.2.7-Warden',$d,20,'SYSTEM',$null,5,$script:OpOriginalSddl)
+            if(-not $untouched){
+                $d=$task.Definition;$d.Triggers.Item(1).Enabled=$true
+                $null=$script:OpFolder.RegisterTaskDefinition('CoChem-4.2.7-Warden',$d,20,'SYSTEM',$null,5,$script:OpOriginalSddl)
+            }
             Assert-428WardenTask ($script:OpFolder.GetTask('CoChem-4.2.7-Warden')) $script:OpOriginalXml $script:OpOriginalSddl $script:OpOldRoot $script:OpOldArgs $true $true 1
         }finally{foreach($p in $held){$p.Dispose()}}
-    }finally{if($null -ne $State.restore_fence -and -not $State.restore_fence.released){try{Release-OpFence $State.restore_fence}catch{}}}
+    }finally{
+        # A restore fence that failed (even before READY) must not take the
+        # writer later: release it, or end this exact one-shot and prove it.
+        $rf=Get-OpProperty $State 'restore_fence'
+        if($null -ne $rf -and -not (Test-OpFenceSettled $rf)){
+            try{Release-OpFence $rf;$State.restore_fence_cleanup=$rf.completion}
+            catch{
+                $failure=Get-OpFailure $_ 'restore_fence_cleanup'
+                try{$State.restore_fence_cleanup=Stop-OpOwnedFenceTask $rf;$State.restore_fence_cleanup.failure=$failure}
+                catch{$State.restore_fence_cleanup=@{status='HELD_PRESERVE_FENCE';failure=$failure;stop_failure=(Get-OpProperty $rf 'stop_failure');
+                    stop_error=(Get-OpFailure $_ 'restore_fence_stop_call')}}
+            }
+        }
+    }
 }
 
 function Invoke-OperationalLaunch {
@@ -1196,7 +1575,8 @@ function Invoke-OperationalLaunch {
         $pins.Add((Open-428Pin (Join-Path $Directory 'pipeline.json') $m.bootstrap_sha256));$pins.Add((Open-428Pin (Join-Path $Directory 'task-catalog-request.json') $m.request_sha256))
         if(-not $ApplyRequested){
             @{schema='cochem-428-operational-launch-plan/1';status='READ_ONLY_PLAN_VERIFIED';source_commit=$m.source_commit;target_root=$script:OpRoot;
-                payload_files=@($inventory.files).Count;host_executed=$false;input_window_minutes=20;late_prompts=$false;maximum_shared_slots=4;pending_backlog_allowed=$true}|ConvertTo-Json;return
+                payload_files=@($inventory.files).Count;host_executed=$false;input_window_minutes=20;late_prompts=$false;maximum_shared_slots=4;pending_backlog_allowed=$true;
+                recovery_scenario=(Get-OpProperty $script:OpRecovery 'scenario')}|ConvertTo-Json;return
         }
         $identity=[Security.Principal.WindowsIdentity]::GetCurrent()
         if($PSVersionTable.PSEdition -cne 'Desktop' -or -not [Environment]::Is64BitProcess -or $env:COMPUTERNAME -cne 'AETHERDESK' -or
@@ -1229,6 +1609,11 @@ function Invoke-OperationalLaunch {
             $script:OpOldArgs=Get-OpDaemonArguments $script:OpOldConfig $script:OpConfig.private_root
             if($null -ne $script:OpRecovery){
                 Set-OpSubstage $state 'verify_original_recovery_evidence'
+                if(Test-OpRunningRecovery){
+                    Assert-OpRunningRecoveryEvidence $script:OpRecovery $m $inventory $pins $state $task
+                    Write-Host 'Running r4 baseline and completed r5 installation verified. No reinstall or sign-in is needed; you can walk away.' -ForegroundColor Green
+                    return
+                }
                 Assert-OpRecoveryEvidence $script:OpRecovery $m $inventory $pins $state
                 Write-Host 'Exact stopped baseline and completed r5 installation verified. No reinstall or sign-in is needed; you can walk away.' -ForegroundColor Green
                 return
@@ -1237,6 +1622,7 @@ function Invoke-OperationalLaunch {
                 $d.Settings.RestartCount -ne 0 -or $d.Settings.MultipleInstances -ne 2 -or $d.Triggers.Count -ne 1 -or
                 $d.Triggers.Item(1).Type -ne 9 -or $d.Triggers.Item(1).UserId -cne 'AETHERDESK\ansac' -or $task.GetInstances(0).Count -ne 1){throw 'Current r4 Warden invariants differ.'}
             $script:OpOriginalXml=$task.Xml;$script:OpOriginalSddl=$task.GetSecurityDescriptor(7)
+            $state.previous_task_xml=$script:OpOriginalXml;$state.previous_task_sddl=$script:OpOriginalSddl
             Assert-428WardenTask $task $script:OpOriginalXml $script:OpOriginalSddl $script:OpOldRoot $script:OpOldArgs $true $true 1
             $health=Get-428Health;Assert-428Health $health $script:OpOldRoot $true
             if($health.version -cne '4.2.8'){throw 'Current runtime version differs.'}
@@ -1266,7 +1652,12 @@ function Invoke-OperationalLaunch {
         }
         $actions.admission_fence={param($state)
             Write-OpStatus $state.phase
-            if($null -ne $script:OpRecovery){
+            if(Test-OpRunningRecovery){
+                # Read-only, before the fence: once READY, the running r4 ends on
+                # its writer timeout and the catalog runtime must find these.
+                Set-OpSubstage $state 'recheck_runtime_dependencies'
+                Assert-OpRecoveryRuntimeDependencies (Join-Path $Directory 'pipeline.json') $m.bootstrap_sha256
+            }elseif($null -ne $script:OpRecovery){
                 Set-OpSubstage $state 'recheck_stopped_recovery_baseline'
                 Assert-OpRecoveryTask ($script:OpFolder.GetTask('CoChem-4.2.7-Warden')) $script:OpRecovery.warden $script:OpOldRoot $script:OpOldArgs 1
                 Assert-OpRecoveryQuiescent $script:OpRecovery $null $pins $state
@@ -1285,15 +1676,20 @@ function Invoke-OperationalLaunch {
             $state.processes=Open-OpProcessProof $health $script:OpOldRoot $script:OpOldConfig
             Set-OpSubstage $state 'previous_task_identity'
             $task=$script:OpFolder.GetTask('CoChem-4.2.7-Warden')
-            if($task.Xml -cne $script:OpOriginalXml -or $task.GetSecurityDescriptor(7) -cne $script:OpOriginalSddl -or
+            if($task.Xml -cne (Get-OpProperty $state 'previous_task_xml' $script:OpOriginalXml) -or
+                $task.GetSecurityDescriptor(7) -cne (Get-OpProperty $state 'previous_task_sddl' $script:OpOriginalSddl) -or
                 (Get-OpRetainedTaskState $task $state.old_task_instance $state.old_task_last_run $state.processes) -cne 'RUNNING'){
                 throw 'Previous task changed before fencing.'}
             $state.fence=Start-OpFence 'stop-fence' $state 'fence'
+            if(Test-OpRunningRecovery){
+                Set-OpSubstage $state 'recheck_catalog_authority'
+                Assert-OpRecoveryCatalog $state.recovery_catalog $state.fence.ready.catalog
+            }
         }
         $actions.stop_previous={param($state)
             Write-OpStatus $state.phase;Assert-OpFence $state.fence
             $task=$script:OpFolder.GetTask('CoChem-4.2.7-Warden')
-            if($null -ne $script:OpRecovery){
+            if($null -ne $script:OpRecovery -and -not (Test-OpRunningRecovery)){
                 Set-OpSubstage $state 'disable_verified_stopped_baseline'
                 Assert-OpRecoveryTask $task $script:OpRecovery.warden $script:OpOldRoot $script:OpOldArgs 1
                 Assert-OpRecoveryQuiescent $script:OpRecovery $state.fence $pins $state;Assert-OpFence $state.fence
@@ -1318,13 +1714,18 @@ function Invoke-OperationalLaunch {
                 Assert-428WardenTask $task $script:OpOriginalXml $script:OpOriginalSddl $script:OpOldRoot $script:OpOldArgs $false $false 1
                 Assert-428PortFree;$state.stopped=$true;return
             }
-            if($task.Xml -cne $script:OpOriginalXml -or $task.GetSecurityDescriptor(7) -cne $script:OpOriginalSddl){throw 'Old task changed before stop.'}
-            $null=Get-OpRetainedTaskState $task $state.old_task_instance $state.old_task_last_run $state.processes $state.fence.ready.ready_at
+            Set-OpSubstage $state 'verify_retained_previous'
+            if($task.Xml -cne (Get-OpProperty $state 'previous_task_xml' $script:OpOriginalXml) -or
+                $task.GetSecurityDescriptor(7) -cne (Get-OpProperty $state 'previous_task_sddl' $script:OpOriginalSddl)){throw 'Old task changed before stop.'}
+            $state.previous_state_at_stop=Get-OpRetainedTaskState $task $state.old_task_instance $state.old_task_last_run $state.processes $state.fence.ready.ready_at
             Assert-OpFence $state.fence
+            Set-OpSubstage $state 'disable_previous_trigger'
             $d=$task.Definition;$d.Triggers.Item(1).Enabled=$false
             $null=$script:OpFolder.RegisterTaskDefinition('CoChem-4.2.7-Warden',$d,20,'SYSTEM',$null,5,$script:OpOriginalSddl)
             $task=$script:OpFolder.GetTask('CoChem-4.2.7-Warden');Assert-428WardenTask $task $script:OpOriginalXml $script:OpOriginalSddl $script:OpOldRoot $script:OpOldArgs $true $false 1
+            Set-OpSubstage $state 'stop_previous_task'
             Assert-OpFence $state.fence;Stop-OpRetainedTask $task $state.old_task_instance $state.old_task_last_run $state.processes $state.fence.ready.ready_at
+            Set-OpSubstage $state 'wait_previous_exit'
             $deadline=[DateTime]::UtcNow.AddSeconds(120)
             do{
                 $task=$script:OpFolder.GetTask('CoChem-4.2.7-Warden');$gone=@($state.processes|Where-Object{-not $_.HasExited}).Count -eq 0
@@ -1395,12 +1796,20 @@ function Invoke-OperationalLaunch {
             if($integration.schema -cne 'cochem-codex-integration-update/1' -or $integration.source_commit -cne $m.source_commit -or
                 $integration.user_home -cne 'C:\Users\ansac' -or $integration.runtime_root -cne $script:OpRoot -or
                 $integration.client_config -cne 'C:\Users\ansac\CoChem427\pipeline-client-r3.json'){throw 'Scoped Codex integration identity differs.'}
-            $path=Join-Path $script:OpPrivate 'codex-integration.json'
-            Copy-VerifiedPayload ([pscustomobject]@{source=$source;destination=$path;sha256=$m.integration_sha256;length=(Get-Item -LiteralPath $source).Length})
+            if($null -ne $script:OpRecovery){
+                # Codex must be integrated in this sitting; bind config.toml live.
+                Set-OpSubstage $state 'codex_capture_live_settings'
+                $live=New-OpCodexLiveManifest (Read-OpStreamBytes $s) $integration 'codex-integration-preflight.json'
+                $state.codex_config_recaptured=[bool]$live.config_recaptured;$state.codex_manifest_sha256=@{preflight=$live.sha256;apply=$null}
+                $path=$live.path;$digest=$live.sha256
+            }else{
+                $path=Join-Path $script:OpPrivate 'codex-integration.json';$digest=$m.integration_sha256
+                Copy-VerifiedPayload ([pscustomobject]@{source=$source;destination=$path;sha256=$m.integration_sha256;length=(Get-Item -LiteralPath $source).Length})
+            }
             $saved=$script:targetRoot
             try{$script:targetRoot=$script:OpPrivate
                 Invoke-428Native (Join-Path $script:OpRoot '.venv\Scripts\python.exe') @('-I','-B','-m','cochem_pipeline.codex_integration_428',
-                    '--manifest',$path,'--manifest-sha256',$m.integration_sha256) 'codex-preflight' 120
+                    '--manifest',$path,'--manifest-sha256',$digest) 'codex-preflight' 120
             }finally{$script:targetRoot=$saved}
             $result=Read-OpPrivateRecord (Join-Path $script:OpPrivate 'codex-preflight.stdout.log')
             if($result.status -cne 'CODEX_UPDATE_PLAN_VERIFIED' -or $result.files_changed -ne 0){throw 'Codex integration preflight did not verify.'}
@@ -1408,11 +1817,22 @@ function Invoke-OperationalLaunch {
         $actions.codex_integration={param($state)
             if($null -eq (Get-OpProperty $m 'integration_manifest')){return}
             Write-OpStatus $state.phase
-            $path=Join-Path $script:OpPrivate 'codex-integration.json'
+            if($null -ne $script:OpRecovery){
+                # Re-capture immediately before apply: Codex may have rewritten
+                # config.toml during the sitting; the module re-checks it again.
+                Set-OpSubstage $state 'codex_capture_live_settings'
+                $source=Join-Path $Directory $m.integration_manifest;$s=Open-428Pin $source $m.integration_sha256;$pins.Add($s);$integration=Read-428Json $s
+                $live=New-OpCodexLiveManifest (Read-OpStreamBytes $s) $integration 'codex-integration-apply.json'
+                $state.codex_config_recaptured=[bool](Get-OpProperty $state 'codex_config_recaptured' $false) -or [bool]$live.config_recaptured
+                $digests=Get-OpProperty $state 'codex_manifest_sha256'
+                if($null -eq $digests){$digests=@{preflight=$null;apply=$null};$state.codex_manifest_sha256=$digests}
+                $digests.apply=$live.sha256;$path=$live.path;$digest=$live.sha256
+            }else{$path=Join-Path $script:OpPrivate 'codex-integration.json';$digest=$m.integration_sha256}
+            Set-OpSubstage $state 'codex_apply'
             $saved=$script:targetRoot
             try{$script:targetRoot=$script:OpPrivate
                 Invoke-428Native (Join-Path $script:OpRoot '.venv\Scripts\python.exe') @('-I','-B','-m','cochem_pipeline.codex_integration_428',
-                    '--manifest',$path,'--manifest-sha256',$m.integration_sha256,'--apply') 'codex-integration' 120
+                    '--manifest',$path,'--manifest-sha256',$digest,'--apply') 'codex-integration' 120
             }finally{$script:targetRoot=$saved}
             $result=Read-OpPrivateRecord (Join-Path $script:OpPrivate 'codex-integration.stdout.log')
             if($result.status -cne 'CODEX_INTEGRATION_UPDATED_REFRESH_REQUIRED' -or $result.current_session_tools_loaded -ne $false){throw 'Codex integration did not verify.'}
