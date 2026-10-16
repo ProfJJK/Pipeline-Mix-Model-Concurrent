@@ -105,10 +105,14 @@ plan passed, but the owner has now run that package too; it is spent. It held
 in preconditions on PID 9612, the existing held supervisor observer. The public
 command hash exactly matches the old documented observation-only invocation;
 see `docs/4.2.8/evidence/operational-recovery-4eabf2e-hold.json`. No new fence,
-task mutation or cutover occurred. A narrowly bound observer correction is in
-preparation. Do not rerun any old command, close clients or the observer, repeat
-sign-in, or submit jobs before verified recovery. Current protected observer
-identity/configuration still require validation; a historical PID is not proof.
+task mutation or cutover occurred. The correction at `490bf2e` passed 273
+serialized source/inert tests. The actual protected observer files and public
+heartbeat passed the final read-only verifier (120 immutable files including
+109 application files); task/native identity checks remain owner-only. The
+fresh packaged read-only plan passed. Use only the reviewed new package and
+owner command in `docs/4.2.8/OPERATIONAL_OBSERVER_RECOVERY_20261015.md`.
+Do not rerun old commands, close clients or the observer, repeat sign-in, or
+submit jobs before verified recovery. Source/package proof is not deployment.
 
 2026-10-15: the owner-approved seven-part operational repair is integrated on
 `fix/428-operational-repair` in the separate local

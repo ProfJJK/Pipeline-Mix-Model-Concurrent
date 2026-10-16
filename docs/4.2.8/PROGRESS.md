@@ -1,10 +1,17 @@
 # 4.2.8 source progress
 
+The observer compatibility correction is ready at `490bf2e`: 273 serialized
+source/inert tests passed; the final verifier checked 120 actual immutable
+observer files and its fresh public heartbeat; the actual packaged read-only
+plan passed. The new [owner recovery](OPERATIONAL_OBSERVER_RECOVERY_20261015.md)
+preserves the observer and reuses installed r5 and existing sessions. Actual
+Administrator task/native evidence and deployment acceptance remain pending.
+
 The `4eabf2e` recovery has now run and is spent too. Its public rejection names
 PID 9612 and a command hash that exactly matches the old held supervisor
 observer. This is another omitted historical process role, not a provider or
-authentication failure. No new fence/task mutation/cutover was reached. A narrow
-protected observer verification is being prepared; preserve the running
+authentication failure. No new fence/task mutation/cutover was reached. The new
+protected observer verification is described above; preserve the running
 observer and all prior packages. See
 [exact hash and public status evidence](evidence/operational-recovery-4eabf2e-hold.json).
 

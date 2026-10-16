@@ -1,0 +1,27 @@
+PIPELINE 4.2.8 — VERIFIED HELD OBSERVER COMPATIBILITY
+
+The previous recovery rejected the existing observation-only supervisor.
+This fresh correction verifies that exact observer and leaves it running.
+All old launch/recovery commands are spent. Preserve their files and receipts.
+
+Paste this command ONCE into Administrator Windows PowerShell:
+
+C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -File "C:\Users\ansac\CoChem427\r428-op-recovery-490bf2e\run_operational_428_launch.ps1" -LaunchManifest "C:\Users\ansac\CoChem427\r428-op-recovery-490bf2e\launch-manifest.json" -LaunchManifestSha256 b94f115342e07a8e5270da04aa669d1d3da4a77353a88fce674d0fde7535e3af -Apply
+
+Existing sign-ins and the completed r5 installation are reused. No browser,
+sign-in, choices, reboot or later input is planned. Leave PowerShell and the
+computer running while protected checks and native acceptance continue.
+The observer and Codex/Claude MCP clients can remain open.
+
+Success: R428_OPERATIONAL_RUNNING_VERIFIED.
+If held: preserve and return the final sanitized JSON. Do not repeat this
+spent command, sign in again, delete evidence or stop processes.
+
+Status directory:
+C:\Program Files\CoChem\R428OperationalRecovery-20261015-a62bffb278044fffbaf21207a866ff81-54a66375d4004523806f5fdaa296918c
+
+Verification: 273 source/inert tests passed. The final verifier checked actual
+protected observer files and public records read-only; the packaged read-only
+plan passed. Administrator-only task/native process acceptance remains pending.
+These checks do not attest deployment or useful-job completion. Apply is owner-only.
+Preserve original r428-op source/build/bundle inputs and all previous packages.
