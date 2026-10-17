@@ -1,3 +1,9 @@
+SPENT — DO NOT RUN THIS COMMAND AGAIN.
+The owner run (2026-10-17 01:30-01:40Z) installed r6, fenced and stopped r4,
+then held at catalog acceptance: the Claude Haiku 5.5 high probe returned a
+failed result (category code). Nothing was published; the launcher restarted
+r4 and verified its health. Preserve all evidence.
+
 PIPELINE 4.2.8 — FRESH r6 INSTALL FROM THE RUNNING r4 (a55f55f)
 
 What this does, in one sitting:

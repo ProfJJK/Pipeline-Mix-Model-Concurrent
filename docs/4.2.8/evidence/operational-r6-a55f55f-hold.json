@@ -1,0 +1,663 @@
+{
+  "schema": "cochem-428-r6-hold-evidence/1",
+  "spent_package": "r428-op-launch-a55f55f",
+  "sitting": "C:\\Program Files\\CoChem\\R428Operational-20261017-cf69149e22f34d28afd3839d9dcff39e",
+  "launch_manifest_sha256": "736957a3731970c5f2f564242eb76cc24d3db0a95289d5abcfcceac4a1fe314b",
+  "owner_result_pasted": {
+    "previous_state_at_exit_timeout": null,
+    "rollback": "PREVIOUS_RUNTIME_RESTORED_HEALTH_VERIFIED",
+    "catalog_request_sha256": "9d667382c02476dd132547e4f0a475b371d4d7f6e7cca131a09441393da13221",
+    "previous_state_at_stop": "RUNNING",
+    "recovery_failure": null,
+    "recovery_error_type": null,
+    "codex_session_refresh_required": false,
+    "verified_stopped_at_entry": false,
+    "all_routes_usable": false,
+    "launcher_failure": {
+      "frames": [
+        {
+          "function": "<ScriptBlock>",
+          "line": 1928
+        },
+        {
+          "function": "Invoke-OpTransaction",
+          "line": 809
+        },
+        {
+          "function": "Invoke-OperationalLaunch",
+          "line": 2004
+        },
+        {
+          "function": "<ScriptBlock>",
+          "line": 2025
+        }
+      ],
+      "observer_proof": null,
+      "substage": null,
+      "process_rejection": null,
+      "error_type": "RuntimeException"
+    },
+    "launch_manifest_sha256": "736957a3731970c5f2f564242eb76cc24d3db0a95289d5abcfcceac4a1fe314b",
+    "codex_integration_status": "NOT_APPLIED",
+    "status": "R428_OPERATIONAL_HELD_PRESERVE_EVIDENCE",
+    "launcher_source_commit": "a55f55f13871eedfe255a8d5aad9f23bb0fc16ac",
+    "codex_config_recaptured": true,
+    "board_policy_observed": {
+      "policy_digest": "c8444fe2fd46b0f53edeaefc677ef7ff698c3e11cb83348a70255026a81da43d",
+      "status": "ALREADY_PUBLISHED"
+    },
+    "error_type": "RuntimeException",
+    "schema": "cochem-428-operational-owner-result/1",
+    "runtime_health_verified": false,
+    "codex_manifest_sha256": {
+      "apply": null,
+      "preflight": "854d4932133f2e94c4733043017b90bb4c0df5907c9f723dc354f05c9b6511c5"
+    },
+    "phase": "catalog_acceptance",
+    "late_prompt": false,
+    "request_sha256": "9d667382c02476dd132547e4f0a475b371d4d7f6e7cca131a09441393da13221",
+    "restore_fence_cleanup": null,
+    "acceptance_failure": {
+      "category": "code",
+      "error_type": "ProviderFailure",
+      "frames": [
+        {
+          "function": "run_owner_phase",
+          "line": 347
+        },
+        {
+          "function": "run_acceptance",
+          "line": 550
+        },
+        {
+          "function": "run_acceptance",
+          "line": 529
+        },
+        {
+          "function": "run",
+          "line": 937
+        }
+      ],
+      "target": {
+        "effort": "high",
+        "model": "claude-haiku-5-5",
+        "provider": "claude"
+      }
+    },
+    "fence_cleanup": {
+      "lock_released": true,
+      "status": "LOCK_RELEASED",
+      "release_requested": true,
+      "native_exit_verified": true
+    },
+    "publication_state": "NOT_COMMITTED",
+    "health_last_attempt": null,
+    "source_commit": "a55f55f13871eedfe255a8d5aad9f23bb0fc16ac",
+    "cutover_requested": false,
+    "useful_job_acceptance": false,
+    "automatic_retry": false,
+    "previous_runtime_at_hold": "ENDED_AT_STOP",
+    "coverage_holds": null
+  },
+  "public_status_records": [
+    {
+      "name": "status-20261017T0130311188235-a45bec43358e4cb0ade3b1a39ba9b99f.json",
+      "sha256": "c9acf75060bdb07b70a553a1eabeaeebc7a8cfc110ddf9b3b389f287cd37cd15",
+      "content": {
+        "result": null,
+        "automatic_retry": false,
+        "utc": "2026-10-17T01:30:31.1252375Z",
+        "substage": null,
+        "status": "RUNNING",
+        "late_prompt": false,
+        "phase": "preconditions",
+        "schema": "cochem-428-operational-status/1"
+      }
+    },
+    {
+      "name": "status-20261017T0133451298172-76c95a4d14524151afbad7d61a9e461e.json",
+      "sha256": "2f2af2bdf70fb09768b3dd58a76bd61bd9e1deb939131273ae73efbc1b8d147f",
+      "content": {
+        "result": null,
+        "automatic_retry": false,
+        "utc": "2026-10-17T01:33:45.1298172Z",
+        "substage": "verify_running_previous_controller",
+        "status": "RUNNING",
+        "late_prompt": false,
+        "phase": "preconditions",
+        "schema": "cochem-428-operational-status/1"
+      }
+    },
+    {
+      "name": "status-20261017T0133481599276-e35a646ca46d4b0c92ccd00b01eaab65.json",
+      "sha256": "ded7ccf766299c4dac36dfede92c5fe9c251f39907a45e65157461f157633e5c",
+      "content": {
+        "result": null,
+        "automatic_retry": false,
+        "utc": "2026-10-17T01:33:48.1599276Z",
+        "substage": "verify_board_policy",
+        "status": "RUNNING",
+        "late_prompt": false,
+        "phase": "preconditions",
+        "schema": "cochem-428-operational-status/1"
+      }
+    },
+    {
+      "name": "status-20261017T0133481787968-12ba4f6a1a5043908807c5e04128236d.json",
+      "sha256": "5480361bd7b6a3e11937418e0db4cb6e8f8be7ebf6fcb53d74b2ae71c740ca55",
+      "content": {
+        "result": null,
+        "automatic_retry": false,
+        "utc": "2026-10-17T01:33:48.1787968Z",
+        "substage": "verify_runtime_dependencies",
+        "status": "RUNNING",
+        "late_prompt": false,
+        "phase": "preconditions",
+        "schema": "cochem-428-operational-status/1"
+      }
+    },
+    {
+      "name": "status-20261017T0133481941889-40ea4181d4f14e20abbb2b19cb017111.json",
+      "sha256": "3e3b1fa1f151deb59a7dfabe975d5a12b298f86c8fb089d6a70524833be7a7a5",
+      "content": {
+        "result": null,
+        "automatic_retry": false,
+        "utc": "2026-10-17T01:33:48.1941889Z",
+        "substage": "verify_codex_managed_files",
+        "status": "RUNNING",
+        "late_prompt": false,
+        "phase": "preconditions",
+        "schema": "cochem-428-operational-status/1"
+      }
+    },
+    {
+      "name": "status-20261017T0133497446400-bcaf95d115784e8c9ed6fb34f2ba1394.json",
+      "sha256": "327c0fb3d86e23f0addeac0309d08b185711194a465f11c35415524df8616fb9",
+      "content": {
+        "result": null,
+        "automatic_retry": false,
+        "utc": "2026-10-17T01:33:49.7523205Z",
+        "substage": null,
+        "status": "RUNNING",
+        "late_prompt": false,
+        "phase": "offline_install",
+        "schema": "cochem-428-operational-status/1"
+      }
+    },
+    {
+      "name": "status-20261017T0138428730002-277fadfe6ceb43f396401ee4afe5f025.json",
+      "sha256": "3c9576fac51ae7c2194f128f6edfad0dec66030023948fbc0f9d7a8041f7c887",
+      "content": {
+        "result": null,
+        "automatic_retry": false,
+        "utc": "2026-10-17T01:38:42.8730002Z",
+        "substage": null,
+        "status": "RUNNING",
+        "late_prompt": false,
+        "phase": "codex_preflight",
+        "schema": "cochem-428-operational-status/1"
+      }
+    },
+    {
+      "name": "status-20261017T0138428730002-2b9a1264abf740149e30a25e36e7ed12.json",
+      "sha256": "4f9a178449746b1219551afe96b1155407b764a3088cefcf2da3e069cf658c75",
+      "content": {
+        "result": null,
+        "automatic_retry": false,
+        "utc": "2026-10-17T01:38:42.8730002Z",
+        "substage": "codex_capture_live_settings",
+        "status": "RUNNING",
+        "late_prompt": false,
+        "phase": "codex_preflight",
+        "schema": "cochem-428-operational-status/1"
+      }
+    },
+    {
+      "name": "status-20261017T0138430233395-812514814ee44b8a83684b2a649b3f77.json",
+      "sha256": "2ee4bf377191e7f0b3256e646a63985c8f2137f9f64fb3e883d743732b97bd1b",
+      "content": {
+        "result": null,
+        "automatic_retry": false,
+        "utc": "2026-10-17T01:38:43.0233395Z",
+        "substage": null,
+        "status": "RUNNING",
+        "late_prompt": false,
+        "phase": "admission_fence",
+        "schema": "cochem-428-operational-status/1"
+      }
+    },
+    {
+      "name": "status-20261017T0138430285829-0358873e12fc4b0dabf4dd977f69d789.json",
+      "sha256": "bd5187f4a28403993d507087aa59a170cdef9ca4b717182f14fe6d61fd7e325d",
+      "content": {
+        "result": null,
+        "automatic_retry": false,
+        "utc": "2026-10-17T01:38:43.0285829Z",
+        "substage": "recheck_runtime_dependencies",
+        "status": "RUNNING",
+        "late_prompt": false,
+        "phase": "admission_fence",
+        "schema": "cochem-428-operational-status/1"
+      }
+    },
+    {
+      "name": "status-20261017T0138430343111-ee560b84930240968eaa584e1aa6cca8.json",
+      "sha256": "0274523c02578ad23c4d7528d14f0a4576ba8aa9ca8ebadb26c99b56aad48120",
+      "content": {
+        "result": null,
+        "automatic_retry": false,
+        "utc": "2026-10-17T01:38:43.0343111Z",
+        "substage": "previous_health",
+        "status": "RUNNING",
+        "late_prompt": false,
+        "phase": "admission_fence",
+        "schema": "cochem-428-operational-status/1"
+      }
+    },
+    {
+      "name": "status-20261017T0138431372603-a61e08111d4d4758bb7bcd245c6c9030.json",
+      "sha256": "1a754794b8afd3a5f5c1c6c6d011519113e28d9d0ab1516b18b039409ab87076",
+      "content": {
+        "result": null,
+        "automatic_retry": false,
+        "utc": "2026-10-17T01:38:43.1372603Z",
+        "substage": "previous_native_identity",
+        "status": "RUNNING",
+        "late_prompt": false,
+        "phase": "admission_fence",
+        "schema": "cochem-428-operational-status/1"
+      }
+    },
+    {
+      "name": "status-20261017T0138438744322-1905e54bbc174d94bed6b81ce1d2449a.json",
+      "sha256": "5c0b8607673fe220a5e800d3c016e9496a7611ddaa094a23b274128ac8bfca96",
+      "content": {
+        "result": null,
+        "automatic_retry": false,
+        "utc": "2026-10-17T01:38:43.8744322Z",
+        "substage": "previous_task_identity",
+        "status": "RUNNING",
+        "late_prompt": false,
+        "phase": "admission_fence",
+        "schema": "cochem-428-operational-status/1"
+      }
+    },
+    {
+      "name": "status-20261017T0138438892526-bcff2af5651e4eb89c4f2b43efa46888.json",
+      "sha256": "41a090f274af9f79694ed207be449cef6aba0556a09a5b64d6619428e4a8ce39",
+      "content": {
+        "result": null,
+        "automatic_retry": false,
+        "utc": "2026-10-17T01:38:43.8892526Z",
+        "substage": "fence_create_directory",
+        "status": "RUNNING",
+        "late_prompt": false,
+        "phase": "admission_fence",
+        "schema": "cochem-428-operational-status/1"
+      }
+    },
+    {
+      "name": "status-20261017T0138439075338-ddd68500b51344b4b2fd6d8d946ecaee.json",
+      "sha256": "f2ca6ce9dedf483b71cd7415056dc46d5ea542575200d0d1b19cf4408a77eb76",
+      "content": {
+        "result": null,
+        "automatic_retry": false,
+        "utc": "2026-10-17T01:38:43.9075338Z",
+        "substage": "fence_create_task",
+        "status": "RUNNING",
+        "late_prompt": false,
+        "phase": "admission_fence",
+        "schema": "cochem-428-operational-status/1"
+      }
+    },
+    {
+      "name": "status-20261017T0138439599350-4f0e03bc6ec147edb715a5f69d7afd5c.json",
+      "sha256": "03c04805f37549432a6370f0f09ff36651c738deab11ca5b1018284d1a9082fa",
+      "content": {
+        "result": null,
+        "automatic_retry": false,
+        "utc": "2026-10-17T01:38:43.9599350Z",
+        "substage": "fence_wait_ready",
+        "status": "RUNNING",
+        "late_prompt": false,
+        "phase": "admission_fence",
+        "schema": "cochem-428-operational-status/1"
+      }
+    },
+    {
+      "name": "status-20261017T0138449899394-08512193535847b5b637a65366c7138c.json",
+      "sha256": "56bcc5b7a0eb71ce90ed6772897d5b3b0f739a9b54db647c316cf3917ac95d84",
+      "content": {
+        "result": null,
+        "automatic_retry": false,
+        "utc": "2026-10-17T01:38:44.9899394Z",
+        "substage": "fence_read_ready",
+        "status": "RUNNING",
+        "late_prompt": false,
+        "phase": "admission_fence",
+        "schema": "cochem-428-operational-status/1"
+      }
+    },
+    {
+      "name": "status-20261017T0138450074104-181627492eb24491ad010e8f8611d942.json",
+      "sha256": "f2ebda9760dd42360920e7393e87a788bee22e72f54371832fe741450b861322",
+      "content": {
+        "result": null,
+        "automatic_retry": false,
+        "utc": "2026-10-17T01:38:45.0074104Z",
+        "substage": "fence_validate_ready",
+        "status": "RUNNING",
+        "late_prompt": false,
+        "phase": "admission_fence",
+        "schema": "cochem-428-operational-status/1"
+      }
+    },
+    {
+      "name": "status-20261017T0138451918151-eec8dfba78244b429d990354ff19d64d.json",
+      "sha256": "531745f83fa9e8728e0fe80811d7252d11218e1afc03c5005a2642a586074df7",
+      "content": {
+        "result": null,
+        "automatic_retry": false,
+        "utc": "2026-10-17T01:38:45.1918151Z",
+        "substage": "recheck_catalog_request",
+        "status": "RUNNING",
+        "late_prompt": false,
+        "phase": "admission_fence",
+        "schema": "cochem-428-operational-status/1"
+      }
+    },
+    {
+      "name": "status-20261017T0138452080489-ac68f328d222462880a6a866fa6de038.json",
+      "sha256": "40c15ade841f6f592132501058d17f79183515b6574120295c469957a0084482",
+      "content": {
+        "result": null,
+        "automatic_retry": false,
+        "utc": "2026-10-17T01:38:45.2080489Z",
+        "substage": null,
+        "status": "RUNNING",
+        "late_prompt": false,
+        "phase": "stop_previous",
+        "schema": "cochem-428-operational-status/1"
+      }
+    },
+    {
+      "name": "status-20261017T0138453765033-961ba0d42d524b19bf1221b67b76f97d.json",
+      "sha256": "3997a40f726a7c4106236ec9fa1ba4646bb7ac22261f7fc527a177a8d7f521fc",
+      "content": {
+        "result": null,
+        "automatic_retry": false,
+        "utc": "2026-10-17T01:38:45.3765033Z",
+        "substage": "verify_retained_previous",
+        "status": "RUNNING",
+        "late_prompt": false,
+        "phase": "stop_previous",
+        "schema": "cochem-428-operational-status/1"
+      }
+    },
+    {
+      "name": "status-20261017T0138456295843-79859e9abb0044eb83b4134b1e21afdb.json",
+      "sha256": "078e4196b08019ad0d3ec78df8ba34bd4022f4b0a1b9190587a30bfa299f8fb6",
+      "content": {
+        "result": null,
+        "automatic_retry": false,
+        "utc": "2026-10-17T01:38:45.6295843Z",
+        "substage": "disable_previous_trigger",
+        "status": "RUNNING",
+        "late_prompt": false,
+        "phase": "stop_previous",
+        "schema": "cochem-428-operational-status/1"
+      }
+    },
+    {
+      "name": "status-20261017T0138456456131-391f10651cd94a8dae499dadefda4ccc.json",
+      "sha256": "fd39120a4036166ff96735999746838b8d79e78a7b0fca455e75fbe6a26c63ae",
+      "content": {
+        "result": null,
+        "automatic_retry": false,
+        "utc": "2026-10-17T01:38:45.6456131Z",
+        "substage": "stop_previous_task",
+        "status": "RUNNING",
+        "late_prompt": false,
+        "phase": "stop_previous",
+        "schema": "cochem-428-operational-status/1"
+      }
+    },
+    {
+      "name": "status-20261017T0138458204705-fed1dd880c7a4005825d64a40d15de94.json",
+      "sha256": "40bb317dbc7d180168e58b496cc62eb7395fecc07b66a2e7b78c60787f948c07",
+      "content": {
+        "result": null,
+        "automatic_retry": false,
+        "utc": "2026-10-17T01:38:45.8204705Z",
+        "substage": "wait_previous_exit",
+        "status": "RUNNING",
+        "late_prompt": false,
+        "phase": "stop_previous",
+        "schema": "cochem-428-operational-status/1"
+      }
+    },
+    {
+      "name": "status-20261017T0138469728105-bd07f6d3dda24e23aa933d20b8418fa4.json",
+      "sha256": "fe020e6acfdd3b93ec36f306d742f0dd1f52ba59175475a66a5ad27d0867e47b",
+      "content": {
+        "result": null,
+        "automatic_retry": false,
+        "utc": "2026-10-17T01:38:46.9728105Z",
+        "substage": null,
+        "status": "RUNNING",
+        "late_prompt": false,
+        "phase": "release_fence",
+        "schema": "cochem-428-operational-status/1"
+      }
+    },
+    {
+      "name": "status-20261017T0138473816787-82d8fbb830c14f239f37e1b8d22742a1.json",
+      "sha256": "b48a5f320bff748b5d0281f024554098b46c46910f0ed5dc1f496f20bcea4fa4",
+      "content": {
+        "result": null,
+        "automatic_retry": false,
+        "utc": "2026-10-17T01:38:47.3816787Z",
+        "substage": null,
+        "status": "RUNNING",
+        "late_prompt": false,
+        "phase": "catalog_acceptance",
+        "schema": "cochem-428-operational-status/1"
+      }
+    },
+    {
+      "name": "status-20261017T0139499350971-921c41902ee744ada9bcfadafad57f7f.json",
+      "sha256": "6607f0bf451bbcb7dd717b27cf0e311d939c643e5649c77bd152a2831e80bf39",
+      "content": {
+        "result": null,
+        "automatic_retry": false,
+        "utc": "2026-10-17T01:39:49.9350971Z",
+        "substage": "fence_create_directory",
+        "status": "RUNNING",
+        "late_prompt": false,
+        "phase": "catalog_acceptance",
+        "schema": "cochem-428-operational-status/1"
+      }
+    },
+    {
+      "name": "status-20261017T0139499468751-0ad488a79e52447880bcd81626d5bc38.json",
+      "sha256": "778343b90abbc9722bbd5e2f88224c49158ed416018a7b08b09a953dfeb6dfa4",
+      "content": {
+        "result": null,
+        "automatic_retry": false,
+        "utc": "2026-10-17T01:39:49.9468751Z",
+        "substage": "fence_create_task",
+        "status": "RUNNING",
+        "late_prompt": false,
+        "phase": "catalog_acceptance",
+        "schema": "cochem-428-operational-status/1"
+      }
+    },
+    {
+      "name": "status-20261017T0139499773983-1fbc6dbf8b1141aba68003a6189a8829.json",
+      "sha256": "31937bc5e88738b072d5cae2b47866f97d8468e4587f03b3e8222770613ea63c",
+      "content": {
+        "result": null,
+        "automatic_retry": false,
+        "utc": "2026-10-17T01:39:49.9773983Z",
+        "substage": "fence_wait_ready",
+        "status": "RUNNING",
+        "late_prompt": false,
+        "phase": "catalog_acceptance",
+        "schema": "cochem-428-operational-status/1"
+      }
+    },
+    {
+      "name": "status-20261017T0139509912849-fe989b62cee0411b86615574856e3767.json",
+      "sha256": "e5cda53ab75c278df7a901c562b822bbb010ccda233d3566d422c7e83bda0189",
+      "content": {
+        "result": null,
+        "automatic_retry": false,
+        "utc": "2026-10-17T01:39:50.9912849Z",
+        "substage": "fence_read_ready",
+        "status": "RUNNING",
+        "late_prompt": false,
+        "phase": "catalog_acceptance",
+        "schema": "cochem-428-operational-status/1"
+      }
+    },
+    {
+      "name": "status-20261017T0139510001122-d6d3ab5227f94bf3979314fa16c1a35f.json",
+      "sha256": "59b440077c20174c9117c9a5e1cb73b978bdb3b9313eec834b3cb2459d007bcf",
+      "content": {
+        "result": null,
+        "automatic_retry": false,
+        "utc": "2026-10-17T01:39:51.0006261Z",
+        "substage": "fence_validate_ready",
+        "status": "RUNNING",
+        "late_prompt": false,
+        "phase": "catalog_acceptance",
+        "schema": "cochem-428-operational-status/1"
+      }
+    },
+    {
+      "name": "status-20261017T0140047432951-a450f587b51a442588b16c59706b7f1b.json",
+      "sha256": "049b25eba67d5c6695e5b169f329a8d01e9155e03e81e835ca8b2f9ddf0b955d",
+      "content": {
+        "result": {
+          "previous_state_at_exit_timeout": null,
+          "rollback": "PREVIOUS_RUNTIME_RESTORED_HEALTH_VERIFIED",
+          "catalog_request_sha256": "9d667382c02476dd132547e4f0a475b371d4d7f6e7cca131a09441393da13221",
+          "previous_state_at_stop": "RUNNING",
+          "recovery_failure": null,
+          "recovery_error_type": null,
+          "codex_session_refresh_required": false,
+          "verified_stopped_at_entry": false,
+          "all_routes_usable": false,
+          "launcher_failure": {
+            "frames": [
+              {
+                "function": "<ScriptBlock>",
+                "line": 1928
+              },
+              {
+                "function": "Invoke-OpTransaction",
+                "line": 809
+              },
+              {
+                "function": "Invoke-OperationalLaunch",
+                "line": 2004
+              },
+              {
+                "function": "<ScriptBlock>",
+                "line": 2025
+              }
+            ],
+            "observer_proof": null,
+            "substage": null,
+            "process_rejection": null,
+            "error_type": "RuntimeException"
+          },
+          "launch_manifest_sha256": "736957a3731970c5f2f564242eb76cc24d3db0a95289d5abcfcceac4a1fe314b",
+          "codex_integration_status": "NOT_APPLIED",
+          "status": "R428_OPERATIONAL_HELD_PRESERVE_EVIDENCE",
+          "launcher_source_commit": "a55f55f13871eedfe255a8d5aad9f23bb0fc16ac",
+          "codex_config_recaptured": true,
+          "board_policy_observed": {
+            "policy_digest": "c8444fe2fd46b0f53edeaefc677ef7ff698c3e11cb83348a70255026a81da43d",
+            "status": "ALREADY_PUBLISHED"
+          },
+          "error_type": "RuntimeException",
+          "schema": "cochem-428-operational-owner-result/1",
+          "runtime_health_verified": false,
+          "codex_manifest_sha256": {
+            "apply": null,
+            "preflight": "854d4932133f2e94c4733043017b90bb4c0df5907c9f723dc354f05c9b6511c5"
+          },
+          "phase": "catalog_acceptance",
+          "late_prompt": false,
+          "request_sha256": "9d667382c02476dd132547e4f0a475b371d4d7f6e7cca131a09441393da13221",
+          "restore_fence_cleanup": null,
+          "acceptance_failure": {
+            "category": "code",
+            "error_type": "ProviderFailure",
+            "frames": [
+              {
+                "function": "run_owner_phase",
+                "line": 347
+              },
+              {
+                "function": "run_acceptance",
+                "line": 550
+              },
+              {
+                "function": "run_acceptance",
+                "line": 529
+              },
+              {
+                "function": "run",
+                "line": 937
+              }
+            ],
+            "target": {
+              "effort": "high",
+              "model": "claude-haiku-5-5",
+              "provider": "claude"
+            }
+          },
+          "fence_cleanup": {
+            "lock_released": true,
+            "status": "LOCK_RELEASED",
+            "release_requested": true,
+            "native_exit_verified": true
+          },
+          "publication_state": "NOT_COMMITTED",
+          "health_last_attempt": null,
+          "source_commit": "a55f55f13871eedfe255a8d5aad9f23bb0fc16ac",
+          "cutover_requested": false,
+          "useful_job_acceptance": false,
+          "automatic_retry": false,
+          "previous_runtime_at_hold": "ENDED_AT_STOP",
+          "coverage_holds": null
+        },
+        "automatic_retry": false,
+        "utc": "2026-10-17T01:40:04.7432951Z",
+        "substage": null,
+        "status": "R428_OPERATIONAL_HELD_PRESERVE_EVIDENCE",
+        "late_prompt": false,
+        "phase": "catalog_acceptance",
+        "schema": "cochem-428-operational-status/1"
+      }
+    }
+  ],
+  "timeline": {
+    "preconditions_start": "2026-10-17T01:30:31Z",
+    "offline_install": "2026-10-17T01:33:49Z",
+    "fence_ready": "2026-10-17T01:38:45Z",
+    "r4_stopped": "2026-10-17T01:38:46Z",
+    "catalog_phase_start": "2026-10-17T01:38:47Z",
+    "restore_fence": "2026-10-17T01:39:49Z",
+    "final": "2026-10-17T01:40:04Z"
+  },
+  "r4_after_hold": {
+    "pid": 8452,
+    "instance_id": "73b2ef6c99b54a8bb1a833bae04f5a58",
+    "version": "4.2.8",
+    "routing_holds": [],
+    "catalog_activation_policy_digest": "c8444fe2fd46b0f53edeaefc677ef7ff698c3e11cb83348a70255026a81da43d"
+  }
+}
