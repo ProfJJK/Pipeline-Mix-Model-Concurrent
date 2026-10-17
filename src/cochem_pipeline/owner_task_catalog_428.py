@@ -309,6 +309,7 @@ def run_owner_phase(bootstrap_config, bootstrap_sha256, request_path, request_sh
                                 raise RuntimeError('Controller maintenance has not drained before publication')
                         if getattr(runtime, 'docker', None) is not None:
                             runtime.docker.reap_orphans(active_attempt_ids=set(), include_warm=False)
+                        phase = 'publication'
 
                     def finalize(conn, acceptance):
                         # Inside the publication transaction: any failure here

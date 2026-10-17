@@ -67,7 +67,13 @@ def prepare_update(export: Path, destination: Path, *, user_home: Path, runtime_
     inventory = json.loads((Path(export) / 'integration-manifest.json').read_bytes())
     # The transformation is validated by working-tree code: it must be the
     # exported (packaged) commit's.
-    require_committed_tree(Path(__file__).resolve().parents[1], inventory.get('source_commit'))
+    repository = Path(__file__).resolve().parents[1]
+    require_committed_tree(repository, inventory.get('source_commit'))
+    for name in FILES:
+        committed = subprocess.run(['git', '-C', str(repository), 'show', inventory['source_commit'] + ':' + PREFIX + name],
+                                   check=True, capture_output=True, timeout=30).stdout
+        if (Path(export) / name).read_bytes() != committed:
+            raise ValueError('Codex export template differs from the packaged commit: ' + name)
     manifest = prepare_codex_update(export, user_home, runtime_root, client_config)
     data = (json.dumps(manifest, indent=2) + '\n').encode('utf-8')
     with destination.open('xb') as stream:

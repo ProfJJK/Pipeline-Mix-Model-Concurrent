@@ -115,6 +115,38 @@ The spent r5 recovery path keeps its reviewed semantics and r5 constants.
 **`prepare_codex_integration_manifest.py --update-from-export`** writes the
 scoped Codex update manifest from a committed export.
 
+**Binding to the packaged commit (second review round):**
+- `require_committed_tree` refuses:
+  - working-tree differences and untracked files;
+  - assume-unchanged or skip-worktree index flags;
+  - ignored non-cache files.
+- The evidence recorder checks the whole tree, so root `pytest.ini` and
+  `conftest.py` are covered.
+- The release preparer must run from, and import, the packaged checkout.
+- The catalog that sizes the Codex contracts and request targets must equal
+  the packaged commit's `docs/4.2.8/routing-candidate.json`.
+- The Codex templates must equal the commit's.
+- The fresh launcher compares the pinned request's own previous policy and
+  task catalog with the reviewed values.
+- The source-test evidence must cover `REQUIRED_SOURCE_TEST_MODULES`.
+
+## Pre-existing failures found and fixed in the same release
+
+A broad 87-module regression found four failures that predate this work: they
+fail identically at `aa7706e`. They were never in the 973-test sweep, because
+their modules had not changed since `c714854`.
+
+- **Three tests in `test_acceptance_428.py` were stale.** Their fixture
+  planned against the raw, unaccepted routing candidate. `a47e825` deliberately
+  bound planning dispatch to accepted catalog history, so they now use the
+  accepted-store fixture. Newer suites already covered the same flow.
+- **`test_worker_gemini_dispatch.py` found a real, narrow regression from
+  `95287db`.** The CHAPTER_DRAFT output contract required every key of the
+  first declared WBS task on every model-written task, before reconciliation
+  could restore the declared ones. Keys beyond `id/description/requirements`
+  are now optional per item; their types are still checked. Manifests with
+  only the three base keys keep the same contract hash.
+
 ## Offline proof
 
 `pipeline_tests/test_catalog_phase_e2e_428.py` (20 tests, about 15 s) runs the
@@ -149,7 +181,8 @@ host, Docker, ImDisk or deployment.
 ## Build recipe (integrator, serialized under the heavy-run lock)
 
 1. Commit everything.
-2. Run `scripts/record_source_tests_428.py` for the focused modules. It writes
+2. Run `scripts/record_source_tests_428.py` for the focused modules, which
+   must include `REQUIRED_SOURCE_TEST_MODULES`. It writes
    `source-test-evidence.json` and `source-tests.log`.
 3. Freeze the commit:
    `scripts/prepare_428_release.py --mode freeze --commit <sha>`.

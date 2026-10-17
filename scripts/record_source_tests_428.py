@@ -47,7 +47,7 @@ def record(destination, modules, *, timeout_seconds=3600, lock_timeout_seconds=5
         raise ValueError('Name existing pipeline_tests/test_*.py modules')
     commit = subprocess.run(['git', '-C', str(ROOT), 'rev-parse', 'HEAD'], capture_output=True, text=True,
                             check=True, timeout=30).stdout.strip()
-    require_committed_tree(ROOT, commit, paths=('src', 'scripts', 'pipeline_tests'))
+    require_committed_tree(ROOT, commit, paths=())
     completed = runner([sys.executable, '-I', str(ROOT / RUNNER), '--timeout-seconds', str(timeout_seconds),
                         '--lock-timeout-seconds', str(lock_timeout_seconds), '--', *modules, '-q', '--tb=short'],
                        cwd=str(ROOT), capture_output=True, timeout=timeout_seconds + lock_timeout_seconds + 120)
@@ -58,7 +58,7 @@ def record(destination, modules, *, timeout_seconds=3600, lock_timeout_seconds=5
     if completed.returncode != 0:
         raise ValueError('Serialized source tests did not pass; the report is preserved')
     passed = summarize(report.decode('utf-8', 'replace'))
-    require_committed_tree(ROOT, commit, paths=('src', 'scripts', 'pipeline_tests'))
+    require_committed_tree(ROOT, commit, paths=())
     evidence = dict(schema=SOURCE_TEST_SCHEMA, source_commit=commit, runner=RUNNER, status='PASSED',
                     passed=passed, failed=0, modules=modules,
                     source_test_report_sha256=hashlib.sha256(report).hexdigest(), host_acceptance_executed=False)

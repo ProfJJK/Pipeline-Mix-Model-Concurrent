@@ -198,15 +198,34 @@ def bootstrap_from_current_428(previous_bytes, *, expected_previous_pin=PREVIOUS
 
 def require_committed_tree(repository, commit, paths=('src', 'scripts')):
     """Offline preparation executes working-tree code (request compilation,
-    contract checks, bootstrap transforms); it must be the packaged commit's."""
+    contract checks, bootstrap transforms); it must be the packaged commit's.
+    An empty paths tuple checks the whole tree. Index flags that hide edits
+    (assume-unchanged, skip-worktree) and ignored non-cache files are refused."""
     if not isinstance(commit, str) or not re.fullmatch('[a-f0-9]{40}', commit):
         raise ValueError('An exact packaged source commit is required')
-    diff = subprocess.run(['git', '-C', str(repository), 'diff', '--quiet', commit, '--', *paths],
-                          capture_output=True, timeout=60)
-    untracked = subprocess.run(['git', '-C', str(repository), 'ls-files', '--others', '--exclude-standard', '--', *paths],
-                               capture_output=True, timeout=60)
-    if diff.returncode != 0 or untracked.returncode != 0 or untracked.stdout.strip():
+    spec = ['--', *paths] if paths else []
+    def git(*args):
+        return subprocess.run(['git', '-C', str(repository), *args], capture_output=True, timeout=120)
+    diff = git('diff', '--quiet', commit, *spec)
+    untracked = git('ls-files', '--others', '--exclude-standard', *spec)
+    flags = git('ls-files', '-v', *spec)
+    ignored = git('ls-files', '--others', '--ignored', '--exclude-standard', '--',
+                  *(paths or ('src', 'scripts', 'pipeline_tests', 'conftest.py', 'pytest.ini')))
+    hidden = [line for line in flags.stdout.decode('utf-8', 'replace').splitlines()
+              if line[:1].islower() or line[:1] == 'S']
+    shadow = [line for line in ignored.stdout.decode('utf-8', 'replace').splitlines()
+              if line.strip() and '__pycache__/' not in line and not line.endswith('.pyc')]
+    if (any(result.returncode != 0 for result in (diff, untracked, flags, ignored))
+            or untracked.stdout.strip() or hidden or shadow):
         raise ValueError('Working-tree source or scripts differ from the packaged commit')
+
+
+def require_checkout(repository):
+    """The packaged checkout must be the one whose code this process runs."""
+    import cochem_pipeline
+    if (Path(repository).resolve() != SCRIPTS.parent.resolve()
+            or Path(cochem_pipeline.__file__).resolve().parent != (SCRIPTS.parent / 'src' / 'cochem_pipeline').resolve()):
+        raise ValueError('Preparation must run from, and import, the packaged checkout')
 
 
 def _committed_script(repository, commit, name):
@@ -220,6 +239,19 @@ def _committed_script(repository, commit, name):
 
 
 SOURCE_TEST_SCHEMA = 'cochem-428-operational-source-tests/1'
+# The focused catalog-phase, launcher, preparer and effort suites every fresh
+# payload must have passed (scripts/record_source_tests_428.py).
+REQUIRED_SOURCE_TEST_MODULES = frozenset('pipeline_tests/' + name for name in (
+    'test_operational_launch_428.py', 'test_operational_fence_cleanup_428.py', 'test_operational_recovery_428.py',
+    'test_operational_recovery_package_428.py', 'test_operational_fence_diagnostic_428.py',
+    'test_operational_process_roles_428.py', 'test_operational_observer_roles_428.py',
+    'test_operational_observer_acl_428.py', 'test_operational_release_428.py', 'test_owner_admission_fence_428.py',
+    'test_owner_task_catalog_428.py', 'test_operational_preserved_pid_428.py', 'test_operational_running_recovery_428.py',
+    'test_operational_oneshot_identity_428.py', 'test_operational_catalog_request_428.py',
+    'test_operational_release_r6_428.py', 'test_task_catalog_acceptance_428.py', 'test_catalog_phase_e2e_428.py',
+    'test_codex_effort_contract_428.py', 'test_native_effort.py', 'test_native_effort_v3.py', 'test_worker_contract.py',
+    'test_worker_inference_policy.py', 'test_codex_integration_428.py', 'test_task_catalog_428.py',
+    'test_acceptance_428.py', 'test_worker_gemini_dispatch.py', 'test_output_contracts_428.py'))
 
 
 def read_source_test_evidence(path, source_commit):
@@ -234,6 +266,7 @@ def read_source_test_evidence(path, source_commit):
             or not isinstance(value['modules'], list) or not value['modules']
             or any(not isinstance(item, str) or not re.fullmatch(r'pipeline_tests/test_[a-z0-9_]+\.py', item)
                    for item in value['modules'])
+            or not REQUIRED_SOURCE_TEST_MODULES <= set(value['modules'])
             or not re.fullmatch('[a-f0-9]{64}', str(value['source_test_report_sha256']))):
         raise ValueError('Source-test evidence is not a PASSED report for the packaged commit')
     # scripts/record_source_tests_428.py keeps the runner report beside it.
@@ -275,7 +308,11 @@ def prepare_operational_release_428(freeze, wheelhouse, application, destination
                                            target_root=target_root)
     routing_basis = evidence_raw = None
     if release == 'r6':
+        require_checkout(repository)
         require_committed_tree(repository, source['commit'])
+        # The catalog that sizes the Codex contracts is the packaged one.
+        if catalog != _strict_json(read_regular(freeze / 'docs/4.2.8/routing-candidate.json').decode('utf-8')):
+            raise ValueError('Task catalog differs from the packaged commit routing candidate')
         policy, routing_basis = active_routing_policy(previous_bundle)
         candidate = route_active_policy(candidate, policy, binary_bindings, catalog)
         evidence_raw = read_source_test_evidence(source_test_evidence, source['commit'])

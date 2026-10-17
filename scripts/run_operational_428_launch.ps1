@@ -1703,6 +1703,9 @@ function Invoke-OperationalLaunch {
         foreach($row in $inventory.files){$pins.Add((Open-428Pin $row.source $row.sha256 $row.length))}
         $pins.Add((Open-428Pin (Join-Path $Directory 'pipeline.json') $m.bootstrap_sha256));$pins.Add((Open-428Pin (Join-Path $Directory 'task-catalog-request.json') $m.request_sha256))
         $script:OpCatalogRequest=Resolve-OpCatalogRequest $m $Directory $pins ($null -ne $script:OpRecovery)
+        if($null -eq $script:OpRecovery -and ($script:OpCatalogRequest.previous_policy_digest -cne $m.request_previous_policy_digest -or
+            $null -ne $script:OpCatalogRequest.previous_task_catalog_sha256)){
+            throw 'The pinned r6 request does not target the board-active policy with no prior task catalog.'}
         if(-not $ApplyRequested){
             @{schema='cochem-428-operational-launch-plan/1';status='READ_ONLY_PLAN_VERIFIED';source_commit=$m.source_commit;target_root=$script:OpRoot;
                 payload_files=@($inventory.files).Count;host_executed=$false;input_window_minutes=20;late_prompts=$false;maximum_shared_slots=4;pending_backlog_allowed=$true;

@@ -349,6 +349,12 @@ def prepare_output_contract(node):
     optional = {'$.summary'}
     if kind == 'CHAPTER_DRAFT':
         optional.add('$.wbs_tasks_defined')  # controller reconciliation restores it
+        # The item shape comes from the first declared task; keys beyond the
+        # base three are the manifest's, which reconciliation restores, so a
+        # model-written or repeated task may omit them (types still checked).
+        optional.update('$.wbs_tasks_defined[].' + key for task in payload.get('wbs_tasks_defined') or ()
+                        if isinstance(task, dict) for key in task
+                        if key not in ('id', 'description', 'requirements'))
     if kind == 'CODE_TEST_AUTHOR':
         optional.add('$.reuse_tests')
     if kind == 'CODE_EDIT':

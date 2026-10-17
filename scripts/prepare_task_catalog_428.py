@@ -46,8 +46,15 @@ def prepare_task_catalog_release(destination, *, configuration, catalog, binary_
     if configuration.get('max_execution_slots') != 4:
         raise ValueError('Task catalog acceptance must preserve four execution slots')
     if expected_policy_digest is not None:
-        # prepare/decode/contract checks below run working-tree code.
+        # prepare/decode/contract checks below run working-tree code, and the
+        # catalog must be the packaged commit's routing candidate.
         require_committed_tree(SCRIPTS.parent, source_commit)
+        import subprocess
+        committed = subprocess.run(['git', '-C', str(SCRIPTS.parent), 'show',
+                                    source_commit + ':docs/4.2.8/routing-candidate.json'],
+                                   capture_output=True, check=True, timeout=60).stdout
+        if catalog != _strict_json(committed.decode('utf-8')):
+            raise ValueError('Task catalog differs from the packaged commit routing candidate')
     policy=load_routing_policy(configuration['routing'])
     if expected_policy_digest is not None and policy.digest != expected_policy_digest:
         raise ValueError('Bootstrap routing does not name the board-active policy; the owner phase would reject it')

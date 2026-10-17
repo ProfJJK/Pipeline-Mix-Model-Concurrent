@@ -29,12 +29,12 @@ from cochem_pipeline.repair_queue_428 import RepairQueue
 from cochem_pipeline.research_evidence_428 import ResearchEvidenceStore
 from cochem_pipeline.research_runtime_428 import ResearchRuntime
 from cochem_pipeline.research_search_428 import HttpResponseFixture, ResearchSearchClient
-from cochem_pipeline.routing import load_routing_policy
 from cochem_pipeline.store import JobStore
 from cochem_pipeline.task_execution_428 import SimpleTaskExecutionRuntime
 from cochem_pipeline.task_release_428 import TaskReleaseRuntime
 from cochem_pipeline.task_routing import digest
 from cochem_pipeline.worker import node_prompt
+from pipeline_tests.task_catalog_fixtures import accepted_planning_store
 from pipeline_tests.test_planning_gateway_428 import accepted_receipt
 from pipeline_tests.test_workflow_428 import document, microtasks, wbs
 
@@ -44,12 +44,10 @@ OWNER_SECRET = "owner-acceptance-secret-key-at-least-32-chars-428"
 AGENT_TOKEN = "shared-agent-bearer-token-cannot-approve-srs-428"
 
 
-def _load_catalog() -> dict:
-    return json.loads((ROOT / "docs" / "4.2.8" / "routing-candidate.json").read_text(encoding="utf-8"))
-
-
 def _make_acceptance_stack(tmp_path: Path):
-    catalog = _load_catalog()
+    # Planning dispatch is bound to protected accepted catalog history
+    # (a47e825); the raw routing candidate is not host-accepted.
+    store, catalog = accepted_planning_store(tmp_path / "jobs428.db")
     clock = [1000.0]
     broker = OwnerApprovalBroker(
         tmp_path / "owner428.db",
@@ -62,10 +60,6 @@ def _make_acceptance_stack(tmp_path: Path):
         catalog,
         flash_context_limit=100000,
         owner_receipt=broker.load_for_journal,
-    )
-    store = JobStore(
-        tmp_path / "jobs428.db",
-        routing_policy=load_routing_policy({"policy_version": 3}),
     )
 
     def _transport(url: str, headers: dict, timeout: float, max_bytes: int) -> HttpResponseFixture:

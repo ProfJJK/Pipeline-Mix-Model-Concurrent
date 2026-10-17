@@ -94,31 +94,46 @@ def test_preparers_refuse_working_tree_code_that_is_not_the_packaged_commit():
     assert task_release.require_committed_tree.__name__ == 'require_committed_tree'
 
 
+def head_commit():
+    import subprocess
+    return subprocess.run(['git', '-C', str(ROOT), 'rev-parse', 'HEAD'], capture_output=True, text=True,
+                          check=True, timeout=30).stdout.strip()
+
+
 @host_inputs
 def test_r6_request_targets_the_active_policy_with_evidence_for_every_target(tmp_path, monkeypatch):
     checked = []
     monkeypatch.setattr(task_release, 'require_committed_tree', lambda repo, commit: checked.append(commit))
+    commit = head_commit()
     candidate, policy, _, bindings, catalog, profiles = inputs()
     routed = release.route_active_policy(candidate, policy, bindings, catalog)
     manifest = task_release.prepare_task_catalog_release(tmp_path / 'r6', configuration=routed, catalog=catalog,
-        binary_bindings=bindings, request_id='1' * 32, source_commit='a' * 40, allow_partial_publication=True,
+        binary_bindings=bindings, request_id='1' * 32, source_commit=commit, allow_partial_publication=True,
         candidate_profile_ids=profiles, expected_policy_digest=release.ACTIVE_POLICY_DIGEST)
     request = json.loads((tmp_path / 'r6' / 'task-catalog-request.json').read_bytes())
     assert request['previous_policy_digest'] == release.ACTIVE_POLICY_DIGEST
     assert request['previous_task_catalog_sha256'] is None and request['activation_authorized'] is False
     assert manifest['previous_policy_digest'] == release.ACTIVE_POLICY_DIGEST and manifest['probe_targets'] == 28
-    assert checked == ['a' * 40]
+    assert checked == [commit]
+    # The catalog that sizes targets and contracts must be the packaged commit's.
+    altered = deepcopy(catalog)
+    altered['generation'] = altered['generation'] + '-edited'
+    with pytest.raises(ValueError, match='packaged commit routing candidate'):
+        task_release.prepare_task_catalog_release(tmp_path / 'altered', configuration=routed, catalog=altered,
+            binary_bindings=bindings, request_id='4' * 32, source_commit=commit, allow_partial_publication=True,
+            candidate_profile_ids=profiles, expected_policy_digest=release.ACTIVE_POLICY_DIGEST)
+    assert not (tmp_path / 'altered').exists()
     # The d5d6094 mistake: a request built from the baseline routing is refused offline.
     with pytest.raises(ValueError, match='board-active policy'):
         task_release.prepare_task_catalog_release(tmp_path / 'baseline', configuration=candidate, catalog=catalog,
-            binary_bindings=bindings, request_id='2' * 32, source_commit='a' * 40, allow_partial_publication=True,
+            binary_bindings=bindings, request_id='2' * 32, source_commit=commit, allow_partial_publication=True,
             candidate_profile_ids=profiles, expected_policy_digest=release.ACTIVE_POLICY_DIGEST)
     # Without Codex contracts no Codex probe could ever record acceptable evidence.
     stripped = deepcopy(routed)
     stripped['providers']['codex'].pop('effort_contracts')
     with pytest.raises(ValueError, match='effort evidence'):
         task_release.prepare_task_catalog_release(tmp_path / 'stripped', configuration=stripped, catalog=catalog,
-            binary_bindings=bindings, request_id='3' * 32, source_commit='a' * 40, allow_partial_publication=True,
+            binary_bindings=bindings, request_id='3' * 32, source_commit=commit, allow_partial_publication=True,
             candidate_profile_ids=profiles, expected_policy_digest=release.ACTIVE_POLICY_DIGEST)
     assert not (tmp_path / 'baseline').exists() and not (tmp_path / 'stripped').exists()
 
@@ -128,7 +143,7 @@ REPORT = b'....\n700 passed in 12.00s\n'
 
 def evidence(**changes):
     value = dict(schema=release.SOURCE_TEST_SCHEMA, source_commit='a' * 40, runner='scripts/run_source_tests_428.py',
-                 status='PASSED', failed=0, passed=700, modules=['pipeline_tests/test_operational_launch_428.py'],
+                 status='PASSED', failed=0, passed=700, modules=sorted(release.REQUIRED_SOURCE_TEST_MODULES),
                  source_test_report_sha256=hashlib.sha256(REPORT).hexdigest(), host_acceptance_executed=False)
     value.update(changes)
     return value
@@ -136,6 +151,7 @@ def evidence(**changes):
 
 @pytest.mark.parametrize('changes', [dict(status='FAILED'), dict(failed=1), dict(source_commit='c' * 40),
     dict(passed=0), dict(modules=[]), dict(modules=['../outside.py']), dict(host_acceptance_executed=True),
+    dict(modules=sorted(release.REQUIRED_SOURCE_TEST_MODULES)[1:]),
     dict(source_test_report_sha256='short'), dict(source_test_report_sha256='c' * 64), dict(extra=True)])
 def test_source_test_gate_requires_a_passed_report_for_the_exact_commit(tmp_path, changes):
     (tmp_path / 'source-tests.log').write_bytes(REPORT)
@@ -161,15 +177,16 @@ def test_recorder_binds_a_clean_serialized_run_and_preserves_failures(tmp_path, 
             recorder.summarize(text)
     trees = []
     monkeypatch.setattr(recorder, 'require_committed_tree', lambda root, commit, paths: trees.append((commit, paths)))
+    modules = sorted(release.REQUIRED_SOURCE_TEST_MODULES)
     module = 'pipeline_tests/test_operational_release_r6_428.py'
     calls = []
     def passing(argv, **kwargs):
         calls.append(argv)
         return type('Done', (), dict(returncode=0, stdout=b'....\n4 passed in 1.00s\n', stderr=b''))()
-    result = recorder.record(tmp_path / 'ok', [module], runner=passing)
-    assert result['status'] == 'PASSED' and result['passed'] == 4 and result['modules'] == [module]
+    result = recorder.record(tmp_path / 'ok', modules, runner=passing)
+    assert result['status'] == 'PASSED' and result['passed'] == 4 and result['modules'] == modules
     assert calls[0][2].endswith('run_source_tests_428.py') and module in calls[0]
-    assert len(trees) == 2 and trees[0][1] == ('src', 'scripts', 'pipeline_tests')
+    assert len(trees) == 2 and trees[0][1] == ()  # the whole committed tree, root pytest config included
     report = (tmp_path / 'ok' / 'source-tests.log').read_bytes()
     assert hashlib.sha256(report).hexdigest() == result['source_test_report_sha256']
     assert release.read_source_test_evidence(tmp_path / 'ok' / 'source-test-evidence.json', result['source_commit'])
