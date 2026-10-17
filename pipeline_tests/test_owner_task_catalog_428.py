@@ -15,6 +15,7 @@ import pytest
 from cochem_pipeline import owner_task_catalog_428 as owner
 from cochem_pipeline import task_catalog_acceptance_428 as acceptance
 from cochem_pipeline.planning_runtime import PlanningConfig
+from cochem_pipeline.routing import load_routing_policy
 from pipeline_tests.test_task_catalog_acceptance_428 import (
     environment, raw_task_catalog, binary_bindings, finish_all, PINS,
 )
@@ -55,7 +56,7 @@ def phase_env(environment, tmp_path, monkeypatch):
     output = tmp_path / 'output'
     output.mkdir()
     bootstrap = source / 'bootstrap.json'
-    bootstrap.write_bytes(acceptance.encoded(dict(routing=request.plan.policy.as_dict(),
+    bootstrap.write_bytes(acceptance.encoded(dict(routing=request.plan.policy.as_dict(), private_root=str(store.path.parent),
         max_execution_slots=4, catalog_activation=True, task_planning=None, providers={}, workers={})))
     request_path = source / 'request.json'
     request_path.write_bytes(acceptance.encoded(raw_request))
@@ -64,7 +65,8 @@ def phase_env(environment, tmp_path, monkeypatch):
         data = json.loads(Path(path).read_bytes())
         loads.append(Path(path))
         return SimpleNamespace(task_planning=PlanningConfig.from_dict(data['task_planning']),
-            catalog_activation=data['catalog_activation'], max_execution_slots=data['max_execution_slots'])
+            catalog_activation=data['catalog_activation'], max_execution_slots=data['max_execution_slots'],
+            routing=load_routing_policy(data['routing']), job_db=store.path)
     monkeypatch.setattr(owner, 'load_config', load)
     runtime = SimpleNamespace(store=store, stop_event=threading.Event(), last_admission_action=None,
         ticks=[], closed=0, tick_failure=None)
@@ -83,17 +85,23 @@ def phase_env(environment, tmp_path, monkeypatch):
         runtime.config = config
         return runtime
     calls = []
-    def publish(rt, proposal):
+    def publish(rt, proposal, *, before_publish=None, finalize=None):
+        # Mirrors the real run_acceptance tail: hooks around one transaction.
         calls.append(proposal)
         assert rt is runtime and (request_path, False) in held
         if len(calls) == 1:
             finish_all(store, proposal)
+        if before_publish is not None:
+            before_publish()
         with store._write() as conn:
             result = acceptance.publish(conn, proposal)
             coverage = acceptance.coverage(result['catalog'], conn=conn)
-        return dict(result, catalog_published=True, coverage=coverage,
-            all_routes_usable=all(row['status'] == 'AVAILABLE' for row in coverage),
-            coverage_holds=sum(row['status'] != 'AVAILABLE' for row in coverage))
+            summary = dict(result, catalog_published=True, coverage=coverage,
+                all_routes_usable=all(row['status'] == 'AVAILABLE' for row in coverage),
+                coverage_holds=sum(row['status'] != 'AVAILABLE' for row in coverage))
+            if finalize is not None:
+                summary['finalized'] = finalize(conn, summary)
+        return summary
     monkeypatch.setattr(owner, 'run_acceptance', publish)
     args = [bootstrap, hashlib.sha256(bootstrap.read_bytes()).hexdigest(), request_path,
             hashlib.sha256(request_path.read_bytes()).hexdigest(), output]
@@ -130,11 +138,11 @@ def test_owner_phase_publishes_exact_new_files_and_validates_normal_loader(phase
 def test_shared_admission_wait_reuses_request_without_prompt_or_ordinary_dispatch(phase_env, monkeypatch):
     env = phase_env
     waits = []
-    def wait_first(rt, request):
+    def wait_first(rt, request, **hooks):
         waits.append(request.request_id)
         if len(waits) == 1:
             return dict(status='WAITING_ADMISSION')
-        return env.publish(rt, request)
+        return env.publish(rt, request, **hooks)
     monkeypatch.setattr(owner, 'run_acceptance', wait_first)
     assert invoke(env)['status'] == 'TASK_CATALOG_CANDIDATE_READY'
     assert waits == [env.request.request_id] * 2
@@ -144,7 +152,7 @@ def test_shared_admission_wait_reuses_request_without_prompt_or_ordinary_dispatc
 @pytest.mark.parametrize('fault', ['guard', 'exception', 'cancel', 'deadline'])
 def test_guard_cancel_and_deadline_hold_without_candidate_or_secret_details(phase_env, monkeypatch, fault):
     env = phase_env
-    def failed(rt, request):
+    def failed(rt, request, **hooks):
         if fault == 'guard':
             rt.last_admission_action = 'terminate_active'
         elif fault == 'exception':
@@ -190,19 +198,86 @@ def test_existing_outputs_or_bad_pin_never_start_runtime(phase_env):
     assert not env.calls
 
 
-def test_failed_candidate_validation_preserves_published_catalog_and_files(phase_env, monkeypatch):
+@pytest.mark.parametrize('fault', ['loader', 'routing', 'enable'])
+def test_failed_candidate_rolls_publication_back_and_keeps_files_as_evidence(phase_env, monkeypatch, fault):
     env = phase_env
     original = owner.load_config
     def reject_candidate(path):
+        loaded = original(path)
         if Path(path).name == 'pipeline.json':
-            raise ValueError('private-config-detail')
-        return original(path)
-    monkeypatch.setattr(owner, 'load_config', reject_candidate)
+            if fault == 'loader':
+                raise ValueError('private-config-detail')
+            loaded.routing = SimpleNamespace(digest='0' * 64)
+        return loaded
+    if fault == 'enable':
+        def refuse(*args, **kwargs):
+            raise ValueError('routing differs from published policy')
+        monkeypatch.setattr(owner, 'enabled_candidate', refuse)
+    else:
+        monkeypatch.setattr(owner, 'load_config', reject_candidate)
     result = invoke(env)
     assert result['status'] == 'TASK_CATALOG_HELD_PRESERVE_EVIDENCE'
-    assert result['catalog_published'] is True and result['phase'] == 'candidate_validation'
-    assert (env.args[-1] / 'pipeline.json').exists() and (env.args[-1] / 'accepted-catalog.json').exists()
+    assert result['catalog_published'] is False and result['publication_state'] == 'NOT_COMMITTED'
+    assert result['phase'] == ('candidate_files' if fault == 'enable' else 'candidate_validation')
+    assert result['runtime_resources_closed'] is True
+    assert result['publication_proof']['catalog_probe_cleanup_verified'] is True
+    assert (env.args[-1] / 'accepted-catalog.json').exists()
+    assert (env.args[-1] / 'pipeline.json').exists() == (fault != 'enable')
+    with env.store._connection() as conn:
+        assert acceptance.catalog_journal.active_task_catalog(conn) is None
     assert env.runtime.closed == 1 and not env.held
+
+
+def test_runtime_construction_failure_reads_board_without_runtime(phase_env):
+    env = phase_env
+    def broken(config):
+        raise RuntimeError('private Docker/RAM detail')
+    result = owner.run_owner_phase(*env.args, runtime_factory=broken, poll_seconds=.01)
+    assert result['status'] == 'TASK_CATALOG_HELD_PRESERVE_EVIDENCE' and result['phase'] == 'runtime_bootstrap'
+    assert result['runtime_constructed'] is False and result['runtime_resources_closed'] is True
+    assert result['publication_state'] == 'NOT_COMMITTED'
+    proof = result['publication_proof']
+    assert proof['catalog_probe_cleanup_verified'] is True and proof['active_catalog_sha256'] is None
+    assert proof['active_policy_sha256'] == env.request.plan.policy.digest
+    assert 'private' not in json.dumps(result) and not env.calls
+
+
+@pytest.mark.parametrize('fault', ['loader', 'flags'])
+def test_refused_bootstrap_still_proves_nothing_was_published(phase_env, monkeypatch, fault):
+    env = phase_env
+    if fault == 'loader':
+        def refuse(path):
+            raise ValueError('private unrouted binding detail')
+        monkeypatch.setattr(owner, 'load_config', refuse)
+    else:
+        raw = json.loads(env.args[0].read_bytes())
+        raw['catalog_activation'] = False
+        env.args[0].write_bytes(acceptance.encoded(raw))
+        env.args[1] = hashlib.sha256(env.args[0].read_bytes()).hexdigest()
+    result = invoke(env)
+    assert result['status'] == 'TASK_CATALOG_HELD_PRESERVE_EVIDENCE' and result['phase'] == 'preconditions'
+    assert result['runtime_constructed'] is False and result['runtime_resources_closed'] is True
+    assert result['publication_state'] == 'NOT_COMMITTED'
+    assert result['publication_proof']['catalog_probe_cleanup_verified'] is True
+    assert 'private' not in json.dumps(result) and not env.calls and env.runtime.closed == 0
+
+
+def test_bootstrap_without_an_absolute_board_root_is_unknown(phase_env):
+    env = phase_env
+    raw = json.loads(env.args[0].read_bytes())
+    raw['private_root'] = 'relative'
+    env.args[0].write_bytes(acceptance.encoded(raw))
+    env.args[1] = hashlib.sha256(env.args[0].read_bytes()).hexdigest()
+    result = invoke(env)
+    assert result['publication_state'] == 'UNKNOWN' and not env.loads
+
+
+def test_board_change_while_runtime_starts_is_never_safe_to_restore(phase_env, monkeypatch):
+    env = phase_env
+    monkeypatch.setattr(owner, 'board_baseline', lambda job_db: ('0' * 64, None))
+    result = invoke(env)
+    assert result['status'] == 'TASK_CATALOG_HELD_PRESERVE_EVIDENCE' and result['phase'] == 'runtime_bootstrap'
+    assert result['publication_state'] == 'UNKNOWN' and not env.calls
 
 
 def test_committed_publication_replays_into_new_output_root_without_probing_again(phase_env, monkeypatch, tmp_path):
@@ -242,17 +317,30 @@ def test_shutdown_failure_is_not_retried_or_claimed_clean(phase_env):
     assert result['cleanup_verified'] is False and not env.held
 
 
-def test_expired_synchronous_probe_cannot_write_candidate_after_publication(phase_env, monkeypatch):
+@pytest.mark.parametrize('when', ['after_probes', 'inside_publication'])
+def test_deadline_before_commit_never_publishes_or_enables(phase_env, monkeypatch, when):
     env = phase_env
-    def expired(rt, request):
-        result = env.publish(rt, request)
+    def expire():
         monkeypatch.setattr(owner.time, 'monotonic', lambda: 10**12)
-        return result
+    original_enable = owner.enabled_candidate
+    def enable_then_expire(*args, **kwargs):
+        candidate = original_enable(*args, **kwargs)
+        expire()
+        return candidate
+    def expired(rt, request, **hooks):
+        if when == 'after_probes':
+            expire()
+        else:
+            monkeypatch.setattr(owner, 'enabled_candidate', enable_then_expire)
+        return env.publish(rt, request, **hooks)
     monkeypatch.setattr(owner, 'run_acceptance', expired)
     result = invoke(env)
     assert result['status'] == 'TASK_CATALOG_HELD_PRESERVE_EVIDENCE'
-    assert result['catalog_published'] is True
-    assert not (env.args[-1] / 'pipeline.json').exists()
+    assert result['catalog_published'] is False and result['publication_state'] == 'NOT_COMMITTED'
+    assert result['failure']['error_type'] == 'TimeoutError'
+    assert (env.args[-1] / 'pipeline.json').exists() == (when == 'inside_publication')
+    with env.store._connection() as conn:
+        assert acceptance.catalog_journal.active_task_catalog(conn) is None
 
 
 def test_request_pin_mismatch_stops_before_acceptance_and_preserves_input(phase_env):
@@ -267,7 +355,7 @@ def test_request_pin_mismatch_stops_before_acceptance_and_preserves_input(phase_
 
 def test_exception_after_publication_never_claims_safe_old_catalog_restoration(phase_env, monkeypatch):
     env = phase_env
-    def commit_then_fail(rt, request):
+    def commit_then_fail(rt, request, **hooks):
         env.publish(rt, request)
         raise RuntimeError('failed after durable catalog transaction')
     monkeypatch.setattr(owner, 'run_acceptance', commit_then_fail)
@@ -280,7 +368,7 @@ def test_exception_after_publication_never_claims_safe_old_catalog_restoration(p
 
 def test_unreadable_publication_journal_is_unknown_not_safe_to_restore(phase_env, monkeypatch):
     env = phase_env
-    monkeypatch.setattr(owner, 'publication_snapshot', lambda *args: dict(
+    monkeypatch.setattr(owner, 'publication_snapshot', lambda *args, **kwargs: dict(
         state='UNKNOWN', catalog_probe_cleanup_verified=False))
     result = invoke(env)
     assert result['status'] == 'TASK_CATALOG_HELD_PRESERVE_EVIDENCE'

@@ -271,7 +271,9 @@ def record_result(conn, request, target, reservation, *, output=None, receipt=No
         for key in ('job_id','workflow_id','attempt_id','fencing_token'):
             if receipt.get(key) != node[key]:
                 raise ValueError('Task probe native receipt identity differs')
-        effort = receipt['inference_policy'].get('reasoning_effort', {})
+        effort = receipt['inference_policy'].get('reasoning_effort')
+        if not isinstance(effort, dict):
+            effort = {}
         if (receipt.get('route_reservation_id') != reservation['reservation_id']
                 or receipt.get('execution_kind') != 'native_cli'
                 or receipt.get('process_identity_source') != 'owned_windows_process_handle'
@@ -317,19 +319,15 @@ def publish(conn, request):
             raise ValueError('Task catalog accepted evidence contradicts its probe outcome')
         if receipt.get('execution_binding') != request.execution_bindings[receipt['provider']]:
             raise ValueError('Task catalog evidence differs from its provider/agent contract')
+    # Each row is the immutable snapshot of a live board hold, captured by
+    # defer_held_target in the transaction that skipped the target. It is
+    # historical evidence: the target publishes as AVAILABILITY_WAIT and is
+    # never routable without a later native acceptance. Requiring the hold to
+    # outlive the remaining probes (30 s busy/provider cooldowns) would make a
+    # request whose rows can never be retried permanently unpublishable.
     holds = [json.loads(row[0]) for row in conn.execute(
         'SELECT evidence_json FROM pipeline_task_catalog_holds WHERE request_id=? ORDER BY target_json',
         (request.request_id,))]
-    already = conn.execute('SELECT 1 FROM pipeline_task_catalog_generations WHERE request_id=?',
-                           (request.request_id,)).fetchone() if conn.execute(
-        "SELECT 1 FROM sqlite_master WHERE name='pipeline_task_catalog_generations'").fetchone() else None
-    if not already:
-        for hold in holds:
-            actual = conn.execute('''SELECT until_at,reason,updated_at FROM pipeline_route_holds
-                WHERE scope=? AND resource_key=? AND until_at>?''',
-                (hold['scope'],hold['resource_key'],time.time())).fetchone()
-            if actual is None or tuple(actual) != (hold['until_at'],hold['failure_category'],hold['updated_at']):
-                raise ValueError('Task catalog untested availability snapshot is no longer current')
     result = catalog_journal.publish_task_catalog(conn, request.plan, receipts,
         request_id=request.request_id,pointer_sha256=request.pointer_sha256,proposal_sha256=request.proposal_sha256,
         unprobed_holds=holds,allow_partial_publication=request.allow_partial_publication)
@@ -409,19 +407,72 @@ def coverage(catalog, *, conn=None):
     return rows
 
 
-def run_acceptance(runtime, request):
+PROBE_LEASE_SECONDS = catalog_slots.PROBE_LEASE_SECONDS
+
+
+def require_target_contracts(providers, request):
+    """Every target must yield the exact binary/version/effort evidence that
+    record_result requires; a configuration fact, provable before any probe."""
+    from .agy_protocol import native_model_binding
+    from .native_effort import effort_contract
+    from .worker import provider_command
+    for target in sorted(set(request.plan.required_targets) | {request.plan.control_target}):
+        provider, model, effort = target
+        spec, binding = providers[provider], request.plan.binary_bindings[provider]
+        if spec.get('executable') != binding['executable']:
+            raise ValueError('Installed task catalog executable differs from reviewed binding')
+        try:
+            contract = effort_contract(provider, model, effort, spec)
+            if provider == 'gemini':
+                native_model_binding(spec, model, effort)
+            provider_command(provider, ['<protected-executable>'], model,
+                             '<disposable-acceptance-workspace>', spec, effort, inference_only=True)
+        except (ValueError, KeyError, TypeError) as exc:
+            raise ValueError('Task catalog target has no reviewed native command') from exc
+        if (contract is None or contract['executable_sha256'] != binding['sha256']
+                or contract['version'] != binding['version']):
+            raise ValueError('Task catalog target lacks reviewed effort evidence for its bound binary')
+
+
+def require_probe_readiness(runtime, request):
+    """Refuse before any seat or native process when a target cannot succeed.
+
+    record_result needs exact binary/version/effort evidence for every target
+    and enabled_candidate needs the bootstrap to route the published policy;
+    both are configuration facts, so they are proven here instead of after
+    paid probes or after publication. Returns the probe containment identity.
+    """
+    config = runtime.config
+    if execution_bindings(config.providers, config.workers) != request.execution_bindings:
+        raise ValueError('Protected provider/agent configuration differs from acceptance request')
+    if config.routing.digest != request.plan.policy.digest or config.max_execution_slots != 4:
+        raise ValueError('Bootstrap routing or seats differ from the request policy; nothing could be enabled')
+    if runtime.ramdisk is None:
+        raise ValueError('Task catalog probes require verified RAM staging')
+    # The one-shot phase is not Warden-launched, so the environment-supplied
+    # Runtime.containment_id is absent; the catalog controller owns this one.
+    containment_id = runtime.catalog.containment_id
+    if not isinstance(containment_id, str) or not re.fullmatch('[0-9a-f]{32}', containment_id):
+        raise ValueError('Task catalog probes require the catalog containment identity')
+    require_target_contracts(config.providers, request)
+    return containment_id
+
+
+def run_acceptance(runtime, request, *, before_publish=None, finalize=None):
     """SYSTEM owner wrapper only; sequential probes, no interactive login/retry.
 
     The caller retains protected_request custody and supplies an already guarded
     runtime/admission/RAM context. No controller/task/service lifecycle occurs.
+    before_publish runs after the last probe, before the publication
+    transaction; finalize(conn, summary) runs inside it, so any failure there
+    rolls publication back. Only resource closure remains after COMMIT.
     """
     from . import windows
     from .native_effort import verified_executable_sha256
     from .worker import NativeRunner, WorkerCleanupError
     from .runtime import clear_ram_workspace
     windows.require_system()
-    if execution_bindings(runtime.config.providers,runtime.config.workers) != request.execution_bindings:
-        raise ValueError('Protected provider/agent configuration differs from acceptance request')
+    containment_id = require_probe_readiness(runtime, request)
     with runtime.store._write() as conn:
         initialize(conn)
     targets = sorted(set(request.plan.required_targets) | {request.plan.control_target})
@@ -445,13 +496,17 @@ def run_acceptance(runtime, request):
                 (request.request_id,encoded(list(target)).decode())).fetchone()
             if held or defer_held_target(conn,request,target):
                 continue
-        slot = sorted(runtime.config.workers)[index % len(runtime.config.workers)]
+        # Startup quarantines (unverified RAM or probe cleanup) keep their slot.
+        slots = [slot for slot in sorted(runtime.config.workers) if slot not in runtime.quarantined]
+        if not slots:
+            raise RuntimeError('Every worker slot is quarantined; no catalog probe can run')
+        slot = slots[index % len(slots)]
         binding = request.plan.binary_bindings[target[0]]
         executable = runtime.config.providers[target[0]]['executable']
         if executable != binding['executable'] or verified_executable_sha256(executable) != binding['sha256']:
             raise ValueError('Installed task catalog executable differs from reviewed binding')
         token = runtime.admission.reserve_catalog(authority,target,worker_slot=slot,
-            containment_id=runtime.catalog_containment_id,boot_id=runtime.boot_id)
+            containment_id=containment_id,boot_id=runtime.boot_id,lease_seconds=PROBE_LEASE_SECONDS)
         if token is None:
             return dict(status='WAITING_ADMISSION',request_id=request.request_id,
                         target=dict(zip(('provider','model','effort'),target)),activation_ready=False)
@@ -480,8 +535,11 @@ def run_acceptance(runtime, request):
             if exc.category in ('quota','busy','provider'):availability=exc
             else:error=exc
         except Exception as exc:
-            # Unknown failure cannot attest process closure.
-            cleaned=False;error=exc
+            # The Runtime dispatch contract: NativeRunner either never launched
+            # or completed its managed close before raising; only a failed
+            # close raises WorkerCleanupError. Revocation, timeouts and invalid
+            # output therefore free the seat as a failed, cleaned probe.
+            error=exc
         if cleaned and descriptor is not None:
             try:clear_ram_workspace(descriptor)
             except Exception as exc:cleaned=False;error=exc
@@ -510,10 +568,15 @@ def run_acceptance(runtime, request):
             runtime.admission.request_maintenance()
     if runtime.stop_event.is_set() or getattr(runtime,'last_admission_action',None)=='terminate_active':
         raise RuntimeError('Task catalog acceptance was revoked before publication')
+    if before_publish is not None:
+        before_publish()
     with runtime.store._write() as conn:
         result=publish(conn,request)
         route_coverage = coverage(result['catalog'],conn=conn)
-    return dict(result, coverage=route_coverage, catalog_published=True,
-                all_routes_usable=all(row['status']=='AVAILABLE' for row in route_coverage),
-                coverage_holds=sum(row['status']!='AVAILABLE' for row in route_coverage),
-                native_acceptance_scope='recorded_exact_targets_only')
+        summary = dict(result, coverage=route_coverage, catalog_published=True,
+                       all_routes_usable=all(row['status']=='AVAILABLE' for row in route_coverage),
+                       coverage_holds=sum(row['status']!='AVAILABLE' for row in route_coverage),
+                       native_acceptance_scope='recorded_exact_targets_only')
+        if finalize is not None:
+            summary['finalized'] = finalize(conn, summary)
+    return summary

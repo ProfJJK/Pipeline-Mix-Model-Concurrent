@@ -593,8 +593,10 @@ $args900=@($ast.FindAll({param($n)$n -is [Management.Automation.Language.Functio
 @{calls=@($calls|ForEach-Object{@($_.CommandElements|Select-Object -Skip 1|ForEach-Object{$_.Extent.Text}) -join ' '});docker_wait=($args900 -match '--docker-wait-seconds 900')}|ConvertTo-Json -Compress
 """)
     assert result['docker_wait'], result
+    # Fresh r6 preconditions and running-r4 recovery share the bounded r4 wait.
     assert sorted(result['calls'])==sorted(['$script:OpOldRoot $false 1200', '$script:OpRoot $true 1200',
-        "$script:OpOldRoot $false ([int](Get-OpProperty $State 'previous_health_seconds' 1200)) $State"]), result
+        "$script:OpOldRoot $false ([int](Get-OpProperty $State 'previous_health_seconds' 1200)) $State",
+        "$script:OpOldRoot $false ([int](Get-OpProperty $state 'previous_health_seconds' 1200)) $state"]), result
 
 
 def test_health_wait_bound_is_enforced():

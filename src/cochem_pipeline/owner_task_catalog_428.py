@@ -93,29 +93,68 @@ def _preceding_authority(store, raw_request, request_sha256):
         return policy, previous
 
 
-def publication_snapshot(store, request_sha256, baseline):
+def _board_state(conn, request_sha256, baseline):
+    conn.execute('BEGIN')
+    try:
+        policy = catalog_journal.active_policy(conn).digest
+        active = catalog_journal.active_task_catalog(conn)
+        active_sha = digest(active) if active is not None else None
+        row = None
+        if conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='pipeline_task_catalog_generations'").fetchone():
+            row = conn.execute('SELECT catalog_sha256 FROM pipeline_task_catalog_generations WHERE proposal_sha256=?',
+                               (request_sha256,)).fetchone()
+        state = ('COMMITTED' if row else 'NOT_COMMITTED'
+                 if baseline == (policy, active_sha) else 'UNKNOWN')
+        return dict(state=state, active_policy_sha256=policy, active_catalog_sha256=active_sha,
+            committed_catalog_sha256=row[0] if row else None,
+            catalog_probe_cleanup_verified=catalog_slots.occupancy(conn) == 0)
+    finally:
+        conn.rollback()
+
+
+@contextmanager
+def read_only_board(job_db):
+    """A query-only connection that cannot migrate, lock out, or write the board."""
+    import sqlite3
+    conn = sqlite3.connect(Path(job_db).resolve().as_uri() + '?mode=ro', uri=True,
+                           timeout=5.0, isolation_level=None)
+    try:
+        conn.execute('PRAGMA busy_timeout=5000')
+        conn.execute('PRAGMA query_only=ON')
+        yield conn
+    finally:
+        conn.close()
+
+
+def board_baseline(job_db):
+    """Active policy/task-catalog identity read before any runtime touches the board."""
+    with read_only_board(job_db) as conn:
+        conn.execute('BEGIN')
+        try:
+            active = catalog_journal.active_task_catalog(conn)
+            return (catalog_journal.active_policy(conn).digest, digest(active) if active is not None else None)
+        finally:
+            conn.rollback()
+
+
+def publication_snapshot(store, request_sha256, baseline, *, job_db=None):
     """Conservative rollback signal from the durable board, never local progress.
 
     A caller receiving no final receipt must assume UNKNOWN. In particular a
     committed publication followed by a coverage/file failure is still COMMITTED.
+    Without a constructed runtime the board is read through a query-only
+    connection, so a failed construction can still prove nothing was published.
     """
     try:
-        with store._connection() as conn:
-            conn.execute('BEGIN')
-            policy = catalog_journal.active_policy(conn).digest
-            active = catalog_journal.active_task_catalog(conn)
-            active_sha = digest(active) if active is not None else None
-            row = None
-            if conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='pipeline_task_catalog_generations'").fetchone():
-                row = conn.execute('SELECT catalog_sha256 FROM pipeline_task_catalog_generations WHERE proposal_sha256=?',
-                                   (request_sha256,)).fetchone()
-            state = ('COMMITTED' if row else 'NOT_COMMITTED'
-                     if baseline == (policy, active_sha) else 'UNKNOWN')
-            return dict(state=state, active_policy_sha256=policy, active_catalog_sha256=active_sha,
-                committed_catalog_sha256=row[0] if row else None,
-                catalog_probe_cleanup_verified=catalog_slots.occupancy(conn) == 0)
+        if store is not None:
+            with store._connection() as conn:
+                return _board_state(conn, request_sha256, baseline)
+        if job_db is not None:
+            with read_only_board(job_db) as conn:
+                return _board_state(conn, request_sha256, baseline)
     except BaseException:
-        return dict(state='UNKNOWN', catalog_probe_cleanup_verified=False)
+        pass
+    return dict(state='UNKNOWN', catalog_probe_cleanup_verified=False)
 
 
 def wait_start_gate(output_root, started_path, started_record, *, timeout_seconds=90):
@@ -148,7 +187,12 @@ def write_start_record(path, record):
 def run_owner_phase(bootstrap_config, bootstrap_sha256, request_path, request_sha256,
                     output_root, *, timeout_seconds=7200, poll_seconds=1,
                     flash_context_limit=None, runtime_factory=None, start_gate=False, start_nonce=None):
-    """The SYSTEM-only API. runtime_factory is an in-process test seam only."""
+    """The SYSTEM-only API. runtime_factory is an in-process test seam only.
+
+    The candidate files are written and validated inside the publication
+    transaction, so every failure before COMMIT leaves the board unchanged.
+    After COMMIT only runtime closure and the result record remain.
+    """
     if type(start_gate) is not bool:
         raise ValueError('Owner start gate must be boolean')
     if (start_gate and (not isinstance(start_nonce, str) or not re.fullmatch('[0-9a-f]{32}', start_nonce))
@@ -166,10 +210,11 @@ def run_owner_phase(bootstrap_config, bootstrap_sha256, request_path, request_sh
         raise ValueError('Owner outputs require a separate fresh protected directory')
     started = time.monotonic()
     runtime = None
+    job_db = None
     monitor = None
     monitor_stop = threading.Event()
     monitor_failures = []
-    phase, published, result, error, closed = 'preconditions', False, None, None, False
+    phase, result, error, closed = 'preconditions', None, None, False
     close_started = False
     baseline = None
     with ExitStack() as lifetime, retained_path(output_root, directory=True), retained_path(bootstrap_config) as input_custody:
@@ -187,7 +232,20 @@ def run_owner_phase(bootstrap_config, bootstrap_sha256, request_path, request_sh
                 wait_start_gate(output_root, started_path, started_record)
             phase = 'preconditions'
             raw = _strict_json(pinned_bytes(input_custody, bootstrap_config, bootstrap_sha256).decode('utf-8-sig'))
+            # The reviewed bytes name the board. Read it before the bootstrap is
+            # even parsed, and before any runtime migration, quarantine or probe:
+            # a refused bootstrap or failed construction must still prove that
+            # nothing was published, so the launcher may restore r4.
+            private_root = raw.get('private_root') if isinstance(raw, dict) else None
+            if not isinstance(private_root, str) or not Path(private_root).is_absolute():
+                raise ValueError('Bootstrap must name an absolute private board root')
+            job_db = Path(private_root) / 'job_board.db'
+            phase = 'board_baseline'
+            baseline = board_baseline(job_db)
+            phase = 'preconditions'
             config = load_config(str(bootstrap_config))
+            if Path(config.job_db) != job_db:
+                raise ValueError('Loaded bootstrap names a different board')
             if (raw.get('task_planning') is not None or getattr(config, 'task_planning', None) is not None
                     or raw.get('catalog_activation') is not True or config.catalog_activation is not True
                     or config.max_execution_slots != 4 or raw.get('max_execution_slots') != 4):
@@ -203,7 +261,9 @@ def run_owner_phase(bootstrap_config, bootstrap_sha256, request_path, request_sh
                 request_data = pinned_bytes(request_custody, request_path, request_sha256)
                 with runtime.store._write() as conn:
                     active = catalog_journal.active_task_catalog(conn)
-                    baseline = (catalog_journal.active_policy(conn).digest, digest(active) if active is not None else None)
+                    if (catalog_journal.active_policy(conn).digest,
+                            digest(active) if active is not None else None) != baseline:
+                        raise ValueError('Board catalog authority changed while the runtime started')
                 policy, previous = _preceding_authority(runtime.store, _strict_json(request_data.decode('utf-8')), request_sha256)
                 with nullcontext(lifetime.enter_context(protected_request(
                         request_path, request_sha256, policy, previous))) as request:
@@ -228,53 +288,79 @@ def run_owner_phase(bootstrap_config, bootstrap_sha256, request_path, request_sh
                             monitor_failures.append(type(exc).__name__)
                             runtime.stop_event.set()
 
+                    def stop_monitor():
+                        # Every probe is closed; no guard tick may race or revoke
+                        # the publication transaction once it opens.
+                        nonlocal phase
+                        phase = 'publication_guard'
+                        monitor_stop.set()
+                        monitor.join(timeout=30)
+                        if monitor.is_alive():
+                            raise RuntimeError('Acceptance monitor did not drain before publication')
+                        require_active()
+                        if getattr(runtime, 'last_admission_action', None) == 'terminate_active':
+                            raise RuntimeError('Critical resource guard revoked acceptance')
+                        # Drain the slow Docker work that close() would otherwise do
+                        # first after COMMIT; a failure here still rolls back.
+                        maintenance = getattr(runtime, '_maintenance_thread', None)
+                        if maintenance is not None:
+                            maintenance.join(timeout=120)
+                            if maintenance.is_alive():
+                                raise RuntimeError('Controller maintenance has not drained before publication')
+                        if getattr(runtime, 'docker', None) is not None:
+                            runtime.docker.reap_orphans(active_attempt_ids=set(), include_warm=False)
+
+                    def finalize(conn, acceptance):
+                        # Inside the publication transaction: any failure here
+                        # rolls the catalog back, so nothing is half-enabled.
+                        nonlocal phase
+                        phase = 'candidate_files'
+                        catalog_path = output_root / 'accepted-catalog.json'
+                        catalog_bytes = write_fresh(catalog_path, acceptance['catalog'])
+                        with retained_path(catalog_path):
+                            candidate = enabled_candidate(conn, request, raw, catalog_path=catalog_path,
+                                catalog_bytes=catalog_bytes, flash_context_limit=flash_context_limit)
+                        candidate_path = output_root / 'pipeline.json'
+                        candidate_bytes = write_fresh(candidate_path, candidate)
+                        phase = 'candidate_validation'
+                        with retained_path(catalog_path), retained_path(candidate_path):
+                            validated = load_config(str(candidate_path))
+                            if (validated.task_planning is None or validated.catalog_activation is not True
+                                    or validated.task_planning.read_catalog() != acceptance['catalog']
+                                    or validated.task_planning.catalog_sha256 != hashlib.sha256(catalog_bytes).hexdigest()
+                                    or validated.routing.digest != request.plan.policy.digest):
+                                raise ValueError('Protected candidate loader did not retain exact accepted catalog')
+                        require_active()
+                        phase = 'publication_commit'
+                        return dict(catalog_path=str(catalog_path),
+                                    catalog_sha256=hashlib.sha256(catalog_bytes).hexdigest(),
+                                    configuration_path=str(candidate_path),
+                                    configuration_sha256=hashlib.sha256(candidate_bytes).hexdigest())
+
                     phase = 'catalog_acceptance'
                     monitor_tick()
                     monitor = threading.Thread(target=supervise, name='task-catalog-guard', daemon=True)
                     monitor.start()
                     while True:
                         require_active()
-                        acceptance = run_acceptance(runtime, request)
+                        acceptance = run_acceptance(runtime, request, before_publish=stop_monitor, finalize=finalize)
                         if acceptance.get('status') != 'WAITING_ADMISSION':
                             break
                         if runtime.stop_event.wait(poll_seconds):
                             raise RuntimeError('Acceptance cancelled while waiting for admission')
-                    published = acceptance.get('catalog_published') is True
-                    require_active()
-                    if not published:
+                    if acceptance.get('catalog_published') is not True:
                         raise RuntimeError('Exact task catalog publication was not completed')
-                    phase = 'candidate_files'
-                    catalog_path = output_root / 'accepted-catalog.json'
-                    catalog_bytes = write_fresh(catalog_path, acceptance['catalog'])
-                    with retained_path(catalog_path), runtime.store._write() as conn:
-                        candidate = enabled_candidate(conn, request, raw, catalog_path=catalog_path,
-                            catalog_bytes=catalog_bytes, flash_context_limit=flash_context_limit)
-                    candidate_path = output_root / 'pipeline.json'
-                    candidate_bytes = write_fresh(candidate_path, candidate)
-                    phase = 'candidate_validation'
-                    with retained_path(catalog_path), retained_path(candidate_path):
-                        validated = load_config(str(candidate_path))
-                        if (validated.task_planning is None or validated.catalog_activation is not True
-                                or validated.task_planning.read_catalog() != acceptance['catalog']
-                                or validated.task_planning.catalog_sha256 != hashlib.sha256(catalog_bytes).hexdigest()):
-                            raise ValueError('Protected candidate loader did not retain exact accepted catalog')
-                    require_active()
+                    files = acceptance['finalized']
                     result = dict(schema='cochem-owner-task-catalog-result/4.2.8',
                         status='TASK_CATALOG_CANDIDATE_READY', request_id=request.request_id,
                         request_sha256=request_sha256, bootstrap_sha256=bootstrap_sha256,
-                        catalog_path=str(catalog_path), catalog_sha256=hashlib.sha256(catalog_bytes).hexdigest(),
-                        configuration_path=str(candidate_path), configuration_sha256=hashlib.sha256(candidate_bytes).hexdigest(),
+                        catalog_path=files['catalog_path'], catalog_sha256=files['catalog_sha256'],
+                        configuration_path=files['configuration_path'], configuration_sha256=files['configuration_sha256'],
                         catalog_published=True, cutover_requested=False, ordinary_jobs_dispatched=False,
                         sign_in_attempted=False, late_prompt=False, coverage=acceptance['coverage'],
                         all_routes_usable=acceptance['all_routes_usable'], coverage_holds=acceptance['coverage_holds'])
                     # Request, bootstrap and output custody cover resource drain.
                     phase = 'resource_drain'
-                    monitor_stop.set()
-                    monitor.join(timeout=30)
-                    if monitor.is_alive():
-                        raise RuntimeError('Acceptance monitor did not drain')
-                    if monitor_failures or runtime.stop_event.is_set():
-                        raise RuntimeError('Acceptance was revoked during final validation')
                     close_started = True
                     runtime.close()
                     closed = True
@@ -293,14 +379,19 @@ def run_owner_phase(bootstrap_config, bootstrap_sha256, request_path, request_sh
                     closed = True
                 except BaseException as exc:
                     error = error or exc
-        publication = (publication_snapshot(runtime.store, request_sha256, baseline) if runtime is not None
-                       else dict(state='UNKNOWN', catalog_probe_cleanup_verified=False))
+            if runtime is None:
+                # Construction failed or never began: no runtime resource can
+                # outlive this process; publication is judged from the board.
+                closed = True
+        publication = publication_snapshot(runtime.store if runtime is not None else None,
+                                           request_sha256, baseline, job_db=job_db)
         if error is not None or not closed:
             result = dict(schema='cochem-owner-task-catalog-result/4.2.8',
                 status='TASK_CATALOG_HELD_PRESERVE_EVIDENCE', phase=phase,
                 error_type=type(error).__name__ if error else 'ResourceDrainUnverified',
                 failure=sanitized_failure(error) if error else None,
                 monitor_error_types=monitor_failures, cleanup_verified=False, runtime_resources_closed=closed,
+                runtime_constructed=runtime is not None,
                 request_sha256=request_sha256, bootstrap_sha256=bootstrap_sha256,
                 publication_state=publication['state'], publication_proof=publication,
                 catalog_published=publication['state'] == 'COMMITTED', cutover_requested=False, automatic_retry=False,
@@ -309,7 +400,7 @@ def run_owner_phase(bootstrap_config, bootstrap_sha256, request_path, request_sh
         else:
             result['cleanup_verified'] = True
             result.update(publication_state=publication['state'], publication_proof=publication,
-                          runtime_resources_closed=True)
+                          runtime_resources_closed=True, runtime_constructed=True)
             if publication['state'] != 'COMMITTED' or publication.get('catalog_probe_cleanup_verified') is not True:
                 result.update(status='TASK_CATALOG_HELD_PRESERVE_EVIDENCE', cleanup_verified=False,
                               phase='publication_recheck', automatic_retry=False)

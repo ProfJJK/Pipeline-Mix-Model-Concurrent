@@ -55,8 +55,11 @@ class JointAdmission:
         with self.store._connection() as conn:probes=occupancy(conn)
         return sum(job['kind'] not in _DOCKER_KINDS for job in self.store.active_jobs())+probes+self._repair_slot_occupancy()
 
-    def reserve_catalog(self, authority, target, *, worker_slot, containment_id, boot_id):
-        """Reserve one native seat after warm Docker capacity has drained."""
+    def reserve_catalog(self, authority, target, *, worker_slot, containment_id, boot_id, lease_seconds=180):
+        """Reserve one native seat after warm Docker capacity has drained.
+
+        The lease must outlast the probe's bounded native sequence: an expired
+        lease revokes the probe and cannot be accepted after closure."""
         from .catalog_slots import reserve
         if not self.lock.acquire(blocking=False):return None
         try:
@@ -71,7 +74,7 @@ class JointAdmission:
                         self._request_drain(max(0,residual-1));return None
                 with self.store._write() as conn:
                     result=reserve(conn,authority,target,worker_slot=worker_slot,
-                        containment_id=containment_id,boot_id=boot_id,max_workers=min(4,capacity),lease_seconds=180)
+                        containment_id=containment_id,boot_id=boot_id,max_workers=min(4,capacity),lease_seconds=lease_seconds)
                 self._publish_locked()
                 return result
         finally:self.lock.release()

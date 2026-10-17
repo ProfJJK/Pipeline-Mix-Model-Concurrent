@@ -1,5 +1,6 @@
 #Requires -Version 5.1
-<# Owner-only 4.2.8 r4 -> r5 sitting: fresh install or explicitly pinned recovery.
+<# Owner-only 4.2.8 sitting from the running r4: a fresh r6 install, or an explicitly
+   pinned (spent) r5 recovery.
    Default is an offline read-only plan.
    No sign-in, late prompt, reboot, database restoration, automatic retry, or
    old bundle modification. Only an explicit -Apply reaches host operations. #>
@@ -76,6 +77,14 @@ function Get-OpRecoveryExpectedFor {
 
 function Test-OpRunningRecovery {
     return ($null -ne $script:OpRecovery -and (Get-OpProperty $script:OpRecovery 'scenario') -ceq 'INSTALLED_R5_RUNNING_R4_20261016')
+}
+
+function Test-OpPreviousRunning {
+    # A fresh install and running-r4 recovery both start from the exact running
+    # r4 their preconditions bound. Once a fence is READY that r4 ends on its
+    # writer timeout, so any hold must settle the fence and judge r4 before
+    # deciding on restoration; only the stopped-r4 recovery starts stopped.
+    return ($null -eq $script:OpRecovery -or (Test-OpRunningRecovery))
 }
 
 function Assert-OpExactFields {
@@ -238,9 +247,10 @@ function Test-OpNamedPipePath {
 }
 
 function Assert-OpRecoveryRuntimeDependencies {
-    # Recovery starts with no controller, so nothing has proven the catalog
-    # runtime's RAM-disk workspace or Docker engine pipe since r4 ended. Check
-    # the pinned bootstrap values read-only before the first fence or task change.
+    # Nothing in the sitting has proven the catalog runtime's RAM-disk workspace
+    # or Docker engine pipe (recovery may start with no controller at all).
+    # Check the pinned bootstrap values read-only before any install, fence or
+    # task change, and again just before the fence.
     param([string]$Bootstrap,[string]$Sha256)
     $stream=Open-428Pin $Bootstrap $Sha256
     try{$config=Read-428Json $stream}finally{$stream.Dispose()}
@@ -767,7 +777,7 @@ function New-OpResultRecord {
         previous_runtime_at_hold=(Get-OpProperty $State 'previous_runtime_at_hold');
         previous_state_at_stop=(Get-OpProperty $State 'previous_state_at_stop');
         previous_state_at_exit_timeout=(Get-OpProperty $State 'previous_state_at_exit_timeout');
-        health_last_attempt=(Get-OpProperty $State 'health_last_attempt');
+        health_last_attempt=(Get-OpProperty $State 'health_last_attempt');board_policy_observed=(Get-OpProperty $State 'board_policy_observed');
         restore_fence_cleanup=(Get-OpProperty $State 'restore_fence_cleanup');
         recovery_error_type=(Get-OpProperty $State 'recovery_error_type');recovery_failure=(Get-OpProperty $State 'recovery_failure');
         acceptance_failure=(Get-OpProperty $State.acceptance 'failure');
@@ -807,7 +817,7 @@ function Invoke-OpTransaction {
         if((Get-OpProperty $State 'verified_stopped_at_entry' $false) -and -not $State.stop_requested){
             $State.rollback='NO_RESTART_ATTEMPTED_PREVIOUS_ALREADY_STOPPED'
         }
-        $running=Test-OpRunningRecovery;$fence=Get-OpProperty $State 'fence'
+        $running=Test-OpPreviousRunning;$fence=Get-OpProperty $State 'fence'
         $fenceReady=$null -ne (Get-OpProperty $fence 'ready')
         if($null -ne $fence -and (-not $State.stop_requested -or ($running -and $fenceReady))){
             # Starting a writer fence is meaningful even when READY validation
@@ -824,7 +834,7 @@ function Invoke-OpTransaction {
                     stop_error=(Get-OpFailure $_ 'fence_stop_call')}}
             }
         }
-        # Running-r4 recovery: after READY the old runtime ends on its writer
+        # Running r4 (fresh or recovery): after READY the old runtime ends on its writer
         # timeout. Only a settled fence and the exact retained run's complete
         # exit after READY restore it like a stopped one. An unsettled fence may
         # still take the writer from r4 later, so it is never "no rollback".
@@ -999,7 +1009,7 @@ function Stop-OpRetainedTask {
 }
 
 function Wait-OpPreviousRuntimeSettled {
-    # Running-r4 recovery only. After this sitting's fence reached READY the old
+    # Running r4 only (fresh r6 sitting or running-r4 recovery). After this sitting's fence reached READY the old
     # runtime is expected to end on its five-second writer timeout. ENDED means
     # the exact retained run, both native processes exited after READY and no
     # task instance; RUNNING means still exactly that run after the bound with
@@ -1366,14 +1376,11 @@ function Write-OpPrivateBytes {
     try{$s.Write($Bytes,0,$Bytes.Length);$s.Flush($true)}finally{$s.Dispose()}
 }
 
-function New-OpCodexLiveManifest {
-    # Codex rewrites its own config.toml (for example at sign-in), so its
-    # pre-update digest is captured inside the sitting, immediately before the
-    # installed module plans or applies. The module still replaces only the
-    # pipeline server table, proves every other setting unchanged, backs up and
-    # rolls back on any concurrent edit. The managed rule, skill and metadata
-    # files stay pinned: any change there holds before anything is written.
-    param([byte[]]$Raw,$Integration,[string]$Name)
+function Get-OpCodexManagedDigests {
+    # Read-only. Every target must exist, and the managed rule, skill and
+    # metadata files must still equal their reviewed pins; config.toml is
+    # returned live because Codex itself rewrites it.
+    param($Integration)
     $files=@{config='.codex\config.toml';rules='.codex\AGENTS.md';skill='.agents\skills\codex-pipeline\SKILL.md';
         metadata='.agents\skills\codex-pipeline\agents\openai.yaml'}
     $live=@{}
@@ -1385,6 +1392,18 @@ function New-OpCodexLiveManifest {
     foreach($key in @('rules','skill','metadata')){
         if($live[$key] -cne [string](Get-OpProperty $Integration.expected $key)){throw 'Codex managed integration files changed since preparation; hold.'}
     }
+    return $live
+}
+
+function New-OpCodexLiveManifest {
+    # Codex rewrites its own config.toml (for example at sign-in), so its
+    # pre-update digest is captured inside the sitting, immediately before the
+    # installed module plans or applies. The module still replaces only the
+    # pipeline server table, proves every other setting unchanged, backs up and
+    # rolls back on any concurrent edit. The managed rule, skill and metadata
+    # files stay pinned: any change there holds before anything is written.
+    param([byte[]]$Raw,$Integration,[string]$Name)
+    $live=Get-OpCodexManagedDigests $Integration
     $pinned=[string](Get-OpProperty $Integration.expected 'config')
     if($pinned -cnotmatch '^[a-f0-9]{64}$'){throw 'Codex configuration pin is malformed.'}
     $text=[Text.UTF8Encoding]::new($false,$true).GetString($Raw)
@@ -1575,9 +1594,9 @@ function Restore-OpPrevious {
         # A hold between the trigger disable and the task disable leaves it enabled
         # with the trigger off; both re-register the baseline with the trigger off.
         $enabled=[bool]$task.Enabled;$trigger=$task.Definition.Triggers.Count -eq 1 -and [bool]$task.Definition.Triggers.Item(1).Enabled
-        $untouched=(Test-OpRunningRecovery) -and $enabled -and $trigger
+        $untouched=(Test-OpPreviousRunning) -and $enabled -and $trigger
         if($untouched){Assert-428WardenTask $task $script:OpOriginalXml $script:OpOriginalSddl $script:OpOldRoot $script:OpOldArgs $true $true 1}
-        elseif((Test-OpRunningRecovery) -and $enabled){Assert-428WardenTask $task $script:OpOriginalXml $script:OpOriginalSddl $script:OpOldRoot $script:OpOldArgs $true $false 1}
+        elseif((Test-OpPreviousRunning) -and $enabled){Assert-428WardenTask $task $script:OpOriginalXml $script:OpOriginalSddl $script:OpOldRoot $script:OpOldArgs $true $false 1}
         else{Assert-428WardenTask $task $script:OpOriginalXml $script:OpOriginalSddl $script:OpOldRoot $script:OpOldArgs $false $false 1}
         if($task.GetInstances(0).Count){throw 'A controller is still running.'}
         $pin=Open-428Pin $script:OpOldConfig $script:OpManifest.previous_config_sha256;$pin.Dispose()
@@ -1622,10 +1641,19 @@ function Invoke-OperationalLaunch {
         foreach($text in @(Import-OpHelpers $Directory)){. ([scriptblock]::Create($text))}
         $s=Open-428Pin $ManifestPath $ManifestHash;$pins.Add($s);$m=Read-428Json $s;$script:OpManifest=$m
         $script:OpOldRoot='C:\Program Files\CoChem\Pipeline4.2.8-windows-20261014-r4'
-        $script:OpRoot='C:\Program Files\CoChem\Pipeline4.2.8-windows-20261015-r5'
+        # A recovery only reuses the spent r5 installation; a fresh sitting installs r6.
+        if($null -ne (Get-OpProperty $m 'recovery_manifest')){
+            $script:OpRoot='C:\Program Files\CoChem\Pipeline4.2.8-windows-20261015-r5';$revision='windows-20261015-428-v5'
+        }else{
+            $script:OpRoot='C:\Program Files\CoChem\Pipeline4.2.8-windows-20261017-r6';$revision='windows-20261017-428-v6'
+            if((Get-OpProperty $m 'release') -cne 'r6' -or
+                (Get-OpProperty $m 'request_previous_policy_digest') -cne 'c8444fe2fd46b0f53edeaefc677ef7ff698c3e11cb83348a70255026a81da43d' -or
+                (Get-OpProperty $m 'integration_manifest') -cne 'codex-integration.json'){
+                throw 'Fresh launch manifest is not the reviewed r6 release (board-active policy and Codex integration).'}
+        }
         $script:OpOldConfig=Join-Path $script:OpOldRoot 'pipeline.json'
         if($m.schema -cne 'cochem-428-operational-launch/1' -or $m.previous_root -cne $script:OpOldRoot -or $m.target_root -cne $script:OpRoot -or
-            $m.revision -cne 'windows-20261015-428-v5' -or $m.previous_config_sha256 -cne 'daaa4b6a8c15aa49ed39af48c087bfe2fcfefdcbae14520b298d46287414509a' -or
+            $m.revision -cne $revision -or $m.previous_config_sha256 -cne 'daaa4b6a8c15aa49ed39af48c087bfe2fcfefdcbae14520b298d46287414509a' -or
             $m.previous_install_sha256 -cne 'fdf93bcbec72533eca5577b2bf5fded8da11dde38e71a13b79bd58af5ca40fa3' -or
             $m.source_commit -cnotmatch '^[a-f0-9]{40}$' -or $m.request_sha256 -cnotmatch '^[a-f0-9]{64}$' -or
             $m.input_window_minutes -ne 20 -or $m.late_prompts -ne $false -or $m.catalog_timeout_seconds -ne 7200){throw 'Operational launch manifest identity differs.'}
@@ -1658,9 +1686,20 @@ function Invoke-OperationalLaunch {
             throw 'Incomplete recovery opt-in is not fresh-install authority.'
         }
         foreach($text in @(Import-428Installer (Join-Path $Directory 'install_operational_428_runtime.ps1'))){. ([scriptblock]::Create($text))};Set-428Constants
+        if($script:targetRoot -cne $script:OpRoot){throw 'Installer and launcher target roots differ.'}
         $installPath=Join-Path $Directory 'install-manifest.json';$s=Open-428Pin $installPath $m.install_manifest_sha256;$pins.Add($s);$inventory=Read-428Json $s
         $null=Get-428InstallFiles $inventory
         if($inventory.source_commit -cne $m.source_commit){throw 'Installed source and launcher differ.'}
+        if($null -eq $script:OpRecovery){
+            # A fresh install carries the PASSED serialized source-test report of its exact commit.
+            $row=@($m.files|Where-Object{$_.name -ceq 'source-test-evidence.json'})[0]
+            $s=Open-428Pin (Join-Path $Directory $row.name) $row.sha256 $row.length;$pins.Add($s);$evidence=Read-428Json $s
+            if($inventory.source_test_evidence_sha256 -cne $row.sha256 -or
+                $evidence.schema -cne 'cochem-428-operational-source-tests/1' -or $evidence.status -cne 'PASSED' -or
+                $evidence.source_commit -cne $m.source_commit -or $evidence.runner -cne 'scripts/run_source_tests_428.py' -or
+                $evidence.passed -lt 1 -or $evidence.failed -ne 0 -or $evidence.host_acceptance_executed -ne $false -or
+                [string]$evidence.source_test_report_sha256 -cnotmatch '^[a-f0-9]{64}$'){throw 'Fresh source-test evidence is not PASSED for this commit.'}
+        }
         foreach($row in $inventory.files){$pins.Add((Open-428Pin $row.source $row.sha256 $row.length))}
         $pins.Add((Open-428Pin (Join-Path $Directory 'pipeline.json') $m.bootstrap_sha256));$pins.Add((Open-428Pin (Join-Path $Directory 'task-catalog-request.json') $m.request_sha256))
         $script:OpCatalogRequest=Resolve-OpCatalogRequest $m $Directory $pins ($null -ne $script:OpRecovery)
@@ -1678,12 +1717,12 @@ function Invoke-OperationalLaunch {
         $mutex=[Threading.Mutex]::new($false,'Global\CoChem428-OwnerSitting')
         try{$locked=$mutex.WaitOne(0)}catch [Threading.AbandonedMutexException]{$locked=$true;throw 'Earlier owner sitting was interrupted; preserve evidence.'}
         if(-not $locked){throw 'Another owner sitting is running.'}
-        if($null -eq $script:OpRecovery -and (Test-Path -LiteralPath $script:OpRoot)){throw 'Fresh r5 root already exists; preserve it, no automatic reuse.'}
+        if($null -eq $script:OpRecovery -and (Test-Path -LiteralPath $script:OpRoot)){throw 'Fresh r6 root already exists; preserve it, no automatic reuse.'}
         if($null -ne $script:OpRecovery -and -not (Test-Path -LiteralPath $script:OpRoot)){throw 'The exact completed r5 installation is missing.'}
         $pins.Add((Open-VerifiedFile $script:python $script:pythonPin (Get-Item -LiteralPath $script:python).Length))
         $awake=Start-428AwakeLease
         if($null -eq $script:OpRecovery){
-            $script:OpSitting='C:\Program Files\CoChem\R428Operational-20261015-'+[Guid]::NewGuid().ToString('N');New-ProtectedDirectory $script:OpSitting
+            $script:OpSitting='C:\Program Files\CoChem\R428Operational-20261017-'+[Guid]::NewGuid().ToString('N');New-ProtectedDirectory $script:OpSitting
         }else{$script:OpSitting=New-OpRecoverySitting $script:OpRecovery $m $ManifestHash}
         $script:OpPrivate=Join-Path $script:OpSitting 'private';New-OpPrivateDirectory $script:OpPrivate
         Write-Host ('Sanitized status reports: '+$script:OpSitting+'\status-*.json')
@@ -1716,8 +1755,28 @@ function Invoke-OperationalLaunch {
             $script:OpOriginalXml=$task.Xml;$script:OpOriginalSddl=$task.GetSecurityDescriptor(7)
             $state.previous_task_xml=$script:OpOriginalXml;$state.previous_task_sddl=$script:OpOriginalSddl
             Assert-428WardenTask $task $script:OpOriginalXml $script:OpOriginalSddl $script:OpOldRoot $script:OpOldArgs $true $true 1
-            $health=Get-428Health;Assert-428Health $health $script:OpOldRoot $true
+            Set-OpSubstage $state 'verify_running_previous_controller'
+            # A just-started r4 can still be in its Docker wait before serving health:
+            # wait (bounded, read-only) for two consistent answers instead of one read.
+            $health=Wait-OpHealth $script:OpOldRoot $false ([int](Get-OpProperty $state 'previous_health_seconds' 1200)) $state
             if($health.version -cne '4.2.8'){throw 'Current runtime version differs.'}
+            Set-OpSubstage $state 'verify_board_policy'
+            # Read-only and before the root is spent: a running board that reports
+            # another published policy cannot accept this request. Until r4's first
+            # catalog poll its status is IDLE; the READY fence re-checks exactly.
+            $activation=Get-OpProperty $health 'catalog_activation'
+            $state.board_policy_observed=@{status=[string](Get-OpProperty $activation 'status');policy_digest=[string](Get-OpProperty $activation 'policy_digest')}
+            if($state.board_policy_observed.status -ceq 'ALREADY_PUBLISHED' -and
+                $state.board_policy_observed.policy_digest -cne (Get-OpCatalogRequest).previous_policy_digest){
+                throw 'The running board reports a different published policy than this request targets; hold before install.'}
+            # Read-only and before the r6 root is spent (both are re-checked later):
+            # the catalog runtime's RAM-disk workspace and Docker pipe, and the
+            # Codex rule/skill/metadata files the integration must find unchanged.
+            Set-OpSubstage $state 'verify_runtime_dependencies'
+            Assert-OpRecoveryRuntimeDependencies (Join-Path $Directory 'pipeline.json') $m.bootstrap_sha256
+            Set-OpSubstage $state 'verify_codex_managed_files'
+            $s=Open-428Pin (Join-Path $Directory $m.integration_manifest) $m.integration_sha256;$pins.Add($s)
+            $null=Get-OpCodexManagedDigests (Read-428Json $s)
             $state.baseline_processes=Open-OpProcessProof $health $script:OpOldRoot $script:OpOldConfig
             $state.old_pid=$health.pid;$state.old_instance=$health.instance_id
             $state.old_task_instance=[string]$task.GetInstances(0).Item(1).InstanceGuid;$state.old_task_last_run=[DateTime]$task.LastRunTime
@@ -1745,7 +1804,7 @@ function Invoke-OperationalLaunch {
         }
         $actions.admission_fence={param($state)
             Write-OpStatus $state.phase
-            if(Test-OpRunningRecovery){
+            if(Test-OpPreviousRunning){
                 # Read-only, before the fence: once READY, the running r4 ends on
                 # its writer timeout and the catalog runtime must find these.
                 Set-OpSubstage $state 'recheck_runtime_dependencies'
@@ -1902,16 +1961,12 @@ function Invoke-OperationalLaunch {
             if($integration.schema -cne 'cochem-codex-integration-update/1' -or $integration.source_commit -cne $m.source_commit -or
                 $integration.user_home -cne 'C:\Users\ansac' -or $integration.runtime_root -cne $script:OpRoot -or
                 $integration.client_config -cne 'C:\Users\ansac\CoChem427\pipeline-client-r3.json'){throw 'Scoped Codex integration identity differs.'}
-            if($null -ne $script:OpRecovery){
-                # Codex must be integrated in this sitting; bind config.toml live.
-                Set-OpSubstage $state 'codex_capture_live_settings'
-                $live=New-OpCodexLiveManifest (Read-OpStreamBytes $s) $integration 'codex-integration-preflight.json'
-                $state.codex_config_recaptured=[bool]$live.config_recaptured;$state.codex_manifest_sha256=@{preflight=$live.sha256;apply=$null}
-                $path=$live.path;$digest=$live.sha256
-            }else{
-                $path=Join-Path $script:OpPrivate 'codex-integration.json';$digest=$m.integration_sha256
-                Copy-VerifiedPayload ([pscustomobject]@{source=$source;destination=$path;sha256=$m.integration_sha256;length=(Get-Item -LiteralPath $source).Length})
-            }
+            # Codex must be integrated in this sitting; Codex rewrites config.toml
+            # itself, so bind it live (rules, skill and metadata stay pinned).
+            Set-OpSubstage $state 'codex_capture_live_settings'
+            $live=New-OpCodexLiveManifest (Read-OpStreamBytes $s) $integration 'codex-integration-preflight.json'
+            $state.codex_config_recaptured=[bool]$live.config_recaptured;$state.codex_manifest_sha256=@{preflight=$live.sha256;apply=$null}
+            $path=$live.path;$digest=$live.sha256
             $saved=$script:targetRoot
             try{$script:targetRoot=$script:OpPrivate
                 Invoke-428Native (Join-Path $script:OpRoot '.venv\Scripts\python.exe') @('-I','-B','-m','cochem_pipeline.codex_integration_428',
@@ -1923,17 +1978,15 @@ function Invoke-OperationalLaunch {
         $actions.codex_integration={param($state)
             if($null -eq (Get-OpProperty $m 'integration_manifest')){return}
             Write-OpStatus $state.phase
-            if($null -ne $script:OpRecovery){
-                # Re-capture immediately before apply: Codex may have rewritten
-                # config.toml during the sitting; the module re-checks it again.
-                Set-OpSubstage $state 'codex_capture_live_settings'
-                $source=Join-Path $Directory $m.integration_manifest;$s=Open-428Pin $source $m.integration_sha256;$pins.Add($s);$integration=Read-428Json $s
-                $live=New-OpCodexLiveManifest (Read-OpStreamBytes $s) $integration 'codex-integration-apply.json'
-                $state.codex_config_recaptured=[bool](Get-OpProperty $state 'codex_config_recaptured' $false) -or [bool]$live.config_recaptured
-                $digests=Get-OpProperty $state 'codex_manifest_sha256'
-                if($null -eq $digests){$digests=@{preflight=$null;apply=$null};$state.codex_manifest_sha256=$digests}
-                $digests.apply=$live.sha256;$path=$live.path;$digest=$live.sha256
-            }else{$path=Join-Path $script:OpPrivate 'codex-integration.json';$digest=$m.integration_sha256}
+            # Re-capture immediately before apply: Codex may have rewritten
+            # config.toml during the sitting; the module re-checks it again.
+            Set-OpSubstage $state 'codex_capture_live_settings'
+            $source=Join-Path $Directory $m.integration_manifest;$s=Open-428Pin $source $m.integration_sha256;$pins.Add($s);$integration=Read-428Json $s
+            $live=New-OpCodexLiveManifest (Read-OpStreamBytes $s) $integration 'codex-integration-apply.json'
+            $state.codex_config_recaptured=[bool](Get-OpProperty $state 'codex_config_recaptured' $false) -or [bool]$live.config_recaptured
+            $digests=Get-OpProperty $state 'codex_manifest_sha256'
+            if($null -eq $digests){$digests=@{preflight=$null;apply=$null};$state.codex_manifest_sha256=$digests}
+            $digests.apply=$live.sha256;$path=$live.path;$digest=$live.sha256
             Set-OpSubstage $state 'codex_apply'
             $saved=$script:targetRoot
             try{$script:targetRoot=$script:OpPrivate

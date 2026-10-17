@@ -90,8 +90,11 @@ def test_replacement_refuses_any_unpinned_policy_basis(tmp_path, monkeypatch, ta
         prepare.active_routing_policy(bundle)
 
 
-def test_runtime_source_guard_accepts_the_unchanged_repository_and_rejects_another_import(monkeypatch):
-    prepare._require_runtime_source(prepare.SCRIPTS.parent)
+def test_runtime_source_guard_refuses_source_past_the_installed_r5_and_other_imports(monkeypatch):
+    # The r6 runtime fixes moved src beyond 865a29b: no package from this
+    # checkout may claim the installed r5 runtime any more.
+    with pytest.raises(ValueError, match='installed r5 source'):
+        prepare._require_runtime_source(prepare.SCRIPTS.parent)
     import cochem_pipeline
     monkeypatch.setattr(cochem_pipeline, '__file__', r'C:\elsewhere\src\cochem_pipeline\__init__.py')
     with pytest.raises(ValueError, match='repository runtime source'):

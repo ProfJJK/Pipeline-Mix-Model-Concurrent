@@ -80,6 +80,13 @@ def admitted(conn, authority, target):
     return True
 
 
+# Worst reviewed native probe: four 30 s policy/version probes (a reviewed
+# effort contract adds the version probe), a 30 s status probe and the 60 s
+# inference, plus launch and cleanup. finish() releases the seat; the lease
+# only bounds a seat whose owner disappeared, and an expired lease revokes it.
+PROBE_LEASE_SECONDS = 600
+
+
 def reserve(conn, authority, target, *, worker_slot, containment_id, boot_id,
             lease_seconds=1800, max_workers=4):
     """Account for shared capacity and current model/provider/pool admission.

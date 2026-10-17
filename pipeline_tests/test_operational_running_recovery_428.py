@@ -377,8 +377,9 @@ NOT_COMMITTED="@{publication_state='NOT_COMMITTED';runtime_resources_closed=$tru
 
 
 def transaction(*, running=True, ready=True, previous='ENDED', at='admission_fence', release='ok', stopfence='ok', receipt='$null',
-                root='$null', disk='none', restore='ok'):
-    return inert_ps(TRANSACTION.replace('SCENARIO', '(Get-OpRunningRecoveryExpected)' if running else '(Get-OpRecoveryExpected)')
+                root='$null', disk='none', restore='ok', fresh=False):
+    scenario='$null' if fresh else '(Get-OpRunningRecoveryExpected)' if running else '(Get-OpRecoveryExpected)'
+    return inert_ps(TRANSACTION.replace('SCENARIO', scenario)
         .replace('__READY__', '@{ready_at=1}' if ready else '$null').replace('__PREV__', previous).replace('__AT__', at)
         .replace('__REL__', release).replace('__STOPF__', stopfence).replace('__RECEIPT__', receipt)
         .replace('__ROOT__', root).replace('__DISK__', disk).replace('__RESTORE__', restore))
@@ -417,6 +418,25 @@ def test_post_ready_hold_settles_the_fence_then_restores_only_an_ended_r4(runnin
         assert result['seen'].index('release')<result['seen'].index('settle-previous'), result
     if not running and at=='stop_previous':
         assert 'release' not in result['seen'], result
+
+
+@pytest.mark.parametrize('ready,previous,at,rollback', [
+    (True, 'ENDED', 'admission_fence', RESTORED),
+    (True, 'RUNNING', 'admission_fence', 'NOT_REQUIRED'),
+    (True, 'UNSETTLED', 'admission_fence', HELD),
+    (False, 'ENDED', 'admission_fence', 'NOT_REQUIRED'),
+    (True, 'ENDED', 'stop_previous', RESTORED),
+    (True, 'RUNNING', 'stop_previous', HELD),
+])
+def test_fresh_r6_sitting_judges_and_restores_r4_exactly_like_running_recovery(ready, previous, at, rollback):
+    # The fresh install also starts from the exact running r4; a hold after
+    # READY that left r4 ended on its writer timeout must bring it back
+    # (the 2026-10-15 fresh hold reported NOT_REQUIRED and left no Warden).
+    result=transaction(fresh=True, ready=ready, previous=previous, at=at)
+    assert result['status']=='R428_OPERATIONAL_HELD_PRESERVE_EVIDENCE'
+    assert result['rollback']==rollback, result
+    assert ('restore_previous' in result['seen'])==(rollback==RESTORED), result
+    assert ('settle-previous' in result['seen'])==ready and result['previous']==(previous if ready else None), result
 
 
 @pytest.mark.parametrize('at,ready', [('stop_previous', True), ('admission_fence', True), ('admission_fence', False)])
@@ -1067,9 +1087,18 @@ def test_recovery_holds_codex_preflight_before_any_host_change_when_managed_file
     assert result['substage']=='codex_capture_live_settings' and result['status']=='NOT_APPLIED'
 
 
-def test_fresh_path_codex_phases_keep_the_packaged_manifest_and_pin():
-    result=inert_ps(CODEX_PHASES.replace('SCENARIO', '$null').replace('LIVE', 'ok'))
+@pytest.mark.parametrize('live', ['ok', 'holds'])
+def test_fresh_r6_path_also_binds_codex_settings_live(live):
+    # Codex rewrites config.toml itself (it moved twice since the r5 package),
+    # so the fresh r6 sitting re-captures it exactly like the recovery path.
+    result=inert_ps(CODEX_PHASES.replace('SCENARIO', '$null').replace('LIVE', live))
+    if live == 'holds':
+        assert result['held'] and result['seen']==[], result
+        assert result['substage']=='codex_capture_live_settings'
+        return
     assert not result['held'], result
-    assert result['seen']==['copy-integration', 'native:codex-preflight:codex-integration.json:'+'d'*64+':False',
-                            'native:codex-integration:codex-integration.json:'+'d'*64+':True'], result
-    assert result['status']=='CODEX_INTEGRATION_UPDATED_REFRESH_REQUIRED' and result['recaptured'] is None and result['digests'] is None
+    assert result['seen']==['live:codex-integration-preflight.json', 'native:codex-preflight:codex-integration-preflight.json:'+'f'*64+':False',
+                            'live:codex-integration-apply.json', 'native:codex-integration:codex-integration-apply.json:'+'9'*64+':True'], result
+    assert 'copy-integration' not in result['seen']
+    assert result['status']=='CODEX_INTEGRATION_UPDATED_REFRESH_REQUIRED'
+    assert result['recaptured'] is True and result['digests']==dict(preflight='f'*64, apply='9'*64)

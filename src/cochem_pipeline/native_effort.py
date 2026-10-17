@@ -7,6 +7,8 @@ metadata remains unverified; the requested profile is never reported as fact.
 No bindings are supplied by default. Missing or
 changed capabilities stop before authentication/inference and allow normal
 job-board compatibility spillover. Protocol fixtures are not host evidence.
+Codex contracts bind its ``-c model_reasoning_effort`` selector to an exact
+binary/version; they are optional only for configs that declare none.
 """
 from __future__ import annotations
 
@@ -41,6 +43,36 @@ def _argv(value, name):
     return list(value)
 
 
+def _codex_contract(model, effort, spec):
+    """Codex selects effort with its own config override, which no other
+    provider contract may use. Without reviewed Codex contracts the legacy
+    unattested selector remains (older protected configs still load); once a
+    protected spec declares them, every routed model/effort needs its own."""
+    contracts = spec.get('effort_contracts') if isinstance(spec, dict) else None
+    if contracts is None:
+        return None
+    contract = contracts.get(f'{model}:{effort}') if isinstance(contracts, dict) else None
+    if not isinstance(contract, dict) or set(contract) != _FIELDS:
+        raise ValueError('Native reasoning effort requires an exact reviewed model/profile contract')
+    if (not isinstance(contract['executable_sha256'], str)
+            or not re.fullmatch('[0-9a-f]{64}', contract['executable_sha256'])):
+        raise ValueError('Native reasoning effort requires the exact executable digest')
+    for field in ('version', 'capability_reference'):
+        if (not isinstance(contract[field], str) or not contract[field].strip()
+                or len(contract[field]) > 2048):
+            raise ValueError('Native reasoning effort requires version and capability provenance')
+    if contract['version_arguments'] != ['--version']:
+        raise ValueError('Native reasoning effort version probe must use the offline --version selector')
+    if contract['arguments'] != ['-c', 'model_reasoning_effort=' + json.dumps(effort)]:
+        raise ValueError('Codex reasoning effort must select exactly the routed native level')
+    if contract['thinking_enabled'] is not None or contract['native_metadata'] is not None:
+        # Native Codex events are read separately and may only contradict.
+        raise ValueError('Codex reasoning effort has no reviewed output metadata binding')
+    if str(spec.get('executable', '')).lower().endswith(('.cmd', '.bat')):
+        raise ValueError('Codex reasoning effort requires the native executable, not a shim')
+    return contract
+
+
 def effort_contract(provider, model, effort, spec):
     """Return an exact reviewed binding; never infer one from a display label."""
     if effort is None:
@@ -48,7 +80,7 @@ def effort_contract(provider, model, effort, spec):
     if provider == 'codex':
         if effort not in ('low', 'medium', 'high', 'xhigh', 'max', 'ultra'):
             raise ValueError('Native Codex reasoning effort is outside the routed contract')
-        return None
+        return _codex_contract(model, effort, spec)
     if ((provider == 'claude' and effort not in ('low', 'medium', 'high', 'xhigh', 'max', 'extended'))
             or (provider == 'gemini' and effort not in ('low', 'medium', 'high', 'extended'))
             or provider not in ('claude', 'gemini')):
@@ -231,6 +263,18 @@ def reported_profile(provider, raw, *, model, effort, spec):
     contract = effort_contract(provider, model, effort, spec)
     if contract is None:
         return None
+    if provider == 'codex':
+        # The reviewed selector is attested by the version-pinned invocation;
+        # a native event may confirm the level, never contradict it.
+        from .worker import native_reported_effort
+        observed = native_reported_effort('codex', raw)
+        if observed is not None and observed != effort:
+            raise ValueError('Native Codex output contradicts the reviewed reasoning effort')
+        return {'verified_profile': effort if observed is not None else None,
+                'native_metadata_path': None, 'observed_native_value': observed,
+                'reported_effort': observed,
+                'observation_status': ('reported_by_native_event' if observed is not None
+                                       else 'not_reported_by_reviewed_cli')}
     if contract['native_metadata'] is None:
         return {'verified_profile': None, 'native_metadata_path': None,
                 'observed_native_value': None, 'reported_effort': None,

@@ -128,7 +128,10 @@ def test_terminal_expiry_never_sends_another_release(tmp_path, mode, held):
         assert result['completion'] is None
 
 
-def test_pre_stop_failure_settles_owned_fence_without_restoration_and_sanitizes_frames():
+@pytest.mark.parametrize('settled', [True, False])
+def test_pre_stop_failure_settles_owned_fence_without_restoration_and_sanitizes_frames(settled):
+    # A fresh sitting starts from the running r4, so an unsettled fence can
+    # still take its writer: that is a held state, never "no rollback".
     result = inert_ps(r"""
 $state=@{phase=$null;status=$null;rollback=$null;stop_requested=$false;stopped=$false;acceptance_started=$false;
     acceptance_exited=$false;cutover_requested=$false;acceptance=$null;fence=$null}
@@ -137,14 +140,14 @@ foreach($name in @('preconditions','offline_install','codex_preflight')){$action
 $actions.admission_fence={param($s)$s.substage='fence_validate_ready';$s.fence=@{completion=$null};throw 'private-secret-C:\private\file'}
 $actions.stop_previous={param($s)throw 'Stop must never be reached'}
 $actions.restore_previous={param($s)throw 'Restore must never be reached'}
-function Release-OpFence {param($f)$script:seen.Add('release');$f.completion=@{status='LOCK_RELEASED'}}
+function Release-OpFence {param($f)$script:seen.Add('release');$f.completion=@{status='LOCK_RELEASED';lock_released=SETTLED;native_exit_verified=SETTLED}}
 $state=Invoke-OpTransaction $actions $state
 $record=New-OpResultRecord $state ([pscustomobject]@{source_commit=('a'*40);request_sha256=('b'*64)}) ('c'*64)
 @{record=$record;seen=@($script:seen)}|ConvertTo-Json -Depth 10 -Compress
-""")
+""".replace('SETTLED', '$true' if settled else '$false'))
     assert result['seen'] == ['release']
     record = result['record']
-    assert record['rollback'] == 'NOT_REQUIRED'
+    assert record['rollback'] == ('NOT_REQUIRED' if settled else 'HELD_PRESERVE_STOPPED_OR_RUNNING_STATE')
     assert record['fence_cleanup']['status'] == 'LOCK_RELEASED'
     failure = record['launcher_failure']
     assert failure['error_type'] == 'RuntimeException'

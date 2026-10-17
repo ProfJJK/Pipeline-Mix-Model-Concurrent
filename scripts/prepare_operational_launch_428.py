@@ -1,4 +1,4 @@
-"""Prepare a fresh immutable owner launcher around an offline r5 payload.
+"""Prepare a fresh immutable owner launcher around an offline r5 (spent) or r6 payload.
 
 This reads ordinary files only. It never executes the installer, owner phase,
 providers, scheduled tasks, or protected mutations.
@@ -17,7 +17,7 @@ for entry in (str(SCRIPTS), str(SCRIPTS.parent/'src')):
 from cochem_pipeline.routing import _strict_json
 from cochem_pipeline.task_catalog_acceptance_428 import encoded
 from prepare_operational_release_428 import (
-    PREVIOUS_BUNDLE, PREVIOUS_ROOT, TARGET_ROOT, REVISION,
+    PREVIOUS_BUNDLE, PREVIOUS_ROOT, RELEASES, ACTIVE_POLICY_DIGEST, SOURCE_TEST_SCHEMA,
     PREVIOUS_CONFIG_SHA256, PREVIOUS_INSTALL_SHA256, _committed_script,
 )
 from prepare_428_release import _assert_fresh_destination, sha
@@ -33,8 +33,13 @@ def prepare_operational_launch(payload, task_catalog_release, destination, repos
     destination = _assert_fresh_destination(Path(destination))
     release_raw = read_regular(payload/'operational-release.json')
     release = _strict_json(release_raw.decode('utf-8'))
+    release_name = release.get('release', 'r5')
+    if release_name not in RELEASES:
+        raise ValueError('Unknown operational release')
+    TARGET_ROOT, REVISION = RELEASES[release_name]
     if (release.get('schema') != 'cochem-428-operational-release/1' or release.get('revision') != REVISION
             or release.get('target_root') != TARGET_ROOT or release.get('task_planning_enabled') is not False
+            or (release_name == 'r6' and release.get('bootstrap_policy_digest') != ACTIVE_POLICY_DIGEST)
             or release.get('catalog_publication_required') is not True
             or release.get('previous',{}).get('config_sha256') != PREVIOUS_CONFIG_SHA256
             or release.get('previous',{}).get('install_manifest_sha256') != PREVIOUS_INSTALL_SHA256):
@@ -62,6 +67,19 @@ def prepare_operational_launch(payload, task_catalog_release, destination, repos
             or task.get('request_sha256') != sha(request) or task.get('request_bytes') != len(request)
             or task.get('configuration_sha256') != sha(encoded(_strict_json(files['pipeline.json'].decode('utf-8'))))):
         raise ValueError('Task-catalog request does not bind this exact bootstrap/source')
+    if release_name == 'r6':
+        # The owner phase finds the board-active policy; a request prepared for
+        # anything else is the d5d6094 hold. Fresh mode also requires PASSED tests.
+        raw_request = _strict_json(request.decode('utf-8'))
+        evidence = _strict_json(files['source-test-evidence.json'].decode('utf-8'))
+        if (task.get('previous_policy_digest') != ACTIVE_POLICY_DIGEST
+                or raw_request.get('previous_policy_digest') != ACTIVE_POLICY_DIGEST
+                or raw_request.get('previous_task_catalog_sha256') is not None
+                or raw_request.get('activation_authorized') is not False):
+            raise ValueError('Task-catalog request does not target the board-active policy')
+        if (evidence.get('schema') != SOURCE_TEST_SCHEMA or evidence.get('status') != 'PASSED'
+                or evidence.get('failed') != 0 or evidence.get('source_commit') != release['source_commit']):
+            raise ValueError('Fresh r6 launch requires PASSED source tests for its exact commit')
     helper = read_regular(Path(previous_bundle)/'run_428_launch.ps1')
     if sha(helper) != HELPER_PIN: raise ValueError('Reviewed pure helper source differs')
     files['reviewed_428_launch_helpers.ps1'] = helper
@@ -69,6 +87,8 @@ def prepare_operational_launch(payload, task_catalog_release, destination, repos
     files['task-catalog-request.json'] = request
     files['task-catalog-manifest.json'] = task_manifest
     integration_pin = None
+    if release_name == 'r6' and codex_integration is None:
+        raise ValueError('The r6 sitting must integrate Codex with the new runtime')
     if codex_integration is not None:
         integration_raw = read_regular(Path(codex_integration))
         integration = _strict_json(integration_raw.decode('utf-8'))
@@ -81,6 +101,7 @@ def prepare_operational_launch(payload, task_catalog_release, destination, repos
         files['codex-integration.json'] = integration_raw
         integration_pin = sha(integration_raw)
     manifest = dict(schema='cochem-428-operational-launch/1',revision=REVISION,
+        **(dict(release='r6',request_previous_policy_digest=ACTIVE_POLICY_DIGEST) if release_name == 'r6' else {}),
         source_commit=release['source_commit'],previous_root=PREVIOUS_ROOT,target_root=TARGET_ROOT,
         previous_config_sha256=PREVIOUS_CONFIG_SHA256,previous_install_sha256=PREVIOUS_INSTALL_SHA256,
         install_manifest_sha256=release['install_manifest_sha256'],bootstrap_sha256=sha(files['pipeline.json']),

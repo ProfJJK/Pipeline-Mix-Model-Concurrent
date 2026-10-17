@@ -107,7 +107,7 @@ class CatalogController:
             if capacity<=0 or not available or rt.ramdisk is None:return
             slot=available[0];target=self.pending[0]
             token=rt.admission.reserve_catalog(self.authority,target,worker_slot=slot,
-                containment_id=self.containment_id,boot_id=rt.boot_id)
+                containment_id=self.containment_id,boot_id=rt.boot_id,lease_seconds=catalog_slots.PROBE_LEASE_SECONDS)
             if token is None:return
             self.reservation=token
             try:self.future=rt.pool.submit(self._execute,target,slot,token)

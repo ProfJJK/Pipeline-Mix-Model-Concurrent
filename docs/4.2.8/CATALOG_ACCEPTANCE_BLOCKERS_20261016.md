@@ -65,3 +65,21 @@ used `CatalogController`, and the r5 tests used fakes.
 No new owner package is delivered. r4 remains the serving 4.2.8 runtime; Codex
 is still configured to reach it through the `cochem-pipeline` MCP table, and its
 board has Codex routes.
+
+## Corrections and resolution (later on 2026-10-16)
+
+**Two statements above were incomplete:**
+- **Blocker 1 needs more than removing the binding.** A bootstrap routed to
+  `c8444fe2…` must also drop the `gemini-3.1-pro:high` Agy effort contract,
+  otherwise `validate_model_bindings` refuses it. It must also drop the
+  `model_limits` key; routing the rebuilt policy's `as_dict()` does that.
+- **"Holds before r4 is touched" was not true in fresh mode.** In fresh mode
+  the check ran after the writer fence was READY, and a hold there reported
+  `NOT_REQUIRED` even though r4 may have ended. The r6 launcher now judges and
+  restores r4 after READY in fresh mode too.
+
+All three blockers, and the latent defects found while reviewing them, are fixed
+in the r6 release. See [OPERATIONAL_RELEASE_R6.md](OPERATIONAL_RELEASE_R6.md).
+A real-Runtime offline simulation (`pipeline_tests/test_catalog_phase_e2e_428.py`)
+publishes all 28 targets with exact evidence, and its candidate configuration
+boots to task planning ENABLED and CONNECTED.

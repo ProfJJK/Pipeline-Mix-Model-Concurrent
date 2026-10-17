@@ -201,6 +201,12 @@ function Open-OpProcessProof {
     $script:seen.Add('handles');return ,$script:processes
 }
 $script:OpCatalogRequest=@{name='task-catalog-request.json';sha256=('b'*64);request_id=('c'*32);previous_policy_digest='policy';previous_task_catalog_sha256=$null}
+$Directory='package';$m=[pscustomobject]@{bootstrap_sha256=('d'*64)}
+function Assert-OpRecoveryRuntimeDependencies {
+    param($bootstrap,$sha)
+    if($script:fenced -or $bootstrap -cne 'package\pipeline.json' -or $sha -cne ('d'*64)){throw 'Dependencies must be read before the fence'}
+    $script:seen.Add('dependencies')
+}
 function Start-OpFence {
     param($label)$script:seen.Add('ready');$script:fenced=$true
     if($script:endedAtReady){$script:count=0;foreach($p in $script:processes){$p.HasExited=$true}}
@@ -219,7 +225,9 @@ foreach($name in @('admission_fence','stop_previous')){
 }
 @{seen=@($script:seen);stopped=$state.stopped}|ConvertTo-Json -Compress
 """.replace('ENDED', '$true' if ended_at_ready else '$false'))
-    expected = ['health', 'handles', 'ready', 'disable-trigger']
+    # A fresh sitting starts from the running r4: the R:/Docker dependencies
+    # of the catalog runtime are proven read-only before the writer fence.
+    expected = ['dependencies', 'health', 'handles', 'ready', 'disable-trigger']
     if not ended_at_ready:
         expected.append('stop')
     assert result == dict(seen=expected+['port-free'], stopped=True)
@@ -365,17 +373,24 @@ def package(tmp_path,monkeypatch):
     task=tmp_path/'task';task.mkdir()
     config=dict(max_execution_slots=4,catalog_activation=True,task_planning=None)
     raw_config=json.dumps(config).encode()
-    files={'pipeline.json':raw_config,'install-manifest.json':b'{}','source-test-evidence.json':b'{}',
+    evidence=json.dumps(dict(schema=prepare.SOURCE_TEST_SCHEMA,source_commit='a'*40,status='PASSED',failed=0,
+        passed=600,runner='scripts/run_source_tests_428.py',modules=['pipeline_tests/test_x.py'],
+        source_test_report_sha256='e'*64,host_acceptance_executed=False)).encode()
+    files={'pipeline.json':raw_config,'install-manifest.json':b'{}','source-test-evidence.json':evidence,
            'install_operational_428_runtime.ps1':b'reviewed-installer','stage_aetherdesk_427_payloads.ps1':b'reviewed-copy'}
-    release=dict(schema='cochem-428-operational-release/1',revision=prepare.REVISION,
-        target_root=prepare.TARGET_ROOT,task_planning_enabled=False,catalog_publication_required=True,
+    target_root,revision=prepare.RELEASES['r6']
+    release=dict(schema='cochem-428-operational-release/1',revision=revision,release='r6',
+        bootstrap_policy_digest=prepare.ACTIVE_POLICY_DIGEST,
+        target_root=target_root,task_planning_enabled=False,catalog_publication_required=True,
         source_commit='a'*40,previous=dict(config_sha256=prepare.PREVIOUS_CONFIG_SHA256,install_manifest_sha256=prepare.PREVIOUS_INSTALL_SHA256),
         bootstrap_candidate_sha256=prepare.sha(raw_config),install_manifest_sha256=prepare.sha(b'{}'),
         files=[dict(name=n,sha256=prepare.sha(v),length=len(v)) for n,v in files.items()])
     for name,blob in files.items():(payload/name).write_bytes(blob)
     (payload/'operational-release.json').write_text(json.dumps(release))
-    (task/'task-catalog-request.json').write_bytes(b'{"request":"test"}')
+    (task/'task-catalog-request.json').write_bytes(json.dumps(dict(previous_policy_digest=prepare.ACTIVE_POLICY_DIGEST,
+        previous_task_catalog_sha256=None,activation_authorized=False)).encode())
     manifest=dict(schema='cochem-task-catalog-release/4.2.8',source_commit='a'*40,request_id='b'*32,
+        previous_policy_digest=prepare.ACTIVE_POLICY_DIGEST,
         request_sha256=prepare.sha((task/'task-catalog-request.json').read_bytes()),
         request_bytes=(task/'task-catalog-request.json').stat().st_size,configuration_sha256=prepare.sha(prepare.encoded(config)))
     (task/'task-catalog-manifest.json').write_text(json.dumps(manifest))
@@ -383,7 +398,12 @@ def package(tmp_path,monkeypatch):
     helper=(ROOT/'scripts/run_428_launch.ps1').read_bytes()
     (previous/'run_428_launch.ps1').write_bytes(helper)
     monkeypatch.setattr(prepare,'_committed_script',lambda repo,commit,name:(repo/'scripts'/name).read_bytes())
-    return dict(payload=payload,task_catalog_release=task,destination=tmp_path/'launch',repository=ROOT,previous_bundle=previous)
+    codex=tmp_path/'codex-default.json'
+    codex.write_text(json.dumps(dict(schema='cochem-codex-integration-update/1',source_commit='a'*40,
+        user_home='C:/Users/ansac'.replace('/',chr(92)),runtime_root=prepare.RELEASES['r6'][0],
+        client_config='C:/Users/ansac/CoChem427/pipeline-client-r3.json'.replace('/',chr(92)))))
+    return dict(payload=payload,task_catalog_release=task,destination=tmp_path/'launch',repository=ROOT,previous_bundle=previous,
+                codex_integration=codex)
 
 
 def test_fresh_launcher_binds_every_input_and_keeps_old_payload_unchanged(package):
@@ -395,7 +415,43 @@ def test_fresh_launcher_binds_every_input_and_keeps_old_payload_unchanged(packag
     assert result['launch_manifest_sha256']==prepare.sha((launch/'launch-manifest.json').read_bytes())
     for row in manifest['files']:
         assert row['sha256']==prepare.sha((launch/row['name']).read_bytes())
+    assert manifest['release']=='r6' and manifest['target_root']==prepare.RELEASES['r6'][0]
+    assert manifest['request_previous_policy_digest']==prepare.ACTIVE_POLICY_DIGEST
     assert before=={p.name:p.read_bytes() for p in package['payload'].iterdir()}
+
+
+@pytest.mark.parametrize('mutation',['stale_request','stale_manifest','prior_catalog','claims_authority',
+                                     'unpassed_tests','other_commit_tests','bootstrap_policy','no_codex'])
+def test_r6_package_requires_board_active_request_and_passed_tests(package,mutation):
+    payload,task=package['payload'],package['task_catalog_release']
+    if mutation in ('stale_request','prior_catalog','claims_authority'):
+        path=task/'task-catalog-request.json';value=json.loads(path.read_text())
+        key,new={'stale_request':('previous_policy_digest','6'*64),'prior_catalog':('previous_task_catalog_sha256','7'*64),
+                 'claims_authority':('activation_authorized',True)}[mutation]
+        value[key]=new;path.write_text(json.dumps(value))
+        manifest_path=task/'task-catalog-manifest.json';manifest=json.loads(manifest_path.read_text())
+        manifest.update(request_sha256=prepare.sha(path.read_bytes()),request_bytes=path.stat().st_size)
+        manifest_path.write_text(json.dumps(manifest))
+    elif mutation=='stale_manifest':
+        path=task/'task-catalog-manifest.json';value=json.loads(path.read_text())
+        value['previous_policy_digest']='6'*64;path.write_text(json.dumps(value))
+    elif mutation in ('unpassed_tests','other_commit_tests'):
+        path=payload/'source-test-evidence.json';value=json.loads(path.read_text())
+        if mutation=='unpassed_tests':value.update(status='FAILED',failed=1)
+        else:value['source_commit']='f'*40
+        path.write_bytes(json.dumps(value).encode())
+        release_path=payload/'operational-release.json';release=json.loads(release_path.read_text())
+        for row in release['files']:
+            if row['name']=='source-test-evidence.json':
+                row.update(sha256=prepare.sha(path.read_bytes()),length=path.stat().st_size)
+        release_path.write_text(json.dumps(release))
+    elif mutation=='no_codex':
+        package={**package,'codex_integration':None}
+    else:
+        path=payload/'operational-release.json';value=json.loads(path.read_text())
+        value['bootstrap_policy_digest']='6'*64;path.write_text(json.dumps(value))
+    with pytest.raises(ValueError):prepare.prepare_operational_launch(**package)
+    assert not package['destination'].exists()
 
 
 @pytest.mark.parametrize('mutation',['source','bootstrap','request','input','helper','old_root'])
@@ -414,10 +470,10 @@ def test_unbound_release_refused_before_creating_destination(package,mutation):
 
 def test_scoped_codex_integration_is_pinned_to_exact_source_owner_and_runtime(package,tmp_path):
     integration=dict(schema='cochem-codex-integration-update/1',source_commit='a'*40,
-        user_home=r'C:\Users\ansac',runtime_root=prepare.TARGET_ROOT,
+        user_home=r'C:\Users\ansac',runtime_root=prepare.RELEASES['r6'][0],
         client_config=r'C:\Users\ansac\CoChem427\pipeline-client-r3.json')
     path=tmp_path/'codex.json';path.write_text(json.dumps(integration))
-    prepare.prepare_operational_launch(**package,codex_integration=path)
+    prepare.prepare_operational_launch(**{**package,'codex_integration':path})
     manifest=json.loads((package['destination']/'launch-manifest.json').read_text())
     assert manifest['integration_manifest']=='codex-integration.json'
     assert manifest['integration_sha256']==prepare.sha(path.read_bytes())
@@ -427,9 +483,9 @@ def test_scoped_codex_integration_is_pinned_to_exact_source_owner_and_runtime(pa
 @pytest.mark.parametrize('field',['source_commit','runtime_root','user_home','client_config'])
 def test_integration_wrong_identity_never_packaged(package,tmp_path,field):
     integration=dict(schema='cochem-codex-integration-update/1',source_commit='a'*40,
-        user_home=r'C:\Users\ansac',runtime_root=prepare.TARGET_ROOT,
+        user_home=r'C:\Users\ansac',runtime_root=prepare.RELEASES['r6'][0],
         client_config=r'C:\Users\ansac\CoChem427\pipeline-client-r3.json')
     integration[field]='wrong';path=tmp_path/'codex.json';path.write_text(json.dumps(integration))
     with pytest.raises(ValueError,match='Codex integration'):
-        prepare.prepare_operational_launch(**package,codex_integration=path)
+        prepare.prepare_operational_launch(**{**package,'codex_integration':path})
     assert not package['destination'].exists()

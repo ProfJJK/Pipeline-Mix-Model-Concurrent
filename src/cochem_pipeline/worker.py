@@ -297,7 +297,9 @@ def provider_command(provider: str, prefix: list[str], model: str, workspace: st
                 argv[argv.index('--sandbox') + 1] = 'read-only'
                 argv[-1:-1] = codex_policy_overrides(mcp_names)
             if reasoning_effort is not None:
-                argv[-1:-1] = ['-c','model_reasoning_effort='+json.dumps(reasoning_effort)]
+                # A reviewed contract pins these exact bytes to its binary/version.
+                argv[-1:-1] = (list(effort_binding['arguments']) if effort_binding is not None else
+                               ['-c','model_reasoning_effort='+json.dumps(reasoning_effort)])
         else:
             if inference_only:
                 policy_args = claude_inference_arguments()
@@ -958,7 +960,7 @@ class NativeRunner:
                                   parse_gemini(raw,spec['protocol'],model,native=native_binding,
                                                identity_policy=identity_policy,stderr=stderr,inference_spec=registry_spec))
                         reported_effort = native_reported_effort(provider,raw)
-                        if provider != 'codex' and reasoning_effort is not None:
+                        if reasoning_effort is not None and binding is not None:
                             from .native_effort import reported_profile
                             observation = reported_profile(provider, raw, model=model,
                                 effort=reasoning_effort, spec=spec)

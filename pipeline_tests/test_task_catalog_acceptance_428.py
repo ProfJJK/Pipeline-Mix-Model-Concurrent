@@ -42,7 +42,7 @@ def environment(tmp_path, raw_task_catalog, binary_bindings):
         execution_bindings=PINS,candidate_profile_ids=['argon-high','sonnet-max','luna-med'])
     data=encoded(raw)
     request=decode_request(data,policy,None,expected_sha256=hashlib.sha256(data).hexdigest())
-    store=JobStore(tmp_path/'board.db',routing_policy=policy)
+    store=JobStore(tmp_path/'job_board.db',routing_policy=policy)
     with store._connection() as conn:
         conn.execute('PRAGMA synchronous=FULL');conn.execute('BEGIN IMMEDIATE')
         catalog_journal.initialize(conn,policy)
@@ -253,12 +253,18 @@ class InertConfig:
     workers: dict
     routing: object
     timeout_seconds: int = 60
+    max_execution_slots: int = 4
 
 
 def inert_runtime(store,request,tmp_path,monkeypatch,*,failure=None):
     from cochem_pipeline import windows, native_effort, worker, runtime, task_catalog_acceptance_428 as module
     monkeypatch.setattr(windows,'require_system',lambda:None)
     monkeypatch.setattr(module,'execution_bindings',lambda p,w:request.execution_bindings)
+    # Contract/command readiness has its own tests and the real-Runtime e2e;
+    # these inert providers carry no effort contracts.
+    readiness=[]
+    monkeypatch.setattr(module,'require_probe_readiness',
+        lambda rt,proposal:(readiness.append(proposal.request_id),rt.catalog.containment_id)[1])
     binaries=request.plan.binary_bindings
     monkeypatch.setattr(native_effort,'verified_executable_sha256',
         lambda path:next(x['sha256'] for x in binaries.values() if x['executable']==path))
@@ -281,7 +287,13 @@ def inert_runtime(store,request,tmp_path,monkeypatch,*,failure=None):
     rt=SimpleNamespace(store=store,config=InertConfig(
         {p:dict(executable=x['executable']) for p,x in binaries.items()},workers,request.plan.policy),
         ramdisk=SimpleNamespace(workspace=lambda slot:descriptor),stop_event=threading.Event(),
-        boot_id=123,catalog_containment_id='a'*32,admission=JointAdmission(store,None,4))
+        boot_id=123,catalog=SimpleNamespace(containment_id='a'*32),quarantined={},
+        admission=JointAdmission(store,None,4),slots=[])
+    original=Runner.run
+    def recording_run(self,node,slot,context,heartbeat,**kwargs):
+        rt.slots.append(slot)
+        return original(self,node,slot,context,heartbeat,**kwargs)
+    Runner.run=recording_run
     return rt,calls,clears
 
 
@@ -312,7 +324,98 @@ def test_coordinator_failure_never_publishes_or_retries(environment,tmp_path,mon
     assert captured.value.catalog_target == dict(zip(('provider', 'model', 'effort'), calls[0]))
     with store._connection() as conn:
         assert catalog_journal.active_task_catalog(conn) is None
-        assert catalog_slots.occupancy(conn)==(0 if fault=='configuration' else 1)
+        # Runtime dispatch contract: only a failed managed close leaves the
+        # seat occupied; any other error follows a verified close.
+        assert catalog_slots.occupancy(conn)==(1 if fault=='cleanup' else 0)
+        row=conn.execute('SELECT cleanup_at,result_json FROM pipeline_catalog_probes').fetchone()
+        assert (row[0] is None)==(fault=='cleanup')
+        if fault!='cleanup':assert json.loads(row[1])['status']=='PROBE_HELD'
+    with pytest.raises(ValueError,match='requires review'):run_acceptance(rt,request)
+    assert len(calls)==1
+
+
+def test_probe_seats_use_the_catalog_containment_lease_and_skip_quarantined_slots(environment,tmp_path,monkeypatch):
+    from cochem_pipeline import task_catalog_acceptance_428 as module
+    store,request,_=environment
+    rt,calls,_=inert_runtime(store,request,tmp_path,monkeypatch)
+    rt.quarantined={'slot1':'inert RAM cleanup failure','slot3':'inert probe cleanup'}
+    result=run_acceptance(rt,request)
+    assert result['catalog_published'] is True
+    assert rt.slots and not {'slot1','slot3'}&set(rt.slots)
+    with store._connection() as conn:
+        rows=conn.execute('SELECT containment_id,boot_id,lease_expires_at-reserved_at FROM pipeline_catalog_probes').fetchall()
+    assert rows and all(row[0]=='a'*32 and row[1]==123 for row in rows)
+    assert all(abs(row[2]-module.PROBE_LEASE_SECONDS)<1 for row in rows)
+    assert module.PROBE_LEASE_SECONDS>=4*30+30+60
+
+
+def test_all_quarantined_slots_hold_before_any_seat(environment,tmp_path,monkeypatch):
+    store,request,_=environment
+    rt,calls,_=inert_runtime(store,request,tmp_path,monkeypatch)
+    rt.quarantined={f'slot{i}':'inert' for i in range(1,7)}
+    with pytest.raises(RuntimeError,match='quarantined'):run_acceptance(rt,request)
+    assert not calls
+    with store._connection() as conn:
+        assert conn.execute('SELECT count(*) FROM pipeline_catalog_probes').fetchone()[0]==0
+
+
+@pytest.mark.parametrize('hook',['before_publish','finalize'])
+def test_publication_hooks_run_before_commit_and_roll_back_on_failure(environment,tmp_path,monkeypatch,hook):
+    store,request,_=environment
+    rt,calls,_=inert_runtime(store,request,tmp_path,monkeypatch)
+    seen=[]
+    def before():
+        seen.append('before')
+        with store._connection() as conn:assert catalog_journal.active_task_catalog(conn) is None
+        if hook=='before_publish':raise RuntimeError('inert guard revoked publication')
+    def finalize(conn,summary):
+        seen.append('finalize')
+        assert conn.in_transaction and summary['catalog_published'] is True
+        assert catalog_journal.active_task_catalog(conn)['request_id']==request.request_id
+        raise ValueError('inert candidate rejected inside publication')
+    with pytest.raises((RuntimeError,ValueError)):
+        run_acceptance(rt,request,before_publish=before,finalize=finalize)
+    assert seen==(['before'] if hook=='before_publish' else ['before','finalize'])
+    with store._connection() as conn:
+        assert catalog_journal.active_task_catalog(conn) is None
+        assert catalog_slots.occupancy(conn)==0
+        assert conn.execute('SELECT count(*) FROM pipeline_catalog_probes WHERE consumed_at IS NOT NULL').fetchone()[0]==0
+    # The durable evidence remains; a corrected continuation publishes without probing.
+    count=len(calls)
+    result=run_acceptance(rt,request,finalize=lambda conn,summary:'files')
+    assert result['finalized']=='files' and len(calls)==count
+
+
+def readiness_runtime(request,binary_bindings,**changes):
+    config=SimpleNamespace(providers=valid_providers(binary_bindings),
+        workers={f'slot{i}':dict(name=f'inert-{i}') for i in range(1,7)},
+        routing=request.plan.policy,max_execution_slots=4)
+    rt=SimpleNamespace(config=config,ramdisk=object(),catalog=SimpleNamespace(containment_id='b'*32))
+    for key,value in changes.items():
+        target=config if hasattr(config,key) else rt
+        setattr(target,key,value)
+    return rt
+
+
+@pytest.mark.parametrize('change',['routing','seats','ramdisk','containment','executable','contract'])
+def test_probe_readiness_refuses_configuration_that_could_not_publish(environment,binary_bindings,monkeypatch,change):
+    from cochem_pipeline import task_catalog_acceptance_428 as module
+    _,request,_=environment
+    monkeypatch.setattr(module,'execution_bindings',lambda p,w:request.execution_bindings)
+    changes={'routing':dict(routing=SimpleNamespace(digest='0'*64)),
+             'seats':dict(max_execution_slots=3),'ramdisk':dict(ramdisk=None),
+             'containment':dict(catalog=SimpleNamespace(containment_id=None))}
+    rt=readiness_runtime(request,binary_bindings,**changes.get(change,{}))
+    if change=='executable':
+        rt.config.providers['claude']['executable']='C:\\other\\claude.exe'
+    with pytest.raises(ValueError):module.require_probe_readiness(rt,request)
+
+
+def test_probe_readiness_requires_matching_execution_bindings(environment,binary_bindings):
+    from cochem_pipeline import task_catalog_acceptance_428 as module
+    _,request,_=environment
+    rt=readiness_runtime(request,binary_bindings)
+    with pytest.raises(ValueError,match='provider/agent configuration'):module.require_probe_readiness(rt,request)
 
 
 def test_coordinator_requires_system_before_any_work(environment,monkeypatch):
@@ -416,7 +519,8 @@ def test_all_quota_blocked_never_publishes_an_empty_catalog(environment):
     with store._connection() as conn:assert catalog_journal.active_task_catalog(conn) is None
 
 
-def test_expired_or_modified_controller_hold_blocks_new_publication(environment):
+@pytest.mark.parametrize('lapse',['expired','rewritten'])
+def test_lapsed_controller_hold_publishes_as_untested_wait_never_as_route(environment,lapse):
     from cochem_pipeline.routing_store import set_hold
     store,request,raw=environment
     request=partial_request(request,raw)
@@ -432,8 +536,15 @@ def test_expired_or_modified_controller_hold_blocks_new_publication(environment)
             record_result(conn,request,target,token,output=output,receipt=receipt,
                 binary_sha256=request.plan.binary_bindings[target[0]]['sha256'],cleanup_verified=True)
     with store._write() as conn:
-        conn.execute('UPDATE pipeline_route_holds SET until_at=0')
-    with pytest.raises(ValueError,match='no longer current'),store._write() as conn:publish(conn,request)
+        if lapse=='expired':conn.execute('UPDATE pipeline_route_holds SET until_at=0')
+        else:set_hold(conn,'model',':'.join(skipped),300,'busy')
+    # The immutable snapshot is historical evidence; the request id can
+    # never re-run that target, so currency would make it unpublishable.
+    with store._write() as conn:catalog=publish(conn,request)['catalog']
+    assert catalog['models']['sonnet-max']['availability_evidence']=='AVAILABILITY_WAIT_UNTESTED'
+    assert 'sonnet-max' not in catalog['accepted_profile_ids']
+    assert all('sonnet-max' not in row['choices']
+               for spec in catalog['task_types'].values() for row in spec['tiers'].values())
 
 
 def test_configuration_drift_cannot_enable_after_publication(environment,tmp_path):
