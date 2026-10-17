@@ -1,0 +1,15 @@
+{
+    "catalog_request_sha256":  "9d667382c02476dd132547e4f0a475b371d4d7f6e7cca131a09441393da13221",
+    "payload_files":  470,
+    "catalog_request_previous_policy_digest":  "c8444fe2fd46b0f53edeaefc677ef7ff698c3e11cb83348a70255026a81da43d",
+    "recovery_scenario":  null,
+    "host_executed":  false,
+    "maximum_shared_slots":  4,
+    "schema":  "cochem-428-operational-launch-plan/1",
+    "target_root":  "C:\\Program Files\\CoChem\\Pipeline4.2.8-windows-20261017-r6",
+    "status":  "READ_ONLY_PLAN_VERIFIED",
+    "late_prompts":  false,
+    "pending_backlog_allowed":  true,
+    "input_window_minutes":  20,
+    "source_commit":  "a55f55f13871eedfe255a8d5aad9f23bb0fc16ac"
+}

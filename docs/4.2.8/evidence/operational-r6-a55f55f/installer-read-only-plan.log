@@ -1,0 +1,10 @@
+{
+    "version":  "4.2.8",
+    "activation_ready":  false,
+    "files":  470,
+    "revision":  "windows-20261017-428-v6",
+    "schema":  "cochem-428-offline-install/1",
+    "target_root":  "C:\\Program Files\\CoChem\\Pipeline4.2.8-windows-20261017-r6",
+    "status":  "READ_ONLY_PLAN",
+    "source_commit":  "a55f55f13871eedfe255a8d5aad9f23bb0fc16ac"
+}
