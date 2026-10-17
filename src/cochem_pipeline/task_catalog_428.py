@@ -24,6 +24,24 @@ from .task_routing import TASK_TYPES, digest
 _HEX64 = re.compile(r"[0-9a-f]{64}\Z")
 _REQ32 = re.compile(r"[0-9a-f]{32}\Z")
 _PROVIDERS = ("codex", "claude", "gemini")
+# Typed, cleanly closed per-target probe failures that exclude only their own
+# target under the reviewed partial-publication policy (never routable).
+PROBE_FAILURE_CATEGORIES = frozenset({'auth', 'context', 'timeout', 'protocol', 'code', 'configuration',
+                                      'compatibility', 'resource', 'output_format', 'validation'})
+_NATIVE_FAILURE_FIELDS = {'exit_code', 'envelope_kind', 'claude_result_subtype', 'api_status'}
+
+
+def _native_failure_facts(value):
+    """Allowlisted typed facts copied from the protected failure metadata."""
+    if value is None:
+        return None
+    if (not isinstance(value, dict) or not set(value) <= _NATIVE_FAILURE_FIELDS
+            or any(value.get(key) is not None and (type(value[key]) is not int or not -2**31 <= value[key] < 2**32)
+                   for key in ('exit_code', 'api_status'))
+            or any(value.get(key) is not None and (not isinstance(value[key], str)
+                   or not re.fullmatch(r'[a-z0-9_]{1,40}', value[key])) for key in ('envelope_kind', 'claude_result_subtype'))):
+        raise ValueError('Native probe failure facts are outside their allowlist')
+    return {key: value.get(key) for key in sorted(_NATIVE_FAILURE_FIELDS)}
 _EXPLICITLY_RETIRED_TARGETS = frozenset({
     ("gemini", "gemini-3.1-pro", "high"),
     ("gemini", "gemini-3.1-pro", None),
@@ -266,7 +284,7 @@ def activate_task_catalog(
         if (any(not isinstance(v, str) or not v for v in key)
                 or key not in expected
                 or key in seen
-                or receipt.get("status") not in ("NATIVE_SELECTOR_ACCEPTED", "AVAILABILITY_WAIT")
+                or receipt.get("status") not in ("NATIVE_SELECTOR_ACCEPTED", "AVAILABILITY_WAIT", "NATIVE_PROBE_FAILED")
                 or receipt.get("cleanup_verified") is not True
                 or receipt.get("plan_digest") != plan.digest
                 or receipt.get("request_id") != request_id
@@ -276,6 +294,9 @@ def activate_task_catalog(
         if (receipt['status'] == 'AVAILABILITY_WAIT'
                 and (not allow_partial_publication or receipt.get('failure_category') not in ('quota', 'busy', 'provider'))):
             raise ValueError('Task catalog deferral requires typed provider availability evidence')
+        if (receipt['status'] == 'NATIVE_PROBE_FAILED'
+                and (not allow_partial_publication or receipt.get('failure_category') not in PROBE_FAILURE_CATEGORIES)):
+            raise ValueError('Task catalog exclusion requires typed, cleaned native probe failure evidence')
         provider = key[0]
         expected_bin_sha = plan.binary_bindings[provider]["sha256"]
         if receipt.get("binary_sha256") != expected_bin_sha:
@@ -295,6 +316,9 @@ def activate_task_catalog(
         }
         if receipt['status'] == 'AVAILABILITY_WAIT':
             sanitized['failure_category'] = receipt['failure_category']
+        if receipt['status'] == 'NATIVE_PROBE_FAILED':
+            sanitized['failure_category'] = receipt['failure_category']
+            sanitized['native_failure'] = _native_failure_facts(receipt.get('native_failure'))
         if 'execution_binding' in receipt:
             binding = receipt['execution_binding']
             if (not isinstance(binding,dict) or set(binding) != {
@@ -363,6 +387,8 @@ def activate_task_catalog(
             if deferred:
                 model['availability_category'] = verified_by_target[target]['failure_category']
                 model['availability_evidence'] = verified_by_target[target]['status']
+            elif verified_by_target.get(target, {}).get('status') == 'NATIVE_PROBE_FAILED':
+                model['native_probe_failure'] = verified_by_target[target]['failure_category']
     if not accepted_profile_ids:
         raise ValueError('Task catalog publication requires at least one accepted profile')
 
@@ -382,7 +408,9 @@ def activate_task_catalog(
         generation=generation,
         host_accepted=True,
         publication_policy=dict(allow_partial_publication=allow_partial_publication,
-                                unprobed_held_targets=len(holds)),
+                                unprobed_held_targets=len(holds),
+                                native_probe_failures=sum(1 for proof in sanitized_proofs
+                                                          if proof['status'] == 'NATIVE_PROBE_FAILED')),
         policy_digest=plan.policy.digest,
         previous_task_catalog_sha256=plan.previous_task_catalog_sha256,
         request_id=request_id,

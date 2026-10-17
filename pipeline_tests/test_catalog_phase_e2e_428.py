@@ -306,13 +306,35 @@ def test_claude_usage_limit_holds_pool_defers_peer_and_still_publishes(make_env,
 
 # --- 3. A probe failure after verified closure frees its seat; failed closure holds it --
 
-@pytest.mark.parametrize('fault', ['extra_field', 'close_failure'])
+def test_cleanly_failed_probe_excludes_only_its_target_and_publishes(make_env):
+    env = make_env()
+    env.native.faults[('codex', 'gpt-6-luna', 'low')] = 'extra_field'
+    result, output = env.run_phase()
+    assert result['status'] == 'TASK_CATALOG_CANDIDATE_READY' and result['publication_state'] == 'COMMITTED', result
+    outcomes = {(row['provider'], row['model'], row['effort']): row for row in result['probe_outcomes']}
+    failed = outcomes[('codex', 'gpt-6-luna', 'low')]
+    assert failed['status'] == 'NATIVE_PROBE_FAILED' and failed['failure_category'] == 'output_format'
+    assert all(row['status'] == 'NATIVE_SELECTOR_ACCEPTED' for key, row in outcomes.items() if key != ('codex', 'gpt-6-luna', 'low'))
+    accepted = json.loads((output / 'accepted-catalog.json').read_bytes())
+    assert accepted['models']['luna-low']['native_acceptance'] == 'NOT_ACCEPTED'
+    assert accepted['models']['luna-low']['native_probe_failure'] == 'output_format'
+    assert all('luna-low' not in row['choices'] for spec in accepted['task_types'].values() for row in spec['tiers'].values())
+    assert accepted['publication_policy']['native_probe_failures'] == 1
+    # This small fixture has one Codex target, so its exclusion is named, not silent.
+    assert result['probe_summary']['providers_without_accepted_targets'] == ['codex']
+    assert any(row['provider'] == 'gemini' for row in env.native.launches)  # the sitting continued
+    assert env.occupancy() == 0 and all(env.ram_slots_empty().values())
+    hermetic(env)
+
+
+@pytest.mark.parametrize('fault', ['close_failure'])
 def test_failed_codex_probe_holds_before_publication(make_env, fault):
     env = make_env()
     env.native.faults[('codex', 'gpt-6-luna', 'low')] = fault
     result, output = env.run_phase()
     held(result, output, 'catalog_acceptance',
          'OutputFormatError' if fault == 'extra_field' else 'WorkerCleanupError')
+    assert result['probe_outcomes'] and result['probe_summary']['by_provider']['claude']['accepted'] == 2
     assert result['failure']['target'] == {'provider': 'codex', 'model': 'gpt-6-luna', 'effort': 'low'}
     assert result['publication_state'] == 'NOT_COMMITTED' and result['runtime_resources_closed'] is True
     assert env.active_catalog() == (ACTIVE_DIGEST, None)
@@ -471,6 +493,18 @@ def test_n2_frozen_codex_worker_path_without_contract(make_env, frozen, monkeypa
                 raise
         monkeypatch.setattr(acceptance, 'record_result', observed)
     result, output = env.run_phase()
+    if readiness == '865a29b':
+        # Under per-target exclusion every Codex target is rejected cleanly and
+        # excluded; the owner result names the provider left without targets.
+        assert result['status'] == 'TASK_CATALOG_CANDIDATE_READY', result
+        assert set(rejected) == {'Task probe lacks exact native binary/effort/fence evidence'}
+        assert result['probe_summary']['providers_without_accepted_targets'] == ['codex']
+        codex = [row for row in result['probe_outcomes'] if row['provider'] == 'codex']
+        assert codex and all(row['status'] == 'NATIVE_PROBE_FAILED' and row['failure_category'] == 'validation'
+                             for row in codex)
+        assert env.occupancy() == 0
+        hermetic(env)
+        return
     held(result, output, 'catalog_acceptance', 'ValueError')
     assert result['publication_state'] == 'NOT_COMMITTED' and restore_authority(result)
     if readiness == 'live':

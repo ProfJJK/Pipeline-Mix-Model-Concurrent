@@ -22,7 +22,8 @@ from . import catalog_journal, catalog_slots, windows
 from .catalog_authority import _WindowsCustody
 from .config import load_config
 from .routing import _strict_json
-from .task_catalog_acceptance_428 import encoded, enabled_candidate, protected_request, run_acceptance
+from .task_catalog_acceptance_428 import (encoded, enabled_candidate, outcome_summary, probe_outcomes,
+                                          protected_request, run_acceptance)
 from .task_routing import digest
 
 
@@ -157,6 +158,23 @@ def publication_snapshot(store, request_sha256, baseline, *, job_db=None):
     return dict(state='UNKNOWN', catalog_probe_cleanup_verified=False)
 
 
+def outcome_snapshot(store, job_db, request_id):
+    """Per-target probe outcomes for the owner result, also after a hold."""
+    if not isinstance(request_id, str) or not re.fullmatch('[0-9a-f]{32}', request_id):
+        return None
+    try:
+        context = store._connection() if store is not None else read_only_board(job_db) if job_db is not None else None
+        if context is None:
+            return None
+        with context as conn:
+            tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+            if not {'pipeline_catalog_probes', 'pipeline_task_probe_evidence', 'pipeline_task_catalog_holds'} <= tables:
+                return []
+            return probe_outcomes(conn, request_id)
+    except BaseException:
+        return None
+
+
 def wait_start_gate(output_root, started_path, started_record, *, timeout_seconds=90):
     """Let the owner retain exact process handles before this phase can exit."""
     acknowledgement = output_root / 'phase-start-ack.json'
@@ -217,6 +235,7 @@ def run_owner_phase(bootstrap_config, bootstrap_sha256, request_path, request_sh
     phase, result, error, closed = 'preconditions', None, None, False
     close_started = False
     baseline = None
+    report_request_id = None
     with ExitStack() as lifetime, retained_path(output_root, directory=True), retained_path(bootstrap_config) as input_custody:
         if any(output_root.iterdir()):
             raise ValueError('Owner output directory must be fresh and empty')
@@ -259,6 +278,7 @@ def run_owner_phase(bootstrap_config, bootstrap_sha256, request_path, request_sh
             # finally block has drained this runtime's owned resources.
             with nullcontext(lifetime.enter_context(retained_path(request_path))) as request_custody:
                 request_data = pinned_bytes(request_custody, request_path, request_sha256)
+                report_request_id = _strict_json(request_data.decode('utf-8')).get('request_id')
                 with runtime.store._write() as conn:
                     active = catalog_journal.active_task_catalog(conn)
                     if (catalog_journal.active_policy(conn).digest,
@@ -359,7 +379,8 @@ def run_owner_phase(bootstrap_config, bootstrap_sha256, request_path, request_sh
                         configuration_path=files['configuration_path'], configuration_sha256=files['configuration_sha256'],
                         catalog_published=True, cutover_requested=False, ordinary_jobs_dispatched=False,
                         sign_in_attempted=False, late_prompt=False, coverage=acceptance['coverage'],
-                        all_routes_usable=acceptance['all_routes_usable'], coverage_holds=acceptance['coverage_holds'])
+                        all_routes_usable=acceptance['all_routes_usable'], coverage_holds=acceptance['coverage_holds'],
+                        probe_outcomes=acceptance.get('probe_outcomes'))
                     # Request, bootstrap and output custody cover resource drain.
                     phase = 'resource_drain'
                     close_started = True
@@ -386,6 +407,7 @@ def run_owner_phase(bootstrap_config, bootstrap_sha256, request_path, request_sh
                 closed = True
         publication = publication_snapshot(runtime.store if runtime is not None else None,
                                            request_sha256, baseline, job_db=job_db)
+        outcomes = outcome_snapshot(runtime.store if runtime is not None else None, job_db, report_request_id)
         if error is not None or not closed:
             result = dict(schema='cochem-owner-task-catalog-result/4.2.8',
                 status='TASK_CATALOG_HELD_PRESERVE_EVIDENCE', phase=phase,
@@ -396,12 +418,15 @@ def run_owner_phase(bootstrap_config, bootstrap_sha256, request_path, request_sh
                 request_sha256=request_sha256, bootstrap_sha256=bootstrap_sha256,
                 publication_state=publication['state'], publication_proof=publication,
                 catalog_published=publication['state'] == 'COMMITTED', cutover_requested=False, automatic_retry=False,
-                ordinary_jobs_dispatched=False, sign_in_attempted=False, late_prompt=False)
+                ordinary_jobs_dispatched=False, sign_in_attempted=False, late_prompt=False, probe_outcomes=outcomes,
+                probe_summary=outcome_summary(outcomes))
             write_fresh(output_root / 'held.json', result)
         else:
             result['cleanup_verified'] = True
             result.update(publication_state=publication['state'], publication_proof=publication,
-                          runtime_resources_closed=True, runtime_constructed=True)
+                          runtime_resources_closed=True, runtime_constructed=True,
+                          probe_outcomes=outcomes if outcomes is not None else result.get('probe_outcomes'))
+            result['probe_summary'] = outcome_summary(result['probe_outcomes'])
             if publication['state'] != 'COMMITTED' or publication.get('catalog_probe_cleanup_verified') is not True:
                 result.update(status='TASK_CATALOG_HELD_PRESERVE_EVIDENCE', cleanup_verified=False,
                               phase='publication_recheck', automatic_retry=False)

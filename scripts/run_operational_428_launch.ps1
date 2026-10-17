@@ -781,6 +781,8 @@ function New-OpResultRecord {
         restore_fence_cleanup=(Get-OpProperty $State 'restore_fence_cleanup');
         recovery_error_type=(Get-OpProperty $State 'recovery_error_type');recovery_failure=(Get-OpProperty $State 'recovery_failure');
         acceptance_failure=(Get-OpProperty $State.acceptance 'failure');
+        catalog_probe_outcomes=(Get-OpProperty $State.acceptance 'probe_outcomes');
+        catalog_probe_summary=(Get-OpProperty $State.acceptance 'probe_summary');
         late_prompt=$false;automatic_retry=$false;useful_job_acceptance=$false}
 }
 

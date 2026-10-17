@@ -13,6 +13,7 @@ import hashlib
 import json
 from pathlib import Path
 import re
+import sqlite3
 import time
 
 from . import catalog_journal, catalog_slots
@@ -20,7 +21,7 @@ from .catalog_authority import CatalogAuthority, _WindowsCustody
 from .failures import ProviderFailure
 from .r6_native_acceptance import make_probe, validate_result
 from .routing import _strict_json, load_routing_policy
-from .task_catalog_428 import TaskCatalogBindingPlan, compile_task_catalog_plan
+from .task_catalog_428 import PROBE_FAILURE_CATEGORIES, TaskCatalogBindingPlan, compile_task_catalog_plan
 from .task_routing import digest
 
 
@@ -299,6 +300,114 @@ def record_result(conn, request, target, reservation, *, output=None, receipt=No
     return evidence
 
 
+class ProbeIntegrityError(RuntimeError):
+    """A reviewed binary or seat changed during a probe; never a target outcome."""
+
+
+def _failure_category(exc):
+    from .output_contracts import OutputFormatError
+    if isinstance(exc, ProviderFailure):
+        return exc.category
+    if isinstance(exc, TimeoutError):
+        return 'timeout'
+    if isinstance(exc, OutputFormatError):
+        return 'output_format'
+    return 'validation'
+
+
+def excludable_failure(runtime, request, exc, cleaned):
+    """Only a cleanly closed failure that concerns its own target may exclude
+    it; revocation, cleanup doubt, integrity or store errors still hold all."""
+    from .worker import ExecutionRevokedError, WorkerCleanupError
+    if (not request.allow_partial_publication or cleaned is not True or runtime.stop_event.is_set()
+            or getattr(runtime, 'last_admission_action', None) == 'terminate_active'
+            or isinstance(exc, (ExecutionRevokedError, WorkerCleanupError, ProbeIntegrityError, sqlite3.Error))
+            or not isinstance(exc, (ProviderFailure, TimeoutError, ValueError))):
+        return False
+    return _failure_category(exc) in PROBE_FAILURE_CATEGORIES
+
+
+def native_failure_facts(private_root, reservation):
+    """Allowlisted typed facts from the worker's protected failure.json, if any."""
+    path = Path(private_root) / 'attempts' / reservation['reservation_id'] / 'failure.json'
+    try:
+        raw = json.loads(path.read_bytes()[:65536].decode('utf-8'))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(raw, dict):
+        return None
+    facts = {key: raw.get(key) for key in ('exit_code', 'envelope_kind', 'claude_result_subtype', 'api_status')}
+    for key in ('exit_code', 'api_status'):
+        if type(facts[key]) is not int or not -2**31 <= facts[key] < 2**32:
+            facts[key] = None
+    for key in ('envelope_kind', 'claude_result_subtype'):
+        if not isinstance(facts[key], str) or not re.fullmatch(r'[a-z0-9_]{1,40}', facts[key]):
+            facts[key] = None
+    return facts
+
+
+def record_failure(conn, request, target, reservation, *, category, native, binary_sha256):
+    """Durable exclusion evidence for one cleanly closed, failed probe."""
+    catalog_journal._transaction(conn)
+    probe_authority(request, target)  # Validates exact request target membership.
+    if not request.allow_partial_publication or category not in PROBE_FAILURE_CATEGORIES:
+        raise ValueError('Task probe exclusion requires the reviewed partial-publication policy')
+    if binary_sha256 != request.plan.binary_bindings[target[0]]['sha256']:
+        raise ValueError('Task probe executable differs from the reviewed binary')
+    row = conn.execute('''SELECT plan_digest,pointer_sha256,proposal_sha256,target_json,cleanup_at,result_json
+        FROM pipeline_catalog_probes WHERE reservation_id=?''', (reservation['reservation_id'],)).fetchone()
+    if (row is None or tuple(row[:4]) != (request.plan.digest, request.pointer_sha256, request.proposal_sha256,
+                                          json.dumps(list(target), separators=(',', ':')))
+            or row[4] is None or row[5] is None or json.loads(row[5]).get('status') == 'NATIVE_SELECTOR_ACCEPTED'):
+        raise ValueError('Task probe exclusion requires a cleaned, unaccepted reservation of this request')
+    evidence = dict(status='NATIVE_PROBE_FAILED', failure_category=category, native_failure=native,
+        provider=target[0], model=target[1], reasoning_effort=target[2],
+        execution_binding=request.execution_bindings[target[0]], binary_sha256=binary_sha256, cleanup_verified=True,
+        request_id=request.request_id, plan_digest=request.plan.digest,
+        reservation_id=reservation['reservation_id'], fencing_token=reservation['fencing_token'])
+    conn.execute('INSERT INTO pipeline_task_probe_evidence VALUES(?,?,?,?)',
+        (reservation['reservation_id'], request.request_id, request.plan.digest, encoded(evidence).decode()))
+    return evidence
+
+
+def probe_outcomes(conn, request_id):
+    """Public per-target outcome list (typed facts only) for the owner result."""
+    outcomes = []
+    for target_json, result_json, evidence_json in conn.execute('''SELECT p.target_json,p.result_json,e.evidence_json
+            FROM pipeline_catalog_probes p LEFT JOIN pipeline_task_probe_evidence e USING(reservation_id)
+            WHERE p.request_id=? ORDER BY p.sequence''', (request_id,)):
+        provider, model, effort = json.loads(target_json)
+        evidence = json.loads(evidence_json) if evidence_json else None
+        row = dict(provider=provider, model=model, effort=effort,
+                   status=(evidence['status'] if evidence else 'NO_EVIDENCE_CLEANUP_UNVERIFIED' if result_json is None
+                           else 'NO_EVIDENCE'))
+        if evidence and 'failure_category' in evidence:
+            row['failure_category'] = evidence['failure_category']
+        if evidence and evidence.get('native_failure'):
+            row['native_failure'] = evidence['native_failure']
+        outcomes.append(row)
+    for (evidence_json,) in conn.execute('''SELECT evidence_json FROM pipeline_task_catalog_holds
+            WHERE request_id=? ORDER BY target_json''', (request_id,)):
+        hold = json.loads(evidence_json)
+        outcomes.append(dict(provider=hold['provider'], model=hold['model'], effort=hold['reasoning_effort'],
+                             status=hold['status'], failure_category=hold['failure_category']))
+    return outcomes
+
+
+def outcome_summary(outcomes):
+    """Accepted/excluded/deferred counts per provider; names any provider left
+    with no accepted target so a systematic exclusion is never silent."""
+    if outcomes is None:
+        return None
+    counts = {provider: dict(accepted=0, excluded=0, deferred=0, unresolved=0) for provider in ('codex', 'claude', 'gemini')}
+    for row in outcomes:
+        key = {'NATIVE_SELECTOR_ACCEPTED': 'accepted', 'NATIVE_PROBE_FAILED': 'excluded', 'AVAILABILITY_WAIT': 'deferred',
+               'AVAILABILITY_WAIT_UNTESTED': 'deferred'}.get(row['status'], 'unresolved')
+        counts.setdefault(row['provider'], dict(accepted=0, excluded=0, deferred=0, unresolved=0))[key] += 1
+    return dict(by_provider=counts, providers_without_accepted_targets=sorted(
+        provider for provider, row in counts.items() if row['accepted'] == 0))
+
+
 def publish(conn, request):
     """Publish and consume exact durable native evidence in the caller transaction."""
     catalog_journal._transaction(conn)
@@ -549,7 +658,7 @@ def run_acceptance(runtime, request, *, before_publish=None, finalize=None):
                     catalog_slots.finish(conn,token,cleanup_verified=cleaned,accepted=False)
                 raise error
             if verified_executable_sha256(executable) != binding['sha256']:
-                raise ValueError('Task catalog executable changed during native acceptance')
+                raise ProbeIntegrityError('Task catalog executable changed during native acceptance')
             with runtime.store._write() as conn:
                 record_result(conn,request,target,token,output=output,receipt=receipt,
                               binary_sha256=binding['sha256'],cleanup_verified=cleaned,availability=availability)
@@ -563,7 +672,14 @@ def run_acceptance(runtime, request, *, before_publish=None, finalize=None):
                                  (token['reservation_id'],)).fetchone()
                 if row is not None and row[0] is None:
                     catalog_slots.finish(conn,token,cleanup_verified=cleaned,accepted=False)
-            raise
+            if not excludable_failure(runtime, request, exc, cleaned):
+                raise
+            # One target's clean failure excludes only that target (never
+            # routable); the sitting continues and reports it.
+            with runtime.store._write() as conn:
+                record_failure(conn,request,target,token,category=_failure_category(exc),
+                               native=native_failure_facts(runtime.config.private_root,token),
+                               binary_sha256=binding['sha256'])
         finally:
             runtime.admission.request_maintenance()
     if runtime.stop_event.is_set() or getattr(runtime,'last_admission_action',None)=='terminate_active':
@@ -576,7 +692,9 @@ def run_acceptance(runtime, request, *, before_publish=None, finalize=None):
         summary = dict(result, coverage=route_coverage, catalog_published=True,
                        all_routes_usable=all(row['status']=='AVAILABLE' for row in route_coverage),
                        coverage_holds=sum(row['status']!='AVAILABLE' for row in route_coverage),
-                       native_acceptance_scope='recorded_exact_targets_only')
+                       native_acceptance_scope='recorded_exact_targets_only',
+                       probe_outcomes=probe_outcomes(conn, request.request_id))
+        summary['probe_summary'] = outcome_summary(summary['probe_outcomes'])
         if finalize is not None:
             summary['finalized'] = finalize(conn, summary)
     return summary
