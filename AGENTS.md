@@ -90,7 +90,15 @@ This is the preferred interface, not a claim that all three adapters have been
 implemented or accepted on this host. Reuse verified sessions before asking for input.
 
 ## Current handoff
-2026-10-16 (night): `r428-op-recovery-d5d6094` is spent. It held in catalog_acceptance on a stale catalog request; r4 was restored and is serving. The installed 865a29b runtime cannot complete catalog acceptance (`docs/4.2.8/CATALOG_ACCEPTANCE_BLOCKERS_20261016.md`), so do not prepare another recovery package against it. A corrected runtime release and installation are required first. There is NO current owner command. The paragraphs below record the earlier state.
+2026-10-17: the corrected **r6** release is packaged and reviewed. It is a fresh install from the running r4 to `C:\Program Files\CoChem\Pipeline4.2.8-windows-20261017-r6`, built at source `a55f55f`.
+- The only current owner command is in `docs/deployment/windows-deployment-next/RETURN_SETUP_428_OPERATIONAL_R6_a55f55f.txt`: package `C:\Users\ansac\CoChem427\r428-op-launch-a55f55f`, manifest `736957a3...`.
+- Details: `docs/4.2.8/OPERATIONAL_OWNER_LAUNCH_R6.md` and `OPERATIONAL_RELEASE_R6.md`.
+- The `r428-op-*-784d684` package was superseded before delivery and must never be run.
+- r4 is serving. Do not run agent tests, builds or cochem Python while the owner sitting runs.
+- Source and package checks are not deployment acceptance: 1278 focused tests, a real-Runtime catalog e2e, a broad regression of 2208 tests, read-only plans, and an independent package review.
+The paragraphs below record the earlier state.
+
+2026-10-16 (night): `r428-op-recovery-d5d6094` is spent. It held in catalog_acceptance on a stale catalog request; r4 was restored and is serving. The installed 865a29b runtime cannot complete catalog acceptance (`docs/4.2.8/CATALOG_ACCEPTANCE_BLOCKERS_20261016.md`), so do not prepare another recovery package against it. A corrected runtime release and installation are required first. The paragraphs below record the earlier state.
 
 2026-10-16 (evening): the owner ran `r428-op-recovery-ab900e9`; it is spent. It
 passed every host check up to fence creation, including the Codex re-capture.

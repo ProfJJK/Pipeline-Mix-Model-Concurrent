@@ -1,5 +1,16 @@
 # 4.2.8 source progress
 
+2026-10-17: the corrected r6 release replaces the spent r5 path ([release](OPERATIONAL_RELEASE_R6.md), [owner launch](OPERATIONAL_OWNER_LAUNCH_R6.md)).
+- **The three host blockers are fixed in the runtime:**
+  - catalog containment;
+  - reviewed Codex effort contracts that record binary/version/effort evidence;
+  - a startup configuration that routes the board-active policy `c8444fe2...`.
+- **Latent defects found by a mapping review are fixed:** a pre-probe readiness check, a 600 s probe lease, cleanup classification, historical hold evidence, candidate validation before COMMIT, and a board baseline read before any Runtime starts.
+- **The fresh launcher now installs r6 from the running r4** with running-r4 settle and restore semantics.
+- **Proof:** a real-Runtime offline e2e accepts all 28 targets and boots the r6 configuration to task planning ENABLED/CONNECTED. Two independent review rounds (each finding adversarially verified) also fixed every preparation input to the packaged commit.
+- **Pre-existing failures:** a broad regression found four; three were stale tests, and one was a narrow CHAPTER_DRAFT contract regression from `95287db`, now fixed. The regression then passed 2208 tests with 0 failed.
+- **Package:** `r428-op-launch-a55f55f`, with 1278 PASSED focused tests, both read-only plans, and an independent package review with no blocking findings. It awaits the owner sitting.
+
 2026-10-16 (night): the owner ran `d5d6094`; it is spent. The fence, r4 stop and release worked on the host. Catalog acceptance then rejected the request as stale: it named the baseline policy, not the board-active `c8444fe2…` that r4 published on 10-14. Nothing was published, and r4 was restored with its health verified. Review then found that the installed 865a29b runtime cannot complete catalog acceptance at all: a missing `catalog_containment_id` attribute, Codex effort evidence that is never recorded, and bootstrap routing that must equal the published policy. A corrected runtime and a new installation are needed. See [the blockers](CATALOG_ACCEPTANCE_BLOCKERS_20261016.md). The launcher now holds before stopping r4 when the request does not name the live policy. No owner package is current.
 
 2026-10-16 (evening): the owner ran `ab900e9`; it is spent. Every host check

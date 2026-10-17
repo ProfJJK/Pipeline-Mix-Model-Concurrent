@@ -1,0 +1,112 @@
+PIPELINE 4.2.8 — FRESH r6 INSTALL FROM THE RUNNING r4 (a55f55f)
+
+What this does, in one sitting:
+1. Installs a new, corrected runtime (r6) into its own new folder. r4 keeps
+   running while this happens.
+2. Briefly locks the job board, then stops r4.
+3. Accepts the task catalog. It sends one tiny "are you ready" prompt to each
+   of 28 model/effort pairs: 10 Claude, 15 Codex and 3 Gemini.
+4. Switches the CoChem-4.2.7-Warden task to r6 and verifies it.
+5. Connects Codex to r6.
+
+Why r6, and not another r5 recovery: the installed r5 code could never finish
+the catalog step. It had three code defects, all now fixed and proven offline
+against the real runtime:
+- a missing runtime attribute;
+- Codex never recorded the evidence the catalog requires;
+- its startup routing did not match the policy the job board has active.
+
+The last sitting (d5d6094) held at that step, and r4 was restored automatically.
+
+r4 is running and healthy right now, so this is ONE step.
+
+Before you paste the command:
+1. Docker Desktop shows its Linux engine running, and R: is visible in
+   Explorer with the folder R:\CoChem427-windows-20261007 on it.
+2. Pause Windows Update (Settings > Windows Update > Pause updates), or start
+   early enough to finish well before 01:00. Keep the PC plugged in.
+3. Do not stop, restart or edit the CoChem-4.2.7-Warden task, any
+   CoChem-4.2.8-Fence or CoChem-4.2.8-Catalog task, or anything under
+   C:\Program Files\CoChem.
+4. No pipeline job is in progress. The pipeline is unavailable from the r4
+   stop until r6 is verified (roughly 30-120 minutes). During that time:
+   - pause the YouTube specialist and any Claude, Codex or other agent session
+     or workflow that submits pipeline jobs (including the agent working in
+     Claude Desktop);
+   - no OBS recording.
+5. Leave Codex and Claude open but idle. Until the final JSON appears:
+   - start no tasks, tests, builds or pipeline submissions;
+   - do not sign in again, update, restart or change settings in Codex or
+     Claude;
+   - do not edit the Codex AGENTS.md or the codex-pipeline skill files. The
+     launcher re-reads config.toml itself.
+
+   Existing provider sign-ins are reused; do not sign out of any of them.
+6. Close heavy apps (games, virtual machines, large copies or backups).
+7. Use one Administrator "Windows PowerShell" window (not PowerShell 7), and
+   have no earlier launcher window open.
+
+Paste this command ONCE into Administrator Windows PowerShell:
+
+C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -File "C:\Users\ansac\CoChem427\r428-op-launch-a55f55f\run_operational_428_launch.ps1" -LaunchManifest "C:\Users\ansac\CoChem427\r428-op-launch-a55f55f\launch-manifest.json" -LaunchManifestSha256 736957a3731970c5f2f564242eb76cc24d3db0a95289d5abcfcceac4a1fe314b -Apply
+
+No sign-in, browser, choices, reboot or later input is planned. Leave the
+PowerShell window and the PC running until the final JSON appears. This can
+take up to about three hours:
+- the offline install takes 10-20 minutes;
+- the 28 catalog probes take about 30-90 minutes;
+- after the switch, the Docker wait can take up to 20 minutes.
+
+Do not sign out, restart or sleep the PC. Do not close the observer or MCP
+clients. The pipeline's MCP tools stop answering once r4 is fenced, and come
+back when r6 is verified; that gap is expected.
+
+Success: R428_OPERATIONAL_RUNNING_VERIFIED. Then fully quit and reopen Codex
+and Claude so they load the r6 pipeline connection, and tell Claude
+"r6 is running". Claude then verifies r6 read-only:
+- planning ENABLED/CONNECTED;
+- catalog coverage;
+- Codex integration.
+
+Only after that does Claude submit the three approved jobs.
+
+If it holds, copy the final JSON back. Do not repeat this one-use command,
+change permissions, delete evidence or stop processes. What a hold leaves
+depends on where it stopped:
+- Before the install: nothing changed; r4 keeps running.
+- After the install, before the write lock: the r6 folder is spent (never
+  reused) and r4 keeps running.
+- After the write lock, before catalog publication: the launcher ends its own
+  lock task. It then restarts r4 and verifies its health when r4 ended, the
+  same way it restored r4 in the last sitting. If it cannot prove that, it
+  preserves the state for a reviewed follow-up.
+- If publication is committed or uncertain: no pipeline controller runs until
+  a reviewed follow-up.
+- After the switch: the Warden task stays pointed at r6 (it may not be
+  running), and nothing is rolled back automatically. Copy the JSON back for
+  a reviewed follow-up.
+
+Sanitized status reports appear in a new folder named
+C:\Program Files\CoChem\R428Operational-20261017-<id>\status-*.json.
+
+Checks behind this package (source and package checks, not deployment
+acceptance):
+- 1,278 serialized source tests passed at a55f55f, including:
+  - a real-runtime offline simulation that accepts all 28 targets with exact
+    binary, version and effort evidence;
+  - a check that the r6 configuration boots to task planning
+    ENABLED/CONNECTED.
+- A broad 87-module regression passed: 2,208 tests, 0 failed.
+- Both packaged read-only plans passed.
+- Two independent review rounds; see docs/4.2.8/OPERATIONAL_OWNER_LAUNCH_R6.md.
+
+Parts that have not run on this PC yet:
+- Codex --version as a worker identity;
+- the 28 live probes;
+- the r6 service with task planning.
+
+A failure before publication restores r4. A failure after the switch leaves r6
+in place, held for review.
+
+Preserve every old package and all r428-op input directories. The 784d684
+package was superseded before delivery; never run it.

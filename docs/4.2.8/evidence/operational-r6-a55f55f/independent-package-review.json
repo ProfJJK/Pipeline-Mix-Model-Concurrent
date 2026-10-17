@@ -1,0 +1,282 @@
+{
+  "schema": "cochem-428-r6-independent-package-review/1",
+  "reviewed_utc": "2026-10-17T01:22:07Z",
+  "status": "VERIFIED_NO_BLOCKING_FINDINGS",
+  "package": "C:\\Users\\ansac\\CoChem427\\r428-op-launch-a55f55f",
+  "launch_manifest_sha256": "736957a3731970c5f2f564242eb76cc24d3db0a95289d5abcfcceac4a1fe314b",
+  "source_commit": "a55f55f13871eedfe255a8d5aad9f23bb0fc16ac",
+  "lanes": {
+    "codex-evidence": {
+      "checks": [
+        {
+          "name": "launch codex-integration.json equals codex dir copy",
+          "passed": true
+        },
+        {
+          "name": "codex manifest identity fields",
+          "passed": true
+        },
+        {
+          "name": "templates equal git show a55f55f:docs/4.2.8/integrations/codex/<file>",
+          "passed": true
+        },
+        {
+          "name": "expected.rules/skill/metadata equal current live files",
+          "passed": true
+        },
+        {
+          "name": "expected.config vs current ~/.codex/config.toml",
+          "passed": true
+        },
+        {
+          "name": "verify_plan on manifest copy with live config hash",
+          "passed": true
+        },
+        {
+          "name": "source-test-evidence launch copy equals tests dir",
+          "passed": true
+        },
+        {
+          "name": "evidence status/failed/commit and repo validator",
+          "passed": true
+        },
+        {
+          "name": "source_test_report_sha256 equals sha of source-tests.log",
+          "passed": true
+        },
+        {
+          "name": "log ends with clean pytest summary matching passed",
+          "passed": true
+        },
+        {
+          "name": "modules include REQUIRED_SOURCE_TEST_MODULES",
+          "passed": true
+        },
+        {
+          "name": "read-only-plan.log READ_ONLY_PLAN_VERIFIED for a55f55f and r6",
+          "passed": true
+        },
+        {
+          "name": "installer-read-only-plan.log READ_ONLY_PLAN for a55f55f and r6",
+          "passed": true
+        },
+        {
+          "name": "board-active routing policy and roots",
+          "passed": true
+        }
+      ],
+      "blocking_findings": [],
+      "non_blocking_notes": [
+        "verify_plan cannot run unchanged before r6 exists. ordinary() calls lstat() on <runtime_root>\\.venv\\Scripts\\python.exe and raises FileNotFoundError, so I proved the patch only with a test shim that skips that one check. The launcher's own codex_preflight runs the installed module after offline_install, so the path will exist then. No reparse points were found on C:\\, C:\\Program Files, C:\\Program Files\\CoChem, the r4 venv python.exe, or the user-home and Codex paths.",
+        "The apply step will fully replace the live SKILL.md (now 4428 B) and agents/openai.yaml (now 430 B) with the a55f55f templates (3819 B and 419 B). It replaces only the managed section of AGENTS.md (now 1219 B). This is intended, but Codex must be refreshed afterwards (refresh_required=true).",
+        "expected.config currently equals the live config.toml. If Codex rewrites config.toml before the sitting, the launcher re-captures it live; rules, skill and metadata stay pinned and will hold the launch if they change.",
+        "source-tests.log was run with pytest -q, so it lists no module names. The 35-module list therefore rests on record_source_tests_428 rather than on the log itself. The progress count (1280 = 1278 passed + 2 skipped) is consistent with the summary. A static count finds 450 'def test_' functions; parametrization accounts for the rest. Two tests were skipped; summarize() allows skips.",
+        "The launcher's read-only and fresh-install checks validate the evidence fields but not the source-tests.log hash, because the log is not shipped in the launch dir. The log is bound only at prepare time by read_source_test_evidence, which I re-ran successfully.",
+        "Neither plan log records the launch-manifest or install-manifest sha256. They are tied to this package only through commit, target root, catalog request sha, payload count 470 and policy digest. Their timestamps (20:13:39-40) follow the launch dir build (20:13:12).",
+        "The 428-repair worktree has one untracked file, docs/deployment/windows-deployment-next/RETURN_SETUP_428_OPERATIONAL_R6_a55f55f.txt. src/ and scripts/ have no diff against a55f55f, and HEAD is a55f55f on fix/428-operational-repair."
+      ]
+    },
+    "semantics": {
+      "checks": [
+        {
+          "name": "repo_state_and_head",
+          "passed": true
+        },
+        {
+          "name": "file_pins",
+          "passed": true
+        },
+        {
+          "name": "(1) load_config(payload pipeline.json)",
+          "passed": true
+        },
+        {
+          "name": "(1) active_routing_policy rebuild",
+          "passed": true
+        },
+        {
+          "name": "(2) every changed key path vs r4 bundle",
+          "passed": true
+        },
+        {
+          "name": "(3) Codex effort contracts",
+          "passed": true
+        },
+        {
+          "name": "(3) Claude and Gemini contracts",
+          "passed": true
+        },
+        {
+          "name": "(3) native executable hashes",
+          "passed": true
+        },
+        {
+          "name": "(4) decode_request and request fields",
+          "passed": true
+        },
+        {
+          "name": "(4) execution_bindings and require_target_contracts",
+          "passed": true
+        },
+        {
+          "name": "(4) target counts",
+          "passed": true
+        },
+        {
+          "name": "(5) request_id uniqueness",
+          "passed": true
+        }
+      ],
+      "blocking_findings": [],
+      "non_blocking_notes": [
+        "Repo cleanliness changed while I was reviewing. The first `git status --porcelain` was empty. Then two untracked docs appeared at about 20:15: docs/4.2.8/OPERATIONAL_OWNER_LAUNCH_R6.md and docs/deployment/windows-deployment-next/RETURN_SETUP_428_OPERATIONAL_R6_a55f55f.txt. src/ and scripts/ still match HEAD exactly, so the package checks hold. Those docs should be committed, or the 'porcelain empty' precondition should be limited to src/scripts.",
+        "The request ID's only repository occurrence is that uncommitted delivery doc (the package table entry for this package). It is not a reused or spent ID.",
+        "The r6 request is byte-identical to the superseded 784d684 request apart from request_id, and the 784d684 and a55f55f payload pipeline.json files are identical. The uncommitted doc says 784d684 was never delivered or run. If it had been run, the a55f55f request's previous_task_catalog_sha256=null would be stale. Whether the board currently holds a published task catalog is a host-state fact I did not check read-only here; the launcher's admission fence is supposed to check it before stopping r4.",
+        "catalog_activation did not change: it was already true in the r4 bundle. task_planning is added as an explicit null and loads as None.",
+        "coding_registration is new, with source_roots=[C:\\Users\\ansac\\source\\repos]. That is a broad root but an allowed change. load_config's disjointness checks against private, token, slot and RAM roots pass.",
+        "4 of the 15 Codex contracts are not routed by the c8444 policy: gpt-6-astra low/medium and gpt-6-luna low/xhigh. They are catalog-only probe targets. This matches route_active_policy (routed plus catalog targets), and all 15 are request probe targets.",
+        "providers.gemini.model is still 'gemini-3.1-pro-preview', unchanged from r4, even though the gemini-3.1-pro:high binding is retired and unrouted. Routing only dispatches gemini-3.8-flash, and the config loads cleanly.",
+        "launch-prepared.json is in the launch directory but not listed in launch-manifest.json. This looks like the preparation receipt rather than a package input."
+      ]
+    },
+    "host-readonly": {
+      "checks": [
+        {
+          "name": "r6 target root absent",
+          "passed": true
+        },
+        {
+          "name": "r4 pipeline.json sha256",
+          "passed": true
+        },
+        {
+          "name": "r4 install-manifest.json sha256",
+          "passed": true
+        },
+        {
+          "name": "Package pins agree with host",
+          "passed": true
+        },
+        {
+          "name": "Board-active routing policy rebuild",
+          "passed": true
+        },
+        {
+          "name": "CoChem-4.2.7-Warden task: Running, Enabled, one enabled logon trigger",
+          "passed": false
+        },
+        {
+          "name": "No CoChem-4.2.8-Fence-* / Catalog-* task running",
+          "passed": true
+        },
+        {
+          "name": "R: workspace present",
+          "passed": true
+        },
+        {
+          "name": "Docker engine pipe from payload pipeline.json",
+          "passed": true
+        },
+        {
+          "name": "r4 pipeline_health",
+          "passed": true
+        },
+        {
+          "name": "r4 admission state",
+          "passed": true
+        },
+        {
+          "name": "Free disk",
+          "passed": true
+        },
+        {
+          "name": "No other owner sitting active / mutex not held",
+          "passed": true
+        }
+      ],
+      "blocking_findings": [],
+      "non_blocking_notes": [
+        "The Warden task's State, Enabled flag and trigger could not be read here: its ACL denies non-elevated reads (E_ACCESSDENIED). Before pasting, the owner should confirm them read-only in an elevated console, e.g. (Get-ScheduledTask -TaskPath '\\' -TaskName 'CoChem-4.2.7-Warden') | Select State, @{n='Enabled';e={$_.Settings.Enabled}}, @{n='Triggers';e={$_.Triggers.Count}}, and check that the single trigger is an enabled logon trigger. The a55f55f launcher's fresh path asserts these invariants itself before any change (lines 1755-1760: SYSTEM principal, one logon trigger for AETHERDESK\\ansac, exactly one instance, Assert-428WardenTask with enabled+trigger). A mismatch would therefore hold in preconditions rather than change anything, but it could still use up the package.",
+        "The expired fence task CoChem-4.2.8-Fence-a232264b12984ff2ab9ef33b7ec24c75 is still registered (state unreadable). Other one-shot Fence/Catalog task names from the d5d6094 sitting are unknown because their evidence under C:\\Program Files\\CoChem\\R428OperationalRecovery-*\\private is ACL-restricted. The launcher does not enumerate leftover CoChem-4.2.8-* tasks; it relies on the writer-lock fence and on r4 health. The d5d6094 final status reports fence_cleanup LOCK_RELEASED with native_exit_verified true.",
+        "Last owner sitting: d5d6094 recovery e3009266..., which held in catalog_acceptance at 2026-10-16T20:33:23Z with status R428_OPERATIONAL_HELD_PRESERVE_EVIDENCE, rollback PREVIOUS_RUNTIME_RESTORED_HEALTH_VERIFIED and publication_state NOT_COMMITTED. r4 has served continuously since 20:33:19Z.",
+        "Elevated powershell PID 24160, open since 06:20 local, is idle and does not hold the sitting mutex. Closing it, or using a fresh elevated console for the sitting, avoids ambiguity.",
+        "The worktree has two untracked files: docs/4.2.8/OPERATIONAL_OWNER_LAUNCH_R6.md and docs/deployment/windows-deployment-next/RETURN_SETUP_428_OPERATIONAL_R6_a55f55f.txt. So the owner command document is not part of commit a55f55f, and AGENTS.md's latest handoff still says there is NO current owner command. This is outside the host-precondition lane but worth reconciling before the sitting.",
+        "The TaskScheduler/Operational event log is disabled on this host, so task history cannot be used as evidence. Docker pipe server identity (com.docker.backend.exe) was not probed because that would mean connecting to the pipe; r4 reports docker_engine healthy.",
+        "r4 catalog_activation.request_id is b8ef27858d2242d0931071f0ed2eaacd (r4's own published activation). It is distinct from the package's new request 82aff819436849d38fcb1d158d222096, which is expected because both extend from policy c8444fe2."
+      ]
+    },
+    "integrity": {
+      "checks": [
+        {
+          "name": "1a launch-manifest.json pin",
+          "passed": true
+        },
+        {
+          "name": "1b launch-manifest files[] rows vs disk",
+          "passed": true
+        },
+        {
+          "name": "1c no unexpected files in launch dir",
+          "passed": true
+        },
+        {
+          "name": "1d launch-manifest top-level pins",
+          "passed": true
+        },
+        {
+          "name": "2a run_operational_428_launch.ps1 == git show a55f55f:scripts/",
+          "passed": true
+        },
+        {
+          "name": "2b install_operational_428_runtime.ps1 == git show a55f55f:scripts/",
+          "passed": true
+        },
+        {
+          "name": "2c reviewed_428_launch_helpers.ps1 pin",
+          "passed": true
+        },
+        {
+          "name": "2d stage_aetherdesk_427_payloads.ps1 pin",
+          "passed": true
+        },
+        {
+          "name": "3a install-manifest identity",
+          "passed": true
+        },
+        {
+          "name": "3b install-manifest files[] rows vs source files on disk",
+          "passed": true
+        },
+        {
+          "name": "3c wheelhouse and requirements binding",
+          "passed": true
+        },
+        {
+          "name": "4a freeze source-preparation.json binds a55f55f",
+          "passed": true
+        },
+        {
+          "name": "4b application-wheel.json binds a55f55f and the freeze",
+          "passed": true
+        },
+        {
+          "name": "supplementary: policy, catalog and target-root bindings",
+          "passed": true
+        }
+      ],
+      "blocking_findings": [],
+      "non_blocking_notes": [
+        "No git path scripts/reviewed_428_launch_helpers.ps1 exists at a55f55f, so a direct git-show comparison does not apply. The packager copies this helper from C:\\Users\\ansac\\CoChem427\\r428-bundle-3dab7f2\\run_428_launch.ps1. It is byte-equal to scripts/run_428_launch.ps1 at both 3dab7f2 and a55f55f, and its sha equals the pin.",
+        "The launch dir holds two files outside files[]: launch-manifest.json and launch-prepared.json. The packager writes both, and launch-prepared.json records the correct manifest sha. The launcher pins only the rows in files[]; it does not check the directory for unlisted files.",
+        "The freeze includes src/x.py (10871 bytes, committed since 3545c1e, a 'Host Warden diagnostic probe' module). It sits outside the cochem* packages, so it is not in the wheel. It will still be copied into source/ under the r6 root as inert source.",
+        "source-tests.log (sha matches source_test_report_sha256 2e1e33f7\u2026) ends with '1278 passed, 2 skipped'. The evidence JSON records passed=1278 and failed=0 but no skipped count.",
+        "The wheelhouse pyproject_sha256 (26ec487a\u2026) does not equal the hash of the freeze pyproject.toml as-is. It matches after the documented normalization in _verify_pyproject_matches_wheelhouse, which changes version 4.2.8 to 4.2.7, so the dependency definition is consistent.",
+        "The install-manifest sources are absolute paths in user-writable C:\\Users\\ansac\\CoChem427 directories. Integrity depends on the installer re-verifying at copy time. It does: install_operational_428_runtime.ps1 calls Open-VerifiedFile on both source and destination with the pinned sha256 and length. These bytes must stay unchanged until the launch runs.",
+        "The three scripts compared against git (launcher, installer, copy helper) are stored with LF line endings, no CRLF and no BOM, and are exactly byte-equal to the committed blobs. The normalized and exact comparisons agree."
+      ]
+    }
+  },
+  "reviewer_ran_tests": false,
+  "host_actions_executed_by_reviewer": false,
+  "host_acceptance_attested": false
+}
